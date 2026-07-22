@@ -448,7 +448,6 @@ async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
   try{
-    await supaFetch(`${map.table}?${map.pk}=gte.0`, { method:'DELETE' });
     if(value && value.length > 0){
       const payload = value.map(item => {
         const {id, ...rest} = item;
@@ -457,12 +456,20 @@ async function saveState(key, value, shared){
       const CHUNK = 500;
       for(let i=0; i<payload.length; i+=CHUNK){
         const chunk = payload.slice(i, i+CHUNK);
-        await supaFetch(map.table, {
+        await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
           method:'POST',
-          headers: {'Prefer':'return=minimal'},
+          headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
           body: JSON.stringify(chunk)
         });
       }
+    }
+    const existingRows = await supaFetch(`${map.table}?select=${map.pk}`);
+    const currentIds = new Set((value||[]).map(item => String(item.id)));
+    const idsToDelete = (existingRows||[])
+      .map(r => r[map.pk])
+      .filter(pk => !currentIds.has(String(pk)));
+    if(idsToDelete.length > 0){
+      await supaFetch(`${map.table}?${map.pk}=in.(${idsToDelete.join(',')})`, { method:'DELETE' });
     }
   }catch(err){
     console.error('saveState failed for', key, err);
