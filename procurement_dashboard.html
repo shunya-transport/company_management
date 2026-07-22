@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>採購管理系統</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --accent:#9d6d2f; --accent-dark:#7d5624; --accent-bg:#f6ead6;
+    --navy:#0d1b2c; --navy-2:#152a43;
+    --red:#B3261E; --red-bg:#FBEAE8;
+    --amber:#9C6B00; --amber-bg:#FDF1DC;
+    --green:#3F7D44; --green-bg:#EAF3E7;
+    --gray:#6B5A48; --gray-bg:#F1E9DD;
+    --radius:14px; --radius-sm:11px;
+    --shadow-sm:0 1px 2px rgba(13,27,44,.07);
+    --shadow-md:0 12px 32px rgba(20,32,51,.09), 0 1px 2px rgba(13,27,44,.05);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:
+      radial-gradient(circle at 88% 8%, rgba(216,179,116,.14), transparent 20%),
+      radial-gradient(circle at 10% 75%, rgba(32,62,97,.07), transparent 24%),
+      linear-gradient(145deg, #fff 0%, #f8f5f1 54%, #eef1f5 100%);
+    color:var(--text); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{
+    max-width:1600px;margin:0 auto;min-height:100vh;display:grid;
+    grid-template-columns:190px minmax(0,1fr);
+    background:rgba(255,255,255,.32);box-shadow:0 0 80px rgba(9,24,41,.08);
+  }
+  .sidebar{
+    position:sticky;top:0;z-index:50;height:100vh;padding:26px 12px 20px;display:flex;flex-direction:column;gap:18px;
+    background:linear-gradient(180deg, rgba(255,255,255,.97), rgba(249,248,246,.96)), radial-gradient(circle at 20% 10%, rgba(216,179,116,.18), transparent 42%);
+    border-right:1px solid rgba(13,27,44,.08);overflow-y:auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 10px;}
+  .brand-mark{
+    font-family:"Noto Serif TC",serif;font-size:24px;font-weight:700;line-height:1;color:transparent;
+    background:linear-gradient(140deg,#8d5b21 3%,#f5e4bc 36%,#b2782f 67%,#f0d59d 100%);
+    -webkit-background-clip:text;background-clip:text;
+  }
+  .brand-copy{color:var(--gold-700,#9d6d2f);font-family:Montserrat,sans-serif;font-size:9px;font-weight:600;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;}
+  header.banner{
+    background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 55%,var(--accent-dark) 100%);
+    color:#fff;padding:30px 28px 34px;position:relative;overflow:hidden;
+  }
+  header.banner::after{
+    content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.10),transparent 70%);
+  }
+  .hero-kicker{margin:0 0 8px;color:#ead3a4;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;position:relative;}
+  header.banner h1{font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;margin:0 0 8px;letter-spacing:.5px;position:relative;}
+  header.banner .sub{color:rgba(255,255,255,.72);font-size:13px;position:relative;max-width:640px;line-height:1.7;}
+  .content{padding:20px 26px 40px;position:relative;}
+  nav{display:flex;flex-direction:column;gap:6px;}
+  nav button{
+    appearance:none;border:1px solid transparent;background:none;text-align:left;padding:10px 12px;font-size:12.5px;font-weight:600;
+    color:#3f4650;cursor:pointer;border-radius:13px;transition:background .2s,color .15s,transform .15s;
+  }
+  nav button:hover{background:rgba(255,255,255,.9);border-color:rgba(13,27,44,.08);transform:translateX(2px);}
+  nav button.active{
+    color:var(--accent);
+    background:linear-gradient(100deg, rgba(246,240,230,.98), rgba(236,205,155,.76));
+    border-color:rgba(201,154,86,.28);box-shadow:0 9px 22px rgba(157,109,47,.13);
+  }
+  .sidebar-motto{
+    margin-top:auto;padding:14px 12px;border:1px solid rgba(201,154,86,.48);border-radius:16px;color:#725426;text-align:center;
+    background:linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,244,223,.88));box-shadow:0 12px 30px rgba(201,154,86,.13);
+  }
+  .sidebar-motto strong{display:block;font-size:12px;letter-spacing:.04em;}
+  .sidebar-motto span{display:block;margin-top:6px;color:#a57632;font-family:Montserrat,sans-serif;font-size:8px;letter-spacing:.045em;text-transform:uppercase;}
+  .panel{display:none;} .panel.active{display:block;animation:fadein .18s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px;box-shadow:var(--shadow-sm);}
+  .stat-card .n{font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.5px;}
+  .stat-card .l{font-size:12px;color:var(--text-2);margin-top:6px;font-weight:500;}
+  .card{
+    position:relative;background:linear-gradient(160deg, rgba(255,255,255,.98), rgba(252,252,252,.94));
+    border:1px solid rgba(255,255,255,.82);border-radius:20px;padding:22px 24px;
+    margin-bottom:16px;box-shadow:var(--shadow-md);overflow:hidden;
+  }
+  .card::after{
+    content:"";position:absolute;top:-60px;right:-70px;width:190px;height:190px;border:1px solid rgba(201,154,86,.30);
+    border-radius:50%;opacity:.10;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, rgba(13,27,44,.98) 0 10%, transparent 10.5% 18%, rgba(201,154,86,.88) 18.5% 28%, transparent 28.5%);
+  }
+  .card h2{font-size:15px;font-weight:700;margin:0 0 14px;color:var(--navy);position:relative;letter-spacing:.02em;}
+  .card h2 .count-badge{
+    display:inline-block;margin-left:8px;padding:2px 9px;border-radius:99px;background:var(--accent-bg);color:var(--accent-dark);
+    font-size:11px;font-weight:700;vertical-align:middle;
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:#263240;font-weight:600;padding:12px 14px;border-bottom:1px solid rgba(13,27,44,.08);white-space:nowrap;font-size:11.5px;letter-spacing:.3px;background:linear-gradient(90deg,#fbfaf8,#f2ece4);}
+  td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
+  tbody tr:hover td{background:#fffaf0;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .pill.red{background:var(--red-bg);color:var(--red);}
+  .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.green{background:var(--green-bg);color:var(--green);}
+  .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input{
+    font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
+    background:rgba(255,255,255,.88);color:var(--text);transition:border-color .15s,box-shadow .15s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  select:focus,input:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 4px rgba(201,154,86,.15);}
+  button.btn{
+    appearance:none;border:none;color:#fff;padding:10px 20px;border-radius:13px;font-size:13px;font-weight:600;cursor:pointer;
+    transition:transform .15s,box-shadow .2s,filter .15s;
+    background:linear-gradient(105deg,var(--navy) 0%,var(--navy-2) 56%,#d8b374 100%);
+    box-shadow:0 10px 23px rgba(13,27,44,.18);
+  }
+  button.btn:hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 15px 29px rgba(13,27,44,.23);}
+  button.btn:active{transform:translateY(0);}
+  button.btn.ghost{background:none;color:var(--text-2);border:1px solid var(--border-strong);box-shadow:none;}
+  button.btn.ghost:hover{background:var(--gray-bg);color:var(--text);transform:none;filter:none;}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:12.5px;font-weight:600;padding:0;}
+  .name-link{background:none;border:none;color:var(--accent-dark);cursor:pointer;font-weight:600;padding:0;font-size:inherit;}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
+  .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
+  .table-scroll{max-height:520px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
+  .table-scroll table{margin:0;}
+  .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
+  .muted{color:var(--text-3);font-size:12px;}
+  @media (max-width:860px){
+    .app-shell{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;top:auto;}
+    nav{flex-direction:row;flex-wrap:wrap;}
+    nav button{flex:0 0 auto;}
+  }
+  @media print{
+    @page{ size: A4; margin: 12mm; }
+    .sidebar, .no-print{display:none !important;}
+    .app-shell{display:block;}
+    body{background:#fff;}
+    #printArea > div{ width:210mm; min-height:297mm; margin:0 !important; padding:0 !important; border:none !important; box-shadow:none !important; box-sizing:border-box; }
+  }
+  .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(43,33,26,.55);z-index:100;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;}
+  .modal-backdrop.show{display:flex;}
+  .modal-box{background:#fff;border-radius:20px;padding:26px 28px;max-width:720px;width:100%;box-shadow:0 24px 60px rgba(13,27,44,.28);position:relative;}
+  .modal-close{position:absolute;top:16px;right:18px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-2);}
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">順亞</div>
+      <div class="brand-copy">Procurement<br>Management</div>
+    </div>
+    <nav>
+      <button data-tab="overview" class="active">總覽</button>
+      <button data-tab="orders">採購登錄</button>
+      <button data-tab="suppliers">合格供應商</button>
+      <button data-tab="ratings">供應商評分</button>
+      <button data-tab="forms">表單生成</button>
+    </nav>
+    <div class="sidebar-motto">
+      <strong>品質 誠信 效率</strong>
+      <span>Procurement System</span>
+    </div>
+  </div>
+  <div class="main">
+    <header class="banner">
+      <p class="hero-kicker">Shun Ya Transportation</p>
+      <h1>採購管理系統</h1>
+      <div class="sub">採購登錄 ・ 合格供應商 ・ 供應商評分 ・ 表單生成 — 資料儲存在共用帳號中，所有使用者共享同一份資料</div>
+    </header>
+    <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;">
+      ⚠️ 目前無法連線到雲端資料庫——請檢查網路連線，若持續發生請聯絡管理員確認 Supabase 專案是否正常運作。
+    </div>
+    <div class="content">
+
+      <div id="overview" class="panel active">
+        <div class="stat-row" id="statRow"></div>
+        <div class="card">
+          <h2>低評分供應商提醒<span class="muted" style="font-weight:400;">（B級以下）</span></h2>
+          <div id="lowRatingAlerts"></div>
+        </div>
+        <div class="card">
+          <h2>各類別供應商數量</h2>
+          <div id="categoryBars"></div>
+        </div>
+      </div>
+
+      <div id="orders" class="panel">
+        <div class="card">
+          <h2>新增採購登錄</h2>
+          <div class="form-grid">
+            <label>採購編號<input id="po_no" placeholder="例：P00065"></label>
+            <label>項次<input id="po_item_no" type="number" value="1"></label>
+            <label>申請日期<input id="po_apply_date" type="date"></label>
+            <label>採購日期<input id="po_purchase_date" type="date"></label>
+            <label>需求日期<input id="po_need_date" type="date"></label>
+            <label>到貨日期<input id="po_arrival_date" type="date"></label>
+            <label>申請單位<input id="po_dept" placeholder="例：行政管理部"></label>
+            <label>申請人<input id="po_applicant" placeholder="選填"></label>
+            <label>供應商名稱<input id="po_supplier"></label>
+            <label>品名/規格<input id="po_spec"></label>
+            <label>數量<input id="po_qty" type="number"></label>
+            <label>單位<input id="po_unit" placeholder="例：件"></label>
+            <label>單價<input id="po_price" type="number"></label>
+            <label>稅額<input id="po_tax" type="number" placeholder="選填"></label>
+            <label>發票號碼/公司<input id="po_invoice" placeholder="選填"></label>
+            <label>付款方式
+              <select id="po_payment">
+                <option value="月結">月結</option>
+                <option value="匯款">匯款</option>
+                <option value="現金">現金</option>
+                <option value="其他">其他</option>
+              </select>
+            </label>
+            <label>採購種類
+              <select id="po_type">
+                <option value="例行性採購">例行性採購</option>
+                <option value="一般事務採購">一般事務採購</option>
+                <option value="專案採購">專案採購</option>
+                <option value="其他">其他</option>
+              </select>
+            </label>
+            <label>備註<input id="po_notes" placeholder="選填"></label>
+          </div>
+          <button class="btn" id="po_add">新增採購登錄</button>
+        </div>
+        <div class="card">
+          <h2>採購登錄清單<span class="count-badge" id="po_count"></span></h2>
+          <div class="toolbar">
+            <input id="po_search" placeholder="搜尋採購編號/供應商/品名">
+            <select id="po_dept_filter"><option value="all">全部申請單位</option></select>
+            <select id="po_type_filter"><option value="all">全部採購種類</option></select>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>採購編號</th><th>項次</th><th>申請日期</th><th>申請單位</th><th>供應商</th><th>品名/規格</th><th>數量</th><th>單價</th><th>總價</th><th>採購種類</th><th></th></tr></thead>
+              <tbody id="poTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="suppliers" class="panel">
+        <div class="card">
+          <h2>新增合格供應商</h2>
+          <div class="form-grid">
+            <label>建檔日期<input id="sp_filed" type="date"></label>
+            <label>供應商類別
+              <select id="sp_category">
+                <option value="__new__">+ 新增類別...</option>
+              </select>
+            </label>
+            <label id="sp_category_new_wrap" style="display:none;">新類別名稱<input id="sp_category_new" placeholder="輸入新的類別名稱"></label>
+            <label>區域<input id="sp_region" placeholder="例：新竹"></label>
+            <label>公司行號<input id="sp_name"></label>
+            <label>地址<input id="sp_address"></label>
+            <label>電話<input id="sp_phone"></label>
+            <label>傳真<input id="sp_fax" placeholder="選填"></label>
+            <label>負責人<input id="sp_boss" placeholder="選填"></label>
+            <label>統一編號<input id="sp_tax_id" placeholder="選填"></label>
+            <label>聯絡人<input id="sp_contact" placeholder="選填"></label>
+            <label>創立日期<input id="sp_established" type="date"></label>
+            <label>營業項目說明<input id="sp_desc" placeholder="選填"></label>
+          </div>
+          <button class="btn" id="sp_add">新增供應商</button>
+        </div>
+        <div class="card">
+          <h2>合格供應商清單<span class="count-badge" id="sp_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;">列出目前仍在合作中的供應商；已無合作的請到下方「供應商歷史資料」查看。</div>
+          <div class="toolbar">
+            <input id="sp_search" placeholder="搜尋公司行號">
+            <select id="sp_category_filter"><option value="all">全部類別</option></select>
+            <select id="sp_region_filter"><option value="all">全部區域</option></select>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>類別</th><th>公司行號</th><th>區域</th><th>地址</th><th>電話</th><th>負責人</th><th>統編</th><th>聯絡人</th><th></th></tr></thead>
+              <tbody id="spTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>供應商歷史資料<span class="count-badge" id="sp_history_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;">已標記為「已無合作」的供應商，資料保留備查，不會出現在上方合格供應商清單裡。</div>
+          <div class="toolbar"><input id="sp_history_search" placeholder="搜尋公司行號"></div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>類別</th><th>公司行號</th><th>區域</th><th>電話</th><th>聯絡人</th><th></th></tr></thead>
+              <tbody id="spHistoryTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="ratings" class="panel">
+        <div class="card">
+          <h2>新增供應商評分</h2>
+          <div class="form-grid">
+            <label>年度(民國)<input id="rt_year" type="number" placeholder="例：115"></label>
+            <label>供應商
+              <select id="rt_supplier"></select>
+            </label>
+            <label>分數<input id="rt_score" type="number" step="0.1"></label>
+            <label>等級
+              <select id="rt_grade">
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+              </select>
+            </label>
+            <label>備註<input id="rt_notes" placeholder="選填"></label>
+          </div>
+          <button class="btn" id="rt_add">新增評分</button>
+        </div>
+        <div class="card">
+          <h2>供應商評分清單<span class="count-badge" id="rt_count"></span></h2>
+          <div class="toolbar">
+            <input id="rt_search" placeholder="搜尋公司行號">
+            <select id="rt_year_filter"><option value="all">全部年度</option></select>
+            <select id="rt_grade_filter">
+              <option value="all">全部等級</option>
+              <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
+            </select>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>年度</th><th>類別</th><th>公司行號</th><th>區域</th><th>分數</th><th>等級</th><th>備註</th><th></th></tr></thead>
+              <tbody id="rtTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="forms" class="panel">
+        <div class="card">
+          <h2>表單生成</h2>
+          <div class="form-grid">
+            <label>採購編號
+              <select id="form_order_no"></select>
+            </label>
+            <label>表單類型
+              <select id="form_type">
+                <option value="request">採購申請單</option>
+                <option value="order">採購單</option>
+                <option value="receiving">驗收單</option>
+              </select>
+            </label>
+          </div>
+          <button class="btn" id="form_generate">產生表單</button>
+          <button class="btn ghost no-print" id="form_print" style="display:none;">列印</button>
+        </div>
+        <div id="printArea"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="spEditModal">
+  <div class="modal-box">
+    <button class="modal-close no-print" id="spEditModalClose">✕</button>
+    <h3 id="spEditModalTitle" style="margin:0 0 16px;font-size:17px;">編輯供應商資料</h3>
+    <div class="form-grid">
+      <label>建檔日期<input id="spe_filed" type="date"></label>
+      <label>供應商類別
+        <select id="spe_category">
+          <option value="__new__">+ 新增類別...</option>
+        </select>
+      </label>
+      <label id="spe_category_new_wrap" style="display:none;">新類別名稱<input id="spe_category_new" placeholder="輸入新的類別名稱"></label>
+      <label>區域<input id="spe_region"></label>
+      <label>公司行號<input id="spe_name"></label>
+      <label>地址<input id="spe_address"></label>
+      <label>電話<input id="spe_phone"></label>
+      <label>傳真<input id="spe_fax"></label>
+      <label>負責人<input id="spe_boss"></label>
+      <label>統一編號<input id="spe_tax_id"></label>
+      <label>聯絡人<input id="spe_contact"></label>
+      <label>創立日期<input id="spe_established" type="date"></label>
+      <label>營業項目說明<input id="spe_desc"></label>
+    </div>
+    <button class="btn" id="spEditModalSave">儲存修改</button>
+    <button class="btn ghost" id="spEditModalCancel">取消</button>
+  </div>
+</div>
+
+<script>
+const SEED = {"procurement_orders": [{"id": 1, "order_item_id": 1, "order_no": "P00001", "item_no": 1, "apply_date": "2021-02-18", "purchase_date": "2021-02-18", "need_date": "2021-07-01", "arrival_date": "2021-06-04", "apply_dept": "行政管理部", "supplier_name": "長昕興業股份有限公司", "item_code": null, "item_spec": "防焰衣(使用3M反光條棉82%.聚酯纖維18%±5%.防火性1級,符合美國NEPA2112防火測試)", "quantity": 150, "unit": "件", "unit_price": 1110, "subtotal": 166500, "tax": 8325, "total_price": 174825, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 2, "order_item_id": 2, "order_no": "P00001", "item_no": 2, "apply_date": "2021-02-18", "purchase_date": "2021-02-18", "need_date": "2021-07-01", "arrival_date": "2021-06-04", "apply_dept": "行政管理部", "supplier_name": "長昕興業股份有限公司", "item_code": null, "item_spec": "防焰褲(使用3M反光條棉82%.聚酯纖維18%±5%.防火性1級,符合美國NEPA2112防火測試)", "quantity": 150, "unit": "件", "unit_price": 1175, "subtotal": 176250, "tax": 8813, "total_price": 185063, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 3, "order_item_id": 3, "order_no": "P00001", "item_no": 3, "apply_date": "2021-02-18", "purchase_date": "2021-02-18", "need_date": "2021-07-01", "arrival_date": "2021-06-04", "apply_dept": "行政管理部", "supplier_name": "長昕興業股份有限公司", "item_code": null, "item_spec": "一般工作服 灰色", "quantity": 100, "unit": "件", "unit_price": 330, "subtotal": 33000, "tax": 1650, "total_price": 34650, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 4, "order_item_id": 4, "order_no": "P00002", "item_no": 1, "apply_date": "2021-05-05", "purchase_date": "2021-05-05", "need_date": "2021-05-30", "arrival_date": "2021-05-10", "apply_dept": "行政管理部", "supplier_name": "俊安興業有限公司", "item_code": null, "item_spec": "PE武士帽", "quantity": 36, "unit": "頂", "unit_price": 85, "subtotal": 3060, "tax": 153, "total_price": 3213, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 5, "order_item_id": 5, "order_no": "P00003", "item_no": 1, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-06-15", "arrival_date": "2021-05-20", "apply_dept": "行政管理部", "supplier_name": "統崎有限公司", "item_code": null, "item_spec": "行車紀錄紙 120K", "quantity": 2, "unit": "盒", "unit_price": 230, "subtotal": 460, "tax": 23, "total_price": 483, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 6, "order_item_id": 6, "order_no": "P00003", "item_no": 2, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-06-15", "arrival_date": "2021-05-20", "apply_dept": "行政管理部", "supplier_name": "統崎有限公司", "item_code": null, "item_spec": "行車紀錄紙 140K", "quantity": 8, "unit": "盒", "unit_price": 230, "subtotal": 1840, "tax": 92, "total_price": 1932, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 7, "order_item_id": 7, "order_no": "P00003", "item_no": 3, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-06-15", "arrival_date": "2021-05-20", "apply_dept": "行政管理部", "supplier_name": "統崎有限公司", "item_code": null, "item_spec": "行車紀錄紙 125K", "quantity": 30, "unit": "盒", "unit_price": 230, "subtotal": 6900, "tax": 345, "total_price": 7245, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 8, "order_item_id": 8, "order_no": "P00004", "item_no": 1, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-05-30", "arrival_date": "2021-05-15", "apply_dept": "行政管理部", "supplier_name": "友鴻企業行", "item_code": null, "item_spec": "輪檔長:24cm(不含耳)*寬12cm*高18cm 重量:3.5kg重 材質:橡膠", "quantity": 100, "unit": "顆", "unit_price": 770, "subtotal": 77000, "tax": 3850, "total_price": 80850, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 9, "order_item_id": 9, "order_no": "P00004", "item_no": 2, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-05-30", "arrival_date": "2021-05-15", "apply_dept": "行政管理部", "supplier_name": "友鴻企業行", "item_code": null, "item_spec": "輪檔長:24cm(不含耳)*寬12cm*高18cm 重量:3.5kg重 材質:橡膠", "quantity": 100, "unit": "顆", "unit_price": 650, "subtotal": 65000, "tax": 3250, "total_price": 68250, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 10, "order_item_id": 10, "order_no": "P00004", "item_no": 3, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-05-30", "arrival_date": "2021-05-15", "apply_dept": "行政管理部", "supplier_name": "友鴻企業行", "item_code": null, "item_spec": "2.5kg PVC軟式交通錐", "quantity": 100, "unit": "支", "unit_price": 145, "subtotal": 14500, "tax": 725, "total_price": 15225, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 11, "order_item_id": 11, "order_no": "P00004", "item_no": 4, "apply_date": "2021-05-10", "purchase_date": "2021-05-10", "need_date": "2021-05-30", "arrival_date": "2021-05-15", "apply_dept": "行政管理部", "supplier_name": "友鴻企業行", "item_code": null, "item_spec": "交通伸縮式連桿", "quantity": 40, "unit": "支", "unit_price": 70, "subtotal": 2800, "tax": 140, "total_price": 2940, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 12, "order_item_id": 12, "order_no": "P00005", "item_no": 1, "apply_date": "2021-05-11", "purchase_date": "2021-05-11", "need_date": "2021-05-30", "arrival_date": "2021-05-12", "apply_dept": "行政管理部", "supplier_name": "麗欣消防企業商行", "item_code": null, "item_spec": "車用乾粉滅火器", "quantity": 12, "unit": "支", "unit_price": 700, "subtotal": 8400, "tax": 420, "total_price": 8820, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 13, "order_item_id": 13, "order_no": "P00006", "item_no": 1, "apply_date": "2021-05-13", "purchase_date": "2021-05-13", "need_date": "2021-05-31", "arrival_date": "2021-05-25", "apply_dept": "行政管理部", "supplier_name": "臻安工業有限公司", "item_code": null, "item_spec": "工作皮手套", "quantity": 10, "unit": "雙", "unit_price": 380, "subtotal": 3800, "tax": 190, "total_price": 3990, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 14, "order_item_id": 14, "order_no": "P00006", "item_no": 2, "apply_date": "2021-05-13", "purchase_date": "2021-05-13", "need_date": "2021-05-31", "arrival_date": "2021-05-25", "apply_dept": "行政管理部", "supplier_name": "臻安工業有限公司", "item_code": null, "item_spec": "低溫防凍圍裙 106.4CM*60.96CM*(42\"824\")", "quantity": 5, "unit": "件", "unit_price": 4500, "subtotal": 22500, "tax": 1125, "total_price": 23625, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 15, "order_item_id": 15, "order_no": "P00007", "item_no": 1, "apply_date": "2021-05-14", "purchase_date": "2021-05-14", "need_date": "2021-05-31", "arrival_date": "2021-05-20", "apply_dept": "行政管理部", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "安全帽+鋁框+面罩", "quantity": 1, "unit": "組", "unit_price": 350, "subtotal": 350, "tax": 18, "total_price": 368, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 16, "order_item_id": 16, "order_no": "P00007", "item_no": 2, "apply_date": "2021-05-14", "purchase_date": "2021-05-14", "need_date": "2021-05-31", "arrival_date": "2021-05-20", "apply_dept": "行政管理部", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "日本TOWA防割耐磨工作手套", "quantity": 6, "unit": "雙", "unit_price": 100, "subtotal": 600, "tax": 30, "total_price": 630, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 17, "order_item_id": 17, "order_no": "P00007", "item_no": 3, "apply_date": "2021-05-14", "purchase_date": "2021-05-14", "need_date": "2021-05-31", "arrival_date": "2021-05-20", "apply_dept": "行政管理部", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "護目鏡", "quantity": 12, "unit": "付", "unit_price": 120, "subtotal": 1440, "tax": 72, "total_price": 1512, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 18, "order_item_id": 18, "order_no": "P00008", "item_no": 1, "apply_date": "2021-05-17", "purchase_date": "2021-05-17", "need_date": "2021-05-31", "arrival_date": "2021-05-30", "apply_dept": "行政管理部", "supplier_name": "敏利企業有限公司", "item_code": null, "item_spec": "滅火器檢查卡", "quantity": 20, "unit": "張", "unit_price": 60, "subtotal": 1200, "tax": 60, "total_price": 1260, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 19, "order_item_id": 19, "order_no": "P00008", "item_no": 2, "apply_date": "2021-05-17", "purchase_date": "2021-05-17", "need_date": "2021-05-31", "arrival_date": "2021-05-30", "apply_dept": "行政管理部", "supplier_name": "敏利企業有限公司", "item_code": null, "item_spec": "3M反光貼紙(空白)", "quantity": 3, "unit": "張", "unit_price": 450, "subtotal": 1350, "tax": 68, "total_price": 1418, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 20, "order_item_id": 20, "order_no": "P00009", "item_no": 1, "apply_date": "2021-05-01", "purchase_date": "2021-05-01", "need_date": "2021-06-30", "arrival_date": "2021-05-17", "apply_dept": "行政管理部", "supplier_name": "富冠工業社", "item_code": null, "item_spec": "銅鎚", "quantity": 20, "unit": "支", "unit_price": 2000, "subtotal": 40000, "tax": 2000, "total_price": 42000, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 21, "order_item_id": 21, "order_no": "P00012", "item_no": 1, "apply_date": "2021-09-03", "purchase_date": "2021-09-03", "need_date": "2021-12-31", "arrival_date": "2021-11-03", "apply_dept": "行政品質部", "supplier_name": "利音貿易開發股份有限公司", "item_code": "302-0702LY-3MT", "item_spec": "PIP反光背心ANSI Class2", "quantity": 18, "unit": "件", "unit_price": 230, "subtotal": 4140, "tax": 207, "total_price": 4347, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 22, "order_item_id": 22, "order_no": "P00012", "item_no": 2, "apply_date": "2021-09-03", "purchase_date": "2021-09-03", "need_date": "2021-12-31", "arrival_date": "2021-11-03", "apply_dept": "行政品質部", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "PIP阻燃背心", "quantity": 20, "unit": "件", "unit_price": 520, "subtotal": 10400, "tax": 520, "total_price": 10920, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 23, "order_item_id": 23, "order_no": "P00012", "item_no": 3, "apply_date": "2021-09-03", "purchase_date": "2021-09-03", "need_date": "2021-12-31", "arrival_date": "2021-11-03", "apply_dept": "行政品質部", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "3M6006 3M綜合濾罐 (包裝方式:2個/包.60個/箱)", "quantity": 20, "unit": "個", "unit_price": 230, "subtotal": 4600, "tax": 230, "total_price": 4830, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 24, "order_item_id": 24, "order_no": "P00011", "item_no": 1, "apply_date": "2021-12-02", "purchase_date": "2021-12-02", "need_date": "2021-12-20", "arrival_date": "2021-12-15", "apply_dept": "行政品質部", "supplier_name": "冠軍企業行", "item_code": null, "item_spec": "2.5KG PVC軟式交通錐", "quantity": 60, "unit": "支", "unit_price": 154, "subtotal": 9240, "tax": 462, "total_price": 9702, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 25, "order_item_id": 25, "order_no": "P00011", "item_no": 2, "apply_date": "2021-12-02", "purchase_date": "2021-12-02", "need_date": "2021-12-20", "arrival_date": "2021-12-15", "apply_dept": "行政品質部", "supplier_name": "冠軍企業行", "item_code": null, "item_spec": "交通伸縮式連趕", "quantity": 10, "unit": "支", "unit_price": 75, "subtotal": 750, "tax": 38, "total_price": 788, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 26, "order_item_id": 26, "order_no": "P00011", "item_no": 3, "apply_date": "2021-12-02", "purchase_date": "2021-12-02", "need_date": "2021-12-20", "arrival_date": "2021-12-15", "apply_dept": "行政品質部", "supplier_name": "冠軍企業行", "item_code": null, "item_spec": "大車活動式車輪檔(黃)", "quantity": 60, "unit": "個", "unit_price": 799, "subtotal": 47940, "tax": 2397, "total_price": 50337, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 27, "order_item_id": 27, "order_no": "P00011", "item_no": 4, "apply_date": "2021-12-02", "purchase_date": "2021-12-02", "need_date": "2021-12-20", "arrival_date": "2021-12-15", "apply_dept": "行政品質部", "supplier_name": "冠軍企業行", "item_code": null, "item_spec": "指揮棒 (短)", "quantity": 10, "unit": "支", "unit_price": 99, "subtotal": 990, "tax": 50, "total_price": 1040, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 28, "order_item_id": 28, "order_no": "P00011", "item_no": 5, "apply_date": "2021-12-02", "purchase_date": "2021-12-02", "need_date": "2021-12-20", "arrival_date": "2021-12-15", "apply_dept": "行政品質部", "supplier_name": "冠軍企業行", "item_code": null, "item_spec": "警示帶", "quantity": 10, "unit": "捲", "unit_price": 189, "subtotal": 1890, "tax": 95, "total_price": 1985, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 29, "order_item_id": 29, "order_no": "L00001", "item_no": 1, "apply_date": "2021-03-01", "purchase_date": "2021-03-01", "need_date": "2021-12-31", "arrival_date": "2021-10-04", "apply_dept": "運務部設備組", "supplier_name": "民富興實業股份有限公司", "item_code": null, "item_spec": "MAN TGS 19.360 4X2 BBW 35噸", "quantity": 3, "unit": "台", "unit_price": 11710000, "subtotal": 35130000, "tax": 1756500, "total_price": 36886500, "invoice_no": "合聯.順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 30, "order_item_id": 30, "order_no": "L00002", "item_no": 1, "apply_date": "2021-03-01", "purchase_date": "2021-03-01", "need_date": "2021-12-31", "arrival_date": "2021-12-07", "apply_dept": "運務部設備組", "supplier_name": "英屬維京群島商永德福汽車股份有限公司", "item_code": null, "item_spec": "斯堪尼亞 P380A4X2NA 35噸", "quantity": 7, "unit": "台", "unit_price": 26250000, "subtotal": 183750000, "tax": 9187500, "total_price": 192937500, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 31, "order_item_id": 31, "order_no": "L00002", "item_no": 2, "apply_date": "2021-03-01", "purchase_date": "2021-03-01", "need_date": "2021-12-31", "arrival_date": "2021-12-07", "apply_dept": "運務部設備組", "supplier_name": "英屬維京群島商永德福汽車股份有限公司", "item_code": null, "item_spec": "斯堪尼亞 P280B4X2NA 18.5噸", "quantity": 1, "unit": "台", "unit_price": 3335000, "subtotal": 3335000, "tax": 166750, "total_price": 3501750, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 32, "order_item_id": 32, "order_no": "L00003", "item_no": 1, "apply_date": "2021-03-01", "purchase_date": "2021-03-01", "need_date": "2021-12-31", "arrival_date": "2021-10-15", "apply_dept": "運務部設備組", "supplier_name": "冠準汽車貨運有限公司", "item_code": null, "item_spec": "達富 FT-CF480E6D 35噸", "quantity": 1, "unit": "台", "unit_price": 4050000, "subtotal": 4050000, "tax": 202500, "total_price": 4252500, "invoice_no": "合聯運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 33, "order_item_id": 33, "order_no": "L00003", "item_no": 2, "apply_date": "2021-03-01", "purchase_date": "2021-03-01", "need_date": "2021-12-31", "arrival_date": "2021-10-15", "apply_dept": "運務部設備組", "supplier_name": "冠準汽車貨運有限公司", "item_code": null, "item_spec": "達富 FTG-CF480E6D (0001) 35噸", "quantity": 1, "unit": "台", "unit_price": 4550000, "subtotal": 4550000, "tax": 227500, "total_price": 4777500, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 34, "order_item_id": 34, "order_no": "L00004", "item_no": 1, "apply_date": "2021-03-01", "purchase_date": "2021-03-01", "need_date": "2021-12-31", "arrival_date": "2021-09-27", "apply_dept": "運務部設備組", "supplier_name": "長源汽車(股)公司", "item_code": null, "item_spec": "國瑞 XZU650L 5噸", "quantity": 2, "unit": "台", "unit_price": 690476, "subtotal": 1380952, "tax": 69048, "total_price": 1450000, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 35, "order_item_id": 35, "order_no": "L00005", "item_no": 1, "apply_date": "2022-12-10", "purchase_date": "2022-12-10", "need_date": "2022-12-17", "arrival_date": "2022-12-16", "apply_dept": "新竹車場", "supplier_name": "恆翼國際股份有限公司", "item_code": null, "item_spec": "氧氣偵測器", "quantity": 2, "unit": "台", "unit_price": 6500, "subtotal": 13000, "tax": 650, "total_price": 13650, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 36, "order_item_id": 36, "order_no": "L00006", "item_no": 1, "apply_date": "2022-12-10", "purchase_date": "2022-12-10", "need_date": "2022-12-17", "arrival_date": "2022-12-15", "apply_dept": "新竹車場", "supplier_name": "言瑞開發科技股份有限公司", "item_code": null, "item_spec": "KYOCERA ECOSYS M2540DN 雷射多功能複合機 (2022/12/17-2023/6/16月租費)", "quantity": 1, "unit": "台", "unit_price": 6000, "subtotal": 6000, "tax": 300, "total_price": 6300, "invoice_no": "利福運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": "月租費6個月"}, {"id": 37, "order_item_id": 37, "order_no": "L00007", "item_no": 1, "apply_date": "2023-01-03", "purchase_date": "2023-01-03", "need_date": "2023-01-31", "arrival_date": "2023-01-05", "apply_dept": "新竹車場", "supplier_name": "欣立織造有限公司", "item_code": null, "item_spec": "超級型捆物組-C塑長端4M(規格2\"5M)", "quantity": 12, "unit": "條", "unit_price": 260, "subtotal": 3120, "tax": 156, "total_price": 3276, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 38, "order_item_id": 38, "order_no": "L00007", "item_no": 2, "apply_date": "2023-01-03", "purchase_date": "2023-01-03", "need_date": "2023-01-31", "arrival_date": "2023-01-05", "apply_dept": "新竹車場", "supplier_name": "欣立織造有限公司", "item_code": null, "item_spec": "超級型捆物組-C塑長端6M(規格2\"7M)", "quantity": 6, "unit": "條", "unit_price": 300, "subtotal": 1800, "tax": 90, "total_price": 1890, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 39, "order_item_id": 39, "order_no": "L00008", "item_no": 1, "apply_date": "2023-01-13", "purchase_date": "2023-01-13", "need_date": "2023-02-15", "arrival_date": null, "apply_dept": "行政管理部", "supplier_name": "安吾企業有限公司", "item_code": null, "item_spec": "3M 工程級反光貼紙印刷 30*30", "quantity": 126, "unit": "張", "unit_price": 150, "subtotal": 18900, "tax": 945, "total_price": 19845, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 40, "order_item_id": 40, "order_no": "L00009", "item_no": 1, "apply_date": "2023-01-13", "purchase_date": "2023-01-13", "need_date": "2023-02-15", "arrival_date": null, "apply_dept": "行政管理部", "supplier_name": "龍躍美工工作室", "item_code": null, "item_spec": "反光貼紙印刷72*70", "quantity": 42, "unit": "張", "unit_price": 500, "subtotal": 21000, "tax": 0, "total_price": 21000, "invoice_no": "利福運通股份有限公司", "payment_method": "付現 (零用金)", "purchase_type": "例行性採購", "notes": "收據"}, {"id": 41, "order_item_id": 41, "order_no": "L00010", "item_no": 1, "apply_date": "2023-02-13", "purchase_date": "2023-02-13", "need_date": "2023-02-17", "arrival_date": "2023-02-16", "apply_dept": "行政管理部", "supplier_name": "癸海有限公司", "item_code": null, "item_spec": "一般工作服 深色 4L以下", "quantity": 50, "unit": "件", "unit_price": 250, "subtotal": 12500, "tax": 625, "total_price": 13125, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 42, "order_item_id": 42, "order_no": "L00010", "item_no": 2, "apply_date": "2023-02-13", "purchase_date": "2023-02-13", "need_date": "2023-02-17", "arrival_date": "2023-02-16", "apply_dept": "行政管理部", "supplier_name": "癸海有限公司", "item_code": null, "item_spec": "一般工作服 深色 5L", "quantity": 6, "unit": "件", "unit_price": 270, "subtotal": 1620, "tax": 81, "total_price": 1701, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 43, "order_item_id": 43, "order_no": "L00010", "item_no": 3, "apply_date": "2023-02-13", "purchase_date": "2023-02-13", "need_date": "2023-02-17", "arrival_date": "2023-02-16", "apply_dept": "行政管理部", "supplier_name": "癸海有限公司", "item_code": null, "item_spec": "一般工作服 深色 6L", "quantity": 4, "unit": "件", "unit_price": 290, "subtotal": 1160, "tax": 58, "total_price": 1218, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 44, "order_item_id": 44, "order_no": "L00011", "item_no": 1, "apply_date": "2023-02-15", "purchase_date": "2023-02-15", "need_date": "2023-02-15", "arrival_date": "2023-02-15", "apply_dept": "行政管理部", "supplier_name": "咸豐科技股份有限公司", "item_code": null, "item_spec": "門禁系統安裝 (新竹廠及台中廠)", "quantity": 1, "unit": "台", "unit_price": 52850, "subtotal": 52850, "tax": 2643, "total_price": 55493, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": "議價付款50000"}, {"id": 45, "order_item_id": 45, "order_no": "L00012", "item_no": 1, "apply_date": "2023-04-19", "purchase_date": "2023-04-19", "need_date": "2023-04-20", "arrival_date": "2023-04-20", "apply_dept": "行政管理部", "supplier_name": "恆翼國際股份有限公司", "item_code": null, "item_spec": "氧-02校正", "quantity": 1, "unit": "台", "unit_price": 800, "subtotal": 800, "tax": 40, "total_price": 840, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 46, "order_item_id": 46, "order_no": "L00013", "item_no": 1, "apply_date": "2023-05-07", "purchase_date": "2023-05-07", "need_date": "2023-05-10", "arrival_date": "2023-05-08", "apply_dept": "行政管理部", "supplier_name": "麗欣消防企業商行", "item_code": null, "item_spec": "車用乾粉滅火器", "quantity": 5, "unit": "支", "unit_price": 700, "subtotal": 3500, "tax": 175, "total_price": 3675, "invoice_no": "合聯運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": "台灣土地銀行代號0050522 帳號:052001033964"}, {"id": 47, "order_item_id": 47, "order_no": "L00014", "item_no": 1, "apply_date": "2023-08-22", "purchase_date": "2023-08-22", "need_date": "2023-08-23", "arrival_date": "2023-08-23", "apply_dept": "新竹車場", "supplier_name": "恆翼國際股份有限公司", "item_code": null, "item_spec": "氫氣偵測器", "quantity": 2, "unit": "支", "unit_price": 8600, "subtotal": 17200, "tax": 860, "total_price": 18060, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 48, "order_item_id": 48, "order_no": "L00015", "item_no": 1, "apply_date": "2023-08-22", "purchase_date": "2023-08-22", "need_date": "2023-08-23", "arrival_date": "2023-08-23", "apply_dept": "新竹車場", "supplier_name": "基圓企業股份有限公司", "item_code": null, "item_spec": "防爆梅開板手46mm德國ENDES製", "quantity": 1, "unit": "支", "unit_price": 6160, "subtotal": 6160, "tax": 308, "total_price": 6468, "invoice_no": "利福運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 49, "order_item_id": 49, "order_no": "L00016", "item_no": 1, "apply_date": "2024-08-25", "purchase_date": "2024-08-25", "need_date": "2024-09-06", "arrival_date": "2024-09-03", "apply_dept": "新竹車場", "supplier_name": "臻安工業有限公司", "item_code": null, "item_spec": "濾毒罐-1包2個", "quantity": 20, "unit": "個", "unit_price": 250, "subtotal": 5000, "tax": 250, "total_price": 5250, "invoice_no": "順亞運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 50, "order_item_id": 50, "order_no": "L00017", "item_no": 1, "apply_date": "2025-06-24", "purchase_date": "2025-06-25", "need_date": "2025-07-18", "arrival_date": "2025-07-15", "apply_dept": "設備組", "supplier_name": "利音貿易開發股份有限公司", "item_code": "3M 6200", "item_spec": "3M半面式防毒面具(24個/箱)", "quantity": 5, "unit": "個", "unit_price": 350, "subtotal": 1750, "tax": 88, "total_price": 1838, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 51, "order_item_id": 51, "order_no": "L00018", "item_no": 1, "apply_date": "2025-07-23", "purchase_date": "2025-07-30", "need_date": "2025-08-11", "arrival_date": "2025-07-29", "apply_dept": "設備組", "supplier_name": "臻安工業有限公司", "item_code": "AP-2601", "item_spec": "工作皮手套(臻安_AP-2601)", "quantity": 300, "unit": "雙", "unit_price": 380, "subtotal": 114000, "tax": 5700, "total_price": 119700, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 52, "order_item_id": 52, "order_no": "L00019", "item_no": 1, "apply_date": "2025-09-17", "purchase_date": "2025-09-17", "need_date": "2025-09-30", "arrival_date": "2025-09-18", "apply_dept": "設備組", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "3M C 級防護衣 (灰)", "quantity": 11, "unit": "件", "unit_price": 680, "subtotal": 7480, "tax": 374, "total_price": 7854, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 53, "order_item_id": 53, "order_no": "L00020", "item_no": 1, "apply_date": "2025-11-20", "purchase_date": "2025-11-20", "need_date": "2025-11-20", "arrival_date": "2025-11-20", "apply_dept": "設備組", "supplier_name": "麗欣消防企業商行", "item_code": null, "item_spec": "20P車用滅火器充藥", "quantity": 8, "unit": "支", "unit_price": 350, "subtotal": 2800, "tax": 140, "total_price": 2940, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 54, "order_item_id": 54, "order_no": "L00020", "item_no": 2, "apply_date": "2025-11-20", "purchase_date": "2025-11-20", "need_date": "2025-11-20", "arrival_date": "2025-11-20", "apply_dept": "設備組", "supplier_name": "麗欣消防企業商行", "item_code": null, "item_spec": "10P車用滅火器充藥", "quantity": 1, "unit": "支", "unit_price": 250, "subtotal": 250, "tax": 13, "total_price": 263, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 55, "order_item_id": 55, "order_no": "L00020", "item_no": 3, "apply_date": "2025-11-20", "purchase_date": "2025-11-20", "need_date": "2025-11-20", "arrival_date": "2025-11-20", "apply_dept": "設備組", "supplier_name": "麗欣消防企業商行", "item_code": null, "item_spec": "3P車用滅火器充藥", "quantity": 1, "unit": "支", "unit_price": 250, "subtotal": 250, "tax": 13, "total_price": 263, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 56, "order_item_id": 56, "order_no": "L00020", "item_no": 4, "apply_date": "2025-11-20", "purchase_date": "2025-11-20", "need_date": "2025-11-20", "arrival_date": "2025-11-20", "apply_dept": "設備組", "supplier_name": "麗欣消防企業商行", "item_code": null, "item_spec": "車用滅火器貼紙", "quantity": 7, "unit": "張", "unit_price": 80, "subtotal": 560, "tax": 28, "total_price": 588, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 57, "order_item_id": 57, "order_no": "L00021", "item_no": 1, "apply_date": "2025-12-01", "purchase_date": "2025-12-01", "need_date": "2025-12-10", "arrival_date": "2025-12-08", "apply_dept": "設備管理部", "supplier_name": "臻安工業有限公司", "item_code": "3M-6006", "item_spec": "綜合型濾毒罐(2個/組)", "quantity": 20, "unit": "個", "unit_price": 245, "subtotal": 9240, "tax": 462, "total_price": 9702, "invoice_no": "順亞運通股份有限公司", "payment_method": "其他", "purchase_type": "例行性採購", "notes": null}, {"id": 58, "order_item_id": 58, "order_no": "L00022", "item_no": 1, "apply_date": "2026-03-19", "purchase_date": "2026-03-19", "need_date": "2026-03-19", "arrival_date": "2026-03-23", "apply_dept": "行政管理部", "supplier_name": "川成電腦有限公司", "item_code": null, "item_spec": "ASUS 27\"VA279QG液晶螢幕", "quantity": 5, "unit": "台", "unit_price": 3200, "subtotal": 16000, "tax": 800, "total_price": 16800, "invoice_no": "順亞運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 59, "order_item_id": 59, "order_no": "L00023", "item_no": 1, "apply_date": "2026-02-26", "purchase_date": "2026-03-04", "need_date": "2026-03-10", "arrival_date": "2026-03-10", "apply_dept": "行政管理部", "supplier_name": "豐榮五金企業有限公司", "item_code": null, "item_spec": "4\"PU輪+培林", "quantity": 20, "unit": "個", "unit_price": 140, "subtotal": 2800, "tax": 0, "total_price": 2800, "invoice_no": "順亞運通股份有限公司", "payment_method": "零用金", "purchase_type": "例行性採購", "notes": "現金支付2800含稅"}, {"id": 60, "order_item_id": 60, "order_no": "L00024", "item_no": 1, "apply_date": "2026-05-20", "purchase_date": "2026-05-26", "need_date": "2026-05-26", "arrival_date": "2026-05-28", "apply_dept": "行政管理部", "supplier_name": "互盛股份有限公司", "item_code": null, "item_spec": "M-EPSON-LQ690C2N:EPSON LQ-690CIIN24針A4網路點陣印表機", "quantity": 1, "unit": "台", "unit_price": 20476, "subtotal": 20476, "tax": 1024, "total_price": 21500, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 61, "order_item_id": 61, "order_no": "L00025", "item_no": 1, "apply_date": "2026-03-25", "purchase_date": "2026-03-25", "need_date": "2026-06-30", "arrival_date": "2026-06-10", "apply_dept": "行政管理部", "supplier_name": "觀新貿易實業股份有限公司", "item_code": null, "item_spec": "HELI全新電動拖板車(鋰電池)/CBD20 2.0頓", "quantity": 1, "unit": "台", "unit_price": 52000, "subtotal": 52000, "tax": 2600, "total_price": 54600, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 62, "order_item_id": 62, "order_no": "L00026", "item_no": 1, "apply_date": "2026-06-12", "purchase_date": "2026-06-12", "need_date": "2026-06-30", "arrival_date": "2026-06-15", "apply_dept": "行政管理部", "supplier_name": "力牛高強油壓拖板車有限公司", "item_code": null, "item_spec": "2.0噸-F20-電動拖板車685*1150MM", "quantity": 3, "unit": "台", "unit_price": 30000, "subtotal": 90000, "tax": 4500, "total_price": 94500, "invoice_no": "順亞運通股份有限公司", "payment_method": "月結", "purchase_type": "例行性採購", "notes": null}, {"id": 63, "order_item_id": 63, "order_no": "L00027", "item_no": 1, "apply_date": "2026-06-02", "purchase_date": "2026-06-02", "need_date": "2026-06-15", "arrival_date": "2026-06-15", "apply_dept": "行政管理部", "supplier_name": "利音貿易開發股份有限公司", "item_code": null, "item_spec": "3M防音耳塞/3M1271", "quantity": 50, "unit": "付", "unit_price": 55, "subtotal": 2750, "tax": 138, "total_price": 2888, "invoice_no": "順亞運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}, {"id": 64, "order_item_id": 64, "order_no": "L00028", "item_no": 1, "apply_date": "2026-07-03", "purchase_date": "2026-07-03", "need_date": "2026-07-06", "arrival_date": "2026-07-06", "apply_dept": "行政管理部", "supplier_name": "揚筠電腦科技有限公司", "item_code": null, "item_spec": "ASUS ASUS X1607AA-0031B325筆電(午夜藍)/ASUS X1407AA-0041D325筆電(鉑金色)", "quantity": 2, "unit": "台", "unit_price": 32200, "subtotal": 64400, "tax": 3220, "total_price": 67620, "invoice_no": "順亞運通股份有限公司", "payment_method": "匯款", "purchase_type": "例行性採購", "notes": null}], "qualified_suppliers": [{"id": 1, "supplier_id": 1, "filed_date": "2016-01-05", "category": "保養維修", "seq_no": 1, "region": "新竹", "company_name": "長源汽車(股)公司", "address": "新竹市香山區中華路四段561號\n高雄市仁武區高楠公路94號\n高雄市小港區大業北路19號\n台南市永康區中正北路332號", "phone": "03-5389811 07-8013688", "fax": "無", "responsible_person": "蘇燕輝", "tax_id": "16630047", "contact_person": "范先生", "established_date": "1947-09-01", "business_desc": "保養維修", "is_active": 0}, {"id": 2, "supplier_id": 2, "filed_date": "2016-01-05", "category": "保養維修", "seq_no": 2, "region": "新竹", "company_name": "裕益汽車股份有限公司(FUSO)", "address": "新竹市東區水源里中華路１段31號\n高雄市路竹區中山路1571號", "phone": "03-5323122 07-6971516", "fax": "無", "responsible_person": "游浩乙", "tax_id": "47304644", "contact_person": null, "established_date": "1984-07-25", "business_desc": "保養維修", "is_active": 0}, {"id": 3, "supplier_id": 3, "filed_date": "2016-01-05", "category": "保養維修", "seq_no": 3, "region": "桃園", "company_name": "英屬維京群島商永德福汽車股份有限公司", "address": "桃園縣平鎮市延平路三段102號\n新北市五股區新五路二段111巷7號\n台中市西屯區廣福路155-3號", "phone": "03-492-2128\n02-22929600\n04-27081090", "fax": "03-492-2165\n02-22927170\n04-27081101", "responsible_person": "李連奎", "tax_id": "27922106", "contact_person": "陳連豐廠長", "established_date": "2005-08-03", "business_desc": "保養維修", "is_active": 0}, {"id": 4, "supplier_id": 4, "filed_date": "2016-01-06", "category": "保養維修", "seq_no": 4, "region": "新竹", "company_name": "至懋汽車股份有限公司-苗栗", "address": "苗栗縣頭份鎮中華路231號\n高雄市前鎮區金福路11號\n桃園市邑山區大湖路45-36號\n台中市龍井區臨港路二段38號之1", "phone": "0800-085995  037-625600 07-8126526 03-3979700 04-26397009  04-26305417", "fax": "無", "responsible_person": "曹玉文", "tax_id": "28101628", "contact_person": "謝志年(新竹) 鄭銘輝(桃園)  林聰慶(台中)", "established_date": "2006-03-02", "business_desc": "保養維修", "is_active": 0}, {"id": 5, "supplier_id": 5, "filed_date": "2016-01-07", "category": "輪胎保養", "seq_no": 5, "region": "新竹", "company_name": "東昇輪胎行", "address": "新竹縣竹東鎮北興路一段65號", "phone": "03-5945572", "fax": "03-5103690", "responsible_person": "張昭旺", "tax_id": "13489073", "contact_person": "張昭旺", "established_date": "2001-10-15", "business_desc": "車胎批發業、汽機車零件配備批發業、車胎零售業(新品)", "is_active": 0}, {"id": 6, "supplier_id": 6, "filed_date": "2016-01-12", "category": "GPS", "seq_no": 6, "region": "新竹", "company_name": "易通通訊有限公司 ", "address": "新北市新莊區幸福路912號3樓", "phone": "02-89935511", "fax": "02-89936611", "responsible_person": "翁得修", "tax_id": "80471191", "contact_person": "翁得修", "established_date": "2003-08-06", "business_desc": "GPS車輛監控 ", "is_active": 0}, {"id": 7, "supplier_id": 7, "filed_date": "2016-01-21", "category": "行車記錄器", "seq_no": 7, "region": "高雄", "company_name": "統崎有限公司", "address": "高雄市前鎮區民權二路429號", "phone": "07-3321625    07-3321626", "fax": "07-3321626", "responsible_person": "陳騰蛟", "tax_id": "83409833", "contact_person": "陳騰蛟", "established_date": "1975-02-26", "business_desc": "行車記錄器", "is_active": 0}, {"id": 8, "supplier_id": 8, "filed_date": "2016-01-21", "category": "保養維修", "seq_no": 8, "region": "高雄", "company_name": "新鈴汽車股份有限公司", "address": "高雄縣仁武鄉澄觀路1318號", "phone": "07-3710000", "fax": "07-3741772", "responsible_person": "黃煥永 ", "tax_id": "80088061", "contact_person": null, "established_date": "1991-11-26", "business_desc": "汽車保養廠", "is_active": 0}, {"id": 9, "supplier_id": 9, "filed_date": "2016-01-21", "category": "保養維修", "seq_no": 9, "region": "高雄", "company_name": "三菱堆高機有限公司 (台貿)", "address": "高雄市左營區自由4路365巷3號", "phone": "07-3755866   06-5893082  06-3755966", "fax": "無", "responsible_person": "陳鳳翔 ", "tax_id": "13186198", "contact_person": null, "established_date": "2002-09-07", "business_desc": "堆高機保養 ", "is_active": 0}, {"id": 10, "supplier_id": 10, "filed_date": "2016-01-21", "category": "保養維修", "seq_no": 10, "region": "高雄", "company_name": "南興汽車修理廠有限公司", "address": "台南市佳里區民安里同安寮72-18號", "phone": "06-7225730 07-7225739", "fax": "無", "responsible_person": "羅志隆", "tax_id": "24246243", "contact_person": null, "established_date": "1990-10-08", "business_desc": "汽、機車零件配備零售業、汽車修理業", "is_active": 0}, {"id": 11, "supplier_id": 11, "filed_date": "2016-01-23", "category": "保養維修", "seq_no": 11, "region": "高雄", "company_name": "銘正汽車材料行", "address": "高雄縣湖內鄉湖內村中山路一段145號", "phone": "07-6935688 05-2600963", "fax": "05-2684347", "responsible_person": "王金娥", "tax_id": "07949606", "contact_person": "謝進學", "established_date": "2016-01-01", "business_desc": "汽車材料買賣、汽車保修廠", "is_active": 0}, {"id": 12, "supplier_id": 12, "filed_date": "2016-01-25", "category": "保養維修", "seq_no": 12, "region": "高雄", "company_name": "勝發電工所", "address": "台南縣麻豆鎮麻佳路一段53號", "phone": "06-5721570 0932-152566", "fax": "無", "responsible_person": "張海龍", "tax_id": "72147926", "contact_person": "張立憲", "established_date": "1971-01-01", "business_desc": "電瓶、馬達、電機保養維修", "is_active": 0}, {"id": 13, "supplier_id": 13, "filed_date": "2016-02-02", "category": "其它", "seq_no": 13, "region": "高雄", "company_name": "強牛企業股份有限公司", "address": "高雄市三民區哈爾濱街229號", "phone": "07-3225556  3219798", "fax": "07-3214948", "responsible_person": "高相楹 ", "tax_id": "76374632", "contact_person": "高相楹 ", "established_date": "1982-04-03", "business_desc": "五金.機械批發業  油壓拖板車", "is_active": 0}, {"id": 14, "supplier_id": 14, "filed_date": "2016-02-02", "category": "車輛買賣", "seq_no": 14, "region": "高雄", "company_name": "尚餘工業股份有限公司", "address": "屏東縣屏東市清溪里建國路388號", "phone": "07-8231855", "fax": "07-8232096", "responsible_person": "詹凱名", "tax_id": "22549869", "contact_person": null, "established_date": "1988-03-14", "business_desc": "車輛買賣", "is_active": 0}, {"id": 15, "supplier_id": 15, "filed_date": "2016-02-03", "category": "保養維修", "seq_no": 15, "region": "新竹", "company_name": "鑫成汽車電機行", "address": "新竹市經國路一段300巷15之3號", "phone": "0932-114833 03-5353297", "fax": "無", "responsible_person": "朱世榮", "tax_id": "20130924", "contact_person": "朱世榮", "established_date": "2016-01-01", "business_desc": "汽車電機維修", "is_active": 0}, {"id": 16, "supplier_id": 16, "filed_date": "2016-02-03", "category": "車體製作", "seq_no": 16, "region": "新竹", "company_name": "富冠企業社", "address": "新竹市高翠路212號", "phone": "03-5226375", "fax": "無", "responsible_person": "何盛金", "tax_id": "47113357", "contact_person": null, "established_date": "2016-01-01", "business_desc": "車體製作", "is_active": 0}, {"id": 17, "supplier_id": 17, "filed_date": "2016-02-03", "category": "廣告", "seq_no": 17, "region": "新竹", "company_name": "敏利企業有限公司", "address": "新竹市光復路一段472號4樓之1", "phone": "03-5798720", "fax": "03-5798723", "responsible_person": "吳鍾驥", "tax_id": "84625042", "contact_person": "盧小姐#109 service@minlie.com.tw 傅先生#158聯絡\n手機 0910-295347\n", "established_date": "1994-12-01", "business_desc": "壓克力、貼紙、鋁板標示 service@minlie.com.tw", "is_active": 0}, {"id": 18, "supplier_id": 18, "filed_date": "2016-02-03", "category": "量測儀器", "seq_no": 18, "region": "新竹", "company_name": "紫陽科技股份有限公司", "address": "桃園縣平鎮市平東路一段178巷15號", "phone": "03-4507572", "fax": "03-4507565", "responsible_person": "紀麗娜", "tax_id": "12815445", "contact_person": "紀麗娜", "established_date": null, "business_desc": "電子材料批發業、電子零組件 、一般儀器 、儀表安裝 、醫療器材 ", "is_active": 0}, {"id": 19, "supplier_id": 19, "filed_date": "2016-02-03", "category": "量測儀器", "seq_no": 19, "region": "新竹", "company_name": "臻安工業有限公司", "address": "台中縣豐原市合作新村30巷2號", "phone": "04-25285600", "fax": "04-25269800", "responsible_person": "蘇慧美", "tax_id": "86215819", "contact_person": "張博軒0918-227771 詹小姐", "established_date": null, "business_desc": "攜帶型氧氣偵測器、工礦安全衛生保護器材、氧氣爆炸性氣體毒性氣體等測定器及噪音器塵測器、消防器材買賣", "is_active": 0}, {"id": 20, "supplier_id": 20, "filed_date": "2016-02-03", "category": "文具", "seq_no": 20, "region": "新竹", "company_name": "將文企業有限公司", "address": "新竹縣竹北市中正東路133號", "phone": "03-6567566", "fax": "03-6567569", "responsible_person": "邱文寬", "tax_id": "86550469", "contact_person": "邱茹瑜", "established_date": "1981-01-29", "business_desc": "文具用品、禮品、汽車香水買賣、印刷品（廣告用、各類報表紙）製造、加工、買賣", "is_active": 0}, {"id": 21, "supplier_id": 21, "filed_date": "2016-02-03", "category": "文具", "seq_no": 21, "region": "新竹", "company_name": "翰林數位影印中心", "address": "新竹市光復路二段26號", "phone": "03-5753273", "fax": "03-5750120", "responsible_person": "謝宗翰", "tax_id": null, "contact_person": "謝宗翰", "established_date": "2016-01-01", "business_desc": "文件輸出、影印、裝訂", "is_active": 0}, {"id": 22, "supplier_id": 22, "filed_date": "2016-02-03", "category": "車輛配備", "seq_no": 22, "region": "新竹", "company_name": "碩立停車設備股份有限公司", "address": "新竹縣竹北市六家五路一段200號1樓", "phone": "03-6586900", "fax": "03-6586907", "responsible_person": "廖茂川 ", "tax_id": "53029630", "contact_person": "蔡金杉", "established_date": "2010-04-22", "business_desc": "退止角.機械批發業.其他機械器具批發業", "is_active": 0}, {"id": 23, "supplier_id": 23, "filed_date": "2016-02-03", "category": "監視系統", "seq_no": 23, "region": "高雄", "company_name": "警民保全股份有限公司(展仕科技)", "address": "高雄市苓雅區凱旋一路3號9樓", "phone": "07-2293030", "fax": "07-2291616", "responsible_person": "何淑靜 ", "tax_id": "27696087", "contact_person": "邱寶元", "established_date": "2005-11-03", "business_desc": "連線監控服務", "is_active": 0}, {"id": 24, "supplier_id": 24, "filed_date": "2016-02-03", "category": "五金零件", "seq_no": 24, "region": "新竹", "company_name": "基圓企業股份有限公司", "address": "台中市西屯區台中港路三段世斌一巷21弄9號1樓  ", "phone": "04-24631847", "fax": "04-24633916", "responsible_person": "吳江泉 ", "tax_id": "84653200", "contact_person": "李櫻麥", "established_date": "1993-12-30", "business_desc": "五金零售業 ", "is_active": 0}, {"id": 25, "supplier_id": 25, "filed_date": "2016-02-03", "category": "車輛配備", "seq_no": 25, "region": "新竹", "company_name": "麗欣消防企業商行", "address": "新竹縣湖口鄉信勢村明德街229巷21弄5號", "phone": "03-5991023", "fax": "03-6992670", "responsible_person": "余榮坤", "tax_id": "67995287", "contact_person": "余榮坤", "established_date": "2016-01-01", "business_desc": "消防器材", "is_active": 0}, {"id": 26, "supplier_id": 26, "filed_date": "2016-02-03", "category": "車輛配備", "seq_no": 26, "region": "新竹", "company_name": "俊安興業有限公司", "address": "桃園縣楊梅市民隆路28號", "phone": "03-4728989", "fax": "03-4725511", "responsible_person": "林長寬", "tax_id": "05153551", "contact_person": "林小姐", "established_date": "1981-07-13", "business_desc": "安全帽(泰昕交易)", "is_active": 0}, {"id": 27, "supplier_id": 27, "filed_date": "2016-02-03", "category": "車輛配備", "seq_no": 27, "region": "彰化", "company_name": "欣立織造企業有限公司", "address": "彰化縣福興鄉外中村番花路一段1039號", "phone": "04-7792326", "fax": "04-7793519", "responsible_person": "蔡錫高", "tax_id": "84387180", "contact_person": "洪玉華", "established_date": "1993-06-04", "business_desc": "綑綁帶、安全、帆布", "is_active": 0}, {"id": 28, "supplier_id": 28, "filed_date": "2016-02-03", "category": "其它", "seq_no": 28, "region": "高雄", "company_name": "冠軍企業行", "address": "高雄市左營區新庄仔路788巷9弄6號", "phone": "07-5567239", "fax": "08-7393980", "responsible_person": "許惠香", "tax_id": "83656382", "contact_person": "曾明智", "established_date": "2016-01-01", "business_desc": "輪擋、三角椎、連桿", "is_active": 0}, {"id": 29, "supplier_id": 29, "filed_date": "2016-02-03", "category": "保養維修", "seq_no": 29, "region": "高雄", "company_name": "凱弘汽車修配股份有限公司 ", "address": "高雄市路竹區中山路1461號", "phone": "07-6962295  07-6969936", "fax": "07-6072256", "responsible_person": "黃聰雄", "tax_id": "88720840", "contact_person": "黃聰雄", "established_date": "1985-03-27", "business_desc": "板金、噴漆", "is_active": 0}, {"id": 30, "supplier_id": 30, "filed_date": "2016-02-04", "category": "車輛配備", "seq_no": 30, "region": "高雄", "company_name": "貝民股份有限公司", "address": "高雄市前鎮區中山二路91號2樓", "phone": "07-3320059-16  0978-763325", "fax": "07-3344689", "responsible_person": "林正東", "tax_id": "20561107", "contact_person": "洪秀玉", "established_date": "1963-10-28", "business_desc": "觸媒還原劑(尿素)", "is_active": 0}, {"id": 31, "supplier_id": 31, "filed_date": "2016-02-05", "category": "行車記錄器", "seq_no": 31, "region": "新竹", "company_name": "仕楨有限公司", "address": "台中市西屯區港尾里中康街243號1樓", "phone": "\t\n04-24260500/0932-648402沈先生", "fax": "04-24252795", "responsible_person": "張美玲", "tax_id": "28567456", "contact_person": "沈先生", "established_date": "2007-01-24", "business_desc": "行車紀錄器", "is_active": 0}, {"id": 32, "supplier_id": 32, "filed_date": "2016-05-21", "category": "車輛配備", "seq_no": 32, "region": "高雄", "company_name": "中日消防工業股份有限公司", "address": "高雄市湖內區中正路二段524號", "phone": "07-6922277  07-6907272", "fax": "07-6922323", "responsible_person": "吳志豪", "tax_id": "28402271", "contact_person": "吳志豪", "established_date": "2006-09-18", "business_desc": "各式消防器材製造批發\n滅火器換藥合工廠", "is_active": 0}, {"id": 33, "supplier_id": 33, "filed_date": "2016-05-21", "category": "保養維修", "seq_no": 33, "region": "新竹", "company_name": "新益汽車工業社", "address": "新竹市水源里3鄰千甲路183號", "phone": "03-5712576 03-5717736", "fax": "5717736", "responsible_person": "溫清沛", "tax_id": "47308986", "contact_person": "溫清沛", "established_date": "1984-07-01", "business_desc": "柴油引擎、底盤修理", "is_active": 0}, {"id": 34, "supplier_id": 34, "filed_date": "2016-05-22", "category": "保養維修", "seq_no": 34, "region": "桃園", "company_name": "龍安汽車電機行", "address": "桃園縣觀音鄉大觀路一段497號", "phone": "03-4839448 03-4839712", "fax": "無", "responsible_person": "游美霞", "tax_id": "2694528", "contact_person": "陳家安", "established_date": "1988-07-07", "business_desc": "電機、冷氣、電瓶、音響保修", "is_active": 0}, {"id": 35, "supplier_id": 35, "filed_date": "2016-05-23", "category": "保養維修-臨時", "seq_no": 35, "region": "桃園", "company_name": "全民希望有限公司", "address": "桃園市大園區中華路219號", "phone": "03-3857577  0932-094181", "fax": "無", "responsible_person": "郭垂青", "tax_id": "16342664", "contact_person": "郭垂青", "established_date": "1998-01-17", "business_desc": "小型車汽車修理、買賣", "is_active": 0}, {"id": 36, "supplier_id": 36, "filed_date": "2016-05-23", "category": "保養維修", "seq_no": 36, "region": "桃園", "company_name": "榮展汽車修理廠", "address": "桃園縣蘆竹鄉山腳村海山路229-2號", "phone": "03-3248581", "fax": "03-3248582", "responsible_person": "謝安宏", "tax_id": "17681108", "contact_person": "謝安宏", "established_date": "2000-05-01", "business_desc": "引擎、底盤、電機、鈑金修護", "is_active": 0}, {"id": 37, "supplier_id": 37, "filed_date": "2016-05-23", "category": "保養維修", "seq_no": 37, "region": "桃園", "company_name": "宏昇汽車修護廠", "address": "桃園市大園區田心里國際路一段133巷8號", "phone": "03-3865655  03-3865179", "fax": "03-3864920", "responsible_person": "游曉芬", "tax_id": "10084008", "contact_person": "陳政頡", "established_date": "2016-01-01", "business_desc": "車輛引擎、底盤、電機、鈑金(烤漆)修護", "is_active": 0}, {"id": 38, "supplier_id": 38, "filed_date": "2016-08-05", "category": "保養維修", "seq_no": 38, "region": "新竹", "company_name": "名冠汽車修理廠", "address": "新竹縣竹北市聯興理10鄰溝貝11-3號", "phone": "03-5539357   0935-609306", "fax": "無", "responsible_person": "鄭林秀菊 ", "tax_id": "28321278", "contact_person": null, "established_date": "2006-05-24", "business_desc": "汽車保養廠", "is_active": 0}, {"id": 39, "supplier_id": 39, "filed_date": "2016-08-19", "category": "保養維修", "seq_no": 39, "region": "台中", "company_name": "台灣達富汽車有限公司", "address": "40764台中市西屯區台灣大道5段224號", "phone": "04-23553166  0938-553166  0930-119168", "fax": "04-23553258", "responsible_person": "張俊儀", "tax_id": "28755871", "contact_person": "張權澤", "established_date": "1999-01-11", "business_desc": "1. DAF新車總代理、零件配備買賣安裝。\n2. DAF汽車保修。\n3. 大小型車輛代檢等相關業務。", "is_active": 0}, {"id": 40, "supplier_id": 40, "filed_date": "2016-08-19", "category": "保養維修", "seq_no": 40, "region": "台中", "company_name": "東亞汽車修配廠", "address": "公司：台中市龍井區新東里遊園南路319巷72號\n工廠：台中市沙鹿區自立路330號(對面)", "phone": "0963-151507", "fax": "無", "responsible_person": "吳政憲", "tax_id": "38838979", "contact_person": "吳政憲", "established_date": "2016-01-01", "business_desc": "1. 柴油車引擎、底盤保修。\n2. 尿素電腦系統升級。\n3. 診斷電腦買賣。\n4. 商用車買賣。", "is_active": 0}, {"id": 41, "supplier_id": 41, "filed_date": "2016-08-19", "category": "五金零件", "seq_no": 41, "region": "台中", "company_name": "港富五金股份有限公司", "address": "台中市梧棲區臨港路二段396號", "phone": "04-26307237  0973-732080", "fax": "04-26307238", "responsible_person": "張信富", "tax_id": "23852086", "contact_person": "蔡家祥", "established_date": "1990-09-15", "business_desc": "機械、建築、 板模、水電等五金、電動工具、配管材料、鋼索吊車、工安器材、焊接器材、無塵室耗材、各式油漆及螺絲、工具與個人防護器具(PPE)販售及維修。", "is_active": 0}, {"id": 42, "supplier_id": 42, "filed_date": "2016-08-19", "category": "車輛配備", "seq_no": 42, "region": "彰化", "company_name": "欣立織造有限公司", "address": "彰化縣福興鄉元中村番花路一段1039號", "phone": "04-7792326　0963-045543", "fax": "04-7793519", "responsible_person": "蔡錫高", "tax_id": "84387180", "contact_person": "洪玉華", "established_date": "1993-06-04", "business_desc": "綑綁帶6m-$280、框架使用4m-$180、綑綁器-$160", "is_active": 0}, {"id": 43, "supplier_id": 43, "filed_date": "2016-08-19", "category": "監視系統", "seq_no": 43, "region": "台中", "company_name": "咸豐科技有限公司", "address": "新竹市長春街144號", "phone": "03-5782677　0927-113236", "fax": "03-5637841", "responsible_person": "徐永豐", "tax_id": "80475611", "contact_person": "徐永豐", "established_date": "2003-09-02", "business_desc": "1. 監視器、電話系統工程。\n2. 門禁管理系統。\n", "is_active": 0}, {"id": 44, "supplier_id": 44, "filed_date": "2016-08-19", "category": "車輛配備", "seq_no": 44, "region": "台中", "company_name": "貝民股份有限公司", "address": "435台中市梧棲區自立二街122號", "phone": "04-26398163/121  0975-828136", "fax": "04-26398140", "responsible_person": "林正東", "tax_id": "20561107", "contact_person": "蔡鎮舟", "established_date": "2016-01-01", "business_desc": "車用尿素水買賣。", "is_active": 0}, {"id": 45, "supplier_id": 45, "filed_date": "2016-08-26", "category": "保養維修", "seq_no": 45, "region": "台中", "company_name": "詒東汽車工業股份有限公司", "address": "台中市梧棲區臨海路7號\n台中市梧棲區草湳里臨港路三段210號", "phone": "04-26393958  04-26393953  0932-534066", "fax": "無", "responsible_person": "賴清波", "tax_id": "86335737", "contact_person": "賴清波", "established_date": "1991-09-11", "business_desc": "車體結構鈑金維修", "is_active": 0}, {"id": 46, "supplier_id": 46, "filed_date": "2016-08-26", "category": "保養維修", "seq_no": 46, "region": "台中", "company_name": "國盛汽車保養廠(通盛)", "address": "台中市梧棲區港帥路一段716號", "phone": "04-26576113  04-26397547  0937-232422", "fax": "無", "responsible_person": "陳文通", "tax_id": null, "contact_person": "陳文通", "established_date": "1997-01-01", "business_desc": "柴油車輛引擎、底盤保修", "is_active": 0}, {"id": 47, "supplier_id": 47, "filed_date": "2016-11-28", "category": "保養維修", "seq_no": 47, "region": "台中", "company_name": "龍興汽車修配廠", "address": "台中市龍井區臨港路一段39-1號", "phone": "04-26399540", "fax": "04-26380686", "responsible_person": "陳建清", "tax_id": "17787600", "contact_person": "陳建清", "established_date": "2016-01-01", "business_desc": "鈑金、烤漆", "is_active": 0}, {"id": 48, "supplier_id": 48, "filed_date": "2017-03-01", "category": "車輛配備", "seq_no": 48, "region": "台南", "company_name": "欣達企業社", "address": "台南市永康區埔園里四維街30之1號1樓", "phone": "06-7957649", "fax": "06-7961058", "responsible_person": "方德馨", "tax_id": "74957393", "contact_person": null, "established_date": "1998-11-02", "business_desc": "交通標示工程業", "is_active": 0}, {"id": 49, "supplier_id": 49, "filed_date": "2017-03-01", "category": "其它", "seq_no": 49, "region": "新竹", "company_name": "越限創意有限公司", "address": "新竹市光復路二段295號13樓之5", "phone": "03-5733708", "fax": "03-5733780", "responsible_person": "劉純興", "tax_id": "16561365", "contact_person": "劉純興", "established_date": "1998-07-30", "business_desc": "電腦設備安裝業", "is_active": 0}, {"id": 50, "supplier_id": 50, "filed_date": "2017-03-01", "category": "其它", "seq_no": 50, "region": "台中", "company_name": "南一辦公家具股份有限公司", "address": "台中市南區復興路 3 段 389 號", "phone": "04-22210723", "fax": "04-22210725", "responsible_person": "沈慶慧", "tax_id": "86547922", "contact_person": "魏宜辰", "established_date": "1992-01-27", "business_desc": "辦公室家具零售、室內裝潢工程", "is_active": 0}, {"id": 51, "supplier_id": 51, "filed_date": "2017-03-01", "category": "其它", "seq_no": 51, "region": "新竹", "company_name": "川成電腦有限公司", "address": "新竹縣竹北市縣政二十路146號1樓", "phone": "03-555-7681", "fax": "03-551-6267", "responsible_person": "詹錢崧", "tax_id": "86562134", "contact_person": "蔡政杰", "established_date": "1992-02-18", "business_desc": "電腦設備販售與維修及電腦軟體販售", "is_active": 0}, {"id": 52, "supplier_id": 52, "filed_date": "2017-03-01", "category": "車輛配備", "seq_no": 52, "region": "台中", "company_name": "台苗工程行", "address": "苗栗縣三義鄉勝興村20份45號", "phone": "037-876696", "fax": "037-876690", "responsible_person": "曾品凱", "tax_id": "45535296", "contact_person": "曾品凱", "established_date": "2006-10-27", "business_desc": "鋼構工程、油漆粉刷及防水抓漏", "is_active": 0}, {"id": 53, "supplier_id": 53, "filed_date": "2017-07-12", "category": "保養維修-臨時", "seq_no": 53, "region": "新竹", "company_name": "毓丰企業社", "address": "新竹縣竹北市溪洲里新溪街364號", "phone": "03-5518948", "fax": "無", "responsible_person": "彭黎興", "tax_id": "08695876", "contact_person": "彭黎興", "established_date": "2016-01-01", "business_desc": "引擎底盤維修", "is_active": 0}, {"id": 54, "supplier_id": 54, "filed_date": "2017-07-12", "category": "保養維修", "seq_no": 54, "region": "台南", "company_name": "富全汽車車業行", "address": "雲林縣荊桐鄉興桐村和平路157號", "phone": "05-5845886", "fax": "無", "responsible_person": "周富義", "tax_id": "76748246", "contact_person": "周富義", "established_date": "1991-06-27", "business_desc": "引擎底盤維修", "is_active": 0}, {"id": 55, "supplier_id": 55, "filed_date": "2017-07-12", "category": "保養維修", "seq_no": 55, "region": "高雄", "company_name": "泰瑋汽車電機行", "address": "高雄市前鎮區漁港路28號", "phone": "07-8316657", "fax": "無", "responsible_person": "涂明諒", "tax_id": "81182064", "contact_person": "涂明諒", "established_date": "1981-12-04", "business_desc": "電機維修", "is_active": 0}, {"id": 56, "supplier_id": 56, "filed_date": "2017-07-12", "category": "保養維修-臨時", "seq_no": 56, "region": "高雄", "company_name": "水井一企業社", "address": "高雄市前鎮區草衙二路200號", "phone": "07-8317679", "fax": "07-8312230", "responsible_person": "林水井", "tax_id": "17111732", "contact_person": "吳小姐", "established_date": "1999-08-25", "business_desc": "板架維修", "is_active": 0}, {"id": 57, "supplier_id": 57, "filed_date": "2017-07-12", "category": "保養維修-臨時", "seq_no": 57, "region": "高雄", "company_name": "洽詮企業有限公司", "address": "高雄市前鎮區佛公路41巷9號1樓", "phone": "07-8110596", "fax": "無", "responsible_person": "楊美溱", "tax_id": "16815656", "contact_person": "楊美溱", "established_date": "1999-10-12", "business_desc": "引擎底盤維修", "is_active": 0}, {"id": 58, "supplier_id": 58, "filed_date": "2019-01-02", "category": "保養維修", "seq_no": 58, "region": "台南", "company_name": "鉅昌輪胎有限公司", "address": "台南市善化區興農路701號", "phone": "06-5814164 / 0965-168609", "fax": "無", "responsible_person": "張昭旺", "tax_id": "70675061", "contact_person": "梁嘉群", "established_date": "1999-12-15", "business_desc": "車輛保養維修.輪胎保修", "is_active": 0}, {"id": 59, "supplier_id": 59, "filed_date": "2019-01-02", "category": "保養維修-臨時", "seq_no": 59, "region": "雲林", "company_name": "鴻進汽車修理廠", "address": "雲林縣莿桐鄉莿桐村中山路二之八號", "phone": "05-5846739 / 0919-003204", "fax": "05-5849130", "responsible_person": "何文進", "tax_id": "06172388", "contact_person": "何明義", "established_date": "1987-08-12", "business_desc": "車輛保養維修", "is_active": 0}, {"id": 60, "supplier_id": 60, "filed_date": "2019-02-10", "category": "保養維修", "seq_no": 60, "region": "台中", "company_name": "晟威工業股份有限公司", "address": "台中區龍井區臨港路二段42-1號", "phone": "04-26569768", "fax": "04-26569765", "responsible_person": "王雙和", "tax_id": "42706583", "contact_person": "陳順福", "established_date": "2018-05-01", "business_desc": "車輛保養維修", "is_active": 0}, {"id": 61, "supplier_id": 61, "filed_date": "2019-02-20", "category": "保養維修", "seq_no": 61, "region": "台南", "company_name": "永騏汽車修配所", "address": "台南市永康區王行東路398號1樓", "phone": "06-23193968", "fax": "無", "responsible_person": "賴麗華", "tax_id": "67913336", "contact_person": "賴麗華", "established_date": "2013-11-20", "business_desc": "車輛保養維修", "is_active": 0}, {"id": 62, "supplier_id": 62, "filed_date": "2019-03-01", "category": "其它", "seq_no": 62, "region": "台北", "company_name": "利音貿易開發股份有限公司", "address": "臺北市中正區博愛路9號7樓之2", "phone": "02-23816767", "fax": "02-23812423", "responsible_person": "郭裕宏", "tax_id": "84277775", "contact_person": "蕭先生 林小姐", "established_date": "1993-05-31", "business_desc": "PIP反光背心", "is_active": 0}, {"id": 63, "supplier_id": 63, "filed_date": "2019-03-01", "category": "其它", "seq_no": 63, "region": "桃園", "company_name": "振鑫城有限公司", "address": "桃園市楊梅區楊新路34之1號", "phone": "03-4617882", "fax": "03-4517416", "responsible_person": "林仁輝", "tax_id": "89225636", "contact_person": "林劼璽 袁先生", "established_date": "1994-08-02", "business_desc": "安全鞋,布疋、衣著、鞋、帽、傘、服飾品批發業", "is_active": 0}, {"id": 64, "supplier_id": 64, "filed_date": "2019-03-01", "category": "五金零件", "seq_no": 64, "region": "雲林", "company_name": "統一五金行", "address": "雲林縣斗六市西路269號", "phone": "05-5517239", "fax": "05-5517259", "responsible_person": "陳瓊雯", "tax_id": "47404587", "contact_person": "陳瓊雯", "established_date": "2016-12-08", "business_desc": "小牛皮手套", "is_active": 0}, {"id": 65, "supplier_id": 65, "filed_date": "2019-04-22", "category": "通信設備", "seq_no": 65, "region": "新竹", "company_name": "正鋒通信工程行", "address": "新竹市北區民富里西大路七００號一樓", "phone": "03-5436089", "fax": "03-5436373", "responsible_person": "葉文福", "tax_id": "20145686", "contact_person": "葉文福", "established_date": "1998-02-12", "business_desc": " 電信器材零售業", "is_active": 0}, {"id": 66, "supplier_id": 66, "filed_date": "2019-04-22", "category": "通信設備", "seq_no": 66, "region": "宜蘭", "company_name": "星僑通信企業社", "address": "宜蘭縣羅東鎮漢民里中山路三段三四三號一樓", "phone": "03-9566869", "fax": "無", "responsible_person": "莊子明", "tax_id": "67896358   ", "contact_person": "莊子明", "established_date": "1998-07-07", "business_desc": "電信設備,器材,零售", "is_active": 0}, {"id": 67, "supplier_id": 67, "filed_date": "2019-04-22", "category": "通信設備", "seq_no": 67, "region": "宜蘭", "company_name": "鴻通電信實業行", "address": "宜蘭縣羅東鎮中山里興東南路二四八號一樓", "phone": "03-9531010", "fax": "無", "responsible_person": "江鑫根", "tax_id": "67891614", "contact_person": "黃宜祤", "established_date": "1998-03-05", "business_desc": "電信設備,器材,零售", "is_active": 0}, {"id": 68, "supplier_id": 68, "filed_date": "2019-04-22", "category": "辦公設備", "seq_no": 68, "region": "台北", "company_name": "博弘科技股份有限公司", "address": "臺北市中山區樂群二路267號5樓之8", "phone": "02-85015055#205", "fax": "無", "responsible_person": "何冠生", "tax_id": "28497918", "contact_person": "許姍姍", "established_date": "2006-10-13", "business_desc": "資訊軟體", "is_active": 0}, {"id": 69, "supplier_id": 69, "filed_date": "2019-04-22", "category": "修繕設備", "seq_no": 69, "region": "雲林", "company_name": "上玄金屬企業有限公司", "address": "雲林縣虎尾鎮建國里建國四村70號 ", "phone": "05-6320192", "fax": "05-6323043", "responsible_person": "廖季裕", "tax_id": "86402051   ", "contact_person": "廖季裕", "established_date": "1991-11-20", "business_desc": "金屬,機械,器材批發,製造", "is_active": 0}, {"id": 70, "supplier_id": 70, "filed_date": "2019-04-22", "category": "修繕設備", "seq_no": 70, "region": "高雄", "company_name": "啓鎰水電行", "address": "高雄市路竹區新民路２０１之２號１樓", "phone": "07-6961039", "fax": "07-6974303", "responsible_person": "許翠玲", "tax_id": "18017411", "contact_person": "許翠玲", "established_date": "2016-12-04", "business_desc": "水器材料,電器批發", "is_active": 0}, {"id": 71, "supplier_id": 71, "filed_date": "2019-04-22", "category": "飲用水及設備", "seq_no": 71, "region": "新竹", "company_name": "賀程企業有限公司", "address": "新竹市民富里經國路2段394號1樓", "phone": "03-5239333 / 03-5239000", "fax": "無", "responsible_person": "何義凱", "tax_id": "25198731   ", "contact_person": "劉泳汝", "established_date": "2010-04-20", "business_desc": "水器材料批發業", "is_active": 0}, {"id": 72, "supplier_id": 72, "filed_date": "2019-04-22", "category": "生活五金", "seq_no": 72, "region": "新竹", "company_name": "金品食品企業有限公司", "address": "新竹市東區公道五路二段328號", "phone": "03-5738866", "fax": "03-5710786", "responsible_person": "彭念譁", "tax_id": "24395876   ", "contact_person": "邱益帆0916718346", "established_date": "2009-04-28", "business_desc": "日常用品,文具,飲料零售業", "is_active": 0}, {"id": 73, "supplier_id": 73, "filed_date": "2019-04-22", "category": "辦公設備", "seq_no": 73, "region": "新竹", "company_name": "互盛股份有限公司", "address": "新竹市錦華里2鄰世界街16號", "phone": "03-5329682", "fax": "無", "responsible_person": "翁國華", "tax_id": "22000047   ", "contact_person": "許先生0912531542", "established_date": "1993-12-20", "business_desc": "事務機租賃/批發", "is_active": 0}, {"id": 74, "supplier_id": 74, "filed_date": "2019-04-22", "category": "廣告", "seq_no": 74, "region": "新竹", "company_name": "全方位廣告設計", "address": "新竹縣竹北市竹義里新泰路６９號４樓之３", "phone": "03-5532000", "fax": "無", "responsible_person": "陳善良", "tax_id": "30107486", "contact_person": "陳先生09261533333", "established_date": "2009-02-27", "business_desc": "一般廣告服務業", "is_active": 0}, {"id": 75, "supplier_id": 75, "filed_date": "2019-04-22", "category": "廣告", "seq_no": 75, "region": "新竹", "company_name": "漢頓廣告社", "address": "新竹市北區舊社里光華二街80巷18之1號1樓", "phone": "03-5956901", "fax": "03-5356958", "responsible_person": "朱心怡", "tax_id": "    09931531   ", "contact_person": "朱心怡", "established_date": "2006-09-12", "business_desc": "一般廣告服務業", "is_active": 0}, {"id": 76, "supplier_id": 76, "filed_date": "2019-04-22", "category": "醫療", "seq_no": 76, "region": "台南", "company_name": "郭綜合醫院", "address": "台南市中西區民生路二段23號", "phone": "06-2221567", "fax": "06-2203567", "responsible_person": "郭國銓", "tax_id": "無", "contact_person": "郭倖伶", "established_date": null, "business_desc": "醫療門診,健檢中心", "is_active": 0}, {"id": 77, "supplier_id": 77, "filed_date": "2019-04-22", "category": "生活五金", "seq_no": 77, "region": "苗栗", "company_name": "振聲電器行", "address": "苗栗縣三義鄉廣盛村２８鄰光復路１９號", "phone": "03-7872126", "fax": "無", "responsible_person": "鍾子期", "tax_id": "45504792", "contact_person": "鍾子期", "established_date": "2007-08-02", "business_desc": "電器醫療零售批發", "is_active": 0}, {"id": 78, "supplier_id": 78, "filed_date": "2019-04-25", "category": "五金零件", "seq_no": 78, "region": "新北", "company_name": "頂佳企業有限公司", "address": "新北市板橋區民權路202巷8弄4號", "phone": "02-29699236", "fax": "02-29691696", "responsible_person": "曹聖偉", "tax_id": "34426357   ", "contact_person": "洪小姐", "established_date": "1980-09-04", "business_desc": "五金零售業", "is_active": 0}, {"id": 79, "supplier_id": 79, "filed_date": "2019-04-25", "category": "生活五金", "seq_no": 79, "region": "台北", "company_name": "上上禾有限公司", "address": "臺北市大安區忠孝東路4段169號11樓之4", "phone": "02-87718346", "fax": "02-27769118", "responsible_person": "黃艶雪", "tax_id": "50771071   ", "contact_person": "郭小姐0968009111", "established_date": "2018-05-15", "business_desc": "日常用品批發業", "is_active": 0}, {"id": 80, "supplier_id": 80, "filed_date": "2019-04-25", "category": "修繕設備", "seq_no": 80, "region": "屏東", "company_name": "友鴻企業行", "address": "屏東縣九如鄉九塊村信義街62號", "phone": "08-7397766", "fax": "08-7393980", "responsible_person": "曾明智", "tax_id": "40793203   ", "contact_person": "曾明智", "established_date": "2015-01-26", "business_desc": "室內裝潢業", "is_active": 0}, {"id": 81, "supplier_id": 81, "filed_date": "2019-04-25", "category": "生活五金", "seq_no": 81, "region": "高雄", "company_name": "國瑋家電行", "address": "高雄市路竹區甲南里大仁路７之３號１樓", "phone": "07-6972401", "fax": "無", "responsible_person": "陳國群", "tax_id": "10708270   ", "contact_person": "陳國群", "established_date": "2008-10-02", "business_desc": "電器及電子產品修理業", "is_active": 0}, {"id": 82, "supplier_id": 82, "filed_date": "2019-04-25", "category": "修繕設備", "seq_no": 82, "region": "台南", "company_name": "煌晟股份有限公司", "address": "臺南市永康區王行里環工路33號", "phone": "06-2337831", "fax": "06-2337177", "responsible_person": "陳璽元", "tax_id": "42918159", "contact_person": "陳璽元", "established_date": "1989-08-21", "business_desc": "金屬製品製造業", "is_active": 0}, {"id": 83, "supplier_id": 83, "filed_date": "2019-04-25", "category": "車輛配備", "seq_no": 83, "region": "嘉義", "company_name": "省輝工業股份有限公司", "address": "嘉義縣水上鄉三和村中山路三段211號", "phone": "05-2359062", "fax": "05-2363177", "responsible_person": "鄭文發", "tax_id": "22381926", "contact_person": "鄭文發", "established_date": "1987-01-21", "business_desc": "各種汽車零件、拖車", "is_active": 0}, {"id": 84, "supplier_id": 84, "filed_date": "2019-04-25", "category": "車輛配備", "seq_no": 84, "region": "新竹", "company_name": "匯豐汽車股份有限公司", "address": "新竹市東區中華路一段11號之1", "phone": "03-5325131", "fax": "無", "responsible_person": "許香萍", "tax_id": "47177627", "contact_person": "彭先生", "established_date": "1980-03-19", "business_desc": "汽車零件、汽車百貨零售", "is_active": 0}, {"id": 85, "supplier_id": 85, "filed_date": "2019-01-03", "category": "修繕設備", "seq_no": 85, "region": "高雄", "company_name": "盛記油漆工程行", "address": "高雄市岡山區仁壽里中華路１２８號１樓", "phone": "07-6258585", "fax": "無", "responsible_person": "王柏松", "tax_id": "07934955 ", "contact_person": "王柏松", "established_date": "1986-03-11", "business_desc": "漆料、塗料零售業", "is_active": 0}, {"id": 86, "supplier_id": 86, "filed_date": "2019-01-03", "category": "通信設備", "seq_no": 86, "region": "宜蘭", "company_name": "兆震通訊企業社", "address": "宜蘭縣羅東鎮中山里興東路1號", "phone": "03-9566808", "fax": "無", "responsible_person": "楊嘉琪", "tax_id": "14900684", "contact_person": "楊嘉琪", "established_date": "2003-07-03", "business_desc": "電腦及事務性機器設備零售業", "is_active": 0}, {"id": 87, "supplier_id": 87, "filed_date": "2019-01-03", "category": "文具", "seq_no": 87, "region": "高雄", "company_name": "新裕豐文化事業有限公司", "address": "高雄市新興區南華橫一路17之1號1樓", "phone": "07-2352468", "fax": "07-2351930", "responsible_person": "蔡彥弘", "tax_id": "89273685 ", "contact_person": "洪于茹 quote@syf.com.tw", "established_date": "1994-12-23", "business_desc": "圖書出版業", "is_active": 0}, {"id": 88, "supplier_id": 88, "filed_date": "2019-01-03", "category": "五金零件", "seq_no": 88, "region": "高雄", "company_name": "啟鎰水電行", "address": "高雄市路竹區新民路２０１之２號１樓", "phone": "07-6961039", "fax": "04-6974303", "responsible_person": "許翠玲", "tax_id": "18017411", "contact_person": "許翠玲", "established_date": "2016-12-04", "business_desc": "水器材料批發業", "is_active": 0}, {"id": 89, "supplier_id": 89, "filed_date": "2019-01-03", "category": "五金零件", "seq_no": 89, "region": "高雄", "company_name": "潤豫貿易有限公司", "address": "高雄市路竹區華山路142號1樓", "phone": "0903-327777", "fax": "無", "responsible_person": "黃嘉俐", "tax_id": "59214936", "contact_person": "黃佳俐", "established_date": "2017-07-03", "business_desc": "五金批發", "is_active": 0}, {"id": 90, "supplier_id": 90, "filed_date": "2019-01-03", "category": "車輛配備", "seq_no": 90, "region": "高雄", "company_name": "伸益車體有限公司", "address": "高雄市苓雅區金門街51之2號3樓", "phone": "0972-881232", "fax": "無", "responsible_person": "陳言珄", "tax_id": "53587640 ", "contact_person": "陳言珄", "established_date": "2012-03-08", "business_desc": "汽車及其零件製造業", "is_active": 0}, {"id": 91, "supplier_id": 91, "filed_date": "2019-01-03", "category": "車輛配備", "seq_no": 91, "region": "高雄", "company_name": "山隆行", "address": "高雄市前鎮區崗山東街３１號", "phone": "07-7228543", "fax": "07-7132378", "responsible_person": "吳炯輝", "tax_id": "41287231", "contact_person": "吳炯輝", "established_date": "2014-10-27", "business_desc": "交通標誌器材批發業", "is_active": 0}, {"id": 92, "supplier_id": 92, "filed_date": "2019-01-03", "category": "生活五金", "seq_no": 92, "region": "桃園", "company_name": "振達電器禮品行", "address": "桃園市大園區田心里中正西路３３號１樓", "phone": "03-3852563", "fax": "無", "responsible_person": "游林里娥", "tax_id": "08403759 ", "contact_person": "游林里娥", "established_date": "1991-10-22", "business_desc": "電器零售業", "is_active": 0}, {"id": 93, "supplier_id": 93, "filed_date": "2019-01-03", "category": "車輛配備", "seq_no": 93, "region": "桃園", "company_name": "保豪有限公司", "address": "桃園市桃園區復興路299號8樓之2", "phone": "03-3342067", "fax": "03-3341862", "responsible_person": "林保宏", "tax_id": "23605924", "contact_person": "林保宏", "established_date": "1989-12-27", "business_desc": "一般進出口貿易業務", "is_active": 0}, {"id": 94, "supplier_id": 94, "filed_date": "2019-01-03", "category": "生活五金", "seq_no": 94, "region": "台北", "company_name": "偉源行", "address": "臺北市大同區太原路41號1樓", "phone": "02-25550335", "fax": "02-25550336", "responsible_person": "黃嘉禾", "tax_id": "48728584", "contact_person": "黃嘉禾", "established_date": "2006-03-17", "business_desc": "塑膠膜、袋零售業", "is_active": 0}, {"id": 95, "supplier_id": 95, "filed_date": "2019-01-03", "category": "辦公設備", "seq_no": 95, "region": "新竹", "company_name": "辦公天地家具有限公司", "address": "新竹市東區建功里公道五路二段186號", "phone": "03-5722233", "fax": "無", "responsible_person": "林其德", "tax_id": "80042220", "contact_person": "林其德", "established_date": "2003-04-03", "business_desc": "家具零售業", "is_active": 0}, {"id": 96, "supplier_id": 96, "filed_date": "2019-01-03", "category": "五金零件", "seq_no": 96, "region": "雲林", "company_name": "名星建材企業股份有限公司", "address": "雲林縣崙背鄉崙前村大利街24號  ", "phone": "05-6654166", "fax": "無", "responsible_person": "李瑞桐", "tax_id": "27647740", "contact_person": "李瑞桐", "established_date": "2005-03-24", "business_desc": "五金批發業", "is_active": 0}, {"id": 97, "supplier_id": 97, "filed_date": "2019-01-03", "category": "廣告", "seq_no": 97, "region": "新竹", "company_name": "勝利莊廣告有限公司", "address": "新竹縣竹北市十興里36鄰嘉勤北路1號", "phone": "03-5536249", "fax": "03-5544470", "responsible_person": "莊添寶", "tax_id": "80313052", "contact_person": "莊太太", "established_date": "2003-04-16", "business_desc": " 印刷品裝訂及加工業", "is_active": 0}, {"id": 98, "supplier_id": 98, "filed_date": "2019-01-03", "category": "辦公設備", "seq_no": 98, "region": "新竹", "company_name": "茂訊電腦股份有限公司", "address": "新竹市東區立功里８鄰光復路２段１９４巷３號", "phone": "03-5750496", "fax": "無", "responsible_person": "沈頤同", "tax_id": "18211772", "contact_person": "郭立偉", "established_date": "1990-03-15", "business_desc": "電腦及其週邊設備製造業", "is_active": 0}, {"id": 99, "supplier_id": 99, "filed_date": "2019-01-03", "category": "辦公設備", "seq_no": 99, "region": "新竹", "company_name": "宏羚股份有限公司-新竹分公司", "address": "新竹縣竹北市光明六路東一段253號6樓", "phone": "03-6578833", "fax": "03-6578669", "responsible_person": "陳欣瑜", "tax_id": "04822794", "contact_person": "陳欣瑜", "established_date": "1982-03-02", "business_desc": "電腦及事務性機器設備批發業\n度量衡器批發業\n電信器材批發業", "is_active": 0}, {"id": 100, "supplier_id": 100, "filed_date": "2019-10-23", "category": "車輛配備", "seq_no": 100, "region": "台中", "company_name": "廖麟造-新潮工作室(喬泰企業社)", "address": "台中市西屯區何德里甘肅路一段93號2樓", "phone": "04-23116322", "fax": "無", "responsible_person": "曾永裕", "tax_id": "19414938", "contact_person": "廖麟造先生0932-633471", "established_date": "1999-03-03", "business_desc": "廖先生向新潮買布製作紅旗(匯款太太盧碧足帳戶)", "is_active": 0}, {"id": 101, "supplier_id": 101, "filed_date": "2019-10-04", "category": "量測儀器", "seq_no": 101, "region": "新北", "company_name": "恆翼國際股份有限公司", "address": "新北市三重區光復路一段82-5號8樓", "phone": "02-85122958", "fax": "02-85122953", "responsible_person": "吳承德", "tax_id": "97440877", "contact_person": "林小姐#286", "established_date": "1997-04-09", "business_desc": "機電工程設備、材料及零件之買賣", "is_active": 0}, {"id": 102, "supplier_id": 102, "filed_date": "2019-08-01", "category": "其它", "seq_no": 102, "region": "桃園", "company_name": "長昕興業股份有限公司", "address": "桃園市桃園區富國路822巷41弄6號", "phone": "0910718952 / 03-2160530", "fax": "03-2160531", "responsible_person": "黄一訓 ", "tax_id": "24261763", "contact_person": "黃先生0910718952", "established_date": "2008-11-07", "business_desc": "服飾品製造業", "is_active": 0}, {"id": 103, "supplier_id": 103, "filed_date": "2019-08-01", "category": "其它", "seq_no": 103, "region": "台南", "company_name": "力牛高強油壓拖板車有限公司", "address": "台南市安定區海寮里5-25號", "phone": "06-5934559", "fax": "06-5934557", "responsible_person": "高相文", "tax_id": "54567283", "contact_person": "高相文", "established_date": "2014-09-17", "business_desc": "機械器具批發業", "is_active": 0}, {"id": 104, "supplier_id": 104, "filed_date": "2019-12-17", "category": "車輛零件", "seq_no": 104, "region": "桃園", "company_name": "鼎福汽車材料有限公司", "address": "桃園市中壢區永福里西園路59巷28號", "phone": "03-4511007 / 03-4513022", "fax": "03-4510504", "responsible_person": "施迪祥", "tax_id": "70607471", "contact_person": "陳德勝", "established_date": "2000-07-26", "business_desc": "汽、機車零件配備批發業", "is_active": 0}, {"id": 105, "supplier_id": 105, "filed_date": "2019-12-01", "category": "其它", "seq_no": 105, "region": "桃園", "company_name": "豐田自動門企業社", "address": "桃園市桃園區玉山里玉山街２３３巷３３號１樓", "phone": "03-3622677 / 03-3610203", "fax": "無", "responsible_person": "鐘陳秀軟", "tax_id": "36497074", "contact_person": "鐘陳秀軟", "established_date": "1993-10-30", "business_desc": "各種電子門、玻璃門、鋁門窗、不銹鋼門窗、空氣門、五金零件之製造加工及其零件買賣", "is_active": 0}, {"id": 106, "supplier_id": 106, "filed_date": "2019-12-01", "category": "車輛零件", "seq_no": 106, "region": "新北", "company_name": "興榮汽車配件", "address": "新北市板橋區四川路2段245巷24號(1樓)", "phone": "0987-589419", "fax": "無", "responsible_person": "陳榮安", "tax_id": "82148797", "contact_person": "陳榮安", "established_date": "2018-12-06", "business_desc": "汽、機車零件配備零售業", "is_active": 0}, {"id": 107, "supplier_id": 107, "filed_date": "2019-08-01", "category": "其它", "seq_no": 107, "region": "新竹", "company_name": "依日咖啡輕食館", "address": "新竹市民族路82-1號1樓", "phone": "03-5316082", "fax": "無", "responsible_person": "朱靜惠", "tax_id": "39988898", "contact_person": "朱靜惠", "established_date": "2019-08-22", "business_desc": "食品什貨、飲料零售業", "is_active": 0}, {"id": 108, "supplier_id": 108, "filed_date": "2019-12-20", "category": "其它", "seq_no": 108, "region": "宜蘭", "company_name": "速發鋼業企業社", "address": "宜蘭縣冬山鄉廣安村新邦路20之2號一樓", "phone": "0958-229116 / 0917-837748", "fax": "無", "responsible_person": "陳建華", "tax_id": "50715706", "contact_person": "陳建華cjh777@kimo.com", "established_date": "2017-03-10", "business_desc": "鋼鐵軋延及擠型業.鋼材二次加工業", "is_active": 0}, {"id": 109, "supplier_id": 109, "filed_date": "2020-01-01", "category": "車輛零件", "seq_no": 109, "region": "彰化", "company_name": "翔晟企業社", "address": "彰化縣彰化市南興里中山路1段248-3號", "phone": "04-7111103", "fax": "無", "responsible_person": "呂光明", "tax_id": "38764337", "contact_person": "呂光明0910-609206", "established_date": "2014-05-20", "business_desc": "電池批發業", "is_active": 0}, {"id": 110, "supplier_id": 110, "filed_date": "2020-01-02", "category": "其它", "seq_no": 110, "region": "台北", "company_name": "艾思黛拉商行", "address": "台北市北投區中英北路2段42巷17弄9號2F-1", "phone": "0922-337455", "fax": "無", "responsible_person": "張桂芬", "tax_id": "72925121", "contact_person": "張桂芬", "established_date": "2018-05-28", "business_desc": "無店面零售業", "is_active": 0}, {"id": 111, "supplier_id": 111, "filed_date": "2020-02-01", "category": "其它", "seq_no": 111, "region": "高雄", "company_name": "駿績有限公司", "address": "高雄市苓雅區永泰路72號8樓之1", "phone": "07-2722285", "fax": "07-2824666", "responsible_person": "王克猷", "tax_id": "13189012", "contact_person": "賴怡如", "established_date": "2002-10-29", "business_desc": "消防安全設備批發業", "is_active": 0}, {"id": 112, "supplier_id": 112, "filed_date": "2020-02-11", "category": "其它", "seq_no": 112, "region": "新竹", "company_name": "順發電腦股份有限公司竹北分公司", "address": "新竹縣竹北市中華路262號1樓", "phone": "03-5559292", "fax": "無", "responsible_person": "吳明昌", "tax_id": "28979014", "contact_person": "吳明昌", "established_date": "2009-05-26", "business_desc": "資訊軟體批發業", "is_active": 0}, {"id": 113, "supplier_id": 113, "filed_date": "2020-02-17", "category": "修繕設備", "seq_no": 113, "region": "新竹", "company_name": "夆栩水電工程行", "address": "新竹縣竹北市聯興一街188巷43號", "phone": "03-5540526", "fax": "03-5542581", "responsible_person": "周天民", "tax_id": "17328514", "contact_person": "周天民", "established_date": "2000-10-07", "business_desc": "電器承裝業", "is_active": 0}, {"id": 114, "supplier_id": 114, "filed_date": "2020-02-21", "category": "生活五金", "seq_no": 114, "region": "台南", "company_name": "日源倉儲設備有限公司", "address": "臺南市東區裕農路805號1樓", "phone": "06-3350666", "fax": "06-234-5766", "responsible_person": "施東良", "tax_id": "97410711", "contact_person": "施東良", "established_date": "1997-03-28", "business_desc": "倉儲設備", "is_active": 0}, {"id": 115, "supplier_id": 115, "filed_date": "2020-02-25", "category": "修繕設備", "seq_no": 115, "region": "高雄", "company_name": "直田企業行", "address": "高雄市小港區港后里天順街４０號", "phone": "07-6162717", "fax": "無", "responsible_person": "楊順龍", "tax_id": "15528071", "contact_person": "楊順龍", "established_date": "2002-12-23", "business_desc": "建材五金批發/大門修繕", "is_active": 0}, {"id": 116, "supplier_id": 116, "filed_date": "2020-03-10", "category": "其它", "seq_no": 116, "region": "新竹", "company_name": "勝宏企業社", "address": "新竹縣竹北市白地里10鄰長青路一段263號", "phone": "03-5563549", "fax": "03-5564088", "responsible_person": "曾春興", "tax_id": "48409131", "contact_person": "曾春興", "established_date": "1985-03-28", "business_desc": "家具、寢具、廚房器具、裝設品批發業", "is_active": 0}, {"id": 117, "supplier_id": 117, "filed_date": "2020-03-18", "category": "生活五金", "seq_no": 117, "region": "新竹", "company_name": "立家屋五金百貨企業社", "address": "新竹縣竹北市華興街387號", "phone": "03-6562672", "fax": "無", "responsible_person": "張雅琪", "tax_id": "2613722", "contact_person": "張雅琪", "established_date": "2013-11-04", "business_desc": "五金批發業、日常用品批發業", "is_active": 0}, {"id": 118, "supplier_id": 118, "filed_date": "2020-03-26", "category": "生活五金", "seq_no": 118, "region": "新竹", "company_name": "象王快適有限公司", "address": "新竹縣竹北市十興里自強北路105號1樓", "phone": "03-6655531", "fax": "無", "responsible_person": "許婷倪", "tax_id": "42974010", "contact_person": "許婷倪", "established_date": "2018-07-16", "business_desc": "五金批發業、日常用品批發業", "is_active": 0}, {"id": 119, "supplier_id": 119, "filed_date": "2020-03-01", "category": "保養維修", "seq_no": 119, "region": "新竹", "company_name": "建泰工業有限公司", "address": "新竹市東區中正里大同路68號2樓 ", "phone": "03-26380669", "fax": "04-26380567", "responsible_person": "陳順福", "tax_id": "83428753", "contact_person": "陳順福0976372550", "established_date": "2020-03-03", "business_desc": "車輛維修、零件批發", "is_active": 0}, {"id": 120, "supplier_id": 120, "filed_date": "2020-04-06", "category": "修繕設備", "seq_no": 120, "region": "苗栗", "company_name": "良泰建材行", "address": "苗栗縣公館鄉館南村六鄰仁愛路一段一三三號一樓", "phone": "037-222360", "fax": "無", "responsible_person": "謝秀鳳", "tax_id": "49697167", "contact_person": "謝秀鳳", "established_date": "1978-05-30", "business_desc": "五金零售業、建材零售業", "is_active": 0}, {"id": 121, "supplier_id": 121, "filed_date": "2020-04-06", "category": "辦公設備", "seq_no": 121, "region": "台南", "company_name": "南一辦公家具股份有限公司(台南)", "address": "臺南市安平區文平里建平五街122號", "phone": "06-2985592", "fax": "無", "responsible_person": "沈慶慧", "tax_id": "86547922", "contact_person": "沈慶慧", "established_date": "1992-01-27", "business_desc": "家具、寢具、廚房器具、裝設品批發業", "is_active": 0}, {"id": 122, "supplier_id": 122, "filed_date": "2020-04-06", "category": "五金零件", "seq_no": 122, "region": "高雄", "company_name": "佑典行", "address": "高雄市湖內區田尾里中山路１段６０４號１樓", "phone": "07-6933755", "fax": "無", "responsible_person": "李麗玫", "tax_id": "85743051", "contact_person": "李麗玫", "established_date": "1976-04-10", "business_desc": "五金零售業", "is_active": 0}, {"id": 123, "supplier_id": 123, "filed_date": "2020-04-15", "category": "其它", "seq_no": 123, "region": "高雄", "company_name": "邏輯運籌股份有限公司", "address": "高雄市鳥松區神農路91之1號", "phone": "07-7317500#117", "fax": "07-7316661", "responsible_person": "杞美林", "tax_id": "16612174", "contact_person": "陳憶婷", "established_date": "1998-07-31", "business_desc": "機械安裝業、日常用品批發業、  倉儲業、租賃業", "is_active": 0}, {"id": 124, "supplier_id": 124, "filed_date": "2020-04-23", "category": "五金零件", "seq_no": 124, "region": "台北", "company_name": "正源五金行", "address": "台北市大同區太原路50之2號1樓", "phone": "02-2555-7857", "fax": "02-2558-5562", "responsible_person": "陳慶瑞", "tax_id": "4519982", "contact_person": "陳慶瑞", "established_date": "1983-05-04", "business_desc": "建材五金(螺絲、螺帽、鉚釘等金屬製品)批發", "is_active": 0}, {"id": 125, "supplier_id": 125, "filed_date": "2020-04-28", "category": "修繕設備", "seq_no": 125, "region": "苗栗", "company_name": "兆陞企業社", "address": "苗栗縣頭份鎮民權里3鄰中華路774號", "phone": "037-695851/0930982072", "fax": "037-695758", "responsible_person": "賴玟憲", "tax_id": "45616500", "contact_person": "賴玟憲", "established_date": "2008-03-06", "business_desc": "電器安裝業、電器零售業、配管工程業", "is_active": 0}, {"id": 126, "supplier_id": 126, "filed_date": "2020-05-13", "category": "車輛配備", "seq_no": 126, "region": "台中", "company_name": "環綸實業有限公司", "address": "台中市公益路二段615-7號5樓之二", "phone": "04-22510620", "fax": "04-22519681", "responsible_person": "陳建霖", "tax_id": "84808746", "contact_person": "陳建霖 0938090536 phill.wetier@msa.hinet.net", "established_date": "2016-10-04", "business_desc": "消防安全設備批發業", "is_active": 0}, {"id": 127, "supplier_id": 127, "filed_date": "2020-06-12", "category": "其它", "seq_no": 127, "region": "桃園", "company_name": "觀新貿易實業股份有限公司", "address": "桃園市平鎮區開封街347巷3號1樓", "phone": "03-4682080/0963732096", "fax": "03-3761488", "responsible_person": "陳美卿", "tax_id": "89556446", "contact_person": "李東霖", "established_date": "1995-06-16", "business_desc": "建設機械、重機械、堆高機、電動堆高機、鏟裝車、建築材料、電機、大小五金之製造、加工及買賣業務", "is_active": 0}, {"id": 128, "supplier_id": 128, "filed_date": "2020-06-12", "category": "其它", "seq_no": 128, "region": "台中", "company_name": "慶澤安全衛生有限公司", "address": "台中市公益路二段615-7號5樓之二", "phone": "04-22510611", "fax": "04-22519681", "responsible_person": "陳建霖", "tax_id": "23696614", "contact_person": "陳建霖", "established_date": "1990-04-11", "business_desc": "環境測定安全衛生之防護器材買賣（環境測定儀器、安全鞋、防護口罩、面具及", "is_active": 0}, {"id": 129, "supplier_id": 129, "filed_date": "2020-06-19", "category": "其它", "seq_no": 129, "region": "彰化", "company_name": "精銳雷射股份有限公司", "address": "彰化縣社頭鄉里仁村員集路一段151-8號", "phone": "04-8720112", "fax": "04-8720122", "responsible_person": "范廷駿", "tax_id": "55989373", "contact_person": "范廷駿", "established_date": "2017-01-25", "business_desc": "模具批發業、機械批發業、其他機械器具批發業", "is_active": 0}, {"id": 130, "supplier_id": 130, "filed_date": "2020-06-22", "category": "其它", "seq_no": 130, "region": "台南", "company_name": "家新實業社", "address": "臺南市善化區坐駕里中山路３２９號１樓", "phone": "06-5835355", "fax": "無", "responsible_person": "王柯瑛嬋", "tax_id": "9541180", "contact_person": "王柯瑛嬋", "established_date": "2006-04-06", "business_desc": "家具、寢具、廚房器具、裝設品批發業", "is_active": 0}, {"id": 131, "supplier_id": 131, "filed_date": "2020-06-23", "category": "其它", "seq_no": 131, "region": "新竹", "company_name": "新陽教具店", "address": "新竹縣竹北市新國里華興街３０２－３號", "phone": "03-5552526", "fax": "03-5540028", "responsible_person": "蘇瑞雪", "tax_id": "46538905", "contact_person": "蘇瑞雪", "established_date": "1964-07-01", "business_desc": "學校工廠各種黑板、運動器材、裝潢木器、教學設備、定製批發", "is_active": 0}, {"id": 132, "supplier_id": 132, "filed_date": "2020-06-29", "category": "其它", "seq_no": 132, "region": "臺南", "company_name": "勝元興業有限公司", "address": "臺南市永康區三民里和平路241巷12號1樓", "phone": "06-2422668", "fax": "06-2422660", "responsible_person": "王進明", "tax_id": "89371953", "contact_person": "王進明", "established_date": "1995-04-06", "business_desc": "帆布製品、貨車帆布罩製造、加工及買賣", "is_active": 0}, {"id": 133, "supplier_id": 133, "filed_date": "2020-07-02", "category": "其它", "seq_no": 133, "region": "台中", "company_name": "泰德昇貿易有限公司", "address": "臺中市豐原區西湳里三豐路二段327號", "phone": "04-2527598、0972959798/0937599938", "fax": "04-25275583", "responsible_person": "朱建宇", "tax_id": "63051245", "contact_person": "陳先生/楊承穎", "established_date": "2017-11-28", "business_desc": "未分類其他機械器具批發", "is_active": 0}, {"id": 134, "supplier_id": 134, "filed_date": "2020-07-07", "category": "其它", "seq_no": 134, "region": "台中", "company_name": "長興鐵材行", "address": "臺中市沙鹿區鹿峰里星海路３２號", "phone": "04-2622-2435", "fax": "04-2623-1878", "responsible_person": "陳木生", "tax_id": "55675767", "contact_person": "陳木生", "established_date": "1971-09-11", "business_desc": "建材五金（基本金屬）批發、金屬裁剪、焊接處理", "is_active": 0}, {"id": 135, "supplier_id": 135, "filed_date": "2020-07-07", "category": "其它", "seq_no": 135, "region": "新北", "company_name": "原皇交通股份有限公司", "address": "新北市林口區麗園里７鄰忠孝路５３３號", "phone": "02-26091594", "fax": "無", "responsible_person": "張永欽", "tax_id": "55675767", "contact_person": "張永欽", "established_date": "1978-04-19", "business_desc": "停車場經營業、汽車貨運業、汽車批發業", "is_active": 0}, {"id": 136, "supplier_id": 136, "filed_date": "2020-07-21", "category": "其它", "seq_no": 136, "region": "新竹", "company_name": "樂誠勞資顧問有限公司", "address": "新竹縣竹北市斗崙里科大一路92號4樓", "phone": "916208702", "fax": "無", "responsible_person": "蘇鵬翰", "tax_id": "42590491", "contact_person": "蘇鵬翰", "established_date": "2015-08-18", "business_desc": "管理顧問業、投資顧問業、其他顧問服務業、資料處理服務業", "is_active": 0}, {"id": 137, "supplier_id": 137, "filed_date": "2020-07-27", "category": "五金零件", "seq_no": 137, "region": "台中", "company_name": "佑承工業社", "address": "臺中市新社區永源里東山街８之１號１樓", "phone": "04-24365781", "fax": "無", "responsible_person": "羅程泓", "tax_id": "72540131", "contact_person": "羅程泓", "established_date": "2018-06-25", "business_desc": "建材五金(螺絲、螺帽、鉚釘等金屬製品)批發", "is_active": 0}, {"id": 138, "supplier_id": 138, "filed_date": "2020-08-06", "category": "車輛零件", "seq_no": 138, "region": "新竹", "company_name": "進發輪胎車業", "address": "新竹市立功里光復路二段32號一樓", "phone": "03-5712288", "fax": "無", "responsible_person": "江昇航", "tax_id": " 41125145", "contact_person": "江昇航", "established_date": "2014-07-04", "business_desc": "車胎批發業、汽機車零件配備批發業、車胎零售業", "is_active": 0}, {"id": 139, "supplier_id": 139, "filed_date": "2020-08-06", "category": "車輛買賣", "seq_no": 139, "region": "新竹", "company_name": "詠順車業", "address": "新竹市中華路1段80號", "phone": "03-5336150", "fax": "03-5336151", "responsible_person": "鍾孟琪", "tax_id": "50702033", "contact_person": "鍾孟琪", "established_date": "2017-03-16", "business_desc": "中古汽車零售、汽車零件、汽車百貨零售", "is_active": 0}, {"id": 140, "supplier_id": 140, "filed_date": "2020-08-25", "category": "保養維修-臨時", "seq_no": 140, "region": "新竹", "company_name": "達盛興汽車有限公司", "address": "新竹市埔頂里公道五路二段132號", "phone": "03-5753318", "fax": "03-5716331", "responsible_person": "陳榮賓", "tax_id": "70712827", "contact_person": "陳榮賓", "established_date": "2000-02-29", "business_desc": "汽車批發業、汽、機車零件配備批發業", "is_active": 0}, {"id": 141, "supplier_id": 141, "filed_date": "2020-10-13", "category": "其它", "seq_no": 141, "region": "台中", "company_name": "榮興水電行", "address": "臺中市龍井區麗水里三港路水裡港巷３６之１號１樓", "phone": "04-26397095", "fax": "無", "responsible_person": "陳秀瑞", "tax_id": "90951846", "contact_person": "陳秀瑞", "established_date": "1995-01-13", "business_desc": "水器材料批發業、電器批發業、消防安全設備批發業", "is_active": 0}, {"id": 142, "supplier_id": 142, "filed_date": "2020-10-22", "category": "其它", "seq_no": 142, "region": "高雄", "company_name": "機穎機械有限公司", "address": "高雄市燕巢區鳳雄里中路巷500之1號", "phone": "07-3532955", "fax": "07-3533002", "responsible_person": "詹伯恭", "tax_id": "79981463", "contact_person": "詹伯恭", "established_date": "2002-06-14", "business_desc": "機械設備製造業、機械批發業、機械安裝業", "is_active": 0}, {"id": 143, "supplier_id": 143, "filed_date": "2020-10-26", "category": "其它", "seq_no": 143, "region": "基隆", "company_name": "品福交通有限公司", "address": "基隆市七堵區大華二路33之7號", "phone": "02-4551398", "fax": "無", "responsible_person": "劉信成", "tax_id": "97426565", "contact_person": "劉信成", "established_date": "1997-04-17", "business_desc": "汽車貨運業", "is_active": 0}, {"id": 144, "supplier_id": 144, "filed_date": "2020-10-26", "category": "其它", "seq_no": 144, "region": "高雄", "company_name": "翔銓交通有限公司", "address": "高雄市路竹區環球路468號1樓", "phone": "07-6960108", "fax": "無", "responsible_person": "曾泰翔", "tax_id": "75164073", "contact_person": "曾泰翔", "established_date": "1969-12-29", "business_desc": "汽車貨運業", "is_active": 0}, {"id": 145, "supplier_id": 145, "filed_date": "2020-10-26", "category": "其它", "seq_no": 145, "region": "新北", "company_name": "至遠企業股份有限公司", "address": "新北市林口區文化二路1段266號地下一層之9 ", "phone": "02-26082898", "fax": "無", "responsible_person": "曹玉文", "tax_id": "27880611", "contact_person": "曹玉文", "established_date": "2005-08-29", "business_desc": "汽車批發業；汽、機車零件配備批發業", "is_active": 0}, {"id": 146, "supplier_id": 146, "filed_date": "2020-12-16", "category": "其它", "seq_no": 146, "region": "台南", "company_name": "順發電腦股份有限公司 善化分公司", "address": "南市善化區中山路226之6號", "phone": "06-585-0606", "fax": "無", "responsible_person": "吳明昌", "tax_id": "28978900", "contact_person": "吳明昌", "established_date": "2009-05-26", "business_desc": "電腦及電腦週邊設備零售", "is_active": 0}, {"id": 147, "supplier_id": 147, "filed_date": "2020-01-01", "category": "飲用水及設備", "seq_no": 147, "region": "桃園", "company_name": "嘉順生技有限公司", "address": "桃園市蘆竹區新興里中興路55巷5號", "phone": "03-3131499 0800-580908 03-5735701", "fax": "無", "responsible_person": "李明振", "tax_id": "54529752", "contact_person": "李明振", "established_date": "2013-10-09", "business_desc": "桶裝水.飲料製造業", "is_active": 0}, {"id": 148, "supplier_id": 148, "filed_date": "2020-01-01", "category": "其它", "seq_no": 148, "region": "新竹", "company_name": "雄大環保企業社", "address": "新竹市香山區中埔里牛埔路346巷30弄31號", "phone": "0975-118334", "fax": "無", "responsible_person": "郭光智", "tax_id": "50533311", "contact_person": "郭光智", "established_date": "2016-11-14", "business_desc": "廢棄物清除業", "is_active": 0}, {"id": 149, "supplier_id": 149, "filed_date": "2020-01-01", "category": "尿素", "seq_no": 149, "region": "台北", "company_name": "貝民股份有限公司", "address": "臺北市中山區松江路168號8樓", "phone": "02-2521-9262#253", "fax": "02-2521-5180", "responsible_person": "林正東", "tax_id": "20561107", "contact_person": "王靖傑", "established_date": "1963-10-30", "business_desc": "基本化學工業、肥料製造業、化學原料批發業", "is_active": 0}, {"id": 150, "supplier_id": 150, "filed_date": "2021-01-22", "category": "其它", "seq_no": 150, "region": "台南", "company_name": "秉龍系統科技有限公司", "address": "臺南市安平區建平八街450巷1號3樓之9", "phone": "06-597-5349", "fax": "06-597-6720", "responsible_person": "方景亮", "tax_id": "24919727", "contact_person": "方景亮", "established_date": "2016-01-27", "business_desc": "配管工程業、電腦及事務性機器設備批發業、其他工程業", "is_active": 0}, {"id": 151, "supplier_id": 151, "filed_date": "2021-02-24", "category": "其它", "seq_no": 151, "region": "台中", "company_name": "廖麟造-喬泰企業社", "address": "台中市沙鹿區清泉里1鄰忠貞路301號", "phone": "04-26154186", "fax": "無", "responsible_person": "陳一超", "tax_id": "10915714", "contact_person": "陳一超", "established_date": "2010-10-26", "business_desc": "紡織紗批發、紡織紗零售", "is_active": 0}, {"id": 152, "supplier_id": 152, "filed_date": "2021-03-22", "category": "其它", "seq_no": 152, "region": "台中", "company_name": "安吾企業有限公司", "address": "412台中市大里區東榮路610號", "phone": "04-2407567", "fax": "04-24073737", "responsible_person": "陳雪惠", "tax_id": "28546707", "contact_person": "彭小姐  王念恩經理", "established_date": "2006-12-22", "business_desc": "交通標誌器材批發業", "is_active": 0}, {"id": 153, "supplier_id": 153, "filed_date": "2021-03-10", "category": "其它", "seq_no": 153, "region": "高雄", "company_name": "凱盛新企業有限公司", "address": "高雄市路竹區竹南里中正路277號1樓", "phone": "07-6964570", "fax": null, "responsible_person": "郭福龍", "tax_id": "16229543", "contact_person": "郭福龍", "established_date": "2004-07-09", "business_desc": "家庭五金", "is_active": 0}, {"id": 154, "supplier_id": 154, "filed_date": "2021-05-01", "category": "其它", "seq_no": 154, "region": "新竹", "company_name": "亮亮通訊", "address": "新竹市東區復中里中央路180號1樓", "phone": "03-5313315", "fax": null, "responsible_person": "陳亮崴", "tax_id": "50707375", "contact_person": "陳亮崴", "established_date": "2017-08-03", "business_desc": "電信器材零售業", "is_active": 0}, {"id": 155, "supplier_id": 155, "filed_date": "2021-05-01", "category": "其它", "seq_no": 155, "region": "台南", "company_name": "誠宇國際股份有限公司", "address": "台南市佳里區六安里14鄰六安116之55號1樓", "phone": null, "fax": null, "responsible_person": "張益誠", "tax_id": "83525208", "contact_person": "張益誠", "established_date": "2020-12-19", "business_desc": "食品什貨批發業.醫療器材批發業", "is_active": 0}, {"id": 156, "supplier_id": 156, "filed_date": "2021-05-28", "category": "其它", "seq_no": 156, "region": "彰化", "company_name": "元承實業有限公司", "address": "彰化市景宗街143號", "phone": "04-7610909", "fax": "04-7615699", "responsible_person": "林滄騰", "tax_id": "42787023", "contact_person": "蔡雅卉", "established_date": "2016-08-02", "business_desc": "口罩.醫療器材批發業.醫療器材零售業", "is_active": 0}, {"id": 157, "supplier_id": 157, "filed_date": "2021-03-01", "category": "其它", "seq_no": 157, "region": "新北", "company_name": "民富興實業股份有限公司", "address": "新北市林口區南勢街250巷68號1樓", "phone": "02-25091962", "fax": "02-25091962", "responsible_person": "\t張慶華", "tax_id": "89925976", "contact_person": "張慶華", "established_date": "1994-12-02", "business_desc": "運輸業,汽車買賣", "is_active": 0}, {"id": 158, "supplier_id": 158, "filed_date": "2021-03-01", "category": "其它", "seq_no": 158, "region": "台南", "company_name": "冠準汽車貨運有限公司", "address": "臺南市安定區文科里油車11之1號1樓", "phone": "06-5922633", "fax": "06-5922633", "responsible_person": "陳政憲", "tax_id": "44951891", "contact_person": "陳政憲", "established_date": "1994-05-05", "business_desc": "運輸業,汽車買賣", "is_active": 0}, {"id": 159, "supplier_id": 159, "filed_date": "2022-12-01", "category": "其它", "seq_no": 159, "region": "台中", "company_name": "言瑞開發科技股份有限公司", "address": "42056台中市豐原區豐圳里成功路654號1樓", "phone": "04-23501111", "fax": "04-25296380", "responsible_person": "王水根", "tax_id": "80641581", "contact_person": "蔡清其", "established_date": null, "business_desc": "事務機租賃/批發", "is_active": 0}, {"id": 160, "supplier_id": 160, "filed_date": "2023-01-12", "category": "其它", "seq_no": 160, "region": "新竹", "company_name": "龍躍美工工作室", "address": "新竹市光復路一段621號4樓", "phone": "035-794210", "fax": null, "responsible_person": "張景雲", "tax_id": "88844743", "contact_person": "彭瑞俞", "established_date": "1996-05-13", "business_desc": "一、電腦掃描割字設計業務。二、海報設計業務。三、帆布條設計業務。四、壓克力板美工設計業務。（營利事業所在地僅供辦公室使用）", "is_active": 0}, {"id": 161, "supplier_id": 161, "filed_date": "2023-01-12", "category": "空白", "seq_no": 161, "region": "屏東", "company_name": "癸海有限公司", "address": "屏東市華山里大連路10巷11弄12號1樓", "phone": "08-7350999", "fax": null, "responsible_person": "楊啓宏", "tax_id": "42969213", "contact_person": "張小姐", "established_date": "2020-12-01", "business_desc": "成衣批發", "is_active": 0}, {"id": 162, "supplier_id": 162, "filed_date": null, "category": "車輛配備", "seq_no": null, "region": null, "company_name": "九鼎聯合有限公司", "address": null, "phone": "03-5342562#218", "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 163, "supplier_id": 163, "filed_date": null, "category": "車輛配備", "seq_no": null, "region": null, "company_name": "冠軍企業社", "address": null, "phone": null, "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 164, "supplier_id": 164, "filed_date": null, "category": "車輛配備", "seq_no": null, "region": null, "company_name": "臻安工業股份有限公司", "address": null, "phone": "04-25285600", "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 165, "supplier_id": 165, "filed_date": null, "category": "車輛配備", "seq_no": null, "region": null, "company_name": "特力屋五金百貨", "address": null, "phone": null, "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 166, "supplier_id": 166, "filed_date": null, "category": "車輛配備", "seq_no": null, "region": null, "company_name": "大樹藥局", "address": null, "phone": null, "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 167, "supplier_id": 167, "filed_date": null, "category": "車輛配備", "seq_no": null, "region": null, "company_name": "豐榮五金企業有限公司", "address": null, "phone": "03-5592188", "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 168, "supplier_id": 168, "filed_date": null, "category": "個人防護用具", "seq_no": null, "region": null, "company_name": "蝦皮賣家", "address": null, "phone": null, "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 169, "supplier_id": 169, "filed_date": null, "category": "辦公文具/其他", "seq_no": null, "region": null, "company_name": "統岐有限公司", "address": null, "phone": "07-3321625", "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 170, "supplier_id": 170, "filed_date": null, "category": "辦公文具/其他", "seq_no": null, "region": null, "company_name": "連淵股份有限公司", "address": null, "phone": "03-5729507", "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}, {"id": 171, "supplier_id": 171, "filed_date": null, "category": "辦公文具/其他", "seq_no": null, "region": null, "company_name": "龍耀美工 張先生", "address": null, "phone": "0932-614869", "fax": null, "responsible_person": null, "tax_id": null, "contact_person": null, "established_date": null, "business_desc": "資料來源：供應商明細.xlsx", "is_active": 1}], "supplier_ratings": [{"id": 1, "rating_id": 1, "year_roc": 114, "seq_no": 1, "category": "保養維修", "company_name": "台灣達富汽車有限公司", "region": "台中", "score": 86, "grade": "A", "notes": null}, {"id": 2, "rating_id": 2, "year_roc": 114, "seq_no": 2, "category": "保養維修", "company_name": "東亞汽車修配廠", "region": "台中", "score": 72, "grade": "B", "notes": null}, {"id": 3, "rating_id": 3, "year_roc": 114, "seq_no": 3, "category": "保養維修", "company_name": "詒東汽車工業股份有限公司", "region": "台中", "score": 72, "grade": "B", "notes": null}, {"id": 4, "rating_id": 4, "year_roc": 114, "seq_no": 4, "category": "保養維修", "company_name": "國盛汽車保養廠(通盛)", "region": "台中", "score": 74, "grade": "B", "notes": null}, {"id": 5, "rating_id": 5, "year_roc": 114, "seq_no": 5, "category": "保養維修", "company_name": "龍興汽車修配廠", "region": "台中", "score": 74, "grade": "B", "notes": null}, {"id": 6, "rating_id": 6, "year_roc": 114, "seq_no": 6, "category": "保養維修", "company_name": "晟威工業股份有限公司", "region": "台中", "score": 72, "grade": "B", "notes": null}, {"id": 7, "rating_id": 7, "year_roc": 114, "seq_no": 7, "category": "保養維修", "company_name": "富全汽車車業行", "region": "台南", "score": 74, "grade": "B", "notes": null}, {"id": 8, "rating_id": 8, "year_roc": 114, "seq_no": 8, "category": "保養維修", "company_name": "鉅昌輪胎有限公司", "region": "台南", "score": 72, "grade": "B", "notes": null}, {"id": 9, "rating_id": 9, "year_roc": 114, "seq_no": 9, "category": "保養維修", "company_name": "永騏汽車修配所", "region": "台南", "score": 76, "grade": "B", "notes": null}, {"id": 10, "rating_id": 10, "year_roc": 114, "seq_no": 10, "category": "保養維修", "company_name": "英屬維京群島商永德福汽車股份有限公司", "region": "桃園", "score": 86, "grade": "A", "notes": null}, {"id": 11, "rating_id": 11, "year_roc": 114, "seq_no": 11, "category": "保養維修", "company_name": "龍安汽車電機行", "region": "桃園", "score": 78, "grade": "B", "notes": null}, {"id": 12, "rating_id": 12, "year_roc": 114, "seq_no": 12, "category": "保養維修", "company_name": "榮展汽車修理廠", "region": "桃園", "score": 74, "grade": "B", "notes": null}, {"id": 13, "rating_id": 13, "year_roc": 114, "seq_no": 13, "category": "保養維修", "company_name": "宏昇汽車修護廠", "region": "桃園", "score": 86, "grade": "B", "notes": null}, {"id": 14, "rating_id": 14, "year_roc": 114, "seq_no": 14, "category": "飲用水及設備", "company_name": "嘉順生技有限公司", "region": "桃園", "score": 86, "grade": "B", "notes": null}, {"id": 15, "rating_id": 15, "year_roc": 114, "seq_no": 15, "category": "行車記錄器", "company_name": "統崎有限公司", "region": "高雄", "score": 84, "grade": "B", "notes": null}, {"id": 16, "rating_id": 16, "year_roc": 114, "seq_no": 16, "category": "保養維修", "company_name": "新鈴汽車股份有限公司", "region": "高雄", "score": 80, "grade": "B", "notes": null}, {"id": 17, "rating_id": 17, "year_roc": 114, "seq_no": 17, "category": "保養維修", "company_name": "三菱堆高機有限公司 (台貿)", "region": "高雄", "score": 80, "grade": "B", "notes": null}, {"id": 18, "rating_id": 18, "year_roc": 114, "seq_no": 18, "category": "保養維修", "company_name": "南興汽車修理廠有限公司", "region": "高雄", "score": 78, "grade": "B", "notes": null}, {"id": 19, "rating_id": 19, "year_roc": 114, "seq_no": 19, "category": "保養維修", "company_name": "銘正汽車材料行", "region": "高雄", "score": 74, "grade": "B", "notes": null}, {"id": 20, "rating_id": 20, "year_roc": 114, "seq_no": 20, "category": "保養維修", "company_name": "勝發電工所", "region": "高雄", "score": 74, "grade": "B", "notes": null}, {"id": 21, "rating_id": 21, "year_roc": 114, "seq_no": 21, "category": "保養維修", "company_name": "凱弘汽車修配股份有限公司 ", "region": "高雄", "score": 74, "grade": "B", "notes": null}, {"id": 22, "rating_id": 22, "year_roc": 114, "seq_no": 22, "category": "保養維修", "company_name": "泰瑋汽車電機行", "region": "高雄", "score": 78, "grade": "B", "notes": null}, {"id": 23, "rating_id": 23, "year_roc": 114, "seq_no": 23, "category": "保養維修", "company_name": "長源汽車(股)公司", "region": "新竹", "score": 86, "grade": "B", "notes": null}, {"id": 24, "rating_id": 24, "year_roc": 114, "seq_no": 24, "category": "保養維修", "company_name": "裕益汽車股份有限公司(FUSO)", "region": "新竹", "score": 86, "grade": "A", "notes": null}, {"id": 25, "rating_id": 25, "year_roc": 114, "seq_no": 25, "category": "保養維修", "company_name": "至懋汽車股份有限公司-苗栗", "region": "新竹", "score": 82, "grade": "B", "notes": null}, {"id": 26, "rating_id": 26, "year_roc": 114, "seq_no": 26, "category": "輪胎保養", "company_name": "東昇輪胎行", "region": "新竹", "score": 80, "grade": "B", "notes": null}, {"id": 27, "rating_id": 27, "year_roc": 114, "seq_no": 27, "category": "GPS", "company_name": "易通通訊有限公司 ", "region": "新竹", "score": 80, "grade": "B", "notes": null}, {"id": 28, "rating_id": 28, "year_roc": 114, "seq_no": 28, "category": "保養維修", "company_name": "鑫成汽車電機行", "region": "新竹", "score": 84, "grade": "B", "notes": null}, {"id": 29, "rating_id": 29, "year_roc": 114, "seq_no": 29, "category": "行車記錄器", "company_name": "仕楨有限公司", "region": "新竹", "score": 86, "grade": "B", "notes": null}, {"id": 30, "rating_id": 30, "year_roc": 114, "seq_no": 30, "category": "保養維修", "company_name": "新益汽車工業社", "region": "新竹", "score": 86, "grade": "B", "notes": null}, {"id": 31, "rating_id": 31, "year_roc": 114, "seq_no": 31, "category": "保養維修", "company_name": "名冠汽車修理廠", "region": "新竹", "score": 84, "grade": "B", "notes": null}, {"id": 32, "rating_id": 32, "year_roc": 114, "seq_no": 32, "category": "飲用水及設備", "company_name": "賀程企業有限公司", "region": "新竹", "score": 86, "grade": "B", "notes": null}, {"id": 33, "rating_id": 33, "year_roc": 114, "seq_no": 33, "category": "保養維修", "company_name": "建泰工業有限公司", "region": "新竹", "score": 86, "grade": "B", "notes": null}], "supplier_item_catalog": [{"id": 1, "catalog_id": 1, "item_name": "輪檔/黃色", "spec": "冠軍企業行", "price_note": null, "supplier_name": "冠軍企業行", "category_group": "車輛配備"}, {"id": 2, "catalog_id": 2, "item_name": "輪檔/黃色", "spec": "冠軍企業行", "price_note": null, "supplier_name": "友鴻企業行", "category_group": "車輛配備"}, {"id": 3, "catalog_id": 3, "item_name": "輪檔/紅色", "spec": "九鼎聯合有限公司          03-5342562#218陳小姐 新竹市東大路2段742巷44號1樓", "price_note": null, "supplier_name": "九鼎聯合有限公司", "category_group": "車輛配備"}, {"id": 4, "catalog_id": 4, "item_name": "三角錐\n(2.5Kg PVC軟式交通錐)", "spec": "冠軍企業社", "price_note": null, "supplier_name": "冠軍企業社", "category_group": "車輛配備"}, {"id": 5, "catalog_id": 5, "item_name": "三角錐\n(2.5Kg PVC軟式交通錐)", "spec": "冠軍企業社", "price_note": null, "supplier_name": "潤豫貿易有限公司", "category_group": "車輛配備"}, {"id": 6, "catalog_id": 6, "item_name": "交通伸縮式連桿", "spec": "冠軍企業行", "price_note": null, "supplier_name": "冠軍企業行", "category_group": "車輛配備"}, {"id": 7, "catalog_id": 7, "item_name": "交通伸縮式連桿", "spec": "冠軍企業行", "price_note": null, "supplier_name": "友鴻企業行", "category_group": "車輛配備"}, {"id": 8, "catalog_id": 8, "item_name": "防毒面具", "spec": "臻安工業股份有限公司 04-25285600台中市豐原區合作新村30巷2號", "price_note": null, "supplier_name": "臻安工業股份有限公司", "category_group": "車輛配備"}, {"id": 9, "catalog_id": 9, "item_name": "防毒面具", "spec": "臻安工業股份有限公司 04-25285600台中市豐原區合作新村30巷2號", "price_note": null, "supplier_name": "利音貿易開發股份有限公司", "category_group": "車輛配備"}, {"id": 10, "catalog_id": 10, "item_name": "濾毒罐", "spec": "臻安工業股份有限公司 04-25285600", "price_note": "245/個，2/包", "supplier_name": "臻安工業股份有限公司", "category_group": "車輛配備"}, {"id": 11, "catalog_id": 11, "item_name": "濾毒罐", "spec": "臻安工業股份有限公司 04-25285600", "price_note": "245/個，2/包", "supplier_name": "利音貿易開發股份有限公司", "category_group": "車輛配備"}, {"id": 12, "catalog_id": 12, "item_name": "C級防護衣", "spec": "駿績有限公司", "price_note": null, "supplier_name": "駿績有限公司", "category_group": "車輛配備"}, {"id": 13, "catalog_id": 13, "item_name": "耐酸鹼手套", "spec": "臻安工業有限公司", "price_note": null, "supplier_name": "臻安工業有限公司", "category_group": "車輛配備"}, {"id": 14, "catalog_id": 14, "item_name": "警示帶", "spec": "特力屋五金百貨", "price_note": null, "supplier_name": "特力屋五金百貨", "category_group": "車輛配備"}, {"id": 15, "catalog_id": 15, "item_name": "三段式LED交通指揮棒", "spec": "友鴻企業行", "price_note": null, "supplier_name": "友鴻企業行", "category_group": "車輛配備"}, {"id": 16, "catalog_id": 16, "item_name": "三段式LED交通指揮棒", "spec": "友鴻企業行", "price_note": null, "supplier_name": "冠軍企業行", "category_group": "車輛配備"}, {"id": 17, "catalog_id": 17, "item_name": "醫藥箱", "spec": "大樹藥局", "price_note": null, "supplier_name": "大樹藥局", "category_group": "車輛配備"}, {"id": 18, "catalog_id": 18, "item_name": "車用滅火器", "spec": "麗欣消防企業商行\n", "price_note": null, "supplier_name": "麗欣消防企業商行", "category_group": "車輛配備"}, {"id": 19, "catalog_id": 19, "item_name": "超級型捆物組", "spec": "欣立織造企業有限公司", "price_note": null, "supplier_name": "欣立織造企業有限公司", "category_group": "車輛配備"}, {"id": 20, "catalog_id": 20, "item_name": "防震墊", "spec": "偉源行", "price_note": null, "supplier_name": "偉源行", "category_group": "車輛配備"}, {"id": 21, "catalog_id": 21, "item_name": "推車小硬輪子", "spec": "豐榮五金企業有限公司 03-5592188新竹縣湖口鄉新興路590號(現金付款包價金額=含稅價)", "price_note": "140/組", "supplier_name": "豐榮五金企業有限公司", "category_group": "車輛配備"}, {"id": 22, "catalog_id": 22, "item_name": "推車小軟輪子", "spec": "豐榮五金企業有限公司     03-5592188                            新竹縣湖口鄉新興路590號(現金付款包價金額=含稅價)", "price_note": "100/只", "supplier_name": "豐榮五金企業有限公司", "category_group": "車輛配備"}, {"id": 23, "catalog_id": 23, "item_name": "推車大輪子", "spec": "豐榮五金企業有限公司     03-5592188                            新竹縣湖口鄉新興路590號(現金付款包價金額=含稅價)", "price_note": "300/只", "supplier_name": "豐榮五金企業有限公司", "category_group": "車輛配備"}, {"id": 24, "catalog_id": 24, "item_name": "安全帽", "spec": "俊安興業有限公司", "price_note": null, "supplier_name": "俊安興業有限公司", "category_group": "個人防護用具"}, {"id": 25, "catalog_id": 25, "item_name": "面罩", "spec": "俊安興業有限公司", "price_note": null, "supplier_name": "俊安興業有限公司", "category_group": "個人防護用具"}, {"id": 26, "catalog_id": 26, "item_name": "面罩框", "spec": "俊安興業有限公司", "price_note": null, "supplier_name": "俊安興業有限公司", "category_group": "個人防護用具"}, {"id": 27, "catalog_id": 27, "item_name": "一般工作服", "spec": "長昕興業股份有限公司\n", "price_note": "250/件", "supplier_name": "長昕興業股份有限公司", "category_group": "個人防護用具"}, {"id": 28, "catalog_id": 28, "item_name": "防燄衣(灰色)", "spec": "長昕興業股份有限公司\n", "price_note": "1095/件", "supplier_name": "長昕興業股份有限公司", "category_group": "個人防護用具"}, {"id": 29, "catalog_id": 29, "item_name": "防燄褲", "spec": "長昕興業股份有限公司\n", "price_note": "1030/件", "supplier_name": "長昕興業股份有限公司", "category_group": "個人防護用具"}, {"id": 30, "catalog_id": 30, "item_name": "防燄外套(黃色)", "spec": "長昕興業股份有限公司\n", "price_note": null, "supplier_name": "長昕興業股份有限公司", "category_group": "個人防護用具"}, {"id": 31, "catalog_id": 31, "item_name": "一般制服(灰色)", "spec": "長昕興業股份有限公司\n", "price_note": null, "supplier_name": "長昕興業股份有限公司", "category_group": "個人防護用具"}, {"id": 32, "catalog_id": 32, "item_name": "防波水外套", "spec": "長昕興業股份有限公司\n", "price_note": null, "supplier_name": "長昕興業股份有限公司", "category_group": "個人防護用具"}, {"id": 33, "catalog_id": 33, "item_name": "一般反光背心(黃色)", "spec": "利音貿易開發股份有限公司", "price_note": null, "supplier_name": "利音貿易開發股份有限公司", "category_group": "個人防護用具"}, {"id": 34, "catalog_id": 34, "item_name": "防燄背心(橘色)", "spec": "利音貿易開發股份有限公司", "price_note": null, "supplier_name": "利音貿易開發股份有限公司", "category_group": "個人防護用具"}, {"id": 35, "catalog_id": 35, "item_name": "紅銅槌", "spec": "富冠企業社\n", "price_note": null, "supplier_name": "富冠企業社", "category_group": "個人防護用具"}, {"id": 36, "catalog_id": 36, "item_name": "防凍手套", "spec": "臻安工業股份有限公司", "price_note": null, "supplier_name": "臻安工業股份有限公司", "category_group": "個人防護用具"}, {"id": 37, "catalog_id": 37, "item_name": "防滑皮手套", "spec": "臻安工業股份有限公司    04-25285600", "price_note": "165/雙，2500免運", "supplier_name": "臻安工業股份有限公司", "category_group": "個人防護用具"}, {"id": 38, "catalog_id": 38, "item_name": "乳膠超止滑工作手套", "spec": "臻安工業股份有限公司 04-25285600", "price_note": null, "supplier_name": "臻安工業股份有限公司", "category_group": "個人防護用具"}, {"id": 39, "catalog_id": 39, "item_name": "乳膠超止滑工作手套", "spec": "臻安工業股份有限公司 04-25285600", "price_note": null, "supplier_name": "蝦皮賣家", "category_group": "個人防護用具"}, {"id": 40, "catalog_id": 40, "item_name": "低溫防凍圍裙", "spec": "環綸實業有限公司", "price_note": null, "supplier_name": "環綸實業有限公司", "category_group": "個人防護用具"}, {"id": 41, "catalog_id": 41, "item_name": "安全鞋", "spec": "振鑫城有限公司 03-4617882 袁先生/0938-991790", "price_note": "550/雙", "supplier_name": "振鑫城有限公司", "category_group": "個人防護用具"}, {"id": 42, "catalog_id": 42, "item_name": "護甲安全鞋", "spec": "振鑫城有限公司 03-4617882 袁先生/0938-991790", "price_note": "750/雙", "supplier_name": "振鑫城有限公司", "category_group": "個人防護用具"}, {"id": 43, "catalog_id": 43, "item_name": "防音耳塞", "spec": "利音貿易開發股份有限公司", "price_note": null, "supplier_name": "利音貿易開發股份有限公司", "category_group": "個人防護用具"}, {"id": 44, "catalog_id": 44, "item_name": "行車紀錄紙", "spec": "120/140/125", "price_note": "230/盒", "supplier_name": "統岐有限公司", "category_group": "辦公文具/其他"}, {"id": 45, "catalog_id": 45, "item_name": "文具", "spec": null, "price_note": "N/A", "supplier_name": "連淵股份有限公司", "category_group": "辦公文具/其他"}, {"id": 46, "catalog_id": 46, "item_name": "報表紙-薪資袋2P", "spec": "2P/2000份", "price_note": "1500/箱", "supplier_name": "連淵股份有限公司", "category_group": "辦公文具/其他"}, {"id": 93, "catalog_id": 93, "item_name": "車體字體刻字", "spec": null, "price_note": null, "supplier_name": "龍耀美工 張先生", "category_group": "辦公文具/其他"}]};
+
+const STATE = {
+  procurementOrders: [],
+  qualifiedSuppliers: [],
+  supplierRatings: [],
+  supplierItemCatalog: []
+};
+
+function esc(v){
+  if(v===null || v===undefined) return '';
+  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmt2(n){
+  if(n===null || n===undefined || isNaN(n)) return n;
+  return Math.round(n*100)/100;
+}
+
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+const TABLE_MAP = {
+  procurement_orders: {table:'procurement_orders', pk:'order_item_id'},
+  qualified_suppliers: {table:'qualified_suppliers', pk:'supplier_id'},
+  supplier_ratings: {table:'supplier_ratings', pk:'rating_id'},
+  supplier_item_catalog: {table:'supplier_item_catalog', pk:'catalog_id'},
+};
+
+async function supaFetch(path, options={}){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers||{})
+    }
+  });
+  if(!res.ok){
+    const text = await res.text().catch(()=> '');
+    throw new Error(`Supabase ${res.status}: ${text}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// Supabase/PostgREST 預設一次最多回傳1000筆，超過的表格需要分批抓取才能拿到完整資料
+async function supaFetchAll(path){
+  const PAGE_SIZE = 1000;
+  let allRows = [];
+  let offset = 0;
+  while(true){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Range-Unit': 'items',
+        'Range': `${offset}-${offset + PAGE_SIZE - 1}`
+      }
+    });
+    if(!res.ok){
+      const text = await res.text().catch(()=> '');
+      throw new Error(`Supabase ${res.status}: ${text}`);
+    }
+    const text = await res.text();
+    const rows = text ? JSON.parse(text) : [];
+    allRows = allRows.concat(rows);
+    if(rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return allRows;
+}
+
+async function safeGet(key, fallback, shared){
+  const map = TABLE_MAP[key];
+  if(!map) return fallback;
+  try{
+    const rows = await supaFetchAll(`${map.table}?select=*&order=${map.pk}.asc`);
+    if(!rows) return fallback;
+    return rows.map(r => ({...r, id: r[map.pk]}));
+  }catch(e){
+    console.error('safeGet failed for', key, e);
+    document.getElementById('storageWarning').style.display = 'block';
+    return fallback;
+  }
+}
+async function saveState(key, value, shared){
+  const map = TABLE_MAP[key];
+  if(!map) return;
+  try{
+    await supaFetch(`${map.table}?${map.pk}=gte.0`, { method:'DELETE' });
+    if(value && value.length > 0){
+      const payload = value.map(item => {
+        const {id, ...rest} = item;
+        return {[map.pk]: id, ...rest};
+      });
+      const CHUNK = 500;
+      for(let i=0; i<payload.length; i+=CHUNK){
+        const chunk = payload.slice(i, i+CHUNK);
+        await supaFetch(map.table, {
+          method:'POST',
+          headers: {'Prefer':'return=minimal'},
+          body: JSON.stringify(chunk)
+        });
+      }
+    }
+  }catch(err){
+    console.error('saveState failed for', key, err);
+    document.getElementById('storageWarning').style.display = 'block';
+    alert('無法儲存資料到雲端資料庫，請檢查網路連線。您剛才輸入的內容目前僅顯示在畫面上，重新整理後可能會消失。');
+    throw err;
+  }
+}
+
+async function loadState(){
+  STATE.procurementOrders = await safeGet('procurement_orders', SEED.procurement_orders || [], true);
+  STATE.qualifiedSuppliers = await safeGet('qualified_suppliers', SEED.qualified_suppliers || [], true);
+  STATE.supplierRatings = await safeGet('supplier_ratings', SEED.supplier_ratings || [], true);
+  STATE.supplierItemCatalog = await safeGet('supplier_item_catalog', SEED.supplier_item_catalog || [], true);
+}
+
+function statusOf(dateStr, warnDays){
+  if(!dateStr) return 'gray';
+  const today = new Date(todayISO()+'T00:00:00');
+  const d = new Date(dateStr+'T00:00:00');
+  const diffDays = Math.round((d-today)/86400000);
+  if(diffDays < 0) return 'red';
+  if(diffDays <= warnDays) return 'amber';
+  return 'green';
+}
+
+// ============ 總覽 ============
+function renderOverview(){
+  const totalOrders = STATE.procurementOrders.length;
+  const totalAmount = STATE.procurementOrders.reduce((s,o)=>s+(parseFloat(o.total_price)||0),0);
+  const totalSuppliers = STATE.qualifiedSuppliers.length;
+  const avgScore = STATE.supplierRatings.length ? fmt2(STATE.supplierRatings.reduce((s,r)=>s+(parseFloat(r.score)||0),0)/STATE.supplierRatings.length) : 0;
+
+  document.getElementById('statRow').innerHTML = `
+    <div class="stat-card"><div class="n">${totalOrders}</div><div class="l">採購登錄筆數</div></div>
+    <div class="stat-card"><div class="n">$${totalAmount.toLocaleString()}</div><div class="l">採購總金額</div></div>
+    <div class="stat-card"><div class="n">${totalSuppliers}</div><div class="l">合格供應商數</div></div>
+    <div class="stat-card"><div class="n">${avgScore}</div><div class="l">平均評分</div></div>
+  `;
+
+  const lowRated = STATE.supplierRatings.filter(r => r.grade && r.grade !== 'A').sort((a,b)=>(a.score||0)-(b.score||0));
+  document.getElementById('lowRatingAlerts').innerHTML = lowRated.length ? `
+    <div class="table-scroll" style="max-height:280px;"><table><thead><tr><th>年度</th><th>公司行號</th><th>類別</th><th>分數</th><th>等級</th></tr></thead><tbody>` +
+    lowRated.map(r => `<tr><td>${esc(r.year_roc)}</td><td>${esc(r.company_name)}</td><td>${esc(r.category)}</td><td>${r.score??''}</td><td><span class="pill amber">${esc(r.grade)}</span></td></tr>`).join('') +
+    `</tbody></table></div>` : `<div class="empty">目前沒有B級以下的供應商</div>`;
+
+  const byCategory = {};
+  STATE.qualifiedSuppliers.forEach(s => {
+    const cat = s.category || '未分類';
+    byCategory[cat] = (byCategory[cat]||0) + 1;
+  });
+  const maxCount = Math.max(1, ...Object.values(byCategory));
+  document.getElementById('categoryBars').innerHTML = Object.entries(byCategory).sort((a,b)=>b[1]-a[1]).map(([cat,count]) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
+      <div style="width:90px;font-size:12.5px;flex-shrink:0;">${esc(cat)}</div>
+      <div style="flex:1;background:var(--gray-bg);border-radius:6px;overflow:hidden;height:16px;">
+        <div style="width:${(count/maxCount*100).toFixed(0)}%;background:linear-gradient(90deg,var(--navy),var(--accent));height:100%;"></div>
+      </div>
+      <div style="width:30px;text-align:right;font-size:12.5px;font-weight:600;">${count}</div>
+    </div>`).join('') || `<div class="empty">尚無供應商資料</div>`;
+}
+
+// ============ 採購登錄 ============
+function renderPoSelects(){
+  const depts = [...new Set(STATE.procurementOrders.map(o=>o.apply_dept).filter(Boolean))];
+  document.getElementById('po_dept_filter').innerHTML = '<option value="all">全部申請單位</option>' + depts.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  const types = [...new Set(STATE.procurementOrders.map(o=>o.purchase_type).filter(Boolean))];
+  document.getElementById('po_type_filter').innerHTML = '<option value="all">全部採購種類</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+}
+function renderPoTable(){
+  const q = document.getElementById('po_search').value.trim();
+  const deptF = document.getElementById('po_dept_filter').value;
+  const typeF = document.getElementById('po_type_filter').value;
+  let rows = STATE.procurementOrders.slice().sort((a,b)=>(b.apply_date||'').localeCompare(a.apply_date||''));
+  if(q) rows = rows.filter(o => (o.order_no||'').includes(q) || (o.supplier_name||'').includes(q) || (o.item_spec||'').includes(q));
+  if(deptF!=='all') rows = rows.filter(o => o.apply_dept===deptF);
+  if(typeF!=='all') rows = rows.filter(o => o.purchase_type===typeF);
+  document.getElementById('po_count').textContent = `共 ${rows.length} 筆`;
+  document.getElementById('poTableBody').innerHTML = rows.slice(0,300).map(o => {
+    const isConfirming = String(confirmingDeletePoId) === String(o.id);
+    const deleteCell = isConfirming
+      ? `<span style="color:var(--red);font-weight:600;">確定？</span> <button class="name-link" data-confirm-del-po="${o.id}" style="color:var(--red);">是</button> <button class="name-link" data-cancel-del-po="${o.id}">否</button>`
+      : `<button class="del-btn" data-ask-del-po="${o.id}">刪除</button>`;
+    return `<tr>
+      <td>${esc(o.order_no)}</td>
+      <td>${o.item_no??''}</td>
+      <td>${esc(o.apply_date||'')}</td>
+      <td>${esc(o.apply_dept||'')}</td>
+      <td>${esc(o.supplier_name||'')}</td>
+      <td class="muted">${esc(o.item_spec||'')}</td>
+      <td>${o.quantity??''} ${esc(o.unit||'')}</td>
+      <td>${o.unit_price?'$'+o.unit_price:''}</td>
+      <td><b>${o.total_price?'$'+Number(o.total_price).toLocaleString():''}</b></td>
+      <td>${esc(o.purchase_type||'')}</td>
+      <td>${deleteCell}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">尚無採購登錄</td></tr>`;
+}
+
+// ============ 合格供應商 ============
+function renderSpSelects(){
+  const cats = [...new Set(STATE.qualifiedSuppliers.map(s=>(s.category||'').trim()).filter(Boolean))].sort();
+  const optsHtml = cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('') + '<option value="__new__">+ 新增類別...</option>';
+  document.getElementById('sp_category').innerHTML = optsHtml;
+  document.getElementById('spe_category').innerHTML = optsHtml;
+  document.getElementById('sp_category_filter').innerHTML = '<option value="all">全部類別</option>' + cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const regions = [...new Set(STATE.qualifiedSuppliers.map(s=>s.region).filter(Boolean))];
+  document.getElementById('sp_region_filter').innerHTML = '<option value="all">全部區域</option>' + regions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+}
+function isActive(s){ return s.is_active === undefined || s.is_active === null || s.is_active === 1 || s.is_active === true; }
+let confirmingDeleteSpId = null;
+let confirmingDeletePoId = null;
+let confirmingDeleteRtId = null;
+let editingSpId = null;
+function openSpEditModal(id){
+  const s = STATE.qualifiedSuppliers.find(x => String(x.id) === String(id));
+  if(!s) return;
+  editingSpId = id;
+  document.getElementById('spEditModalTitle').textContent = `編輯供應商資料 — ${s.company_name}`;
+  document.getElementById('spe_filed').value = s.filed_date || '';
+  {
+    const cat = (s.category||'').trim();
+    const sel = document.getElementById('spe_category');
+    const hasOpt = Array.from(sel.options).some(o => o.value === cat);
+    if(cat && hasOpt){
+      sel.value = cat;
+      document.getElementById('spe_category_new_wrap').style.display = 'none';
+    }else{
+      sel.value = '__new__';
+      document.getElementById('spe_category_new_wrap').style.display = 'flex';
+      document.getElementById('spe_category_new').value = cat;
+    }
+  }
+  document.getElementById('spe_region').value = s.region || '';
+  document.getElementById('spe_name').value = s.company_name || '';
+  document.getElementById('spe_address').value = s.address || '';
+  document.getElementById('spe_phone').value = s.phone || '';
+  document.getElementById('spe_fax').value = s.fax || '';
+  document.getElementById('spe_boss').value = s.responsible_person || '';
+  document.getElementById('spe_tax_id').value = s.tax_id || '';
+  document.getElementById('spe_contact').value = s.contact_person || '';
+  document.getElementById('spe_established').value = s.established_date || '';
+  document.getElementById('spe_desc').value = s.business_desc || '';
+  document.getElementById('spEditModal').classList.add('show');
+}
+function closeSpEditModal(){ document.getElementById('spEditModal').classList.remove('show'); }
+function renderSpTable(){
+  const q = document.getElementById('sp_search').value.trim();
+  const catF = document.getElementById('sp_category_filter').value;
+  const regionF = document.getElementById('sp_region_filter').value;
+  let rows = STATE.qualifiedSuppliers.filter(isActive).sort((a,b)=>(a.company_name||'').localeCompare(b.company_name||''));
+  if(q) rows = rows.filter(s => (s.company_name||'').includes(q));
+  if(catF!=='all') rows = rows.filter(s => s.category===catF);
+  if(regionF!=='all') rows = rows.filter(s => s.region===regionF);
+  document.getElementById('sp_count').textContent = `共 ${rows.length} 筆`;
+  document.getElementById('spTableBody').innerHTML = rows.map(s => `
+    <tr>
+      <td>${esc(s.category||'')}</td>
+      <td><button class="name-link" data-edit-sp="${s.id}"><b>${esc(s.company_name)}</b></button></td>
+      <td>${esc(s.region||'')}</td>
+      <td class="muted">${esc((s.address||'').split('\\n')[0])}</td>
+      <td>${esc((s.phone||'').split(' ')[0])}</td>
+      <td>${esc(s.responsible_person||'')}</td>
+      <td>${esc(s.tax_id||'')}</td>
+      <td>${esc(s.contact_person||'')}</td>
+      <td><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button></td>
+    </tr>`).join('') || `<tr><td colspan="9" class="empty">尚無供應商資料</td></tr>`;
+}
+function renderSpHistoryTable(){
+  const q = document.getElementById('sp_history_search').value.trim();
+  let rows = STATE.qualifiedSuppliers.filter(s => !isActive(s)).sort((a,b)=>(a.company_name||'').localeCompare(b.company_name||''));
+  if(q) rows = rows.filter(s => (s.company_name||'').includes(q));
+  document.getElementById('sp_history_count').textContent = `共 ${rows.length} 筆`;
+  document.getElementById('spHistoryTableBody').innerHTML = rows.map(s => {
+    const isConfirming = String(confirmingDeleteSpId) === String(s.id);
+    const deleteCell = isConfirming
+      ? `<span style="color:var(--red);font-weight:600;">確定永久刪除？</span> <button class="name-link" data-confirm-del-sp="${s.id}" style="color:var(--red);">確定</button> <button class="name-link" data-cancel-del-sp="${s.id}">取消</button>`
+      : `<button class="name-link" data-reactivate-sp="${s.id}">恢復合作</button> <button class="del-btn" data-ask-del-sp="${s.id}">刪除</button>`;
+    return `<tr>
+      <td>${esc(s.category||'')}</td>
+      <td><button class="name-link" data-edit-sp="${s.id}">${esc(s.company_name)}</button></td>
+      <td>${esc(s.region||'')}</td>
+      <td>${esc((s.phone||'').split(' ')[0])}</td>
+      <td>${esc(s.contact_person||'')}</td>
+      <td>${deleteCell}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">目前沒有已無合作的供應商</td></tr>`;
+}
+
+// ============ 供應商評分 ============
+function renderRtSelects(){
+  document.getElementById('rt_supplier').innerHTML = STATE.qualifiedSuppliers.map(s => `<option value="${s.id}">${esc(s.company_name)}（${esc(s.category||'')}）</option>`).join('');
+  const years = [...new Set(STATE.supplierRatings.map(r=>r.year_roc).filter(Boolean))].sort((a,b)=>b-a);
+  document.getElementById('rt_year_filter').innerHTML = '<option value="all">全部年度</option>' + years.map(y=>`<option value="${y}">民國${y}年</option>`).join('');
+}
+function renderRtTable(){
+  const q = document.getElementById('rt_search').value.trim();
+  const yearF = document.getElementById('rt_year_filter').value;
+  const gradeF = document.getElementById('rt_grade_filter').value;
+  let rows = STATE.supplierRatings.slice().sort((a,b)=>(b.year_roc||0)-(a.year_roc||0));
+  if(q) rows = rows.filter(r => (r.company_name||'').includes(q));
+  if(yearF!=='all') rows = rows.filter(r => String(r.year_roc)===yearF);
+  if(gradeF!=='all') rows = rows.filter(r => r.grade===gradeF);
+  document.getElementById('rt_count').textContent = `共 ${rows.length} 筆`;
+  document.getElementById('rtTableBody').innerHTML = rows.map(r => {
+    const gradeCls = r.grade==='A' ? 'green' : r.grade==='B' ? 'amber' : 'red';
+    const isConfirming = String(confirmingDeleteRtId) === String(r.id);
+    const deleteCell = isConfirming
+      ? `<span style="color:var(--red);font-weight:600;">確定？</span> <button class="name-link" data-confirm-del-rt="${r.id}" style="color:var(--red);">是</button> <button class="name-link" data-cancel-del-rt="${r.id}">否</button>`
+      : `<button class="del-btn" data-ask-del-rt="${r.id}">刪除</button>`;
+    return `<tr>
+      <td>民國${esc(r.year_roc)}年</td>
+      <td>${esc(r.category||'')}</td>
+      <td>${esc(r.company_name)}</td>
+      <td>${esc(r.region||'')}</td>
+      <td>${r.score??''}</td>
+      <td><span class="pill ${gradeCls}">${esc(r.grade||'')}</span></td>
+      <td class="muted">${esc(r.notes||'')}</td>
+      <td>${deleteCell}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" class="empty">尚無評分資料</td></tr>`;
+}
+
+// ============ 表單生成 ============
+function renderFormSelects(){
+  const orderNos = [...new Set(STATE.procurementOrders.map(o=>o.order_no))].sort().reverse();
+  document.getElementById('form_order_no').innerHTML = orderNos.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+}
+function checkbox(checked){ return checked ? '■' : '□'; }
+
+function buildRequestForm(orderNo, items, first){
+  const rows10 = Array.from({length:10}, (_,i) => items[i] || null);
+  const rowsHtml = rows10.map((o,i) => `
+    <tr>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;width:6%;">${i+1}</td>
+      <td style="border:1px solid #333;padding:4px 6px;width:42%;">${o?esc(o.item_spec||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;width:26%;"></td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;width:13%;">${o?(o.quantity??''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;width:13%;">${o?esc(o.unit||''):''}</td>
+    </tr>`).join('');
+  const pt = (first.purchase_type||'').trim();
+  const dept = (first.apply_dept||'').trim();
+  return `
+    <div style="text-align:right;font-size:15px;font-weight:700;margin-bottom:6px;">採購申請單　　　　　　　　　　　　　　${esc(orderNo)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;width:16%;font-weight:700;">採 購 種 類</td>
+        <td style="border:1px solid #333;padding:6px;" colspan="4">
+          ${checkbox(pt==='一般事務採購')}一般事務採購 (2千元含以上)　${checkbox(pt==='例行性採購')}例行性採購　${checkbox(pt==='專案採購')}專案採購 (超出30萬之案件)<br>
+          ${checkbox(pt==='其他')}其他
+        </td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申 請 部 門</td>
+        <td style="border:1px solid #333;padding:6px;" colspan="4">
+          ${checkbox(dept==='業務部')}業務部　${checkbox(dept==='行政管理部')}行政管理部　${checkbox(dept==='財務部')}財務部　${checkbox(dept==='品質管理部')}品質管理部　${checkbox(dept==='環安衛管理部')}環安衛管理部<br>
+          運務管理部：　${checkbox(dept==='桃園車場')}桃園車場　${checkbox(dept==='新竹車場')}新竹車場　${checkbox(dept==='台中車場')}台中車場　${checkbox(dept==='台南車場')}台南車場　${checkbox(dept==='高雄車場')}高雄車場
+        </td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申請人</td>
+        <td style="border:1px solid #333;padding:6px;" colspan="4">${esc(first.applicant||'')}</td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申請日期</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;">${esc(first.apply_date||'')}</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">需求日期</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;" colspan="2">${esc(first.need_date||'')}</td>
+      </tr>
+      <tr>
+        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">項次</th>
+        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">品　名</th>
+        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">規　格</th>
+        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">請購數</th>
+        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">單位</th>
+      </tr>
+      ${rowsHtml}
+      <tr><td colspan="5" style="border:1px solid #333;padding:6px;">用途說明：</td></tr>
+      <tr>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">總經理</td>
+        <td colspan="1" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">環安衛主管</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">部門主管</td>
+      </tr>
+    </table>
+    <p style="font-size:11px;color:#555;margin-top:10px;">※二千元(含)以上申請人提出申請，經核可後申請人需送至採購單位。</p>`;
+}
+
+function buildOrderForm(orderNo, items, first, totalPrice){
+  const rows10 = Array.from({length:10}, (_,i) => items[i] || null);
+  const rowsHtml = rows10.map((o,i) => `
+    <tr>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${i+1}</td>
+      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.supplier_name||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.item_spec||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.quantity??''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?esc(o.unit||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.unit_price??''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.total_price??''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;font-size:11px;">${o?esc(o.payment_method||''):''}</td>
+    </tr>`).join('');
+  const pt = (first.purchase_type||'').trim();
+  return `
+    <div style="text-align:right;font-size:15px;font-weight:700;margin-bottom:6px;">採購單　　　　　　　　　　　　　　${esc(orderNo)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;width:14%;font-weight:700;">採 購 種 類</td>
+        <td style="border:1px solid #333;padding:6px;" colspan="7">
+          ${checkbox(pt==='一般事務採購')}一般事務採購 (2千元含以上)　${checkbox(pt==='例行性採購')}例行性採購　${checkbox(pt==='專案採購')}專案採購 (超出30萬之案件)　${checkbox(pt==='其他')}其他
+        </td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申請日期</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;" colspan="2">${esc(first.apply_date||'')}</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">需求日期</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;" colspan="2">${esc(first.need_date||'')}</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">採購日期</td>
+        <td style="border:1px solid #333;padding:6px;text-align:center;">${esc(first.purchase_date||'')}</td>
+      </tr>
+      <tr>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">項次</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">外部供應商/聯絡人/電話</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">品名/規格</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">數量</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單位</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單價</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">小計</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">付款方式</th>
+      </tr>
+      ${rowsHtml}
+      <tr>
+        <td colspan="6" style="border:1px solid #333;padding:6px;">採購總價：■未稅　□含稅</td>
+        <td colspan="2" style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">$${totalPrice.toLocaleString()}</td>
+      </tr>
+      <tr><td colspan="8" style="border:1px solid #333;padding:6px;">說明：</td></tr>
+      <tr>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">總經理</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">行政管理部主管</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">環安衛主管</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">採購單位：${esc(first.applicant||'')}</td>
+      </tr>
+    </table>
+    <div style="font-size:10.5px;color:#555;margin-top:10px;line-height:1.8;">
+      <p>1.【一般事務採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准，由採購單位進行採購。</p>
+      <p>2.【例行性採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位依第一次進行詢價、比價的報價價格為基準（為固定長期配合廠商）。</p>
+      <p>3.【車輛採購】屬專案採購案件由總經理訂定之規格，再由運務管理部申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准。</p>
+      <p>4.【專案採購】30萬以上，經呈權責部門主管需提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准。</p>
+      <p>5.若是各區統一規格，由運務管理部統籌請購，再進行區域分配，設備管理部負責規劃、庫存數量統計與區域間調配。</p>
+      <p>6.個人PPE及車輛配備須經環安衛主管簽核</p>
+    </div>`;
+}
+
+function buildReceivingForm(orderNo, items, first){
+  const rows10 = Array.from({length:10}, (_,i) => items[i] || null);
+  const rowsHtml = rows10.map((o,i) => `
+    <tr>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${i+1}</td>
+      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.supplier_name||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.item_spec||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.quantity??''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?esc(o.unit||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.quantity??''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?esc(o.unit||''):''}</td>
+      <td style="border:1px solid #333;padding:4px 6px;text-align:center;"></td>
+    </tr>`).join('');
+  return `
+    <div style="text-align:right;font-size:15px;font-weight:700;margin-bottom:6px;">驗收單　　　　　　　　　　　　　　${esc(orderNo)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;width:14%;font-weight:700;">驗收日期</td>
+        <td style="border:1px solid #333;padding:6px;" colspan="7">${esc(first.arrival_date||'')}</td>
+      </tr>
+      <tr>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">項次</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">外部供應商/送貨人</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">品名/規格</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">採購數</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單位</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">實收數量</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單位</th>
+        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">驗收判定<br><span style="font-weight:400;font-size:10px;">合格/不合格</span></th>
+      </tr>
+      ${rowsHtml}
+      <tr>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">行政主管</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">採購單位</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">環安衛主管簽核及備註</td>
+        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">請購部門主管 / 申請人：${esc(first.applicant||'')}</td>
+      </tr>
+      <tr><td colspan="8" style="border:1px solid #333;padding:6px;font-weight:700;">驗退</td></tr>
+      <tr>
+        <td colspan="2" style="border:1px solid #333;padding:6px;">驗退人：＿＿＿＿＿</td>
+        <td colspan="2" style="border:1px solid #333;padding:6px;">退件數：＿＿＿＿＿</td>
+        <td colspan="4" style="border:1px solid #333;padding:6px;">退貨日期：＿＿＿＿＿</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="border:1px solid #333;padding:6px;">退件品名：＿＿＿＿＿＿＿＿＿＿＿＿</td>
+        <td colspan="4" style="border:1px solid #333;padding:6px;">退貨原因：＿＿＿＿＿＿＿＿＿＿＿＿<br><span style="font-size:10px;color:#555;">※需填寫「外部供應商改善要求書」進行改善作業。</span></td>
+      </tr>
+      <tr><td colspan="8" style="border:1px solid #333;padding:6px;font-weight:700;">驗收結案</td></tr>
+      <tr>
+        <td colspan="2" style="border:1px solid #333;padding:6px;">廠商單據：□收據　■發票</td>
+        <td colspan="2" style="border:1px solid #333;padding:6px;">會計：＿＿＿＿＿</td>
+        <td colspan="2" style="border:1px solid #333;padding:6px;">付款狀態：已付款</td>
+        <td colspan="2" style="border:1px solid #333;padding:6px;">日期：＿＿＿＿＿</td>
+      </tr>
+    </table>
+    <div style="font-size:10.5px;color:#555;margin-top:10px;line-height:1.8;">
+      <p>※1.進行驗收結案流程：採購（收集廠商單據）→提交會計單據正本→採購結案確認（單據影本佐證）。</p>
+      <p>※2.驗收時有不合格時，需填寫「外部供應商改善要求書」。</p>
+    </div>`;
+}
+
+function generateForm(){
+  const orderNo = document.getElementById('form_order_no').value;
+  const type = document.getElementById('form_type').value;
+  const items = STATE.procurementOrders.filter(o => o.order_no === orderNo).sort((a,b)=>(a.item_no||0)-(b.item_no||0));
+  if(!items.length){ alert('請先選擇採購編號'); return; }
+  const first = items[0];
+  const totalPrice = items.reduce((s,o)=>s+(parseFloat(o.total_price)||0),0);
+
+  let bodyHtml = '';
+  if(type==='request') bodyHtml = buildRequestForm(orderNo, items, first);
+  else if(type==='order') bodyHtml = buildOrderForm(orderNo, items, first, totalPrice);
+  else bodyHtml = buildReceivingForm(orderNo, items, first);
+
+  document.getElementById('printArea').innerHTML = `<div style="width:210mm;min-height:297mm;box-sizing:border-box;margin:0 auto;padding:15mm 12mm;border:1px solid #ddd;box-shadow:0 4px 16px rgba(0,0,0,.08);background:#fff;">${bodyHtml}</div>`;
+  document.getElementById('form_print').style.display = 'inline-block';
+}
+
+function renderAll(){
+  renderOverview();
+  renderPoSelects();
+  renderPoTable();
+  renderSpSelects();
+  renderSpTable();
+  renderSpHistoryTable();
+  renderRtSelects();
+  renderRtTable();
+  renderFormSelects();
+}
+
+// ============ 事件處理 ============
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('po_add').addEventListener('click', async () => {
+  const orderNo = document.getElementById('po_no').value.trim();
+  if(!orderNo){ alert('請填寫採購編號'); return; }
+  const qty = parseFloat(document.getElementById('po_qty').value) || 0;
+  const price = parseFloat(document.getElementById('po_price').value) || 0;
+  const subtotal = qty * price;
+  const tax = document.getElementById('po_tax').value ? parseFloat(document.getElementById('po_tax').value) : fmt2(subtotal*0.05);
+  STATE.procurementOrders.push({
+    id: nextId(STATE.procurementOrders), order_no: orderNo,
+    item_no: parseInt(document.getElementById('po_item_no').value) || 1,
+    apply_date: document.getElementById('po_apply_date').value || null,
+    purchase_date: document.getElementById('po_purchase_date').value || null,
+    need_date: document.getElementById('po_need_date').value || null,
+    arrival_date: document.getElementById('po_arrival_date').value || null,
+    apply_dept: document.getElementById('po_dept').value.trim(),
+    applicant: document.getElementById('po_applicant').value.trim(),
+    supplier_name: document.getElementById('po_supplier').value.trim(),
+    item_spec: document.getElementById('po_spec').value.trim(),
+    quantity: qty, unit: document.getElementById('po_unit').value.trim(),
+    unit_price: price, subtotal: fmt2(subtotal), tax: fmt2(tax), total_price: fmt2(subtotal+tax),
+    invoice_no: document.getElementById('po_invoice').value.trim(),
+    payment_method: document.getElementById('po_payment').value,
+    purchase_type: document.getElementById('po_type').value,
+    notes: document.getElementById('po_notes').value.trim()
+  });
+  await saveState('procurement_orders', STATE.procurementOrders, true);
+  ['po_no','po_apply_date','po_purchase_date','po_need_date','po_arrival_date','po_dept','po_applicant','po_supplier','po_spec','po_qty','po_unit','po_price','po_tax','po_invoice','po_notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('po_item_no').value = 1;
+  renderAll();
+});
+document.getElementById('po_search').addEventListener('input', renderPoTable);
+document.getElementById('po_dept_filter').addEventListener('change', renderPoTable);
+document.getElementById('po_type_filter').addEventListener('change', renderPoTable);
+document.getElementById('poTableBody').addEventListener('click', async (e) => {
+  const askId = e.target.getAttribute('data-ask-del-po');
+  const confirmId = e.target.getAttribute('data-confirm-del-po');
+  const cancelId = e.target.getAttribute('data-cancel-del-po');
+  if(askId){
+    confirmingDeletePoId = askId;
+    renderPoTable();
+  }else if(cancelId){
+    confirmingDeletePoId = null;
+    renderPoTable();
+  }else if(confirmId){
+    STATE.procurementOrders = STATE.procurementOrders.filter(o => String(o.id) !== confirmId);
+    confirmingDeletePoId = null;
+    await saveState('procurement_orders', STATE.procurementOrders, true);
+    renderAll();
+  }
+});
+
+function getCategoryValue(selectId, newInputId){
+  const sel = document.getElementById(selectId);
+  if(sel.value === '__new__'){
+    return document.getElementById(newInputId).value.trim();
+  }
+  return sel.value;
+}
+document.getElementById('sp_category').addEventListener('change', (e) => {
+  document.getElementById('sp_category_new_wrap').style.display = e.target.value==='__new__' ? 'flex' : 'none';
+});
+document.getElementById('spe_category').addEventListener('change', (e) => {
+  document.getElementById('spe_category_new_wrap').style.display = e.target.value==='__new__' ? 'flex' : 'none';
+});
+document.getElementById('sp_add').addEventListener('click', async () => {
+  const name = document.getElementById('sp_name').value.trim();
+  if(!name){ alert('請填寫公司行號'); return; }
+  STATE.qualifiedSuppliers.push({
+    id: nextId(STATE.qualifiedSuppliers),
+    filed_date: document.getElementById('sp_filed').value || todayISO(),
+    category: getCategoryValue('sp_category','sp_category_new'),
+    region: document.getElementById('sp_region').value.trim(),
+    company_name: name,
+    address: document.getElementById('sp_address').value.trim(),
+    phone: document.getElementById('sp_phone').value.trim(),
+    fax: document.getElementById('sp_fax').value.trim(),
+    responsible_person: document.getElementById('sp_boss').value.trim(),
+    tax_id: document.getElementById('sp_tax_id').value.trim(),
+    contact_person: document.getElementById('sp_contact').value.trim(),
+    established_date: document.getElementById('sp_established').value || null,
+    business_desc: document.getElementById('sp_desc').value.trim()
+  });
+  await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+  ['sp_filed','sp_region','sp_name','sp_address','sp_phone','sp_fax','sp_boss','sp_tax_id','sp_contact','sp_established','sp_desc','sp_category_new'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('sp_category_new_wrap').style.display = 'none';
+  renderAll();
+});
+document.getElementById('sp_search').addEventListener('input', renderSpTable);
+document.getElementById('sp_category_filter').addEventListener('change', renderSpTable);
+document.getElementById('sp_region_filter').addEventListener('change', renderSpTable);
+document.getElementById('spTableBody').addEventListener('click', async (e) => {
+  const deactivateId = e.target.getAttribute('data-deactivate-sp');
+  const editId = e.target.getAttribute('data-edit-sp');
+  if(deactivateId){
+    const s = STATE.qualifiedSuppliers.find(x => String(x.id) === deactivateId);
+    if(s){ s.is_active = false; }
+    await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+    renderAll();
+  }else if(editId){
+    openSpEditModal(editId);
+  }
+});
+document.getElementById('sp_history_search').addEventListener('input', renderSpHistoryTable);
+document.getElementById('spHistoryTableBody').addEventListener('click', async (e) => {
+  const reactivateId = e.target.getAttribute('data-reactivate-sp');
+  const askId = e.target.getAttribute('data-ask-del-sp');
+  const confirmId = e.target.getAttribute('data-confirm-del-sp');
+  const cancelId = e.target.getAttribute('data-cancel-del-sp');
+  const editId = e.target.getAttribute('data-edit-sp');
+  if(reactivateId){
+    const s = STATE.qualifiedSuppliers.find(x => String(x.id) === reactivateId);
+    if(s){ s.is_active = true; }
+    await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+    renderAll();
+  }else if(editId){
+    openSpEditModal(editId);
+  }else if(askId){
+    confirmingDeleteSpId = askId;
+    renderSpHistoryTable();
+  }else if(cancelId){
+    confirmingDeleteSpId = null;
+    renderSpHistoryTable();
+  }else if(confirmId){
+    STATE.qualifiedSuppliers = STATE.qualifiedSuppliers.filter(s => String(s.id) !== confirmId);
+    confirmingDeleteSpId = null;
+    await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+    renderAll();
+  }
+});
+
+document.getElementById('rt_add').addEventListener('click', async () => {
+  const supplierId = parseInt(document.getElementById('rt_supplier').value);
+  const year = parseInt(document.getElementById('rt_year').value);
+  if(!supplierId || !year){ alert('請選擇供應商並填寫年度'); return; }
+  const supplier = STATE.qualifiedSuppliers.find(s => s.id === supplierId);
+  STATE.supplierRatings.push({
+    id: nextId(STATE.supplierRatings), year_roc: year,
+    category: supplier ? supplier.category : '',
+    company_name: supplier ? supplier.company_name : '',
+    region: supplier ? supplier.region : '',
+    score: document.getElementById('rt_score').value ? parseFloat(document.getElementById('rt_score').value) : null,
+    grade: document.getElementById('rt_grade').value,
+    notes: document.getElementById('rt_notes').value.trim()
+  });
+  await saveState('supplier_ratings', STATE.supplierRatings, true);
+  ['rt_year','rt_score','rt_notes'].forEach(id=>document.getElementById(id).value='');
+  renderAll();
+});
+document.getElementById('rt_search').addEventListener('input', renderRtTable);
+document.getElementById('rt_year_filter').addEventListener('change', renderRtTable);
+document.getElementById('rt_grade_filter').addEventListener('change', renderRtTable);
+document.getElementById('rtTableBody').addEventListener('click', async (e) => {
+  const askId = e.target.getAttribute('data-ask-del-rt');
+  const confirmId = e.target.getAttribute('data-confirm-del-rt');
+  const cancelId = e.target.getAttribute('data-cancel-del-rt');
+  if(askId){
+    confirmingDeleteRtId = askId;
+    renderRtTable();
+  }else if(cancelId){
+    confirmingDeleteRtId = null;
+    renderRtTable();
+  }else if(confirmId){
+    STATE.supplierRatings = STATE.supplierRatings.filter(r => String(r.id) !== confirmId);
+    confirmingDeleteRtId = null;
+    await saveState('supplier_ratings', STATE.supplierRatings, true);
+    renderAll();
+  }
+});
+
+document.getElementById('spEditModalClose').addEventListener('click', closeSpEditModal);
+document.getElementById('spEditModalCancel').addEventListener('click', closeSpEditModal);
+document.getElementById('spEditModal').addEventListener('click', (e) => {
+  if(e.target.id === 'spEditModal') closeSpEditModal();
+});
+document.getElementById('spEditModalSave').addEventListener('click', async () => {
+  const s = STATE.qualifiedSuppliers.find(x => String(x.id) === String(editingSpId));
+  if(!s) return;
+  s.filed_date = document.getElementById('spe_filed').value || null;
+  s.category = getCategoryValue('spe_category','spe_category_new');
+  s.region = document.getElementById('spe_region').value.trim();
+  s.company_name = document.getElementById('spe_name').value.trim();
+  s.address = document.getElementById('spe_address').value.trim();
+  s.phone = document.getElementById('spe_phone').value.trim();
+  s.fax = document.getElementById('spe_fax').value.trim();
+  s.responsible_person = document.getElementById('spe_boss').value.trim();
+  s.tax_id = document.getElementById('spe_tax_id').value.trim();
+  s.contact_person = document.getElementById('spe_contact').value.trim();
+  s.established_date = document.getElementById('spe_established').value || null;
+  s.business_desc = document.getElementById('spe_desc').value.trim();
+  await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+  closeSpEditModal();
+  renderAll();
+});
+
+document.getElementById('form_generate').addEventListener('click', generateForm);
+document.getElementById('form_print').addEventListener('click', () => {
+  const printWin = window.open('', '_blank');
+  printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>列印表單</title>
+    <style>
+      @page{ size: A4; margin: 12mm; }
+      body{font-family:"Noto Sans TC",sans-serif;margin:0;}
+      #printArea > div{ width:210mm !important; min-height:297mm; margin:0 !important; padding:0 !important; border:none !important; box-shadow:none !important; box-sizing:border-box; }
+    </style>
+    </head><body><div id="printArea">${document.getElementById('printArea').innerHTML}</div></body></html>`);
+  printWin.document.close();
+  printWin.focus();
+  setTimeout(()=>printWin.print(), 300);
+});
+
+(async function init(){
+  await loadState();
+  renderAll();
+})();
+</script>
+</body>
+</html>
