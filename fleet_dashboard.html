@@ -694,7 +694,7 @@
     </div>
 
     <div class="card">
-      <h2>保養到期提醒<span class="count-badge" id="maint_due_count"></span></h2>
+      <h2>車輛保養清單<span class="count-badge" id="maint_due_count"></span></h2>
       <div class="table-scroll">
         <table>
           <thead><tr><th>車號</th><th>保養標準車型</th><th>項目</th><th>狀態</th><th>說明</th></tr></thead>
@@ -2830,8 +2830,8 @@ function getVehicleLatestMileage(plate){
   return v ? (v.current_mileage || null) : null;
 }
 const TIRE_POSITIONS = {
-  '車輛': ['左前', '右前', '左後', '右後'],
-  '板架': ['第1軸-左', '第1軸-右', '第2軸-左', '第2軸-右', '第3軸-左', '第3軸-右']
+  '車輛': ['1','2','3','4','5','6','7','8'],
+  '板架': ['1','2','3','4','5','6','7','8']
 };
 function tirePositionsFor(category){ return TIRE_POSITIONS[category] || TIRE_POSITIONS['車輛']; }
 
@@ -2848,7 +2848,7 @@ function updateTirePositionOptions(){
   const plate = document.getElementById('tire_plate').value;
   const v = STATE.vehicles.find(x => x.plate === plate);
   const positions = tirePositionsFor(v ? v.vehicle_category : '車輛');
-  document.getElementById('tire_position').innerHTML = positions.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  document.getElementById('tire_position').innerHTML = positions.map(p => `<option value="${esc(p)}">${esc(p)}（${Number(p)%2?'左':'右'}）</option>`).join('');
 }
 
 function currentTireAt(vehicleId, position){
@@ -2876,19 +2876,13 @@ function renderTireLayout(){
     const s = tireAgeStatus(t.install_date);
     return `<div class="tire-slot ${s}"><div class="pos-label">${esc(pos)}</div><div class="tire-info">${esc(t.brand||'—')}<br>${esc(t.install_date||'')}</div></div>`;
   };
-  let bodyHtml;
-  if(v.vehicle_category === '板架'){
-    bodyHtml = `
-      <div class="tire-row">${slot(positions[0])}${slot(positions[1])}</div>
-      <div class="tire-row">${slot(positions[2])}${slot(positions[3])}</div>
-      <div class="tire-row">${slot(positions[4])}${slot(positions[5])}</div>
+  const bodyHtml = `
+      <div class="tire-row" style="font-size:10px;color:var(--text-3);margin-bottom:6px;"><div style="flex:1;text-align:center;">左（單）</div><div style="flex:1;text-align:center;">右（雙）</div></div>
+      <div class="tire-row">${slot('1')}${slot('2')}</div>
+      <div class="tire-row">${slot('3')}${slot('4')}</div>
+      <div class="tire-row">${slot('5')}${slot('6')}</div>
+      <div class="tire-row">${slot('7')}${slot('8')}</div>
     `;
-  }else{
-    bodyHtml = `
-      <div class="tire-row">${slot(positions[0])}${slot(positions[1])}</div>
-      <div class="tire-row">${slot(positions[2])}${slot(positions[3])}</div>
-    `;
-  }
   container.innerHTML = `<div class="tire-body">${bodyHtml}</div>
     <div class="muted" style="text-align:center;margin-top:10px;">綠色：1年內安裝 ・ 黃色：安裝滿1年 ・ 紅色：安裝滿18個月建議檢查</div>`;
 }
@@ -4090,24 +4084,38 @@ function renderMaintStandardsTable(){
 function renderMaintDueTable(){
   const rows = [];
   STATE.vehicles.forEach(v => {
-    if(!v.maintenance_model) return;
-    const due = computeMaintenanceDue(v);
-    due.forEach(d => {
-      if(d.status==='red' || d.status==='amber'){
-        rows.push({plate:v.plate, model:v.maintenance_model, label:d.label, status:d.status, text:d.text});
+    if(v.status==='報廢') return;
+    const items = [];
+    // 小保/大保(沿用既有計算,不影響總覽)
+    if(v.maintenance_model){ computeMaintenanceDue(v).forEach(d => items.push(d)); }
+    // 輪軸保養(此清單獨立計算,不動總覽用的 computeMaintenanceDue)
+    const axle = STATE.maintSchedules.find(s => s.plate===v.plate && s.maintenance_type==='輪軸保養');
+    if(axle && axle.frequency_km && axle.last_service_mileage!=null){
+      const cur = getVehicleLatestMileage(v.plate);
+      if(cur==null){ items.push({label:'輪軸保養', status:'gray', text:'尚無足夠里程資料估算'}); }
+      else {
+        const nextDue = axle.last_service_mileage + axle.frequency_km;
+        const remaining = nextDue - cur;
+        const buffer = Math.max(1000, axle.frequency_km*0.05);
+        const status = remaining<=0?'red':(remaining<=buffer?'amber':'green');
+        items.push({label:'輪軸保養', status, text:`剩餘約 ${remaining} km（下次保養里程 ${nextDue} km）`});
       }
-    });
+    }
+    items.forEach(d => rows.push({plate:v.plate, model:v.maintenance_model||'—', label:d.label, status:d.status, text:d.text}));
   });
-  rows.sort((a,b) => a.status==='red' ? -1 : 1);
-  document.getElementById('maint_due_count').textContent = `${rows.length} 台需要注意`;
+  const order = {red:0, amber:1, green:2, gray:3};
+  rows.sort((a,b) => (order[a.status]-order[b.status]) || String(a.plate).localeCompare(String(b.plate)));
+  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'資料不足'};
+  const need = rows.filter(r => r.status==='red' || r.status==='amber').length;
+  document.getElementById('maint_due_count').textContent = `共 ${rows.length} 項・${need} 項需注意`;
   document.getElementById('maintDueBody').innerHTML = rows.map(r => `
     <tr>
       <td>${esc(r.plate)}</td>
       <td>${esc(r.model)}</td>
       <td>${esc(r.label)}</td>
-      <td><span class="pill ${r.status}">${r.status==='red'?'已逾期':'即將到期'}</span></td>
+      <td><span class="pill ${r.status}">${label[r.status]}</span></td>
       <td class="muted">${esc(r.text)}</td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty">目前沒有即將到期或逾期的保養項目</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="5" class="empty">目前沒有保養資料</td></tr>`;
 }
 
 function renderInternalYearStatus(){
