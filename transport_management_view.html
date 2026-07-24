@@ -563,6 +563,8 @@
           <option value="all">全部狀態</option>
           <option value="overdue">已逾期</option>
           <option value="soon">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
           <option value="normal">正常</option>
           <option value="unset">未設定</option>
         </select>
@@ -583,6 +585,8 @@
           <option value="all">全部狀態</option>
           <option value="overdue">已逾期</option>
           <option value="soon">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
           <option value="normal">正常</option>
         </select>
       </div>
@@ -2146,9 +2150,13 @@ function renderLeaseTable(){
     if(q && !(l.plate||'').includes(q)) return false;
     if(lesseeFilter!=='all' && l.lessee_name!==lesseeFilter) return false;
     if(filter==='all') return true;
-    const s = statusOf(addOneMonth(l.inspection_expiry), 30);
+    const grace = addOneMonth(l.inspection_expiry);
+    const s = statusOf(grace, 30);
+    const dd = daysUntil(grace);
     if(filter==='overdue') return s==='red';
     if(filter==='soon') return s==='amber';
+    if(filter==='soon60') return dd!==null && dd>=0 && dd<=60;
+    if(filter==='soon90') return dd!==null && dd>=0 && dd<=90;
     if(filter==='normal') return s==='green';
     return true;
   });
@@ -2201,8 +2209,11 @@ function renderSelfUseTrailers(){
     if(statusFilter!=='all'){
       const ds = vehicleDocStatus(v.id, '驗車');
       const code = ds ? ds.status : 'gray';
+      const dd = ds ? daysUntil(ds.grace) : null;
       if(statusFilter==='overdue' && code!=='red') return false;
       if(statusFilter==='soon' && code!=='amber') return false;
+      if(statusFilter==='soon60' && !(dd!==null && dd>=0 && dd<=60)) return false;
+      if(statusFilter==='soon90' && !(dd!==null && dd>=0 && dd<=90)) return false;
       if(statusFilter==='normal' && code!=='green') return false;
       if(statusFilter==='unset' && code!=='gray') return false;
     }
