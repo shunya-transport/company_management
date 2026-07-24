@@ -214,6 +214,8 @@
             <select id="training_status_filter">
               <option value="all">全部狀態</option>
               <option value="red">已逾期</option>
+              <option value="soon30">30天內到期</option>
+              <option value="soon60">60天內到期</option>
               <option value="amber">90天內到期</option>
               <option value="green">正常</option>
               <option value="gray">長期有效</option>
@@ -233,6 +235,8 @@
             <select id="external_status_filter">
               <option value="all">全部狀態</option>
               <option value="red">已逾期</option>
+              <option value="soon30">30天內到期</option>
+              <option value="soon60">60天內到期</option>
               <option value="amber">90天內到期</option>
               <option value="green">正常</option>
               <option value="gray">長期有效</option>
@@ -583,6 +587,7 @@ function renderEmpSelect(){
 function renderTypeSelect(){
   document.getElementById('tf_type').innerHTML = STATE.trainingTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
 }
+let editingTrainingExpiryId = null;
 function renderTrainingTable(){
   const body = document.getElementById('trainingTableBody');
   const emptyEl = document.getElementById('trainingEmpty');
@@ -590,28 +595,51 @@ function renderTrainingTable(){
   const statusFilter = document.getElementById('training_status_filter').value;
   let rows = STATE.trainings;
   if(q) rows = rows.filter(t => (t.employee_name||'').includes(q) || (t.type_name||'').includes(q));
-  if(statusFilter!=='all') rows = rows.filter(t => certStatusCode(t)===statusFilter);
+  if(statusFilter!=='all') rows = rows.filter(t => {
+    if(statusFilter==='soon30' || statusFilter==='soon60'){
+      if(t.no_expiry || !t.expiry_date) return false;
+      const dd = daysUntil(t.expiry_date);
+      return dd>=0 && dd<=(statusFilter==='soon30'?30:60);
+    }
+    return certStatusCode(t)===statusFilter;
+  });
   if(rows.length===0){
     body.innerHTML = STATE.trainings.length===0 ? '' : `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
     emptyEl.style.display = STATE.trainings.length===0 ? 'block' : 'none';
     return;
   }
   emptyEl.style.display='none';
-  body.innerHTML = rows.map(t => `<tr>
+  body.innerHTML = rows.map(t => {
+    const editing = String(editingTrainingExpiryId) === String(t.id);
+    const expiryCell = editing
+      ? `<input type="date" id="train_exp_input_${t.id}" value="${esc(t.expiry_date||'')}" style="width:140px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="train_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label>`
+      : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—'));
+    const actionCell = editing
+      ? `<button class="name-link" data-save-expiry="${t.id}">儲存</button> <button class="del-btn" data-cancel-expiry="${t.id}">取消</button>`
+      : `<button class="name-link" data-edit-expiry="${t.id}">改到期日</button> <button class="del-btn" data-del-training="${t.id}">刪除</button>`;
+    return `<tr>
       <td>${esc(t.employee_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td>${esc(t.cert_no||'')}</td>
       <td>${esc(t.issue_date||'')}</td>
-      <td>${t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')}</td>
+      <td>${expiryCell}</td>
       <td>${certStatusPill(t)}</td>
-      <td><button class="del-btn" data-del-training="${t.id}">刪除</button></td>
-    </tr>`).join('');
+      <td>${actionCell}</td>
+    </tr>`;
+  }).join('');
 }
 function renderExternalStatusTable(){
   const filter = document.getElementById('external_status_filter').value;
   let rows = STATE.trainings.map(t => ({...t, s: t.no_expiry ? 'gray' : statusOf(t.expiry_date, 90)}))
     .sort((a,b) => (a.expiry_date||'9999').localeCompare(b.expiry_date||'9999'));
-  if(filter !== 'all') rows = rows.filter(r => r.s === filter);
+  if(filter !== 'all') rows = rows.filter(r => {
+    if(filter==='soon30' || filter==='soon60'){
+      if(r.no_expiry || !r.expiry_date) return false;
+      const dd = daysUntil(r.expiry_date);
+      return dd>=0 && dd<=(filter==='soon30'?30:60);
+    }
+    return r.s === filter;
+  });
   document.getElementById('external_status_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('externalStatusBody').innerHTML = rows.map(t => `
     <tr>
@@ -762,11 +790,30 @@ document.getElementById('training_search').addEventListener('input', renderTrain
 document.getElementById('training_status_filter').addEventListener('change', renderTrainingTable);
 document.getElementById('external_status_filter').addEventListener('change', renderExternalStatusTable);
 document.getElementById('trainingTableBody').addEventListener('click', async (e) => {
-  const id = e.target.getAttribute('data-del-training');
-  if(id){
-    STATE.trainings = STATE.trainings.filter(t => String(t.id) !== id);
+  const delId = e.target.getAttribute('data-del-training');
+  if(delId){
+    STATE.trainings = STATE.trainings.filter(t => String(t.id) !== delId);
     await saveState('employee_trainings', STATE.trainings, true);
     renderAll();
+    return;
+  }
+  const editId = e.target.getAttribute('data-edit-expiry');
+  if(editId){ editingTrainingExpiryId = editId; renderTrainingTable(); return; }
+  const cancelId = e.target.getAttribute('data-cancel-expiry');
+  if(cancelId){ editingTrainingExpiryId = null; renderTrainingTable(); return; }
+  const saveId = e.target.getAttribute('data-save-expiry');
+  if(saveId){
+    const rec = STATE.trainings.find(t => String(t.id) === saveId);
+    if(rec){
+      const noExp = document.getElementById('train_noexp_'+saveId).checked;
+      const val = document.getElementById('train_exp_input_'+saveId).value;
+      rec.no_expiry = noExp ? 1 : 0;
+      rec.expiry_date = noExp ? null : (val || null);
+      await saveState('employee_trainings', STATE.trainings, true);
+    }
+    editingTrainingExpiryId = null;
+    renderAll();
+    return;
   }
 });
 

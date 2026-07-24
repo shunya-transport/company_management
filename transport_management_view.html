@@ -521,6 +521,8 @@
           <option value="all">全部狀態</option>
           <option value="red">已逾期</option>
           <option value="amber">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
           <option value="green">正常</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
@@ -625,7 +627,9 @@
         <select id="training_status_filter">
           <option value="all">全部狀態</option>
           <option value="red">已逾期</option>
-          <option value="amber">90天內到期</option>
+          <option value="soon30">30天內到期</option>
+              <option value="soon60">60天內到期</option>
+              <option value="amber">90天內到期</option>
           <option value="green">正常</option>
           <option value="gray">長期有效</option>
         </select>
@@ -645,7 +649,9 @@
         <select id="external_status_filter">
           <option value="all">全部狀態</option>
           <option value="red">已逾期</option>
-          <option value="amber">90天內到期</option>
+          <option value="soon30">30天內到期</option>
+              <option value="soon60">60天內到期</option>
+              <option value="amber">90天內到期</option>
           <option value="green">正常</option>
           <option value="gray">長期有效</option>
         </select>
@@ -2258,7 +2264,14 @@ function renderTrainingTable(){
   const statusFilter = document.getElementById('training_status_filter').value;
   let rows = STATE.trainings;
   if(q) rows = rows.filter(t => (t.employee_name||'').includes(q) || (t.type_name||'').includes(q));
-  if(statusFilter!=='all') rows = rows.filter(t => certStatusCode(t)===statusFilter);
+  if(statusFilter!=='all') rows = rows.filter(t => {
+    if(statusFilter==='soon30' || statusFilter==='soon60'){
+      if(t.no_expiry || !t.expiry_date) return false;
+      const dd = daysUntil(t.expiry_date);
+      return dd>=0 && dd<=(statusFilter==='soon30'?30:60);
+    }
+    return certStatusCode(t)===statusFilter;
+  });
   if(rows.length===0){
     body.innerHTML = STATE.trainings.length===0 ? '' : `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
     emptyEl.style.display = STATE.trainings.length===0 ? 'block' : 'none';
@@ -2958,7 +2971,13 @@ function renderViTable(){
   });
   if(q) rows = rows.filter(i => (i.plate||'').includes(q));
   if(typeF!=='all') rows = rows.filter(i => i.insurance_type===typeF);
-  if(statusF!=='all') rows = rows.filter(i => vehicleInsuranceStatus(i)===statusF);
+  if(statusF!=='all') rows = rows.filter(i => {
+    if(statusF==='soon60' || statusF==='soon90'){
+      const dd = i.expiry_date ? daysUntil(i.expiry_date) : null;
+      return dd!==null && dd>=0 && dd<=(statusF==='soon60'?60:90);
+    }
+    return vehicleInsuranceStatus(i)===statusF;
+  });
   document.getElementById('vi_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('viTableBody').innerHTML = rows.map(i => {
     const v = STATE.vehicles.find(x => x.plate === i.plate);
@@ -4142,7 +4161,14 @@ function renderExternalStatusTable(){
   const filter = document.getElementById('external_status_filter').value;
   let rows = STATE.trainings.map(t => ({...t, s: t.no_expiry ? 'gray' : statusOf(t.expiry_date, 90)}))
     .sort((a,b) => (a.expiry_date||'9999').localeCompare(b.expiry_date||'9999'));
-  if(filter !== 'all') rows = rows.filter(r => r.s === filter);
+  if(filter !== 'all') rows = rows.filter(r => {
+    if(filter==='soon30' || filter==='soon60'){
+      if(r.no_expiry || !r.expiry_date) return false;
+      const dd = daysUntil(r.expiry_date);
+      return dd>=0 && dd<=(filter==='soon30'?30:60);
+    }
+    return r.s === filter;
+  });
   document.getElementById('external_status_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('externalStatusBody').innerHTML = rows.map(t => `
     <tr>
