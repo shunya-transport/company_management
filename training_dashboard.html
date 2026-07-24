@@ -451,7 +451,15 @@ async function saveState(key, value, shared){
     if(value && value.length > 0){
       const payload = value.map(item => {
         const {id, ...rest} = item;
-        return {[map.pk]: id, ...rest};
+        let clean = rest;
+        if(map.table === 'employee_trainings'){
+          // [修正] 還原成 Supabase 真實欄位:移除顯示用欄位,cert_no -> certificate_no
+          const {employee_name, type_name, employee_no, region, cert_no, ...cols} = rest;
+          clean = Object.assign({}, cols, {
+            certificate_no: (cert_no !== undefined ? cert_no : rest.certificate_no)
+          });
+        }
+        return {[map.pk]: id, ...clean};
       });
       const CHUNK = 500;
       for(let i=0; i<payload.length; i+=CHUNK){
@@ -498,6 +506,24 @@ async function loadState(){
   STATE.refDepartments = SEED.ref_departments || [];
 
   STATE.trainings = await safeGet('employee_trainings', SEED.trainings || [], true);
+  // [修正] Supabase 只回傳 employee_id / type_id / certificate_no,
+  // 此處對照 STATE.employees 與 STATE.trainingTypes 補回顯示用的姓名/項目/證照號碼,
+  // 讓受訓紀錄清單不會空白。
+  {
+    const empById = {}; (STATE.employees || []).forEach(e => { empById[String(e.id)] = e; });
+    const typeById = {}; (STATE.trainingTypes || []).forEach(t => { typeById[String(t.id)] = t; });
+    STATE.trainings = (STATE.trainings || []).map(r => {
+      const e = empById[String(r.employee_id)] || {};
+      const ty = typeById[String(r.type_id)] || {};
+      return Object.assign({}, r, {
+        employee_name: r.employee_name || e.name || '',
+        employee_no:   r.employee_no   || e.employee_no || '',
+        region:        r.region        || e.region || '',
+        type_name:     r.type_name     || ty.name || '',
+        cert_no: (r.cert_no !== undefined && r.cert_no !== null) ? r.cert_no : (r.certificate_no || null)
+      });
+    });
+  }
   STATE.trainingLog = await safeGet('training_log', SEED.training_log || [], true);
 
   // 受訓紀錄的人員姓名/訓練項目/證書字號欄位是編號存的，這裡補回文字
