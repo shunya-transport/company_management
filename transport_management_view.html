@@ -729,10 +729,18 @@
     </div>
     <div class="card">
       <h2>板架打油到期提醒<span class="count-badge" id="maint_grease_count"></span></h2>
+      <div class="toolbar"><select id="maint_grease_filter">
+        <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
+        <option value="soon30">30天內</option><option value="soon60">60天內</option><option value="soon90">90天內</option>
+      </select></div>
       <div id="maintGreaseAlerts"></div>
     </div>
     <div class="card">
       <h2>輪軸保養到期提醒<span class="count-badge" id="maint_axle_count"></span></h2>
+      <div class="toolbar"><select id="maint_axle_filter">
+        <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
+        <option value="soon30">30天內</option><option value="soon60">60天內</option><option value="soon90">90天內</option>
+      </select></div>
       <div id="maintAxleAlerts"></div>
     </div>
 
@@ -4116,35 +4124,53 @@ function addMonthsN(dateStr, n){ if(!dateStr) return null; const d=new Date(date
 function scheduleDueStatus(s){
   if(s.frequency_km){
     const cur=getVehicleLatestMileage(s.plate);
-    if(cur==null || s.last_service_mileage==null) return {status:'gray', text:'尚無里程資料', sortKey:1e12};
+    if(cur==null || s.last_service_mileage==null)
+      return {status:'gray', last:(s.last_service_mileage!=null?s.last_service_mileage+' km':'—'), next:'—', remain:'尚無里程資料', dd:null, sortKey:1e12};
     const next=s.last_service_mileage+s.frequency_km, rem=next-cur, buf=Math.max(1000,s.frequency_km*0.05);
-    return {status: rem<=0?'red':(rem<=buf?'amber':'green'), text: rem<=0?`超出約 ${-rem} km`:`剩約 ${rem} km`, sortKey:rem};
+    return {status: rem<=0?'red':(rem<=buf?'amber':'green'),
+      last: s.last_service_mileage+' km', next: next+' km',
+      remain: rem<=0?`超出 ${-rem} km`:`剩 ${rem} km`, dd:null, sortKey:rem};
   } else if(s.frequency_months && s.last_service_date){
     const next=addMonthsN(s.last_service_date, s.frequency_months), dd=daysUntil(next);
-    return {status: dd<0?'red':(dd<=30?'amber':'green'), text:(dd<0?`逾期 ${-dd} 天`:`剩 ${dd} 天`)+`（預計 ${next}）`, sortKey:dd};
+    return {status: dd<0?'red':(dd<=30?'amber':'green'),
+      last: s.last_service_date.slice(0,10), next: next,
+      remain: dd<0?`逾期 ${-dd} 天`:`剩 ${dd} 天`, dd:dd, sortKey:dd};
   }
-  return {status:'gray', text:'資料不足', sortKey:1e12};
+  return {status:'gray', last:'—', next:'—', remain:'資料不足', dd:null, sortKey:1e12};
 }
-function dueAlertsFor(type){
+function duePassFilter(d, filter){
+  if(filter==='overdue') return d.status==='red';
+  if(filter==='soon30'||filter==='soon60'||filter==='soon90'){
+    const n = filter==='soon30'?30:(filter==='soon60'?60:90);
+    if(d.dd!=null) return d.dd>=0 && d.dd<=n;
+    return d.status==='red';
+  }
+  return d.status==='red' || d.status==='amber';
+}
+function dueAlertsFor(type, filter){
   return STATE.maintSchedules.filter(s => s.maintenance_type===type)
-    .map(s => { const d=scheduleDueStatus(s); return {plate:s.plate, status:d.status, text:d.text, sortKey:d.sortKey}; })
-    .filter(r => r.status==='red' || r.status==='amber')
+    .map(s => { const d=scheduleDueStatus(s); return {plate:s.plate, status:d.status, last:d.last, next:d.next, remain:d.remain, dd:d.dd, sortKey:d.sortKey}; })
+    .filter(d => duePassFilter(d, filter||'all'))
     .sort((a,b)=> a.sortKey-b.sortKey);
 }
-function renderDueAlertTable(containerId, countId, type){
-  const alerts=dueAlertsFor(type);
+function renderDueAlertTable(containerId, countId, type, filter){
+  const alerts=dueAlertsFor(type, filter);
   const cEl=document.getElementById(countId); if(cEl) cEl.textContent=`${alerts.length} 項`;
   const el=document.getElementById(containerId); if(!el) return;
-  el.innerHTML = alerts.length ? `<div class="table-scroll" style="max-height:320px;"><table><thead><tr><th>車號</th><th>狀態</th><th>說明</th></tr></thead><tbody>`+
-    alerts.map(d=>`<tr><td>${esc(d.plate)}</td><td><span class="pill ${d.status}">${d.status==='red'?'已逾期':'即將到期'}</span></td><td class="muted">${esc(d.text)}</td></tr>`).join('')+`</tbody></table></div>`
-    : '<div class="empty">目前沒有逾期或即將到期的項目</div>';
+  const label={red:'已逾期',amber:'即將到期',green:'正常',gray:'資料不足'};
+  el.innerHTML = alerts.length ? `<div class="table-scroll" style="max-height:340px;"><table><thead><tr><th>車號</th><th>上次</th><th>預估</th><th>剩餘</th><th>狀態</th></tr></thead><tbody>`+
+    alerts.map(d=>`<tr><td>${esc(d.plate)}</td><td class="muted">${esc(d.last)}</td><td>${esc(d.next)}</td><td>${esc(d.remain)}</td><td><span class="pill ${d.status}">${label[d.status]}</span></td></tr>`).join('')+`</tbody></table></div>`
+    : '<div class="empty">目前沒有符合條件的項目</div>';
 }
 function renderDueReminders(){
-  renderDueAlertTable('overviewGreaseAlerts','overview_grease_count','打油');
-  renderDueAlertTable('maintGreaseAlerts','maint_grease_count','打油');
-  renderDueAlertTable('overviewAxleAlerts','overview_axle_count','輪軸保養');
-  renderDueAlertTable('maintAxleAlerts','maint_axle_count','輪軸保養');
+  const gf=(document.getElementById('maint_grease_filter')||{}).value || 'all';
+  const af=(document.getElementById('maint_axle_filter')||{}).value || 'all';
+  renderDueAlertTable('overviewGreaseAlerts','overview_grease_count','打油','all');
+  renderDueAlertTable('maintGreaseAlerts','maint_grease_count','打油', gf);
+  renderDueAlertTable('overviewAxleAlerts','overview_axle_count','輪軸保養','all');
+  renderDueAlertTable('maintAxleAlerts','maint_axle_count','輪軸保養', af);
 }
+['maint_grease_filter','maint_axle_filter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', renderDueReminders); });
 function renderMaintDueTable(){
   const rows = [];
   STATE.vehicles.forEach(v => {
