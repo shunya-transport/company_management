@@ -641,7 +641,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>狀態</th></tr></thead>
+          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>狀態</th><th></th></tr></thead>
           <tbody id="externalStatusBody"></tbody>
         </table>
       </div>
@@ -4151,6 +4151,7 @@ function renderInternalYearStatus(){
     </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+let editingExternalId = null;
 function renderExternalStatusTable(){
   const filter = document.getElementById('external_status_filter').value;
   let rows = STATE.trainings.map(t => ({...t, s: t.no_expiry ? 'gray' : statusOf(t.expiry_date, 90)}))
@@ -4164,16 +4165,49 @@ function renderExternalStatusTable(){
     return r.s === filter;
   });
   document.getElementById('external_status_count').textContent = `共 ${rows.length} 筆`;
-  document.getElementById('externalStatusBody').innerHTML = rows.map(t => `
-    <tr>
+  document.getElementById('externalStatusBody').innerHTML = rows.map(t => {
+    const editing = String(editingExternalId) === String(t.id);
+    const issueCell = editing
+      ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
+      : esc(t.issue_date||'—');
+    const expiryCell = editing
+      ? `<input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label>`
+      : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—'));
+    const actionCell = editing
+      ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
+      : `<button class="name-link" data-edit-ext="${t.id}">修改</button>`;
+    return `<tr>
       <td>${esc(t.employee_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td>${esc(t.cert_no||'')}</td>
-      <td>${esc(t.issue_date||'—')}</td>
-      <td>${t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')}</td>
+      <td>${issueCell}</td>
+      <td>${expiryCell}</td>
       <td>${certStatusPill(t)}</td>
-    </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合條件的紀錄</td></tr>`;
+      <td>${actionCell}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
+
+document.getElementById('externalStatusBody').addEventListener('click', async (e) => {
+  const editId = e.target.getAttribute('data-edit-ext');
+  if(editId){ editingExternalId = editId; renderExternalStatusTable(); return; }
+  const cancelId = e.target.getAttribute('data-cancel-ext');
+  if(cancelId){ editingExternalId = null; renderExternalStatusTable(); return; }
+  const saveId = e.target.getAttribute('data-save-ext');
+  if(saveId){
+    const rec = STATE.trainings.find(t => String(t.id) === saveId);
+    if(rec){
+      const noExp = document.getElementById('ext_noexp_'+saveId).checked;
+      rec.issue_date = document.getElementById('ext_issue_'+saveId).value || null;
+      rec.no_expiry = noExp ? 1 : 0;
+      rec.expiry_date = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
+      await saveState('employee_trainings', STATE.trainings, true);
+    }
+    editingExternalId = null;
+    renderAll();
+    return;
+  }
+});
 
 let logYearsInit = false;
 function renderTrainingLogTable(){
