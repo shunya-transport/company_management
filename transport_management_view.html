@@ -264,6 +264,14 @@
       <div id="overviewMaintAlerts"></div>
     </div>
     <div class="card">
+      <h2>板架打油到期提醒<span class="count-badge" id="overview_grease_count"></span></h2>
+      <div id="overviewGreaseAlerts"></div>
+    </div>
+    <div class="card">
+      <h2>輪軸保養到期提醒<span class="count-badge" id="overview_axle_count"></span></h2>
+      <div id="overviewAxleAlerts"></div>
+    </div>
+    <div class="card">
       <h2>車輛保險到期提醒<span class="count-badge" id="overview_insurance_count"></span></h2>
       <div id="overviewInsuranceAlerts"></div>
     </div>
@@ -658,7 +666,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>狀態</th></tr></thead>
+          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>狀態</th><th></th></tr></thead>
           <tbody id="externalStatusBody"></tbody>
         </table>
       </div>
@@ -718,6 +726,14 @@
           <tbody id="maintDueBody"></tbody>
         </table>
       </div>
+    </div>
+    <div class="card">
+      <h2>板架打油到期提醒<span class="count-badge" id="maint_grease_count"></span></h2>
+      <div id="maintGreaseAlerts"></div>
+    </div>
+    <div class="card">
+      <h2>輪軸保養到期提醒<span class="count-badge" id="maint_axle_count"></span></h2>
+      <div id="maintAxleAlerts"></div>
     </div>
 
     <div class="card">
@@ -3048,7 +3064,7 @@ function renderMaintenanceTables(){
   const msBody = document.getElementById('maintScheduleTableBody');
   const msEmpty = document.getElementById('maintScheduleEmpty');
   const rows2 = [
-    ...STATE.maintSchedules.map(s => ({
+    ...STATE.maintSchedules.filter(s => s.maintenance_type==='輪軸保養').map(s => ({
       plate:s.plate, item:s.maintenance_type,
       freq: `${s.frequency_km?s.frequency_km+'km ':''}${s.frequency_months?s.frequency_months+'個月':''}`,
       last: `${s.last_service_date||''}${s.last_service_mileage?' / '+s.last_service_mileage+'km':''}`,
@@ -3833,6 +3849,7 @@ function renderAdminRewards(){
   let rows = STATE.adminRewards;
   if(q) rows = rows.filter(r => (r.name||'').includes(q));
   if(typeF!=='all') rows = rows.filter(r => r.reward_type===typeF);
+  rows = rows.slice().sort((a,b) => (Number(b.id)||0) - (Number(a.id)||0));
   document.getElementById('admin_rewards_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('adminRewardsBody').innerHTML = rows.slice(0,200).map(r => `
     <tr><td><button class="name-link" data-view-reward="${r.id}">#${esc(r.id)}</button></td>
@@ -4095,6 +4112,39 @@ function renderMaintStandardsTable(){
     </tr>`).join('');
 }
 
+function addMonthsN(dateStr, n){ if(!dateStr) return null; const d=new Date(dateStr.slice(0,10)+'T00:00:00'); const day=d.getDate(); d.setMonth(d.getMonth()+n); if(d.getDate()!==day) d.setDate(0); return d.toISOString().slice(0,10); }
+function scheduleDueStatus(s){
+  if(s.frequency_km){
+    const cur=getVehicleLatestMileage(s.plate);
+    if(cur==null || s.last_service_mileage==null) return {status:'gray', text:'尚無里程資料', sortKey:1e12};
+    const next=s.last_service_mileage+s.frequency_km, rem=next-cur, buf=Math.max(1000,s.frequency_km*0.05);
+    return {status: rem<=0?'red':(rem<=buf?'amber':'green'), text: rem<=0?`超出約 ${-rem} km`:`剩約 ${rem} km`, sortKey:rem};
+  } else if(s.frequency_months && s.last_service_date){
+    const next=addMonthsN(s.last_service_date, s.frequency_months), dd=daysUntil(next);
+    return {status: dd<0?'red':(dd<=30?'amber':'green'), text:(dd<0?`逾期 ${-dd} 天`:`剩 ${dd} 天`)+`（預計 ${next}）`, sortKey:dd};
+  }
+  return {status:'gray', text:'資料不足', sortKey:1e12};
+}
+function dueAlertsFor(type){
+  return STATE.maintSchedules.filter(s => s.maintenance_type===type)
+    .map(s => { const d=scheduleDueStatus(s); return {plate:s.plate, status:d.status, text:d.text, sortKey:d.sortKey}; })
+    .filter(r => r.status==='red' || r.status==='amber')
+    .sort((a,b)=> a.sortKey-b.sortKey);
+}
+function renderDueAlertTable(containerId, countId, type){
+  const alerts=dueAlertsFor(type);
+  const cEl=document.getElementById(countId); if(cEl) cEl.textContent=`${alerts.length} 項`;
+  const el=document.getElementById(containerId); if(!el) return;
+  el.innerHTML = alerts.length ? `<div class="table-scroll" style="max-height:320px;"><table><thead><tr><th>車號</th><th>狀態</th><th>說明</th></tr></thead><tbody>`+
+    alerts.map(d=>`<tr><td>${esc(d.plate)}</td><td><span class="pill ${d.status}">${d.status==='red'?'已逾期':'即將到期'}</span></td><td class="muted">${esc(d.text)}</td></tr>`).join('')+`</tbody></table></div>`
+    : '<div class="empty">目前沒有逾期或即將到期的項目</div>';
+}
+function renderDueReminders(){
+  renderDueAlertTable('overviewGreaseAlerts','overview_grease_count','打油');
+  renderDueAlertTable('maintGreaseAlerts','maint_grease_count','打油');
+  renderDueAlertTable('overviewAxleAlerts','overview_axle_count','輪軸保養');
+  renderDueAlertTable('maintAxleAlerts','maint_axle_count','輪軸保養');
+}
 function renderMaintDueTable(){
   const rows = [];
   STATE.vehicles.forEach(v => {
@@ -4102,19 +4152,6 @@ function renderMaintDueTable(){
     const items = [];
     // 小保/大保(沿用既有計算,不影響總覽)
     if(v.maintenance_model){ computeMaintenanceDue(v).forEach(d => items.push(d)); }
-    // 輪軸保養(此清單獨立計算,不動總覽用的 computeMaintenanceDue)
-    const axle = STATE.maintSchedules.find(s => s.plate===v.plate && s.maintenance_type==='輪軸保養');
-    if(axle && axle.frequency_km && axle.last_service_mileage!=null){
-      const cur = getVehicleLatestMileage(v.plate);
-      if(cur==null){ items.push({label:'輪軸保養', status:'gray', text:'尚無足夠里程資料估算'}); }
-      else {
-        const nextDue = axle.last_service_mileage + axle.frequency_km;
-        const remaining = nextDue - cur;
-        const buffer = Math.max(1000, axle.frequency_km*0.05);
-        const status = remaining<=0?'red':(remaining<=buffer?'amber':'green');
-        items.push({label:'輪軸保養', status, text:`剩餘約 ${remaining} km（下次保養里程 ${nextDue} km）`});
-      }
-    }
     items.forEach(d => rows.push({plate:v.plate, model:v.maintenance_model||'—', label:d.label, status:d.status, text:d.text}));
   });
   const order = {red:0, amber:1, green:2, gray:3};
@@ -4165,6 +4202,7 @@ function renderInternalYearStatus(){
     </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+let editingExternalId = null;
 function renderExternalStatusTable(){
   const filter = document.getElementById('external_status_filter').value;
   let rows = STATE.trainings.map(t => ({...t, s: t.no_expiry ? 'gray' : statusOf(t.expiry_date, 90)}))
@@ -4178,16 +4216,49 @@ function renderExternalStatusTable(){
     return r.s === filter;
   });
   document.getElementById('external_status_count').textContent = `共 ${rows.length} 筆`;
-  document.getElementById('externalStatusBody').innerHTML = rows.map(t => `
-    <tr>
+  document.getElementById('externalStatusBody').innerHTML = rows.map(t => {
+    const editing = String(editingExternalId) === String(t.id);
+    const issueCell = editing
+      ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
+      : esc(t.issue_date||'—');
+    const expiryCell = editing
+      ? `<input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label>`
+      : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—'));
+    const actionCell = editing
+      ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
+      : `<button class="name-link" data-edit-ext="${t.id}">修改</button>`;
+    return `<tr>
       <td>${esc(t.employee_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td>${esc(t.cert_no||'')}</td>
-      <td>${esc(t.issue_date||'—')}</td>
-      <td>${t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')}</td>
+      <td>${issueCell}</td>
+      <td>${expiryCell}</td>
       <td>${certStatusPill(t)}</td>
-    </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合條件的紀錄</td></tr>`;
+      <td>${actionCell}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
+
+document.getElementById('externalStatusBody').addEventListener('click', async (e) => {
+  const editId = e.target.getAttribute('data-edit-ext');
+  if(editId){ editingExternalId = editId; renderExternalStatusTable(); return; }
+  const cancelId = e.target.getAttribute('data-cancel-ext');
+  if(cancelId){ editingExternalId = null; renderExternalStatusTable(); return; }
+  const saveId = e.target.getAttribute('data-save-ext');
+  if(saveId){
+    const rec = STATE.trainings.find(t => String(t.id) === saveId);
+    if(rec){
+      const noExp = document.getElementById('ext_noexp_'+saveId).checked;
+      rec.issue_date = document.getElementById('ext_issue_'+saveId).value || null;
+      rec.no_expiry = noExp ? 1 : 0;
+      rec.expiry_date = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
+      await saveState('employee_trainings', STATE.trainings, true);
+    }
+    editingExternalId = null;
+    renderAll();
+    return;
+  }
+});
 
 let logYearsInit = false;
 function renderTrainingLogTable(){
@@ -4511,6 +4582,7 @@ function renderLeaveStatTable(){
 
 function renderAll(){
   renderOverview();
+  renderDueReminders();
   renderLeaseTable();
   renderSelfUseTrailers();
   renderTrainingTable();
