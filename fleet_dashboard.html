@@ -1971,6 +1971,13 @@ async function saveState(key, value, shared){
         stripFields.forEach(f => delete rest[f]);
         return {[map.pk]: id, ...rest};
       });
+      // PostgREST 批次 upsert 要求同一批每個物件的欄位名稱完全一致(否則回 PGRST102)
+      // 這裡取所有物件欄位的聯集,缺的補 null,避免新舊資料欄位不齊時整批寫入失敗
+      {
+        const _allKeys = new Set();
+        payload.forEach(o => Object.keys(o).forEach(k => _allKeys.add(k)));
+        payload.forEach(o => { _allKeys.forEach(k => { if(!(k in o)) o[k] = null; }); });
+      }
       const CHUNK = 500;
       for(let i=0; i<payload.length; i+=CHUNK){
         const chunk = payload.slice(i, i+CHUNK);
