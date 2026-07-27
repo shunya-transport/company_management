@@ -702,6 +702,7 @@
         <label>廠商<input id="mr_vendor" placeholder="選填"></label>
         <label>費用<input id="mr_cost" type="number" placeholder="選填"></label>
         <label>內容說明<input id="mr_desc" placeholder="例：機油、來令片更換"></label>
+        <label>更換零件名稱<input id="mr_parts" placeholder="選填，例：機油芯、來令片"></label>
       </div>
       <button class="btn" id="mr_add">新增維修保養記錄</button>
       <div class="muted" style="margin-top:8px;">選「小保養」或「大保養」時，系統會自動更新這台車的保養週期紀錄（供下方到期估算使用），填寫的里程數也會一併記錄為最新里程。</div>
@@ -721,7 +722,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>類型</th><th>日期</th><th>里程</th><th>廠商</th><th>內容</th><th>費用</th></tr></thead>
+          <thead><tr><th>車號</th><th>類型</th><th>日期</th><th>里程</th><th>廠商</th><th>內容</th><th>更換零件</th><th>費用</th></tr></thead>
           <tbody id="maintHistoryBody"></tbody>
         </table>
       </div>
@@ -3888,8 +3889,9 @@ function renderMaintHistoryTable(){
       <td>${r.mileage_at_service ? esc(r.mileage_at_service)+' km' : '—'}</td>
       <td>${esc(r.vendor_name||'—')}</td>
       <td class="muted">${esc(r.description||'')}</td>
+      <td class="muted">${esc(r.parts_replaced||'—')}</td>
       <td>${r.cost ? '$'+esc(r.cost) : '—'}</td>
-    </tr>`).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
 let adminFiltersInit = false;
@@ -5884,13 +5886,15 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   const vendorName = document.getElementById('mr_vendor').value.trim();
   const cost = document.getElementById('mr_cost').value ? parseFloat(document.getElementById('mr_cost').value) : null;
   const desc = document.getElementById('mr_desc').value.trim();
+  const partsEl = document.getElementById('mr_parts');
+  const parts = partsEl ? partsEl.value.trim() : '';
 
   // maintenance_records.maintenance_type 只接受 定期保養/臨時維修/年度驗車/其他，小保養/大保養歸類為定期保養
   const recordType = (type==='小保養'||type==='大保養') ? '定期保養' : type;
   STATE.maintRecords.unshift({
     id: nextId(STATE.maintRecords), plate, vehicle_id: plateToVehicleId(plate), maintenance_type: recordType,
     maintenance_date: date, mileage_at_service: mileage, vendor_name: vendorName || null,
-    description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, cost, status:'已完成'
+    description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, status:'已完成'
   });
   await saveState('maint_records', STATE.maintRecords, true);
 
@@ -5916,7 +5920,7 @@ document.getElementById('mr_add').addEventListener('click', async () => {
     await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
   }
 
-  ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_desc'].forEach(id=>document.getElementById(id).value='');
+  ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_desc','mr_parts'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
 
