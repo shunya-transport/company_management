@@ -570,12 +570,148 @@ async function safeGet(key, fallback, shared){
     return fallback;
   }
 }
+// ===== 送出前檢查:資料庫規定不可空白的欄位(NOT NULL),先在前端擋下來 =====
+// 這樣使用者看到的是「車號找不到」而不是 Postgres 的 23502 錯誤碼
+const REQUIRED_FIELDS = {
+  'annual_leave_tiers': ['min_years','leave_days'],
+  'axle_maintenance_records': ['vehicle_id','axle_no','service_date'],
+  'calibration_records': ['instrument_id','calibration_date'],
+  'companies': ['company_name'],
+  'customers': ['name'],
+  'departments': ['dept_name'],
+  'driver_licenses': ['employee_id'],
+  'emission_test_records': ['vehicle_id','test_date'],
+  'employee_document_checklist': ['employee_id','item_id'],
+  'employee_documents': ['employee_id'],
+  'employee_equipment': ['employee_id','type_id'],
+  'employee_pension_elections': ['employee_id'],
+  'employee_trainings': ['employee_id','type_id'],
+  'employees': ['name','employee_type'],
+  'equipment_types': ['name'],
+  'fuel_logs': ['vehicle_id','fuel_date'],
+  'instruments': ['asset_no'],
+  'insurance_change_records': ['employee_id'],
+  'insurance_monthly_records': ['year_roc','month'],
+  'internal_training_types': ['type_name'],
+  'internal_trainings': ['employee_id','type_id'],
+  'leave_records': ['leave_type','start_date','end_date'],
+  'lessees': ['lessee_name'],
+  'maintenance_cycle_standards': ['model_name'],
+  'maintenance_items': ['record_id','item_name'],
+  'maintenance_records': ['vehicle_id','maintenance_type','maintenance_date'],
+  'maintenance_schedules': ['vehicle_id','maintenance_type'],
+  'medical_exam_records': ['employee_id','exam_date'],
+  'medical_kit_items': ['vehicle_id','item_name'],
+  'overtime_records': ['ot_date'],
+  'permissions': ['module','action'],
+  'positions': ['position_name'],
+  'procurement_orders': ['order_no'],
+  'qualified_suppliers': ['company_name'],
+  'ref_departments': ['name'],
+  'ref_pass_types': ['name'],
+  'ref_positions': ['name'],
+  'ref_reward_types': ['name'],
+  'ref_yards': ['name'],
+  'required_document_types': ['item_name'],
+  'roles': ['role_name'],
+  'stock_items': ['type_id'],
+  'stock_transactions': ['item_id','transaction_type','quantity','transaction_date'],
+  'supplier_item_catalog': ['item_name','supplier_name'],
+  'supplier_ratings': ['company_name'],
+  'tire_inspection_log': ['vehicle_id','year_roc','month'],
+  'tire_records': ['vehicle_id','position'],
+  'toll_records': ['toll_date'],
+  'trailer_leases': ['vehicle_id','lessee_id'],
+  'training_types': ['type_name'],
+  'urea_logs': ['region','log_date','quantity'],
+  'user_accounts': ['username','password_hash'],
+  'vehicle_documents': ['vehicle_id','doc_type'],
+  'vehicle_equipment': ['vehicle_id','type_id'],
+  'vehicle_insurance': ['vehicle_id','insurance_type'],
+  'vehicle_mileage_logs': ['vehicle_id','log_date','mileage'],
+  'vehicles': ['plate_number'],
+  'vendors': ['vendor_name'],
+};
+const FIELD_LABELS = {
+  'action': '動作',
+  'asset_no': '財產編號',
+  'axle_no': '軸號',
+  'calibration_date': '校正日期',
+  'company_name': '公司名稱',
+  'dept_name': '部門名稱',
+  'doc_type': '文件類型',
+  'employee_id': '人員（必須是系統人員清單裡已存在的姓名）',
+  'employee_type': '人員類別',
+  'end_date': '結束日期',
+  'exam_date': '體檢日期',
+  'fuel_date': '加油日期',
+  'instrument_id': '儀器',
+  'insurance_type': '保險種類',
+  'item_id': '品項',
+  'item_name': '品名',
+  'leave_days': '特休天數',
+  'leave_type': '假別',
+  'lessee_id': '承租人（必須是已建檔的承租人）',
+  'lessee_name': '承租人名稱',
+  'log_date': '日期',
+  'maintenance_date': '保養日期',
+  'maintenance_type': '保養類型',
+  'mileage': '里程數',
+  'min_years': '年資下限',
+  'model_name': '車型',
+  'module': '模組',
+  'month': '月份',
+  'name': '名稱',
+  'order_no': '採購單號',
+  'ot_date': '加班日期',
+  'password_hash': '密碼',
+  'plate_number': '車號',
+  'position': '胎位',
+  'position_name': '職稱',
+  'quantity': '數量',
+  'record_id': '關聯記錄',
+  'region': '區域',
+  'role_name': '角色名稱',
+  'service_date': '施作日期',
+  'start_date': '開始日期',
+  'supplier_name': '供應商名稱',
+  'test_date': '檢測日期',
+  'toll_date': '日期',
+  'transaction_date': '異動日期',
+  'transaction_type': '異動類型',
+  'type_id': '項目類別',
+  'type_name': '項目名稱',
+  'username': '帳號',
+  'vehicle_id': '車號（必須是系統車輛清單裡已存在的車號）',
+  'vendor_name': '廠商名稱',
+  'year_roc': '年度',
+};
+function checkRequired(table, rows){
+  const need = REQUIRED_FIELDS[table];
+  if(!need || !rows || !rows.length) return null;
+  const bad = [];
+  rows.forEach(r => {
+    const miss = need.filter(k => r[k] === null || r[k] === undefined || r[k] === '');
+    if(miss.length) bad.push(miss);
+  });
+  if(!bad.length) return null;
+  const names = [...new Set(bad.flat())].map(k => FIELD_LABELS[k] || k);
+  return { count: bad.length, names: names };
+}
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
   if(LOAD_FAILED.has(key)){
     alert('「' + key + '」這份資料在開啟頁面時沒有讀取成功,目前畫面上是內建備援資料。\n\n為了避免覆蓋或刪除雲端的正確資料,這次不會存檔。\n請先重新整理頁面,確認上方紅色警告消失後再操作。');
     throw new Error('資料未成功載入,已阻止存檔以保護雲端資料');
+  }
+  {
+    const _bad = checkRequired(map.table, value);
+    if(_bad){
+      alert('資料不完整,沒有存檔。\n\n有 ' + _bad.count + ' 筆資料缺少必填欄位:\n' + _bad.names.join('\n') +
+            '\n\n如果是車號或人員,通常代表您打的名稱不在系統清單裡(例如只打了車牌後四碼)。\n請點一下輸入框,從下拉建議清單直接選取正確的名稱。\n\n您輸入的內容仍在畫面上,修正後再按一次即可。');
+      throw new Error('必填欄位未填:' + _bad.names.join(','));
+    }
   }
   try{
     if(value && value.length > 0){

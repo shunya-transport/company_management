@@ -1680,8 +1680,19 @@ function statusLabel(dateStr, soonDays){
 }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+function normPlate(p){ return String(p==null?'':p).trim().toUpperCase().replace(/\s+/g,''); }
+function vehicleByPlate(plate){
+  const key = normPlate(plate);
+  if(!key) return null;
+  let v = STATE.vehicles.find(x => normPlate(x.plate) === key);
+  if(v) return v;
+  // 使用者可能只打了車牌的一部分(例如只打 9298),若全系統只有一台對得上就自動帶入
+  const bare = key.replace(/-/g,'');
+  const hit = STATE.vehicles.filter(x => normPlate(x.plate).replace(/-/g,'').endsWith(bare));
+  return hit.length === 1 ? hit[0] : null;
+}
 function plateToVehicleId(plate){
-  const v = STATE.vehicles.find(x => x.plate === plate);
+  const v = vehicleByPlate(plate);
   return v ? v.id : null;
 }
 function lesseeNameToId(name){
@@ -1972,6 +1983,7 @@ async function enrichDenormalizedFields(){
 
 // 各儲存key在寫回Supabase前，需要先移除的「計算/補值」欄位（這些欄位在資料庫裡不存在，是畫面顯示用的）
 const COMPUTED_FIELDS = {
+  axle_maintenance_records: ['plate'],
   roster_employees: ['dept_name','position_name','company_name'],
   roster_vehicles: ['plate','company_name'],
   admin_tolls: ['plate'],
@@ -1985,12 +1997,148 @@ const COMPUTED_FIELDS = {
   lessees: ['name'],
 };
 
+// ===== 送出前檢查:資料庫規定不可空白的欄位(NOT NULL),先在前端擋下來 =====
+// 這樣使用者看到的是「車號找不到」而不是 Postgres 的 23502 錯誤碼
+const REQUIRED_FIELDS = {
+  'annual_leave_tiers': ['min_years','leave_days'],
+  'axle_maintenance_records': ['vehicle_id','axle_no','service_date'],
+  'calibration_records': ['instrument_id','calibration_date'],
+  'companies': ['company_name'],
+  'customers': ['name'],
+  'departments': ['dept_name'],
+  'driver_licenses': ['employee_id'],
+  'emission_test_records': ['vehicle_id','test_date'],
+  'employee_document_checklist': ['employee_id','item_id'],
+  'employee_documents': ['employee_id'],
+  'employee_equipment': ['employee_id','type_id'],
+  'employee_pension_elections': ['employee_id'],
+  'employee_trainings': ['employee_id','type_id'],
+  'employees': ['name','employee_type'],
+  'equipment_types': ['name'],
+  'fuel_logs': ['vehicle_id','fuel_date'],
+  'instruments': ['asset_no'],
+  'insurance_change_records': ['employee_id'],
+  'insurance_monthly_records': ['year_roc','month'],
+  'internal_training_types': ['type_name'],
+  'internal_trainings': ['employee_id','type_id'],
+  'leave_records': ['leave_type','start_date','end_date'],
+  'lessees': ['lessee_name'],
+  'maintenance_cycle_standards': ['model_name'],
+  'maintenance_items': ['record_id','item_name'],
+  'maintenance_records': ['vehicle_id','maintenance_type','maintenance_date'],
+  'maintenance_schedules': ['vehicle_id','maintenance_type'],
+  'medical_exam_records': ['employee_id','exam_date'],
+  'medical_kit_items': ['vehicle_id','item_name'],
+  'overtime_records': ['ot_date'],
+  'permissions': ['module','action'],
+  'positions': ['position_name'],
+  'procurement_orders': ['order_no'],
+  'qualified_suppliers': ['company_name'],
+  'ref_departments': ['name'],
+  'ref_pass_types': ['name'],
+  'ref_positions': ['name'],
+  'ref_reward_types': ['name'],
+  'ref_yards': ['name'],
+  'required_document_types': ['item_name'],
+  'roles': ['role_name'],
+  'stock_items': ['type_id'],
+  'stock_transactions': ['item_id','transaction_type','quantity','transaction_date'],
+  'supplier_item_catalog': ['item_name','supplier_name'],
+  'supplier_ratings': ['company_name'],
+  'tire_inspection_log': ['vehicle_id','year_roc','month'],
+  'tire_records': ['vehicle_id','position'],
+  'toll_records': ['toll_date'],
+  'trailer_leases': ['vehicle_id','lessee_id'],
+  'training_types': ['type_name'],
+  'urea_logs': ['region','log_date','quantity'],
+  'user_accounts': ['username','password_hash'],
+  'vehicle_documents': ['vehicle_id','doc_type'],
+  'vehicle_equipment': ['vehicle_id','type_id'],
+  'vehicle_insurance': ['vehicle_id','insurance_type'],
+  'vehicle_mileage_logs': ['vehicle_id','log_date','mileage'],
+  'vehicles': ['plate_number'],
+  'vendors': ['vendor_name'],
+};
+const FIELD_LABELS = {
+  'action': '動作',
+  'asset_no': '財產編號',
+  'axle_no': '軸號',
+  'calibration_date': '校正日期',
+  'company_name': '公司名稱',
+  'dept_name': '部門名稱',
+  'doc_type': '文件類型',
+  'employee_id': '人員（必須是系統人員清單裡已存在的姓名）',
+  'employee_type': '人員類別',
+  'end_date': '結束日期',
+  'exam_date': '體檢日期',
+  'fuel_date': '加油日期',
+  'instrument_id': '儀器',
+  'insurance_type': '保險種類',
+  'item_id': '品項',
+  'item_name': '品名',
+  'leave_days': '特休天數',
+  'leave_type': '假別',
+  'lessee_id': '承租人（必須是已建檔的承租人）',
+  'lessee_name': '承租人名稱',
+  'log_date': '日期',
+  'maintenance_date': '保養日期',
+  'maintenance_type': '保養類型',
+  'mileage': '里程數',
+  'min_years': '年資下限',
+  'model_name': '車型',
+  'module': '模組',
+  'month': '月份',
+  'name': '名稱',
+  'order_no': '採購單號',
+  'ot_date': '加班日期',
+  'password_hash': '密碼',
+  'plate_number': '車號',
+  'position': '胎位',
+  'position_name': '職稱',
+  'quantity': '數量',
+  'record_id': '關聯記錄',
+  'region': '區域',
+  'role_name': '角色名稱',
+  'service_date': '施作日期',
+  'start_date': '開始日期',
+  'supplier_name': '供應商名稱',
+  'test_date': '檢測日期',
+  'toll_date': '日期',
+  'transaction_date': '異動日期',
+  'transaction_type': '異動類型',
+  'type_id': '項目類別',
+  'type_name': '項目名稱',
+  'username': '帳號',
+  'vehicle_id': '車號（必須是系統車輛清單裡已存在的車號）',
+  'vendor_name': '廠商名稱',
+  'year_roc': '年度',
+};
+function checkRequired(table, rows){
+  const need = REQUIRED_FIELDS[table];
+  if(!need || !rows || !rows.length) return null;
+  const bad = [];
+  rows.forEach(r => {
+    const miss = need.filter(k => r[k] === null || r[k] === undefined || r[k] === '');
+    if(miss.length) bad.push(miss);
+  });
+  if(!bad.length) return null;
+  const names = [...new Set(bad.flat())].map(k => FIELD_LABELS[k] || k);
+  return { count: bad.length, names: names };
+}
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
   if(LOAD_FAILED.has(key)){
     alert('「' + key + '」這份資料在開啟頁面時沒有讀取成功,目前畫面上是內建備援資料。\n\n為了避免覆蓋或刪除雲端的正確資料,這次不會存檔。\n請先重新整理頁面,確認上方紅色警告消失後再操作。');
     throw new Error('資料未成功載入,已阻止存檔以保護雲端資料');
+  }
+  {
+    const _bad = checkRequired(map.table, value);
+    if(_bad){
+      alert('資料不完整,沒有存檔。\n\n有 ' + _bad.count + ' 筆資料缺少必填欄位:\n' + _bad.names.join('\n') +
+            '\n\n如果是車號或人員,通常代表您打的名稱不在系統清單裡(例如只打了車牌後四碼)。\n請點一下輸入框,從下拉建議清單直接選取正確的名稱。\n\n您輸入的內容仍在畫面上,修正後再按一次即可。');
+      throw new Error('必填欄位未填:' + _bad.names.join(','));
+    }
   }
   try{
     // 先寫入/更新目前的資料(upsert)，確保新資料真的進去了，才進行後續刪除，避免寫入失敗時舊資料被砍空
@@ -3240,7 +3388,7 @@ async function saveChecklist(){
     const status = sel.value;
     let rec = STATE.docChecklist.find(c => c.employee_id === currentChecklistEmpId && c.item_id === itemId);
     if(rec){ rec.status = status; }
-    else{ STATE.docChecklist.push({employee_id: currentChecklistEmpId, item_id: itemId, status}); }
+    else{ STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: currentChecklistEmpId, item_id: itemId, status}); }
   });
   await saveState('doc_checklist', STATE.docChecklist, true);
   closeChecklistModal();
@@ -4786,7 +4934,7 @@ document.getElementById('si_add').addEventListener('click', async () => {
   const typeId = parseInt(document.getElementById('si_type').value);
   if(!typeId){ alert('請選擇配備類型'); return; }
   STATE.stockItems.push({
-    item_id: nextId(STATE.stockItems.map(i=>({id:i.item_id}))),
+    id: nextId(STATE.stockItems.map(i=>({id:i.item_id}))), item_id: nextId(STATE.stockItems.map(i=>({id:i.item_id}))),
     type_id: typeId,
     size: document.getElementById('si_size').value.trim(),
     unit_cost: document.getElementById('si_cost').value ? parseFloat(document.getElementById('si_cost').value) : null,
@@ -4845,7 +4993,7 @@ document.getElementById('st_add').addEventListener('click', async () => {
   const qty = parseInt(document.getElementById('st_qty').value);
   if(!itemId || !date || !qty){ alert('請選擇品項、日期並填寫數量'); return; }
   STATE.stockTransactions.push({
-    transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
+    id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))), transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
     item_id: itemId,
     transaction_type: document.getElementById('st_type').value,
     quantity: qty,
@@ -4873,7 +5021,7 @@ document.getElementById('in_add').addEventListener('click', async () => {
   if(!assetNo){ alert('請填寫財產編號'); return; }
   const newId = nextId(STATE.instruments.map(i=>({id:i.instrument_id})));
   STATE.instruments.push({
-    instrument_id: newId,
+    id: newId, instrument_id: newId,
     type_id: parseInt(document.getElementById('in_type').value),
     asset_no: assetNo,
     brand_model: document.getElementById('in_brand').value.trim(),
@@ -4932,7 +5080,7 @@ document.getElementById('cal_add').addEventListener('click', async () => {
   if(!instId || !date){ alert('請選擇儀器並填寫校驗日期'); return; }
   const nextDue = document.getElementById('cal_next').value || null;
   STATE.calibrationRecords.push({
-    record_id: nextId(STATE.calibrationRecords.map(r=>({id:r.record_id}))),
+    id: nextId(STATE.calibrationRecords.map(r=>({id:r.record_id}))), record_id: nextId(STATE.calibrationRecords.map(r=>({id:r.record_id}))),
     instrument_id: instId, calibration_date: date,
     vendor: document.getElementById('cal_vendor').value.trim(),
     result: document.getElementById('cal_result').value,
@@ -5512,7 +5660,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
   });
   document.querySelectorAll('#sf_checklist .new-cl-status').forEach(sel => {
     const itemId = parseInt(sel.getAttribute('data-new-item-id'));
-    STATE.docChecklist.push({employee_id: newEmpId, item_id: itemId, status: sel.value, submitted_date: sel.value === '已繳交' ? todayISO() : null});
+    STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: newEmpId, item_id: itemId, status: sel.value, submitted_date: sel.value === '已繳交' ? todayISO() : null});
   });
   await saveState('roster_employees', STATE.employees, true);
   await saveState('doc_checklist', STATE.docChecklist, true);
@@ -5672,7 +5820,7 @@ document.getElementById('medKitModalAdd').addEventListener('click', async () => 
   const name = document.getElementById('mk_name').value.trim();
   if(!name){ alert('請填寫品項名稱'); return; }
   STATE.medicalKitItems.push({
-    item_id: nextId(STATE.medicalKitItems.map(x=>({id:x.item_id}))),
+    id: nextId(STATE.medicalKitItems.map(x=>({id:x.item_id}))), item_id: nextId(STATE.medicalKitItems.map(x=>({id:x.item_id}))),
     vehicle_id: currentMedKitVehicleId,
     item_name: name,
     quantity: parseInt(document.getElementById('mk_qty').value) || 1,
@@ -5743,7 +5891,7 @@ document.getElementById('equipModalAdd').addEventListener('click', async () => {
   });
   if(stockItemId){
     STATE.stockTransactions.push({
-      transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
+      id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))), transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
       item_id: stockItemId, transaction_type: '領用', quantity: qty,
       transaction_date: issueDate, employee_id: currentEquipEmpId,
       notes: `人員領用自動產生（物品領用紀錄 #${newRecordId}）`
@@ -5765,7 +5913,7 @@ document.getElementById('equipModalBody').addEventListener('click', async (e) =>
       rec.status = '已歸還'; rec.return_date = todayISO();
       if(rec.stock_item_id){
         STATE.stockTransactions.push({
-          transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
+          id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))), transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
           item_id: rec.stock_item_id, transaction_type: '退回', quantity: rec.quantity||1,
           transaction_date: todayISO(), employee_id: rec.employee_id,
           notes: `人員歸還自動產生（物品領用紀錄 #${rec.id}）`
@@ -5781,7 +5929,7 @@ document.getElementById('equipModalBody').addEventListener('click', async (e) =>
     if(rec && rec.stock_item_id && rec.status==='使用中'){
       if(!confirm('這筆領用紀錄有連結庫存且尚未歸還，刪除後將自動補回庫存數量，確定要刪除嗎？')) return;
       STATE.stockTransactions.push({
-        transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
+        id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))), transaction_id: nextId(STATE.stockTransactions.map(t=>({id:t.transaction_id}))),
         item_id: rec.stock_item_id, transaction_type: '退回', quantity: rec.quantity||1,
         transaction_date: todayISO(), employee_id: rec.employee_id,
         notes: `刪除領用紀錄自動補回庫存（原紀錄 #${rec.id}）`
@@ -5859,7 +6007,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
   if(!plate){ alert('請輸入車號'); return; }
   if(STATE.vehicles.some(v=>v.plate===plate)){ alert('這個車號已經存在'); return; }
   STATE.vehicles.push({
-    id: nextId(STATE.vehicles), plate,
+    id: nextId(STATE.vehicles), plate, plate_number: plate,
     vehicle_category: document.getElementById('vf_category').value,
     vehicle_type: document.getElementById('vf_type').value.trim(),
     brand: document.getElementById('vf_brand').value.trim(),
@@ -5912,6 +6060,8 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   const type = document.getElementById('mr_type').value;
   const date = document.getElementById('mr_date').value;
   if(!plate || !date){ alert('請填寫車號與日期'); return; }
+  const _mv = vehicleByPlate(plate);
+  if(!_mv){ alert('系統找不到車號「' + plate + '」。\n\n請點一下車號欄位,從下拉建議清單直接選取正確的車號(例如 KLC-9298),不要只打後四碼。'); return; }
   const mileage = document.getElementById('mr_mileage').value ? parseInt(document.getElementById('mr_mileage').value) : null;
   const vendorName = document.getElementById('mr_vendor').value.trim();
   const cost = document.getElementById('mr_cost').value ? parseFloat(document.getElementById('mr_cost').value) : null;
@@ -5922,7 +6072,7 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   // maintenance_records.maintenance_type 只接受 定期保養/臨時維修/年度驗車/其他，小保養/大保養歸類為定期保養
   const recordType = (type==='小保養'||type==='大保養') ? '定期保養' : type;
   STATE.maintRecords.unshift({
-    id: nextId(STATE.maintRecords), plate, vehicle_id: plateToVehicleId(plate), maintenance_type: recordType,
+    id: nextId(STATE.maintRecords), plate: _mv.plate, vehicle_id: _mv.id, maintenance_type: recordType,
     maintenance_date: date, mileage_at_service: mileage, vendor_name: vendorName || null,
     description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, status:'已完成',
     created_at: new Date().toISOString()
@@ -5986,9 +6136,13 @@ document.getElementById('axle_add').addEventListener('click', async () => {
   const plate = document.getElementById('axle_plate').value.trim();
   const date = document.getElementById('axle_date').value;
   if(!plate || !date){ alert('請填寫車號與保養日期'); return; }
+  const _av = vehicleByPlate(plate);
+  if(!_av){ alert('系統找不到車號「' + plate + '」。\n\n請點一下車號欄位,從下拉建議清單直接選取正確的車號。'); return; }
+  const _axleNo = parseInt(document.getElementById('axle_no').value);
+  if(![1,2,3].includes(_axleNo)){ alert('請選擇軸號(1、2 或 3)'); return; }
   STATE.axleRecords.push({
-    id: nextId(STATE.axleRecords), plate,
-    axle_no: parseInt(document.getElementById('axle_no').value),
+    id: nextId(STATE.axleRecords), plate: _av.plate, vehicle_id: _av.id,
+    axle_no: _axleNo,
     service_date: date,
     mileage: parseInt(document.getElementById('axle_mileage').value) || null
   });
