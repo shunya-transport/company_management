@@ -704,7 +704,7 @@
         </label>
         <label>日期<input id="mr_date" type="date"></label>
         <label>里程數(km)<input id="mr_mileage" type="number" placeholder="例：120000"></label>
-        <label>廠商<input id="mr_vendor" placeholder="選填"></label>
+        <label>廠商<input id="mr_vendor" placeholder="選填，可從清單選取" list="vendorList" autocomplete="off"></label>
         <label>費用<input id="mr_cost" type="number" placeholder="選填"></label>
         <label>內容說明<input id="mr_desc" placeholder="例：機油、來令片更換"></label>
         <label>更換零件名稱<input id="mr_parts" placeholder="選填，例：機油芯、來令片"></label>
@@ -806,6 +806,7 @@
     </div>
 
     <datalist id="plateList"></datalist>
+    <datalist id="vendorList"></datalist>
 
     <div class="card">
       <h2>輪軸保養清單</h2>
@@ -1689,6 +1690,32 @@ function statusLabel(dateStr, soonDays){
 }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+// ===== 廠商名稱對照 =====
+// maintenance_records 存的是 vendor_id,表單打的是名稱,沒換成編號的話廠商會存不進去
+function normName(n){ return String(n==null?'':n).trim().replace(/\s+/g,'').toUpperCase(); }
+function vendorByName(name){
+  const key = normName(name);
+  if(!key) return null;
+  const list = STATE.vendors || [];
+  let v = list.find(x => normName(x.name) === key);
+  if(v) return v;
+  const hit = list.filter(x => normName(x.name).includes(key));
+  return hit.length === 1 ? hit[0] : null;
+}
+// 找不到的廠商,經使用者確認後直接建檔,回傳新的 vendor_id
+async function createVendor(name){
+  const list = STATE.vendors || [];
+  const newId = list.reduce((m,v) => Math.max(m, Number(v.id)||0), 0) + 1;
+  await supaFetch('vendors', {
+    method: 'POST',
+    headers: {'Prefer':'return=minimal'},
+    body: JSON.stringify([{ vendor_id: newId, vendor_name: String(name).trim() }])
+  });
+  list.push({ id: newId, name: String(name).trim() });
+  STATE.vendors = list;
+  return newId;
+}
+
 function normPlate(p){ return String(p==null?'':p).trim().toUpperCase().replace(/\s+/g,''); }
 function vehicleByPlate(plate){
   const key = normPlate(plate);
@@ -1743,7 +1770,7 @@ function nextEmployeeNo(){
 let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employees: [], employeesHistory: [], vehicles: [],
   mileageLogs: [], fuelLogs: [], maintSchedules: [], axleRecords: [], emissionRecords: [], licenses: [],
   internalTrainings: [], insuranceChanges: [], accessCards: [], insuranceMonthly: [], accessCardRoster: [], trainingLog: [],
-  docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [],
+  docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [], vendors: [],
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
   adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
@@ -1954,6 +1981,8 @@ async function enrichDenormalizedFields(){
   const vendorRows = await supaFetch(`vendors?select=vendor_id,vendor_name`).catch(()=>[]);
   const vendorById = {};
   (vendorRows||[]).forEach(v => { vendorById[v.vendor_id] = v.vendor_name; });
+  // 保留一份廠商清單在 STATE,新增維修記錄時要把廠商名稱換成 vendor_id 才存得進去
+  STATE.vendors = (vendorRows||[]).map(v => ({ id: v.vendor_id, name: v.vendor_name }));
 
   const empById = {};
   STATE.employees.forEach(e => { empById[e.id] = e; });
@@ -2406,6 +2435,10 @@ function renderDatalists(){
   const plateListEl = document.getElementById('plateList');
   if(plateListEl){
     plateListEl.innerHTML = STATE.vehicles.map(v=>`<option value="${esc(v.plate)}">`).join('');
+  }
+  const vendorListEl = document.getElementById('vendorList');
+  if(vendorListEl){
+    vendorListEl.innerHTML = (STATE.vendors||[]).map(v=>`<option value="${esc(v.name)}">`).join('');
   }
 }
 
@@ -5772,6 +5805,7 @@ document.getElementById('licenseModalAdd').addEventListener('click', async () =>
     id: nextId(STATE.trainings), employee_id: currentLicenseEmpId, employee_name: emp.name,
     type_id: typeId, type_name: type.name,
     cert_no: document.getElementById('lm_number').value.trim(),
+    certificate_no: document.getElementById('lm_number').value.trim(),
     issue_date: document.getElementById('lm_issue').value || null,
     expiry_date: noExpiry ? null : (document.getElementById('lm_expiry').value || null),
     no_expiry: noExpiry
@@ -6080,6 +6114,18 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   if(!_mv){ alert('系統找不到車號「' + plate + '」。\n\n請點一下車號欄位,從下拉建議清單直接選取正確的車號(例如 KLC-9298),不要只打後四碼。'); return; }
   const mileage = document.getElementById('mr_mileage').value ? parseInt(document.getElementById('mr_mileage').value) : null;
   const vendorName = document.getElementById('mr_vendor').value.trim();
+  // 廠商欄位必須換成 vendor_id 才會存進資料庫,只送名稱會被丟掉
+  let _vendorId = null;
+  if(vendorName){
+    const _vd = vendorByName(vendorName);
+    if(_vd){
+      _vendorId = _vd.id;
+    }else if(confirm('廠商「' + vendorName + '」不在系統的廠商清單裡。\n\n按「確定」:自動建立這家廠商並記錄下來。\n按「取消」:回去重新輸入(可從欄位的下拉清單選取現有廠商)。')){
+      _vendorId = await createVendor(vendorName);
+    }else{
+      return;
+    }
+  }
   const cost = document.getElementById('mr_cost').value ? parseFloat(document.getElementById('mr_cost').value) : null;
   const desc = document.getElementById('mr_desc').value.trim();
   const partsEl = document.getElementById('mr_parts');
@@ -6089,7 +6135,8 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   const recordType = (type==='小保養'||type==='大保養') ? '定期保養' : type;
   STATE.maintRecords.unshift({
     id: nextId(STATE.maintRecords), plate: _mv.plate, vehicle_id: _mv.id, maintenance_type: recordType,
-    maintenance_date: date, mileage_at_service: mileage, vendor_name: vendorName || null,
+    maintenance_date: date, mileage_at_service: mileage,
+    vendor_id: _vendorId, vendor_name: vendorName || null,
     description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, status:'已完成',
     created_at: new Date().toISOString()
   });
