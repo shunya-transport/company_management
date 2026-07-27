@@ -1731,7 +1731,8 @@ function ensureLogin(){
         const d=await r.json();
         if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
         AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
-        setInterval(refreshToken, 45*60*1000);
+        setInterval(refreshToken, 30*60*1000);
+        document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshToken(); });
         if(ov) ov.style.display='none';
         resolve();
       }catch(e){ msg.textContent='連線錯誤:'+e.message; }
@@ -1741,11 +1742,46 @@ function ensureLogin(){
   });
 }
 async function refreshToken(){
-  if(!REFRESH_TOKEN) return;
+  if(!REFRESH_TOKEN) return false;
   try{
     const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
-    const d=await r.json(); if(d&&d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token; }
+    const d=await r.json();
+    if(r.ok && d && d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token||REFRESH_TOKEN; return true; }
   }catch(e){}
+  return false;
+}
+// ===== 連線階段逾時自動處理:先試著續期,續期失敗才跳出登入框 =====
+let _reauthPromise=null;
+function _reauth(){
+  if(!_reauthPromise){
+    _reauthPromise=(async ()=>{
+      if(await refreshToken()) return true;
+      AUTH_TOKEN=null;
+      const msg=document.getElementById('login_msg');
+      if(msg) msg.textContent='連線階段已逾時,請重新登入(您未存檔的內容仍保留在畫面上)';
+      await ensureLogin();
+      return true;
+    })().finally(()=>{ _reauthPromise=null; });
+  }
+  return _reauthPromise;
+}
+// 統一帶上「目前最新」的 token;遇到 401/403 先續期再重試一次
+async function authFetch(url, options={}){
+  const build=()=>{
+    const h=Object.assign({}, options.headers||{});
+    delete h.apikey; delete h.Authorization;
+    return Object.assign({}, options, {headers: Object.assign({
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    }, h)});
+  };
+  let res = await fetch(url, build());
+  if(res.status===401 || res.status===403){
+    await _reauth();
+    res = await fetch(url, build());
+  }
+  return res;
 }
 
 // 儲存key名稱 -> 對應的Supabase真實資料表與主鍵欄位
@@ -1785,7 +1821,7 @@ const TABLE_MAP = {
 };
 
 async function supaFetch(path, options={}){
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
       'apikey': SUPABASE_KEY,
@@ -1808,7 +1844,7 @@ async function supaFetchAll(path, sep){
   let allRows = [];
   let offset = 0;
   while(true){
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
@@ -1956,7 +1992,8 @@ async function saveState(key, value, shared){
   }catch(err){
     console.error('saveState failed for', key, err);
     document.getElementById('storageWarning').style.display = 'block';
-    alert('無法儲存資料到雲端資料庫，請檢查網路連線，或聯絡管理員確認 Supabase 專案狀態。您剛才輸入的內容目前僅顯示在畫面上，重新整理後可能會消失。');
+    alert('無法儲存資料到雲端資料庫。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
+          '\n\n您剛才輸入的內容仍在畫面上，請「不要重新整理」，先排除問題後再按一次儲存。');
     throw err;
   }
 }
