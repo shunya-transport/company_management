@@ -514,6 +514,14 @@ async function supaFetchAll(path){
   return allRows;
 }
 
+// ===== 載入失敗保護:記住哪些資料沒讀成功,避免用備援資料覆蓋雲端 =====
+const LOAD_FAILED = new Set();
+function showStorageWarning(detail){
+  const el = document.getElementById('storageWarning');
+  if(!el) return;
+  el.style.display = 'block';
+  el.textContent = '⚠️ ' + detail;
+}
 async function safeGet(key, fallback, shared){
   const map = TABLE_MAP[key];
   if(!map) return fallback;
@@ -523,13 +531,18 @@ async function safeGet(key, fallback, shared){
     return rows.map(r => ({...r, id: r[map.pk]}));
   }catch(e){
     console.error('safeGet failed for', key, e);
-    document.getElementById('storageWarning').style.display = 'block';
+    LOAD_FAILED.add(key);
+    showStorageWarning('「' + key + '」讀取失敗,畫面顯示的是內建備援資料,請「不要存檔」以免覆蓋雲端。錯誤訊息:' + (e && e.message ? e.message : e));
     return fallback;
   }
 }
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
+  if(LOAD_FAILED.has(key)){
+    alert('「' + key + '」這份資料在開啟頁面時沒有讀取成功,目前畫面上是內建備援資料。\n\n為了避免覆蓋或刪除雲端的正確資料,這次不會存檔。\n請先重新整理頁面,確認上方紅色警告消失後再操作。');
+    throw new Error('資料未成功載入,已阻止存檔以保護雲端資料');
+  }
   try{
     if(value && value.length > 0){
       const payload = value.map(item => {
@@ -567,11 +580,17 @@ async function saveState(key, value, shared){
       .map(r => r[map.pk])
       .filter(pk => !currentIds.has(String(pk)));
     if(idsToDelete.length > 0){
+      // 保險:一次要刪掉超過5筆且佔全表一半以上,先跳出確認,避免整表誤刪
+      if(idsToDelete.length > 5 && idsToDelete.length >= ((existingRows||[]).length * 0.5)){
+        if(!confirm('系統偵測到這次存檔會從雲端刪除 ' + idsToDelete.length + ' 筆「' + map.table + '」資料。\n\n這通常代表資料沒有正常載入。如果您不是刻意要刪除,請按「取消」。\n\n確定要刪除嗎?')){
+          throw new Error('已取消刪除動作,雲端資料未變更');
+        }
+      }
       await supaFetch(`${map.table}?${map.pk}=in.(${idsToDelete.join(',')})`, { method:'DELETE' });
     }
   }catch(err){
     console.error('saveState failed for', key, err);
-    document.getElementById('storageWarning').style.display = 'block';
+    showStorageWarning('「' + key + '」存檔失敗:' + (err && err.message ? err.message : err));
     alert('無法儲存資料到雲端資料庫。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
           '\n\n您剛才輸入的內容仍在畫面上，請「不要重新整理」，先排除問題後再按一次儲存。');
     throw err;
