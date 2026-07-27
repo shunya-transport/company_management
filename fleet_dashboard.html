@@ -2993,7 +2993,7 @@ function renderVehicleModalView(v){
       ${schedules.length ? schedules.map(s => `<div>${esc(s.maintenance_type)}：最後 ${esc(s.last_service_date||'—')}${s.last_service_mileage?'（'+esc(s.last_service_mileage)+' km）':''}${s.frequency_km?`，每 ${esc(s.frequency_km)} km`:''}${s.frequency_months?`，每 ${esc(s.frequency_months)} 個月`:''}</div>`).join('') : '<div class="muted">尚無保養週期紀錄</div>'}
       ${lastFuel ? `<div style="margin-top:6px;" class="muted">最近一次加油：${esc(lastFuel.fuel_date)}（${esc(lastFuel.liters||'')} 公升）</div>` : ''}
       ${(() => {
-        const recent = STATE.maintRecords.filter(r=>r.plate===v.plate).slice(0,3);
+        const recent = STATE.maintRecords.filter(r=>r.plate===v.plate).slice().sort((a,b)=>String(b.maintenance_date||'').localeCompare(String(a.maintenance_date||''))).slice(0,3);
         if(!recent.length) return '';
         return '<div style="margin-top:8px;">' + recent.map(r=>`<div class="muted">${esc((r.maintenance_date||'').slice(0,10))} ${esc(r.maintenance_type)}：${esc(r.description||'')}${r.cost?' （$'+esc(r.cost)+'）':''}</div>`).join('') + '</div>';
       })()}
@@ -3332,7 +3332,7 @@ function renderMaintenanceTables(){
       last: `${s.last_service_date||''}${s.last_service_mileage?' / '+s.last_service_mileage+'km':''}`,
       notes:s.notes||'', kind:'schedule', id:s.id
     })),
-    ...STATE.axleRecords.map(a => ({
+    ...STATE.axleRecords.slice().sort((a,b)=>String(b.service_date||'').localeCompare(String(a.service_date||''))).map(a => ({
       plate:a.plate, item:`輪軸保養(第${a.axle_no}軸)`, freq:'', last:`${a.service_date}${a.mileage?' / '+a.mileage+'km':''}`,
       notes:'', kind:'axle', id:a.id
     }))
@@ -4052,6 +4052,13 @@ function renderMaintHistoryTable(){
   let rows = STATE.maintRecords;
   if(q) rows = rows.filter(r => (r.plate||'').includes(q));
   if(typeF !== 'all') rows = rows.filter(r => r.maintenance_type === typeF);
+  // 依保養日期由新到舊排序,新輸入的記錄才會出現在最上面
+  // (資料庫的 record_id 順序不等於日期順序,不排序的話新記錄會被擠到200筆之外看不到)
+  rows = rows.slice().sort((a,b) => {
+    const d = String(b.maintenance_date||'').slice(0,10).localeCompare(String(a.maintenance_date||'').slice(0,10));
+    if(d !== 0) return d;
+    return String(b.created_at||'').localeCompare(String(a.created_at||''));
+  });
   document.getElementById('maint_history_count').textContent = `共 ${rows.length} 筆`;
   const shown = rows.slice(0,200);
   document.getElementById('maintHistoryBody').innerHTML = shown.map(r => `
@@ -6098,6 +6105,9 @@ document.getElementById('mr_add').addEventListener('click', async () => {
 
   ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_desc','mr_parts'].forEach(id=>document.getElementById(id).value='');
   renderAll();
+  // 存檔成功才會執行到這裡(saveState 失敗會丟出錯誤),明確告知使用者已寫入雲端
+  alert('已存檔到雲端\n\n車號:' + _mv.plate + '\n日期:' + date + '\n類型:' + type +
+        '\n\n目前維修保養記錄共 ' + STATE.maintRecords.length + ' 筆,新記錄已顯示在歷史記錄最上方。');
 });
 
 document.getElementById('tire_plate').addEventListener('change', updateTirePositionOptions);
