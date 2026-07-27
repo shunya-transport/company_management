@@ -62,7 +62,7 @@ async function sendEmail(RESEND_API_KEY, recipients, subject, html) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'onboarding@resend.dev',
+     from: '順亞運通系統通知 <noreply@dgtt.com.tw>',
       to: recipients,
       subject,
       html,
