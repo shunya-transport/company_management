@@ -583,21 +583,25 @@ async function saveState(key, value, shared){
         const {id, ...rest} = item;
         return {[map.pk]: id, ...rest};
       });
-      // PostgREST 批次 upsert 要求同一批每個物件的欄位名稱完全一致(否則回 PGRST102)
-      // 這裡取所有物件欄位的聯集,缺的補 null,避免新舊資料欄位不齊時整批寫入失敗
-      {
-        const _allKeys = new Set();
-        payload.forEach(o => Object.keys(o).forEach(k => _allKeys.add(k)));
-        payload.forEach(o => { _allKeys.forEach(k => { if(!(k in o)) o[k] = null; }); });
-      }
+      // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致(否則回 PGRST102)
+      // 作法:按「欄位組合」分群,各群分別送出。不補 null,讓資料庫自己套用預設值
+      // (補 null 會踩到 created_at 這類 NOT NULL 欄位,造成 23502 錯誤)
+      const _groups = new Map();
+      payload.forEach(o => {
+        const sig = Object.keys(o).sort().join('|');
+        if(!_groups.has(sig)) _groups.set(sig, []);
+        _groups.get(sig).push(o);
+      });
       const CHUNK = 500;
-      for(let i=0; i<payload.length; i+=CHUNK){
-        const chunk = payload.slice(i, i+CHUNK);
-        await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
-          method:'POST',
-          headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
-          body: JSON.stringify(chunk)
-        });
+      for(const _group of _groups.values()){
+        for(let i=0; i<_group.length; i+=CHUNK){
+          const chunk = _group.slice(i, i+CHUNK);
+          await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
+            method:'POST',
+            headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
+            body: JSON.stringify(chunk)
+          });
+        }
       }
     }
     const existingRows = await supaFetch(`${map.table}?select=${map.pk}`);
