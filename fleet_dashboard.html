@@ -197,6 +197,16 @@
 </style>
 </head>
 <body>
+<div id="loginOverlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0d1b2c,#152a43);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="background:#fff;padding:34px 30px;border-radius:16px;width:340px;box-shadow:0 24px 70px rgba(0,0,0,.45);">
+    <div style="font-size:20px;font-weight:700;color:#142033;margin-bottom:4px;">順亞運通 管理系統</div>
+    <div style="font-size:12.5px;color:#8b929b;margin-bottom:20px;">請登入以存取資料</div>
+    <input id="login_email" type="email" placeholder="帳號 (Email)" autocomplete="username" style="width:100%;padding:11px;margin-bottom:11px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <input id="login_pw" type="password" placeholder="密碼" autocomplete="current-password" style="width:100%;padding:11px;margin-bottom:16px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <button id="login_btn" style="width:100%;padding:12px;background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;">登入</button>
+    <div id="login_msg" style="margin-top:13px;font-size:12.5px;color:#B3261E;min-height:17px;text-align:center;"></div>
+  </div>
+</div>
 <div class="app-shell">
   <div class="sidebar">
     <div class="brand">
@@ -1705,6 +1715,39 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
 const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
 
+// ===== 登入驗證(Supabase Auth)=====
+let AUTH_TOKEN=null, REFRESH_TOKEN=null;
+function ensureLogin(){
+  return new Promise((resolve)=>{
+    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='flex';
+    async function doLogin(){
+      const email=(document.getElementById('login_email').value||'').trim();
+      const pw=document.getElementById('login_pw').value||'';
+      const msg=document.getElementById('login_msg');
+      if(!email||!pw){ msg.textContent='請輸入帳號與密碼'; return; }
+      msg.textContent='登入中…';
+      try{
+        const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+        const d=await r.json();
+        if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
+        AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
+        setInterval(refreshToken, 45*60*1000);
+        if(ov) ov.style.display='none';
+        resolve();
+      }catch(e){ msg.textContent='連線錯誤:'+e.message; }
+    }
+    const btn=document.getElementById('login_btn'); if(btn) btn.onclick=doLogin;
+    const pwEl=document.getElementById('login_pw'); if(pwEl) pwEl.onkeydown=(e)=>{ if(e.key==='Enter') doLogin(); };
+  });
+}
+async function refreshToken(){
+  if(!REFRESH_TOKEN) return;
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
+    const d=await r.json(); if(d&&d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token; }
+  }catch(e){}
+}
+
 // 儲存key名稱 -> 對應的Supabase真實資料表與主鍵欄位
 const TABLE_MAP = {
   admin_rewards: {table:'employee_rewards', pk:'reward_id'},
@@ -1746,7 +1789,7 @@ async function supaFetch(path, options={}){
     ...options,
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       ...(options.headers||{})
     }
@@ -1768,7 +1811,7 @@ async function supaFetchAll(path, sep){
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
         'Content-Type': 'application/json',
         'Range-Unit': 'items',
         'Range': `${offset}-${offset + PAGE_SIZE - 1}`
@@ -5922,6 +5965,7 @@ document.getElementById('legacyExportBtn').addEventListener('click', async () =>
 });
 
 (async function init(){
+  await ensureLogin();
   await loadState();
   renderLesseeSelect();
   renderEmpSelect();

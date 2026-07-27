@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>保養檢測到期總表</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap');
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy:#0d1b2c; --navy-2:#152a43; --gold-700:#9d6d2f; --accent:#9d6d2f; --accent-dark:#7d5624;
+    --red:#B3261E; --red-bg:#FBEAE8; --amber:#9C6B00; --amber-bg:#FDF1DC;
+    --green:#3F7D44; --green-bg:#EAF3E7; --gray:#6B5A48; --gray-bg:#F1E9DD;
+    --radius:14px; --shadow-md:0 12px 32px rgba(20,32,51,.09);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:linear-gradient(145deg,#fff,#f8f5f1 54%,#eef1f5);color:var(--text);font-size:14px;line-height:1.6;padding:24px;}
+  .wrap{max-width:1300px;margin:0 auto;}
+  header.banner{background:linear-gradient(120deg,var(--navy),var(--navy-2) 55%,var(--accent-dark));
+    color:#fff;border-radius:var(--radius);padding:22px 26px;margin-bottom:18px;box-shadow:var(--shadow-md);}
+  header.banner h1{margin:0;font-size:22px;letter-spacing:2px;}
+  header.banner p{margin:6px 0 0;color:#e9d9bd;font-size:12.5px;}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;}
+  .tile{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow-md);}
+  .tile .n{font-family:Montserrat,sans-serif;font-size:28px;font-weight:700;line-height:1;}
+  .tile .l{font-size:12px;color:var(--text-3);margin-top:6px;}
+  .tile.red .n{color:var(--red);} .tile.amber .n{color:var(--amber);} .tile.green .n{color:var(--green);} .tile.gray .n{color:var(--gray);}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-md);}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  .toolbar input,.toolbar select{padding:8px 11px;border:1px solid var(--border-strong);border-radius:9px;font-size:13px;background:#fff;}
+  .count{color:var(--gold-700);font-size:13px;margin-left:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:#263240;font-weight:600;padding:9px 12px;border-bottom:2px solid var(--border);
+    background:linear-gradient(90deg,#fbfaf8,#f2ece4);font-size:11.5px;white-space:nowrap;position:sticky;top:0;}
+  td{padding:9px 12px;border-bottom:1px solid rgba(13,27,44,.06);}
+  tr:hover td{background:#fbf8f3;}
+  .pill{padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;}
+  .pill.red{background:var(--red-bg);color:var(--red);} .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.green{background:var(--green-bg);color:var(--green);} .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .muted{color:var(--text-3);}
+  .loading{padding:40px;text-align:center;color:var(--text-3);}
+  .kind{font-size:10.5px;color:var(--text-3);}
+</style>
+</head>
+<body>
+<div id="loginOverlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0d1b2c,#152a43);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="background:#fff;padding:34px 30px;border-radius:16px;width:340px;box-shadow:0 24px 70px rgba(0,0,0,.45);">
+    <div style="font-size:20px;font-weight:700;color:#142033;margin-bottom:4px;">順亞運通 管理系統</div>
+    <div style="font-size:12.5px;color:#8b929b;margin-bottom:20px;">請登入以存取資料</div>
+    <input id="login_email" type="email" placeholder="帳號 (Email)" autocomplete="username" style="width:100%;padding:11px;margin-bottom:11px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <input id="login_pw" type="password" placeholder="密碼" autocomplete="current-password" style="width:100%;padding:11px;margin-bottom:16px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <button id="login_btn" style="width:100%;padding:12px;background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;">登入</button>
+    <div id="login_msg" style="margin-top:13px;font-size:12.5px;color:#B3261E;min-height:17px;text-align:center;"></div>
+  </div>
+</div>
+<div class="wrap">
+  <header class="banner">
+    <h1>保養檢測到期總表</h1>
+    <p>什麼車、什麼時間、該做什麼 — 小保／大保／輪軸(里程型)＋打油／車輛檢測／廢氣檢測(時間型),即時從資料庫計算</p>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <div class="toolbar">
+      <input id="q" placeholder="搜尋車號">
+      <select id="f_yard"><option value="all">全部車場</option></select>
+      <select id="f_type"><option value="all">全部項目</option></select>
+      <select id="f_status">
+        <option value="all">全部狀態</option>
+        <option value="red">已逾期</option>
+        <option value="amber">即將到期</option>
+        <option value="green">正常</option>
+        <option value="gray">資料不足</option>
+      </select>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="table-scroll" style="overflow-x:auto;max-height:70vh;overflow-y:auto;">
+      <table>
+        <thead><tr>
+          <th>車號</th><th>車場</th><th>項目</th><th>基準</th><th>上次</th>
+          <th>下次應做</th><th>剩餘</th><th>狀態</th>
+        </tr></thead>
+        <tbody id="body"><tr><td colspan="8" class="loading">載入中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <p class="muted" style="font-size:11.5px;margin-top:12px;">
+    里程型:下次里程 = 最近保養里程 + 週期,對比最新里程紀錄。無里程紀錄的車顯示「資料不足」。<br>
+    時間型:下次日期 = 最近執行日期 + 週期月數,對比今天。逾期紅、30天內橘、其餘綠。
+  </p>
+</div>
+
+<script>
+const SUPABASE_URL='https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY='sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+let AUTH_TOKEN=null, REFRESH_TOKEN=null;
+function ensureLogin(){
+  return new Promise((resolve)=>{
+    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='flex';
+    async function doLogin(){
+      const email=(document.getElementById('login_email').value||'').trim();
+      const pw=document.getElementById('login_pw').value||'';
+      const msg=document.getElementById('login_msg');
+      if(!email||!pw){ msg.textContent='請輸入帳號與密碼'; return; }
+      msg.textContent='登入中…';
+      try{
+        const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+        const d=await r.json();
+        if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
+        AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
+        setInterval(refreshToken, 45*60*1000);
+        if(ov) ov.style.display='none';
+        resolve();
+      }catch(e){ msg.textContent='連線錯誤:'+e.message; }
+    }
+    const btn=document.getElementById('login_btn'); if(btn) btn.onclick=doLogin;
+    const pwEl=document.getElementById('login_pw'); if(pwEl) pwEl.onkeydown=(e)=>{ if(e.key==='Enter') doLogin(); };
+  });
+}
+async function refreshToken(){
+  if(!REFRESH_TOKEN) return;
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
+    const d=await r.json(); if(d&&d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token; }
+  }catch(e){}
+}
+const H={apikey:SUPABASE_KEY, Authorization:'Bearer '+SUPABASE_KEY};
+async function sget(path){ const r=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:{apikey:SUPABASE_KEY, Authorization:'Bearer '+(AUTH_TOKEN||SUPABASE_KEY)}}); if(!r.ok) throw new Error(path+' '+r.status); return r.json(); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function daysUntil(d){ if(!d) return null; return Math.round((new Date(d+'T00:00:00')-new Date(todayISO()+'T00:00:00'))/86400000); }
+function addMonths(dateStr,m){ if(!dateStr) return null; const d=new Date(dateStr.slice(0,10)+'T00:00:00'); const day=d.getDate(); d.setMonth(d.getMonth()+m); if(d.getDate()!==day) d.setDate(0); return d.toISOString().slice(0,10); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const KM_TYPES=['小保養','中保養','大保養','輪軸保養'];
+
+let ROWS=[];
+function computeRow(s, plate, yard, curMileage){
+  const isKm = s.frequency_km != null && s.frequency_km !== '';
+  if(isKm){
+    const freq=s.frequency_km, last=s.last_service_mileage;
+    if(!freq || last==null || curMileage==null)
+      return {plate,yard,type:s.maintenance_type,kind:'里程',last: last!=null?last+' km':'—',next:'—',remain:'資料不足',status:'gray',sortKey:1e12};
+    const next=last+freq, remain=next-curMileage;
+    const buffer=Math.max(1000, freq*0.05);
+    let st = remain<=0?'red':(remain<=buffer?'amber':'green');
+    return {plate,yard,type:s.maintenance_type,kind:'里程',last:last+' km',next:next+' km',
+      remain: remain<=0?`超出 ${-remain} km`:`剩 ${remain} km`, status:st, sortKey:remain};
+  } else {
+    const fm=s.frequency_months, last=s.last_service_date;
+    if(!fm || !last)
+      return {plate,yard,type:s.maintenance_type,kind:'時間',last: last?last.slice(0,10):'—',next:'—',remain:'資料不足',status:'gray',sortKey:1e12};
+    const next=addMonths(last,fm), dd=daysUntil(next);
+    let st = dd<0?'red':(dd<=30?'amber':'green');
+    return {plate,yard,type:s.maintenance_type,kind:'時間',last:last.slice(0,10),next:next,
+      remain: dd<0?`逾期 ${-dd} 天`:`剩 ${dd} 天`, status:st, sortKey:dd};
+  }
+}
+
+async function load(){
+  try{
+    const [sched, vehicles, mlogs] = await Promise.all([
+      sget('maintenance_schedules?select=*'),
+      sget('vehicles?select=vehicle_id,plate_number,base_location'),
+      sget('vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc')
+    ]);
+    const vById={}; vehicles.forEach(v=>vById[v.vehicle_id]=v);
+    const latestMileage={};
+    mlogs.forEach(m=>{ if(!(m.vehicle_id in latestMileage)) latestMileage[m.vehicle_id]=m.mileage; });
+    ROWS = sched.map(s=>{
+      const v=vById[s.vehicle_id]||{};
+      return computeRow(s, v.plate_number||('車#'+s.vehicle_id), v.base_location||'—', latestMileage[s.vehicle_id] ?? null);
+    });
+    // 填車場、項目下拉
+    const yards=[...new Set(ROWS.map(r=>r.yard).filter(Boolean))].sort();
+    document.getElementById('f_yard').innerHTML='<option value="all">全部車場</option>'+yards.map(y=>`<option>${esc(y)}</option>`).join('');
+    const types=[...new Set(ROWS.map(r=>r.type))];
+    document.getElementById('f_type').innerHTML='<option value="all">全部項目</option>'+types.map(t=>`<option>${esc(t)}</option>`).join('');
+    render();
+  }catch(e){
+    document.getElementById('body').innerHTML=`<tr><td colspan="8" class="loading">載入失敗:${esc(e.message)}<br>請確認已在 Supabase 執行擴充 SQL,且網路可連線。</td></tr>`;
+  }
+}
+
+function render(){
+  const q=document.getElementById('q').value.trim();
+  const fy=document.getElementById('f_yard').value, ft=document.getElementById('f_type').value, fs=document.getElementById('f_status').value;
+  let rows=ROWS.filter(r=>{
+    if(q && !r.plate.includes(q)) return false;
+    if(fy!=='all' && r.yard!==fy) return false;
+    if(ft!=='all' && r.type!==ft) return false;
+    if(fs!=='all' && r.status!==fs) return false;
+    return true;
+  }).sort((a,b)=>a.sortKey-b.sortKey);
+  // 統計
+  const c={red:0,amber:0,green:0,gray:0}; ROWS.forEach(r=>c[r.status]++);
+  document.getElementById('tiles').innerHTML=`
+    <div class="tile red"><div class="n">${c.red}</div><div class="l">已逾期</div></div>
+    <div class="tile amber"><div class="n">${c.amber}</div><div class="l">即將到期</div></div>
+    <div class="tile green"><div class="n">${c.green}</div><div class="l">正常</div></div>
+    <div class="tile gray"><div class="n">${c.gray}</div><div class="l">資料不足</div></div>
+    <div class="tile"><div class="n">${ROWS.length}</div><div class="l">追蹤項目總數</div></div>`;
+  document.getElementById('count').textContent=`共 ${rows.length} 項`;
+  const label={red:'已逾期',amber:'即將到期',green:'正常',gray:'資料不足'};
+  document.getElementById('body').innerHTML = rows.length ? rows.map(r=>`
+    <tr>
+      <td><b>${esc(r.plate)}</b></td><td>${esc(r.yard)}</td>
+      <td>${esc(r.type)}</td><td class="kind">${r.kind}</td>
+      <td class="muted">${esc(r.last)}</td><td>${esc(r.next)}</td>
+      <td>${esc(r.remain)}</td>
+      <td><span class="pill ${r.status}">${label[r.status]}</span></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="loading">沒有符合條件的項目</td></tr>';
+}
+['q','f_yard','f_type','f_status'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',render);
+  document.getElementById(id).addEventListener('change',render);
+});
+ensureLogin().then(load);
+</script>
+</body>
+</html>
