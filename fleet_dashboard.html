@@ -143,6 +143,11 @@
   .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
   .table-scroll table{margin:0;}
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
+  /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
+  table.mh-table{table-layout:fixed;min-width:940px;font-size:14px;}
+  table.mh-table th{font-size:12.5px;padding:12px 10px;}
+  table.mh-table td{padding:11px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  table.mh-table td.mh-desc,table.mh-table td.mh-parts{white-space:normal;overflow:visible;font-size:11.5px;line-height:1.5;word-break:break-word;color:#5b6672;}
   .muted{color:var(--text-3);font-size:12px;}
   .lessee-bar{display:flex;align-items:center;gap:10px;padding:7px 0;}
   .lessee-bar .name{width:70px;font-size:13px;flex-shrink:0;font-weight:500;}
@@ -704,7 +709,11 @@
         </select>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="mh-table">
+          <colgroup>
+            <col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%">
+            <col style="width:10%"><col style="width:25%"><col style="width:15%"><col style="width:9%">
+          </colgroup>
           <thead><tr><th>車號</th><th>類型</th><th>日期</th><th>里程</th><th>廠商</th><th>內容</th><th>更換零件</th><th>費用</th></tr></thead>
           <tbody id="maintHistoryBody"></tbody>
         </table>
@@ -4047,13 +4056,13 @@ function renderMaintHistoryTable(){
   const shown = rows.slice(0,200);
   document.getElementById('maintHistoryBody').innerHTML = shown.map(r => `
     <tr>
-      <td>${esc(r.plate)}</td>
+      <td title="${esc(r.plate)}">${esc(r.plate)}</td>
       <td>${esc(r.maintenance_type)}</td>
       <td>${esc((r.maintenance_date||'').slice(0,10))}</td>
       <td>${r.mileage_at_service ? esc(r.mileage_at_service)+' km' : '—'}</td>
       <td>${esc(r.vendor_name||'—')}</td>
-      <td class="muted">${esc(r.description||'')}</td>
-      <td class="muted">${esc(r.parts_replaced||'—')}</td>
+      <td class="muted mh-desc" title="${esc(r.description||'')}">${esc(r.description||'')}</td>
+      <td class="muted mh-parts" title="${esc(r.parts_replaced||'')}">${esc(r.parts_replaced||'—')}</td>
       <td>${r.cost ? '$'+esc(r.cost) : '—'}</td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
