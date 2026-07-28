@@ -924,6 +924,12 @@
   <div id="ledgers" class="panel">
     <div class="card">
       <h2>新增請假登錄</h2>
+      <div style="display:flex;gap:10px 20px;align-items:baseline;flex-wrap:wrap;margin:-4px 0 16px;padding:11px 16px;background:var(--accent-bg);border-radius:var(--radius-sm);">
+        <span style="font-size:12px;color:var(--text-3);">目前最新編號</span>
+        <span id="lv_latest_regno" style="font-size:19px;font-weight:700;color:var(--navy-900);letter-spacing:.04em;">—</span>
+        <span style="font-size:12px;color:var(--text-3);">新增後會是</span>
+        <span id="lv_next_regno" style="font-size:16px;font-weight:700;color:var(--accent);letter-spacing:.04em;">—</span>
+      </div>
       <div class="form-grid">
         <label>人員
           <select id="lv_emp"></select>
@@ -1735,14 +1741,32 @@ function lesseeNameToId(name){
   const l = STATE.lessees.find(x => x.name === name);
   return l ? l.id : null;
 }
-function nextLeaveRegNo(){
-  // 延續原始請假巨集的登錄編號格式：H110 + 5位數流水號
-  let maxSeq = 1083;
+function leaveRegSeq(r){
+  // 取出請假編號的流水號部分，用來比大小；沒有編號的排最後
+  const m = r.reg_no && String(r.reg_no).match(/^H110(\d+)$/);
+  return m ? parseInt(m[1],10) : -1;
+}
+function latestLeaveRegNo(){
+  // 目前已登錄的最大編號
+  let best = null, bestSeq = -1;
   STATE.leaveRecords.forEach(r => {
-    const m = r.reg_no && r.reg_no.match(/^H110(\d+)$/);
-    if(m){ maxSeq = Math.max(maxSeq, parseInt(m[1])); }
+    const s = leaveRegSeq(r);
+    if(s > bestSeq){ bestSeq = s; best = r.reg_no; }
   });
-  return 'H110' + String(maxSeq+1).padStart(5,'0');
+  return best;
+}
+function nextLeaveRegNo(){
+  // 延續原始請假巨集的登錄編號格式：H110 + 流水號
+  // 位數比照現有編號（目前是4位，例如 H1101083），避免新舊編號長度不一致
+  let maxSeq = 1083, width = 4;
+  STATE.leaveRecords.forEach(r => {
+    const m = r.reg_no && String(r.reg_no).match(/^H110(\d+)$/);
+    if(m){
+      width = Math.max(width, m[1].length);
+      maxSeq = Math.max(maxSeq, parseInt(m[1],10));
+    }
+  });
+  return 'H110' + String(maxSeq+1).padStart(width,'0');
 }
 function nextOvertimeRegNo(dateStr){
   // 延續原始加班登錄巨集的編號格式：H110 + 月份(2碼) + 序號(該月份區間內累加，不分年份)
@@ -4714,10 +4738,18 @@ function renderLeaveSelects(){
   document.getElementById('lv_type_filter').innerHTML = '<option value="all">全部假別</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
 }
 
+function renderLeaveRegNoBox(){
+  // 釘在新增表單上方的編號提示
+  const latest = latestLeaveRegNo();
+  document.getElementById('lv_latest_regno').textContent = latest || '（尚無紀錄）';
+  document.getElementById('lv_next_regno').textContent = nextLeaveRegNo();
+}
+
 function renderLeaveTable(){
   const q = document.getElementById('lv_search').value.trim();
   const typeF = document.getElementById('lv_type_filter').value;
-  let rows = STATE.leaveRecords.slice().sort((a,b)=>(b.start_date||'').localeCompare(a.start_date||''));
+  // 依登錄編號由大到小排，最新登錄的排在最上面；編號一樣大再比流水號
+  let rows = STATE.leaveRecords.slice().sort((a,b)=> (leaveRegSeq(b)-leaveRegSeq(a)) || ((b.id||0)-(a.id||0)));
   if(q){
     rows = rows.filter(r => {
       const emp = findEmployeeAnywhere(r.employee_id);
@@ -4949,6 +4981,7 @@ function renderAll(){
   renderInsuranceLedger();
   renderAccessCardLedger();
   renderLeaveLedger();
+  renderLeaveRegNoBox();
   renderLeaveTable();
   renderOvertimeTable();
   renderLeaveGrid();
