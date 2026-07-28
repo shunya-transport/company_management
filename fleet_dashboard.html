@@ -1511,7 +1511,7 @@
             <option value="pension_contribution">勞健保提撥計算表</option>
             <option value="personal_leave">個人請假清單</option>
             <option value="employer_ins_el">僱主險（團保）名冊 — 已加保人員（EL 格式）</option>
-            <option value="employer_ins_en">僱主險（團保）名冊 — 其他人員（EN 格式）</option>
+            <option value="employer_ins_en">僱主險（團保）名冊 — 全體在職人員（EN 格式）</option>
           </select>
         </label>
         <label>人員
@@ -4221,7 +4221,7 @@ function generateForm(){
 
 // ===== 僱主險（團保）人員名冊 =====
 // EL＝已加保人員，欄位比照利福僱主EL名冊（序號/日期/姓名/出生年月日/身分證字號）
-// EN＝其他人員（未加保、不需加保），欄位比照利福僱主EN名冊（序號/姓名/出生年月日/身分證字號），沒有日期欄
+// EN＝全體在職人員（直接＋間接都列），欄位比照利福僱主EN名冊（序號/姓名/出生年月日/身分證字號），沒有日期欄
 function employerInsRosterRows(type){
   const onDuty = STATE.employees.filter(e => e.status === '在職');
   if(type === 'employer_ins_el'){
@@ -4229,8 +4229,8 @@ function employerInsRosterRows(type){
       .sort((a,b) => (a.employer_ins_date||'9999').localeCompare(b.employer_ins_date||'9999')
                      || (a.employee_no||'').localeCompare(b.employee_no||''));
   }
-  return onDuty.filter(e => e.employer_ins_status !== '已加保')
-    .sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
+  // EN 名冊是全體在職人員，直接人員和間接人員都要列，依員工編號排序
+  return onDuty.slice().sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
 }
 
 // 名冊上的日期一律用民國格式（例：113/9/4），跟保險公司那邊的表格一致
@@ -4261,7 +4261,7 @@ function buildEmployerInsRoster(type){
   const stamp = (extraVal('ex_roster_date') || todayISO()).replace(/-/g,'');
   const title = el ? `利福僱主EL人員名冊${stamp}` : `利福僱主EN人員名冊${stamp}`;
   const sub = el ? '本名冊為目前在職且已加保雇主險（團保）之人員。'
-                 : '本名冊為目前在職、未加保雇主險（團保）之其他人員。';
+                 : '本名冊為目前全體在職人員（含直接人員與間接人員）。';
   const th = 'padding:6px 8px;border:1px solid #333;background:#f5f5f5;text-align:center;font-weight:700;';
   const td = 'padding:6px 8px;border:1px solid #333;text-align:center;';
   const head = el
