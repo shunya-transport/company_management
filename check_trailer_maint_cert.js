@@ -1,4 +1,4 @@
-// 每月1號、15號執行：板架到期（合約+驗車）、車輛保養（大/小保養）、人員證照到期
+// 每月1號、15號執行：車輛與板架的驗車＋各項證件文件、保養（大/小保養）、板架出租合約、人員證照到期
 const { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -21,7 +21,8 @@ async function main() {
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?doc_type=eq.驗車&select=*'),
+    // 驗車和其他證件（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）都在這張表，一次撈回來後再分開
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'maintenance_schedules?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employee_trainings?no_expiry=eq.false&select=*'),
@@ -48,6 +49,20 @@ async function main() {
     return /半拖車|貨櫃架|^40/.test(String(v.vehicle_type || ''));
   };
 
+  // 目前出租中的板架：整列上底色，管理人員一眼就知道這台在客戶手上，
+  // 要約時間進場檢驗或換件得先跟承租廠商喬
+  const leasedLesseeByVehicle = {};
+  leases.forEach(l => {
+    if (l.vehicle_id != null && !(l.vehicle_id in leasedLesseeByVehicle)) {
+      leasedLesseeByVehicle[l.vehicle_id] = lesseeById[l.lessee_id] || '出租中';
+    }
+  });
+  const LEASED_BG = 'style="background:#fff3cd;"';
+  const rentTag = (id) => (id in leasedLesseeByVehicle)
+    ? `🔶 出租中（${leasedLesseeByVehicle[id]}）`
+    : '自用';
+  const rowAttr = (id) => (id in leasedLesseeByVehicle) ? ` ${LEASED_BG}` : '';
+
   // ---------- 1. 板架出租合約到期 ----------
   const leaseItems = leases
     .filter(l => l.lease_end_date)
@@ -56,22 +71,29 @@ async function main() {
     <td>${l.plate}</td><td>${l.lessee_name}</td><td>${l.lease_end_date}</td><td>${daysLabel(l.lease_end_date)}</td>
   </tr>`, ['板架車號', '承租廠商', '合約到期日', '剩餘天數']);
 
-  // ---------- 2. 驗車到期（車輛與板架分開列，車輛在上、板架在下） ----------
-  const inspectionItems = docs
+  // ---------- 2. 驗車與其他證件到期（車輛與板架分開列，車輛在上、板架在下） ----------
+  const allDocItems = docs
     .filter(d => d.expiry_date)
     .map(d => {
       const v = vehicleById[d.vehicle_id] || {};
       return { ...d, plate: v.plate_number || '', vehicle_type: v.vehicle_type || '', is_trailer: isTrailer(v) };
     });
-  const vehicleInspectionItems = inspectionItems.filter(d => !d.is_trailer);
-  const trailerInspectionItems = inspectionItems.filter(d => d.is_trailer);
+  const inspectionItems = allDocItems.filter(d => d.doc_type === '驗車');
+  const otherDocItems = allDocItems.filter(d => d.doc_type !== '驗車');
 
-  const vehicleInspectionHtml = bucketByDate(vehicleInspectionItems, 'expiry_date', d => `<tr>
+  const vehicleInspectionHtml = bucketByDate(inspectionItems.filter(d => !d.is_trailer), 'expiry_date', d => `<tr>
     <td><b>${d.plate}</b></td><td>${d.vehicle_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
   </tr>`, ['車號', '車種', '驗車到期日', '剩餘天數']);
-  const trailerInspectionHtml = bucketByDate(trailerInspectionItems, 'expiry_date', d => `<tr>
-    <td><b>${d.plate}</b></td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
-  </tr>`, ['板架車號', '驗車到期日', '剩餘天數']);
+  const trailerInspectionHtml = bucketByDate(inspectionItems.filter(d => d.is_trailer), 'expiry_date', d => `<tr${rowAttr(d.vehicle_id)}>
+    <td><b>${d.plate}</b></td><td>${rentTag(d.vehicle_id)}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
+  </tr>`, ['板架車號', '出租狀態', '驗車到期日', '剩餘天數']);
+
+  const vehicleDocHtml = bucketByDate(otherDocItems.filter(d => !d.is_trailer), 'expiry_date', d => `<tr>
+    <td><b>${d.plate}</b></td><td>${d.doc_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
+  </tr>`, ['車號', '文件類型', '到期日', '剩餘天數']);
+  const trailerDocHtml = bucketByDate(otherDocItems.filter(d => d.is_trailer), 'expiry_date', d => `<tr${rowAttr(d.vehicle_id)}>
+    <td><b>${d.plate}</b></td><td>${rentTag(d.vehicle_id)}</td><td>${d.doc_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
+  </tr>`, ['板架車號', '出租狀態', '文件類型', '到期日', '剩餘天數']);
 
   // ---------- 3. 人員證照到期 ----------
   const certItems = trainings
@@ -106,22 +128,24 @@ async function main() {
       const buffer = Math.max(1000, km * 0.05);
       if (remaining > buffer) return; // 還很遠，不列入通知
       const status = remaining <= 0 ? '🔴 已逾期' : '🟠 即將到期';
-      const row = `<tr><td><b>${v.plate_number}</b></td><td>${label}</td><td>${status}</td><td>剩餘約 ${remaining} km（下次保養里程 ${nextDue} km）</td></tr>`;
-      (isTrailer(v) ? trailerMaintRows : vehicleMaintRows).push(row);
+      const trailer = isTrailer(v);
+      const rentCell = trailer ? `<td>${rentTag(v.vehicle_id)}</td>` : '';
+      const row = `<tr${trailer ? rowAttr(v.vehicle_id) : ''}><td><b>${v.plate_number}</b></td>${rentCell}<td>${label}</td><td>${status}</td><td>剩餘約 ${remaining} km（下次保養里程 ${nextDue} km）</td></tr>`;
+      (trailer ? trailerMaintRows : vehicleMaintRows).push(row);
     });
   });
-  const maintTable = (rows, title) => rows.length
+  const maintTable = (rows, title, cols) => rows.length
     ? `<h4 style="font-family:sans-serif;margin:14px 0 6px;">🔧 ${title}（共${rows.length}筆，依剩餘里程判斷）</h4>
        <table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%;" border="1" cellpadding="6">
-         <tr style="background:#f2ece5;"><th style="text-align:left;">車號</th><th style="text-align:left;">保養類型</th><th style="text-align:left;">狀態</th><th style="text-align:left;">說明</th></tr>
+         <tr style="background:#f2ece5;">${cols.map(c => `<th style="text-align:left;white-space:nowrap;">${c}</th>`).join('')}</tr>
          ${rows.join('')}
        </table>`
     : '';
-  const vehicleMaintHtml = maintTable(vehicleMaintRows, '車輛保養提醒');
-  const trailerMaintHtml = maintTable(trailerMaintRows, '板架保養提醒');
+  const vehicleMaintHtml = maintTable(vehicleMaintRows, '車輛保養提醒', ['車號', '保養類型', '狀態', '說明']);
+  const trailerMaintHtml = maintTable(trailerMaintRows, '板架保養提醒', ['板架車號', '出租狀態', '保養類型', '狀態', '說明']);
 
   const totalCount = leaseItems.filter(l => daysUntil(l.lease_end_date) <= 90).length
-    + inspectionItems.filter(d => daysUntil(d.expiry_date) <= 90).length
+    + allDocItems.filter(d => daysUntil(d.expiry_date) <= 90).length
     + certItems.filter(t => daysUntil(t.expiry_date) <= 90).length
     + vehicleMaintRows.length + trailerMaintRows.length;
 
@@ -136,21 +160,27 @@ async function main() {
 
   let html = `<h2 style="font-family:sans-serif;">車輛／板架／人員證照到期通知（${todayISO()}）</h2>`;
 
-  if (vehicleInspectionHtml || vehicleMaintHtml) {
+  if (vehicleInspectionHtml || vehicleDocHtml || vehicleMaintHtml) {
     html += `<h2 ${groupBar}>🚛 車輛</h2>`;
     if (vehicleInspectionHtml) html += `<h3 ${bar}>🚛 車輛驗車到期</h3>${vehicleInspectionHtml}`;
+    if (vehicleDocHtml) html += `<h3 ${bar}>📄 車輛文件到期（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${vehicleDocHtml}`;
     if (vehicleMaintHtml) html += `<h3 ${bar}>🔧 車輛保養</h3>${vehicleMaintHtml}`;
   }
 
-  if (trailerInspectionHtml || trailerMaintHtml || leaseHtml) {
-    html += `<h2 ${groupBar}>🚚 板架</h2>`;
+  if (trailerInspectionHtml || trailerDocHtml || trailerMaintHtml || leaseHtml) {
+    html += `<h2 ${groupBar}>🚚 板架</h2>
+      <p style="font-family:sans-serif;font-size:13px;margin:6px 0 0;">
+        <span style="background:#fff3cd;border:1px solid #d8bf6a;padding:0 14px;">&nbsp;</span>
+        　黃底的列＝這台板架目前<b>出租中</b>，要安排進場檢驗或維修前，請先跟承租廠商聯絡。
+      </p>`;
     if (trailerInspectionHtml) html += `<h3 ${bar}>🚚 板架驗車到期</h3>${trailerInspectionHtml}`;
+    if (trailerDocHtml) html += `<h3 ${bar}>📄 板架文件到期（行照等）</h3>${trailerDocHtml}`;
     if (trailerMaintHtml) html += `<h3 ${bar}>🔧 板架保養</h3>${trailerMaintHtml}`;
     if (leaseHtml) html += `<h3 ${bar}>📋 板架出租合約到期</h3>${leaseHtml}`;
   }
 
   if (certHtml) html += `<h2 ${groupBar}>🎓 人員</h2><h3 ${bar}>🎓 人員證照到期</h3>${certHtml}`;
-  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號、15號寄送，資料來源：順亞運通車隊儀表板。</p>`;
+  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號、15號寄送，資料來源：順亞運通車隊儀表板。人員體檢、儀器校正與車輛保險在另一份「其餘物品」通知信裡。</p>`;
 
   const recipients = NOTIFY_EMAIL.split(',').map(s => s.trim()).filter(Boolean);
   await sendEmail(RESEND_API_KEY, recipients, `【到期通知】車輛／板架／證照 共 ${totalCount} 筆項目`, html);

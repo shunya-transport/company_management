@@ -1,4 +1,5 @@
-// 每月1號執行：其餘物品到期（車輛保險、車輛文件、體檢、儀器校正）
+// 每月1號執行：其餘物品到期（車輛／板架保險、人員體檢、儀器校正）
+// 註：驗車與行照等各項證件文件已移到「車輛／板架／證照」那封信（每月1號、15號），這裡不重複列出。
 const { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -14,13 +15,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !RESEND_API_KEY || !NOTIFY_EMAIL) {
 async function main() {
   console.log('開始檢查其餘物品到期狀況...', todayISO());
 
-  const [insurance, docs, vehicles, medExams, employees, instruments] = await Promise.all([
+  const [insurance, vehicles, medExams, employees, instruments, leases, lessees] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_insurance?select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?doc_type=neq.驗車&select=*'), // 驗車已在另一份板架通知涵蓋，這裡排除避免重複
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'medical_exam_records?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'instruments?select=*'),
+    // 出租中的板架要在表格裡上底色，所以這裡也要知道哪幾台在客戶那邊
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=vehicle_id,lessee_id'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
   ]);
 
   const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v]));
@@ -39,23 +42,25 @@ async function main() {
     return { ...row, plate: v.plate_number || '', vehicle_type: v.vehicle_type || '', is_trailer: isTrailer(v) };
   };
 
+  // 目前出租中的板架：整列上底色，管理人員一眼就知道這台在客戶手上
+  const lesseeById = Object.fromEntries(lessees.map(l => [l.lessee_id, l.lessee_name]));
+  const leasedLesseeByVehicle = {};
+  leases.forEach(l => {
+    if (l.vehicle_id != null && !(l.vehicle_id in leasedLesseeByVehicle)) {
+      leasedLesseeByVehicle[l.vehicle_id] = lesseeById[l.lessee_id] || '出租中';
+    }
+  });
+  const rentTag = (id) => (id in leasedLesseeByVehicle) ? `🔶 出租中（${leasedLesseeByVehicle[id]}）` : '自用';
+  const rowAttr = (id) => (id in leasedLesseeByVehicle) ? ' style="background:#fff3cd;"' : '';
+
   // ---------- 1. 保險到期（車輛與板架分開，車輛在上） ----------
   const insItems = insurance.filter(i => i.expiry_date).map(attachVehicle);
-  const insRow = i => `<tr>
+  const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', i => `<tr>
     <td><b>${i.plate}</b></td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
-  </tr>`;
-  const insHeaders = ['車號', '險種', '保險公司', '到期日', '剩餘天數'];
-  const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', insRow, insHeaders);
-  const insTrailerHtml = bucketByDate(insItems.filter(i => i.is_trailer), 'expiry_date', insRow, insHeaders);
-
-  // ---------- 2. 其他文件到期（行照/滅火器/濾毒罐/自主管理標章/行車記錄器，驗車已排除） ----------
-  const docItems = docs.filter(d => d.expiry_date).map(attachVehicle);
-  const docRow = d => `<tr>
-    <td><b>${d.plate}</b></td><td>${d.doc_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
-  </tr>`;
-  const docHeaders = ['車號', '文件類型', '到期日', '剩餘天數'];
-  const docVehicleHtml = bucketByDate(docItems.filter(d => !d.is_trailer), 'expiry_date', docRow, docHeaders);
-  const docTrailerHtml = bucketByDate(docItems.filter(d => d.is_trailer), 'expiry_date', docRow, docHeaders);
+  </tr>`, ['車號', '險種', '保險公司', '到期日', '剩餘天數']);
+  const insTrailerHtml = bucketByDate(insItems.filter(i => i.is_trailer), 'expiry_date', i => `<tr${rowAttr(i.vehicle_id)}>
+    <td><b>${i.plate}</b></td><td>${rentTag(i.vehicle_id)}</td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
+  </tr>`, ['板架車號', '出租狀態', '險種', '保險公司', '到期日', '剩餘天數']);
 
   // ---------- 3. 人員體檢到期 ----------
   const medItems = medExams
@@ -72,7 +77,6 @@ async function main() {
   </tr>`, ['廠牌型號', '財產編號', '存放位置', '下次校正到期日', '剩餘天數']);
 
   const totalCount = insItems.filter(i => daysUntil(i.expiry_date) <= 90).length
-    + docItems.filter(d => daysUntil(d.expiry_date) <= 90).length
     + medItems.filter(m => daysUntil(m.next_due_date) <= 90).length
     + calItems.filter(c => daysUntil(c.next_calibration_due) <= 90).length;
 
@@ -87,16 +91,17 @@ async function main() {
 
   let html = `<h2 style="font-family:sans-serif;">其餘物品到期通知（${todayISO()}）</h2>`;
 
-  if (insVehicleHtml || docVehicleHtml) {
-    html += `<h2 ${groupBar}>🚛 車輛</h2>`;
-    if (insVehicleHtml) html += `<h3 ${bar}>🚗 車輛保險到期</h3>${insVehicleHtml}`;
-    if (docVehicleHtml) html += `<h3 ${bar}>📄 車輛文件到期（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${docVehicleHtml}`;
+  if (insVehicleHtml) {
+    html += `<h2 ${groupBar}>🚛 車輛</h2><h3 ${bar}>🚗 車輛保險到期</h3>${insVehicleHtml}`;
   }
 
-  if (insTrailerHtml || docTrailerHtml) {
-    html += `<h2 ${groupBar}>🚚 板架</h2>`;
-    if (insTrailerHtml) html += `<h3 ${bar}>🚗 板架保險到期</h3>${insTrailerHtml}`;
-    if (docTrailerHtml) html += `<h3 ${bar}>📄 板架文件到期（行照等）</h3>${docTrailerHtml}`;
+  if (insTrailerHtml) {
+    html += `<h2 ${groupBar}>🚚 板架</h2>
+      <p style="font-family:sans-serif;font-size:13px;margin:6px 0 0;">
+        <span style="background:#fff3cd;border:1px solid #d8bf6a;padding:0 14px;">&nbsp;</span>
+        　黃底的列＝這台板架目前<b>出租中</b>。
+      </p>
+      <h3 ${bar}>🚗 板架保險到期</h3>${insTrailerHtml}`;
   }
 
   if (medHtml || calHtml) {
@@ -105,7 +110,7 @@ async function main() {
     if (calHtml) html += `<h3 ${bar}>🔬 儀器校正到期</h3>${calHtml}`;
   }
 
-  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號寄送，資料來源：順亞運通車隊儀表板。驗車已在另一份「車輛／板架／證照」通知信裡，這裡不重複列出。</p>`;
+  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號寄送，資料來源：順亞運通車隊儀表板。驗車與行照／滅火器／濾毒罐／自主管理標章／行車記錄器等證件，已在另一份「車輛／板架／證照」通知信（每月1號、15號）裡，這裡不重複列出。</p>`;
 
   const recipients = NOTIFY_EMAIL.split(',').map(s => s.trim()).filter(Boolean);
   await sendEmail(RESEND_API_KEY, recipients, `【到期通知】其餘物品 共 ${totalCount} 筆項目`, html);
