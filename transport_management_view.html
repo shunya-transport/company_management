@@ -341,7 +341,7 @@
         <div class="form-grid" id="sf_checklist"></div>
       </div>
       <div class="detail-section">
-        <h4>報到辦理事項（直接人員必辦，間接人員可留「不需辦理」）</h4>
+        <h4>報到辦理事項（雇主險團保，直接人員必辦，間接人員可留「不需加保」）</h4>
         <div class="form-grid">
           <label>是否加保雇主險（團保）
             <select id="sf_empins_status">
@@ -355,15 +355,6 @@
             <span style="font-size:11px;font-weight:400;color:var(--text-3);white-space:nowrap;">可早於到職日，照保單填</span>
           </label>
           <label>團保保險公司<input id="sf_empins_insurer" placeholder="選填"></label>
-          <label>是否登錄血壓酒測機
-            <select id="sf_bp_status">
-              <option value="未登錄">未登錄</option>
-              <option value="已登錄">已登錄</option>
-              <option value="不需登錄">不需登錄</option>
-            </select>
-          </label>
-          <label>血壓酒測機登錄日期<input id="sf_bp_date" type="date"></label>
-          <label>血壓酒測機代號<input id="sf_bp_code" placeholder="選填，機台上的人員代號"></label>
         </div>
       </div>
       <div class="detail-section">
@@ -378,7 +369,7 @@
           <div style="font-size:12px;color:var(--text-3);margin-bottom:6px;">可通行門禁（切換上面的「類別」會自動帶入建議權限，仍可自己勾選調整）</div>
           <div id="sf_gates" style="display:flex;flex-wrap:wrap;gap:8px 18px;"></div>
         </div>
-        <div class="muted" style="margin-top:8px;font-size:12px;">有填卡號才會發卡；存檔時會同時寫進人員的「門禁卡通行點」和下面的「門禁卡完整清冊」。</div>
+        <div class="muted" style="margin-top:8px;font-size:12px;">有填卡號才會發卡；存檔時會同時寫進人員的「門禁卡通行點」和下面的「門禁卡完整清冊」。<br>勾了「酒測系統」就代表這個人已登錄血壓酒測機，不用再另外選一次。</div>
       </div>
       <button class="btn" id="sf_add">新增人員</button>
     </div>
@@ -2059,6 +2050,23 @@ function renderGateChecks(containerId, cls, checked){
     + `<input type="checkbox" class="${cls}" value="${esc(g)}" ${on.indexOf(g)>=0?'checked':''} style="width:auto;margin:0;"> ${esc(g)}</label>`).join('');
 }
 function readGateChecks(cls){ return [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.value); }
+// 血壓酒測機的登錄狀態直接跟門禁卡的「酒測系統」權限走，不用再另外選一次
+function bpStatusFromGates(gates, empType){
+  if(gatesSplit(gates).indexOf('酒測系統') >= 0) return '已登錄';
+  return empType === '間接' ? '不需登錄' : '未登錄';
+}
+
+// ===== 車場（區域）=====
+// 目前實際還在營運的車場只有這三個，桃園／雲林／高雄已經沒有了，不要再出現在下拉選單
+const ACTIVE_YARDS = ['新竹','台中','台南'];
+function yardOptions(current){
+  const src = STATE.refYards.length ? STATE.refYards.map(y=>y.name)
+            : [...new Set(STATE.employees.map(e=>e.region).filter(Boolean))];
+  const list = ACTIVE_YARDS.filter(n => src.indexOf(n) >= 0);
+  // 舊資料萬一掛在已經關掉的車場，保留那一筆自己的值，才不會一存檔就被改成別的車場
+  if(current && list.indexOf(current) < 0) list.push(current);
+  return list;
+}
 // ===== 廠商名稱對照 =====
 // maintenance_records 存的是 vendor_id,表單打的是名稱,沒換成編號的話廠商會存不進去
 function normName(n){ return String(n==null?'':n).trim().replace(/\s+/g,'').toUpperCase(); }
@@ -2885,8 +2893,7 @@ function renderNewStaffSelects(){
   companySel.innerHTML = companyOptions.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
   const regionSel = document.getElementById('sf_region');
-  const regionOptions = STATE.refYards.length ? STATE.refYards.map(y=>y.name)
-    : [...new Set(STATE.employees.map(e=>e.region).filter(Boolean))];
+  const regionOptions = yardOptions();
   regionSel.innerHTML = regionOptions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
 
   // 門禁卡的區域預設跟著人員區域走，要跨場區發卡時可以自己改
@@ -4221,7 +4228,7 @@ function renderStaffModalEdit(e){
   const deptOptions = STATE.refDepartments.length ? STATE.refDepartments.map(d=>d.name) : [...new Set(STATE.employees.map(x=>x.dept_name).filter(Boolean))];
   const posOptions = STATE.refPositions.length ? STATE.refPositions.map(p=>p.name) : [...new Set(STATE.employees.map(x=>x.position_name).filter(Boolean))];
   const companyOptions = STATE.refCompanies.length ? STATE.refCompanies.map(c=>c.name) : [...new Set(STATE.employees.map(x=>x.company_name).filter(Boolean))];
-  const regionOptions = STATE.refYards.length ? STATE.refYards.map(y=>y.name) : [...new Set(STATE.employees.map(x=>x.region).filter(Boolean))];
+  const regionOptions = yardOptions(e.region);
   const opt = (list, current) => list.map(v => `<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
 
   document.getElementById('staffModalContent').innerHTML = `
@@ -4257,25 +4264,22 @@ function renderStaffModalEdit(e){
       </label>
       <label>團保加保日期<input id="se_empins_date" type="date" value="${esc(e.employer_ins_date||'')}"></label>
       <label>團保保險公司<input id="se_empins_insurer" value="${esc(e.employer_ins_insurer||'')}"></label>
-      <label>是否登錄血壓酒測機
-        <select id="se_bp_status">
-          ${['未登錄','已登錄','不需登錄'].map(v=>`<option value="${v}" ${(e.bp_alcohol_status||'未登錄')===v?'selected':''}>${v}</option>`).join('')}
-        </select>
-      </label>
-      <label>血壓酒測機登錄日期<input id="se_bp_date" type="date" value="${esc(e.bp_alcohol_date||'')}"></label>
-      <label>血壓酒測機代號<input id="se_bp_code" value="${esc(e.bp_alcohol_code||'')}"></label>
       <label>勞退自提比例(%)<input id="se_pension_rate" type="number" step="0.5" min="0" max="6" value="${esc((STATE.pensionElections.find(p=>p.employee_id===e.id)||{}).self_contribution_rate||0)}"></label>
     </div>
     <div class="detail-section">
       <h4>門禁卡通行權限</h4>
       <div id="se_gates" style="display:flex;flex-wrap:wrap;gap:8px 18px;"></div>
-      <div class="muted" style="margin-top:6px;font-size:12px;">要有門禁卡號才會建卡；存檔時會一併更新門禁卡通行點與門禁卡完整清冊。</div>
+      <div class="muted" style="margin-top:6px;font-size:12px;">要有門禁卡號才會建卡；存檔時會一併更新門禁卡通行點與門禁卡完整清冊。<br>勾了「酒測系統」就代表已登錄血壓酒測機，人員資料會跟著一起更新。</div>
     </div>
     <button class="btn" id="staffModalSaveBtn">儲存</button>
     <button class="btn ghost" id="staffModalCancelBtn">取消</button>
   `;
   const _curCard = STATE.accessCards.find(c => c.employee_id === e.id);
-  renderGateChecks('se_gates', 'se-gate', gatesSplit(_curCard ? _curCard.gates : ''));
+  const _curGates = gatesSplit(_curCard ? _curCard.gates : '');
+  // 舊資料有人是「已登錄血壓酒測機」但門禁卡沒開酒測系統，開啟時先幫他勾起來，
+  // 存檔後兩邊才會一致，也不會被誤降成「未登錄」
+  if(e.bp_alcohol_status === '已登錄' && _curGates.indexOf('酒測系統') < 0) _curGates.push('酒測系統');
+  renderGateChecks('se_gates', 'se-gate', _curGates);
   document.getElementById('staffModalCancelBtn').addEventListener('click', () => renderStaffModalView(e));
   document.getElementById('staffModalSaveBtn').addEventListener('click', async () => {
     e.dept_name = document.getElementById('se_dept').value;
@@ -4299,9 +4303,6 @@ function renderStaffModalEdit(e){
     e.employer_ins_status = document.getElementById('se_empins_status').value;
     e.employer_ins_date = document.getElementById('se_empins_date').value || null;
     e.employer_ins_insurer = document.getElementById('se_empins_insurer').value.trim() || null;
-    e.bp_alcohol_status = document.getElementById('se_bp_status').value;
-    e.bp_alcohol_date = document.getElementById('se_bp_date').value || null;
-    e.bp_alcohol_code = document.getElementById('se_bp_code').value.trim() || null;
     const rate = parseFloat(document.getElementById('se_pension_rate').value) || 0;
     let elec = STATE.pensionElections.find(p => p.employee_id === e.id);
     if(elec){ elec.self_contribution_rate = rate; elec.effective_date = todayISO(); }
@@ -4309,6 +4310,7 @@ function renderStaffModalEdit(e){
     // 門禁卡：卡號和通行權限一起維護，沒有卡的人補一張，清冊同步更新
     const _cardNo = e.access_card_no;
     const _gates = gatesJoin(readGateChecks('se-gate'));
+    e.bp_alcohol_status = bpStatusFromGates(_gates, e.employee_type);
     let _card = STATE.accessCards.find(c => c.employee_id === e.id);
     if(_cardNo){
       if(_card){ _card.card_no = _cardNo; _card.region = e.region; _card.gates = _gates; }
@@ -7081,9 +7083,9 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     employer_ins_status: document.getElementById('sf_empins_status').value,
     employer_ins_date: document.getElementById('sf_empins_date').value || null,
     employer_ins_insurer: document.getElementById('sf_empins_insurer').value.trim() || null,
-    bp_alcohol_status: document.getElementById('sf_bp_status').value,
-    bp_alcohol_date: document.getElementById('sf_bp_date').value || null,
-    bp_alcohol_code: document.getElementById('sf_bp_code').value.trim() || null,
+    bp_alcohol_status: bpStatusFromGates(cardGates, document.getElementById('sf_type').value),
+    bp_alcohol_date: null,
+    bp_alcohol_code: null,
     access_card_no: cardNo || null,
     status: '在職'
   });
@@ -7112,7 +7114,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     await saveState('access_cards', STATE.accessCards, true);
     await saveState('access_card_roster', STATE.accessCardRoster, true);
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_empins_date','sf_empins_insurer','sf_bp_date','sf_bp_code','sf_card'].forEach(id=>document.getElementById(id).value='');
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_empins_date','sf_empins_insurer','sf_card'].forEach(id=>document.getElementById(id).value='');
   applyStaffTypeDefaults();
   renderStaffNoBox();
   renderNewStaffChecklist();
@@ -7123,10 +7125,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
 function applyStaffTypeDefaults(){
   const t = document.getElementById('sf_type');
   const ins = document.getElementById('sf_empins_status');
-  const bp = document.getElementById('sf_bp_status');
-  if(!t || !ins || !bp) return;
-  if(t.value === '間接'){ ins.value = '不需加保'; bp.value = '不需登錄'; }
-  else { ins.value = '未加保'; bp.value = '未登錄'; }
+  if(!t || !ins) return;
+  ins.value = (t.value === '間接') ? '不需加保' : '未加保';
   // 門禁權限也依類別帶：司機要開酒測系統和各場區，內勤只開新竹大小門
   renderGateChecks('sf_gates', 'sf-gate', GATE_DEFAULTS[t.value] || []);
 }
