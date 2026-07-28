@@ -1519,13 +1519,13 @@
   <div id="workhour" class="panel">
     <div class="card">
       <h2>工時控管標準</h2>
-      <div class="muted" style="margin-bottom:10px;">數值取自「115年度全區工時控管」的控管條件，可以直接改，改完下面的統計與警示會立刻重算（只影響畫面，不會寫回資料庫）。</div>
+      <div class="muted" style="margin-bottom:10px;">數值取自「115年度全區工時控管」的控管條件，可以直接改，改完下面的統計與警示會立刻重算（只影響畫面，不會寫回資料庫）。「標準日數」依行政院人事行政總處公布的「政府行政機關辦公日曆表」自動帶入該月公職人員實際辦公日（已扣掉週休二日與國定假日、加回補行上班日）；自己改過之後就不再自動覆蓋，把欄位清空即可恢復自動。</div>
       <div class="form-grid">
         <label>每日工作時數 ≦<input id="wh_lim_day" type="number" step="0.5" value="12"></label>
         <label>每月總工時 ≦<input id="wh_lim_month" type="number" step="1" value="240"></label>
         <label>連續出勤累計工時 ≦<input id="wh_lim_cont" type="number" step="1" value="60"></label>
         <label>連續出勤天數警戒 ≧<input id="wh_lim_contdays" type="number" step="1" value="7"></label>
-        <label>標準日數（該月應出勤天數）<input id="wh_std_days" type="number" step="1" placeholder="自動帶入平日天數"></label>
+        <label>標準日數（該月辦公日數）<input id="wh_std_days" type="number" step="1" data-auto="1" placeholder="自動帶入辦公日曆表"></label>
         <label>標準日工時<input id="wh_std_hours" type="number" step="0.5" value="8"></label>
       </div>
       <div class="muted" style="margin-top:10px;">休息時間規定：繼續作業 4 小時至少休息 1.5 小時（含用膳）；連續作業 2 小時至少休息 0.5 小時以上。</div>
@@ -1560,30 +1560,16 @@
       <button class="btn ghost no-print" id="wh_export_monthly" style="margin-top:10px;">匯出 CSV</button>
     </div>
 
-    <div class="card no-print">
-      <h2>輸入每日工時<span class="count-badge" id="wh_in_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">司機清單直接取自「人員管理」的在職人員，區別也會跟著人員資料自動帶入（需要時仍可手動改）。填了上下班時間就會自動算出刷卡時數與工時；「連續累計工時」由系統依日期自動重算，不用自己填。同一位司機的同一天再輸入一次，會覆蓋原本那筆。</div>
-      <div class="form-grid">
-        <label>司機<select id="wh_in_emp"></select></label>
-        <label>區別<select id="wh_in_region"></select></label>
-        <label>日期<input id="wh_in_date" type="date"></label>
-        <label>出勤狀態<select id="wh_in_status"><option value="出勤">出勤</option><option value="休">休</option></select></label>
-        <label>上班時間<input id="wh_in_start" type="time"></label>
-        <label>下班時間<input id="wh_in_end" type="time"></label>
-        <label>下班跨隔日<select id="wh_in_overnight"><option value="0">否</option><option value="1">是</option></select></label>
-        <label>休息時數<input id="wh_in_rest" type="number" step="0.5" placeholder="自動建議"></label>
-        <label>工時（可手動覆寫）<input id="wh_in_hours" type="number" step="0.1" placeholder="自動計算"></label>
-      </div>
-      <button class="btn" id="wh_in_add">存入每日工時</button>
-      <button class="btn ghost" id="wh_in_clear">清空欄位</button>
-      <div class="muted" id="wh_in_hint" style="margin-top:10px;"></div>
-      <div class="toolbar" style="margin-top:14px;">
+    <div class="card">
+      <h2>每日工時明細（唯讀）<span class="count-badge" id="wh_in_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">每日工時不需要在這裡逐筆輸入，這些資料是由每月的工時控管檔匯入後直接進資料庫的，本表只提供查詢核對。要手動維護的只有上面的「輸入月度工時里程」。</div>
+      <div class="toolbar no-print">
         <input id="wh_in_search" placeholder="搜尋司機姓名">
         <select id="wh_in_period"><option value="all">全部月份</option></select>
       </div>
       <div class="table-scroll" style="max-height:420px;">
         <table>
-          <thead><tr><th>日期</th><th>司機</th><th>區別</th><th>狀態</th><th>上班</th><th>下班</th><th style="text-align:right;">刷卡時數</th><th style="text-align:right;">休息</th><th style="text-align:right;">工時</th><th style="text-align:right;">連續累計</th><th></th></tr></thead>
+          <thead><tr><th>日期</th><th>司機</th><th>區別</th><th>狀態</th><th>上班</th><th>下班</th><th style="text-align:right;">刷卡時數</th><th style="text-align:right;">休息</th><th style="text-align:right;">工時</th><th style="text-align:right;">連續累計</th></tr></thead>
           <tbody id="whInputBody"></tbody>
         </table>
       </div>
@@ -7538,16 +7524,68 @@ function whAllRegions(){
   return [...s].sort();
 }
 
-// 該月平日天數（週一～週五），當作標準日數的預設值
-function whWeekdayCount(periodKey){
-  if(periodKey === 'all') return 0;
-  const yr = parseInt(periodKey.slice(0,3),10) + 1911;
+// ----- 標準日數：行政院人事行政總處「政府行政機關辦公日曆表」 -----
+// 標準日數＝該月扣掉週六、週日與國定假日後，公職人員實際要出勤的天數，
+// 不是單純的週一～週五。off 是放假日、on 是彈性放假的補行上班日（要算成上班）。
+// 注意：113、114 年的 5/1 勞動節只有勞工放假、行政機關照常上班，所以沒有列進去；
+// 115 年起依「紀念日及節日實施條例」勞動節成為全國性放假日，才開始列入。
+// 對照後的全年放假日數：113年 115 天、114年 118 天、115年 120 天，與行政院公布數字一致。
+const WH_GOV_CALENDAR = {
+  113: { off: ['1/1','2/8~2/14','2/28','4/4~4/7','6/8~6/10','9/17','10/10'], on: ['2/17'] },
+  114: { off: ['1/1','1/25~2/2','2/28~3/2','4/3~4/6','5/30~6/1','9/27~9/29','10/4~10/6',
+               '10/10~10/12','10/24~10/26','12/25'], on: ['2/8'] },
+  115: { off: ['1/1','2/14~2/22','2/27~3/1','4/3~4/6','5/1~5/3','6/19~6/21','9/25~9/28',
+               '10/9~10/11','10/24~10/26','12/25~12/27'], on: [] }
+};
+let WH_GOV_INDEX = null;
+function whGovIndex(){
+  if(WH_GOV_INDEX) return WH_GOV_INDEX;
+  const idx = {};
+  const md = s => { const p = String(s).split('/'); return [parseInt(p[0],10), parseInt(p[1],10)]; };
+  Object.keys(WH_GOV_CALENDAR).forEach(k => {
+    const roc = parseInt(k,10), yr = roc + 1911;
+    const off = new Set(), on = new Set();
+    const push = (set, spec) => {
+      const parts = String(spec).split('~');
+      const a = md(parts[0]), b = parts[1] ? md(parts[1]) : md(parts[0]);
+      let d = new Date(yr, a[0]-1, a[1]);
+      const end = new Date(yr, b[0]-1, b[1]);
+      while(d <= end){
+        set.add((d.getMonth()+1) + '-' + d.getDate());
+        d = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1);
+      }
+    };
+    WH_GOV_CALENDAR[k].off.forEach(s => push(off, s));
+    WH_GOV_CALENDAR[k].on.forEach(s => push(on, s));
+    idx[roc] = { off: off, on: on };
+  });
+  WH_GOV_INDEX = idx;
+  return idx;
+}
+// 回傳 { days: 該月辦公日數, official: 是否有查到該年度的辦公日曆表 }
+function whWorkDays(periodKey){
+  if(!periodKey || periodKey === 'all') return { days: 0, official: false };
+  const roc = parseInt(periodKey.slice(0,3),10);
   const mo = parseInt(periodKey.slice(4),10);
+  if(isNaN(roc) || isNaN(mo)) return { days: 0, official: false };
+  const yr = roc + 1911;
+  const cal = whGovIndex()[roc] || null;
   const last = new Date(yr, mo, 0).getDate();
   let n = 0;
-  for(let d=1; d<=last; d++){ const w = new Date(yr, mo-1, d).getDay(); if(w!==0 && w!==6) n++; }
-  return n;
+  for(let d = 1; d <= last; d++){
+    const w = new Date(yr, mo-1, d).getDay();
+    const key = mo + '-' + d;
+    if(cal){
+      if(cal.off.has(key)) continue;                    // 國定假日
+      if((w === 0 || w === 6) && !cal.on.has(key)) continue;  // 週休二日，補班日除外
+    }else if(w === 0 || w === 6){
+      continue;                                          // 沒收錄的年度：退回週一～週五估算
+    }
+    n++;
+  }
+  return { days: n, official: !!cal };
 }
+function whWorkDayCount(periodKey){ return whWorkDays(periodKey).days; }
 
 function whPeriodKeys(){
   // 由近排到遠
@@ -7577,33 +7615,6 @@ function renderWhSelects(){
       keys.map(k => `<option value="${k}">${whPeriodText(k)}</option>`).join('');
     if(keys.includes(keepI)) iSel.value = keepI;
   }
-
-  const eSel = document.getElementById('wh_in_emp');
-  if(eSel){
-    const keepE = eSel.value;
-    const list = (STATE.employees || []).filter(e => e.status === '在職')
-      .slice().sort((a,b) => String(a.employee_no||'').localeCompare(String(b.employee_no||''), undefined, {numeric:true}));
-    eSel.innerHTML = list.map(e =>
-      `<option value="${e.id}">${esc(e.name)}${e.region?'（'+esc(e.region)+'）':''}</option>`).join('')
-      || '<option value="">人員資料尚未載入</option>';
-    if(list.some(e => String(e.id) === keepE)) eSel.value = keepE;
-  }
-  const gSel = document.getElementById('wh_in_region');
-  if(gSel){
-    const keepG = gSel.value;
-    const regs = whAllRegions();
-    gSel.innerHTML = regs.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('')
-      || '<option value="新竹">新竹</option>';
-    if(regs.includes(keepG)) gSel.value = keepG;
-    else whSyncInRegion();
-  }
-}
-
-function whSyncInRegion(){
-  const eSel = document.getElementById('wh_in_emp'), gSel = document.getElementById('wh_in_region');
-  if(!eSel || !gSel) return;
-  const e = (STATE.employees || []).find(x => String(x.id) === eSel.value);
-  if(e && e.region && [...gSel.options].some(o => o.value === e.region)) gSel.value = e.region;
 }
 
 // ----- 月度工時 × 里程 -----
@@ -7789,12 +7800,20 @@ function renderWhDrivers(){
 
   // KPI
   const stdDaysInput = document.getElementById('wh_std_days');
-  if(stdDaysInput && !stdDaysInput.value && p !== 'all') stdDaysInput.value = whWeekdayCount(p);
+  const gov = whWorkDays(p);
+  // 沒填過、或先前是自動帶入的，就跟著月份重新帶入辦公日曆表的天數
+  if(stdDaysInput && p !== 'all' && (stdDaysInput.value === '' || stdDaysInput.dataset.auto !== '0')){
+    stdDaysInput.value = gov.days;
+    stdDaysInput.dataset.auto = '1';
+  }
   const stdDays = parseFloat(stdDaysInput ? stdDaysInput.value : '') || 0;
+  const stdNote = (p === 'all') ? '請先選年月'
+    : (stdDays === gov.days ? (gov.official ? '辦公日曆表' : '週一～週五估算')
+                            : '手動指定，日曆表為 ' + gov.days + ' 天');
   const stdTotal = stdDays * lim.stdHours * list.length;
   const over = list.filter(o => (monthly && o.hours > lim.month) || o.maxDay > lim.day || o.maxCum > lim.cont).length;
   document.getElementById('whKpi').innerHTML = `
-    <div class="stat-card"><div class="n">${stdDays || '—'}</div><div class="l">標準日數</div></div>
+    <div class="stat-card"><div class="n">${stdDays || '—'}</div><div class="l">標準日數（${esc(stdNote)}）</div></div>
     <div class="stat-card"><div class="n">${stdTotal ? Math.round(stdTotal).toLocaleString() : '—'}</div><div class="l">標準總工時（${lim.stdHours}H／日）</div></div>
     <div class="stat-card"><div class="n">${Math.round(sum.hours).toLocaleString()}</div><div class="l">實際總工時</div></div>
     <div class="stat-card"><div class="n">${list.length}</div><div class="l">司機總人數</div></div>
@@ -7912,57 +7931,7 @@ function renderWhViolations(){
     </tr>`).join('') || `<tr><td colspan="8" class="empty">這個條件下沒有超標紀錄</td></tr>`;
 }
 
-// ----- 每日工時輸入 -----
-function whCalcHours(start, end, overnight, rest){
-  if(!start || !end) return null;
-  const toMin = s => { const p = String(s).split(':'); return parseInt(p[0],10)*60 + (parseInt(p[1],10)||0); };
-  let d = toMin(end) - toMin(start);
-  if(overnight || d < 0) d += 1440;
-  const card = d / 60;
-  return { card: whRound(card,2), work: whRound(Math.max(0, card - whNum(rest)),2) };
-}
-
-function whSuggestRest(card){
-  if(card >= 8) return 2;
-  if(card >= 4) return 1.5;
-  if(card >= 2) return 0.5;
-  return 0;
-}
-
-function whUpdateInputHint(){
-  const hint = document.getElementById('wh_in_hint');
-  if(!hint) return;
-  const status = document.getElementById('wh_in_status').value;
-  if(status === '休'){ hint.textContent = '狀態為「休」，工時、刷卡時數都會存 0。'; return; }
-  const start = document.getElementById('wh_in_start').value;
-  const end = document.getElementById('wh_in_end').value;
-  const ov = document.getElementById('wh_in_overnight').value === '1';
-  const restEl = document.getElementById('wh_in_rest');
-  const raw = whCalcHours(start, end, ov, 0);
-  if(!raw){ hint.textContent = '填上下班時間後會自動計算刷卡時數與工時。'; return; }
-  if(restEl.value === '') restEl.value = whSuggestRest(raw.card);
-  const r = whCalcHours(start, end, ov, restEl.value);
-  const hEl = document.getElementById('wh_in_hours');
-  hEl.placeholder = String(r.work);
-  const lim = whLimits();
-  hint.textContent = `刷卡時數 ${r.card} H － 休息 ${whNum(restEl.value)} H ＝ 工時 ${r.work} H` +
-    (r.work > lim.day ? `　⚠ 已超過單日上限 ${lim.day} H` : '');
-}
-
-// 依日期順序重算某位司機的「連續出勤累計工時」（遇到「休」或斷日就歸零）
-function whRecalcCum(name){
-  const rows = whAll().filter(r => (r.driver_name||'') === name)
-    .sort((a,b) => String(a.work_date||'').localeCompare(String(b.work_date||'')));
-  let cum = 0, prevDate = null;
-  rows.forEach(r => {
-    if(r.day_status === '休'){ r.cum_hours = 0; cum = 0; prevDate = r.work_date; return; }
-    if(prevDate && !whIsNextDay(prevDate, r.work_date)) cum = 0;
-    cum += whNum(r.work_hours);
-    r.cum_hours = whRound(cum,2);
-    prevDate = r.work_date;
-  });
-}
-
+// ----- 每日工時明細（唯讀查詢，資料由每月匯入檔提供） -----
 function whInputRows(){
   const q = (document.getElementById('wh_in_search') ? document.getElementById('wh_in_search').value.trim() : '');
   const p = (document.getElementById('wh_in_period') ? document.getElementById('wh_in_period').value : 'all');
@@ -7990,83 +7959,7 @@ function renderWhInputTable(){
       <td style="text-align:right;">${r.rest_hours==null?'—':whRound(r.rest_hours,2)}</td>
       <td style="text-align:right;font-weight:600;">${r.work_hours==null?'—':whRound(r.work_hours,2)}</td>
       <td style="text-align:right;">${r.cum_hours==null?'—':whRound(r.cum_hours,1)}</td>
-      <td><button class="del-btn" data-del-whd="${r.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="11" class="empty">這個條件下沒有每日工時紀錄</td></tr>`;
-}
-
-async function whAddDaily(){
-  const eSel = document.getElementById('wh_in_emp');
-  const emp = (STATE.employees || []).find(x => String(x.id) === eSel.value);
-  if(!emp){ alert('請先選擇司機。如果下拉是空的，代表人員資料還沒載入完成。'); return; }
-  const date = document.getElementById('wh_in_date').value;
-  if(!date){ alert('請選擇日期。'); return; }
-  const region = document.getElementById('wh_in_region').value || emp.region || '';
-  if(!region){ alert('請選擇區別。'); return; }
-
-  const status = document.getElementById('wh_in_status').value;
-  const ov = document.getElementById('wh_in_overnight').value === '1';
-  const start = status === '休' ? '' : document.getElementById('wh_in_start').value;
-  const end   = status === '休' ? '' : document.getElementById('wh_in_end').value;
-  const restV = document.getElementById('wh_in_rest').value;
-  const manual = document.getElementById('wh_in_hours').value;
-
-  let card = null, work = 0, rest = null;
-  if(status !== '休'){
-    const calc = whCalcHours(start, end, ov, restV);
-    if(calc){ card = calc.card; work = calc.work; rest = whNum(restV); }
-    if(manual !== '') work = whRound(parseFloat(manual), 2);
-    if(!calc && manual === ''){ alert('請填上下班時間，或直接在「工時」欄位輸入時數。'); return; }
-  }
-
-  const y = parseInt(date.slice(0,4),10) - 1911;
-  const mo = parseInt(date.slice(5,7),10);
-  const dd = parseInt(date.slice(8,10),10);
-
-  const existing = whAll().find(r => (r.driver_name||'') === emp.name && r.work_date === date);
-  const target = existing || { id: nextId(whAll()) };
-  if(!existing) target.wh_id = target.id;
-
-  target.region = region;
-  target.driver_name = emp.name;
-  target.employee_id = emp.id;
-  target.year_roc = y;
-  target.month = mo;
-  target.day = dd;
-  target.work_date = date;
-  target.day_status = status;
-  target.clock_in = start || null;
-  target.clock_out = end || null;
-  target.overnight = ov ? 1 : 0;
-  target.card_hours = status === '休' ? 0 : card;
-  target.rest_hours = status === '休' ? 0 : rest;
-  target.work_hours = status === '休' ? 0 : work;
-  if(!existing){ target.cum_hours = 0; STATE.workHourDaily.push(target); }
-
-  whRecalcCum(emp.name);
-
-  try{
-    await saveState('work_hour_daily', STATE.workHourDaily, true);
-  }catch(err){
-    if(!existing) STATE.workHourDaily = STATE.workHourDaily.filter(r => r.id !== target.id);
-    return;
-  }
-  document.getElementById('wh_in_hours').value = '';
-  document.getElementById('wh_in_hint').textContent =
-    (existing ? '已更新 ' : '已新增 ') + emp.name + ' ' + date + ' 的工時紀錄。';
-  renderWorkHourAll();
-}
-
-async function whDeleteDaily(id){
-  const rec = whAll().find(r => String(r.id) === String(id));
-  if(!rec) return;
-  if(!confirm(`確定要刪除 ${rec.driver_name} ${rec.work_date} 這筆工時紀錄嗎？`)) return;
-  const name = rec.driver_name;
-  const backup = STATE.workHourDaily.slice();
-  STATE.workHourDaily = STATE.workHourDaily.filter(r => String(r.id) !== String(id));
-  whRecalcCum(name);
-  try{ await saveState('work_hour_daily', STATE.workHourDaily, true); }
-  catch(err){ STATE.workHourDaily = backup; return; }
-  renderWorkHourAll();
+    </tr>`).join('') || `<tr><td colspan="10" class="empty">這個條件下沒有每日工時紀錄</td></tr>`;
 }
 
 // ----- 月度輸入 -----
@@ -8147,26 +8040,16 @@ if(document.getElementById('wh_period')){
   ['wh_period','wh_region','wh_vio_type'].forEach(id =>
     document.getElementById(id).addEventListener('change', whRerender));
   document.getElementById('wh_search').addEventListener('input', whRerender);
-  ['wh_lim_day','wh_lim_month','wh_lim_cont','wh_lim_contdays','wh_std_days','wh_std_hours'].forEach(id =>
+  ['wh_lim_day','wh_lim_month','wh_lim_cont','wh_lim_contdays','wh_std_hours'].forEach(id =>
     document.getElementById(id).addEventListener('input', whRerender));
+  document.getElementById('wh_std_days').addEventListener('input', function(){
+    // 自己填過就不再被辦公日曆表覆蓋；清空之後恢復自動帶入
+    this.dataset.auto = (this.value === '') ? '1' : '0';
+    whRerender();
+  });
 
-  document.getElementById('wh_in_emp').addEventListener('change', whSyncInRegion);
-  ['wh_in_status','wh_in_start','wh_in_end','wh_in_overnight'].forEach(id =>
-    document.getElementById(id).addEventListener('change', whUpdateInputHint));
-  document.getElementById('wh_in_rest').addEventListener('input', whUpdateInputHint);
   document.getElementById('wh_in_search').addEventListener('input', renderWhInputTable);
   document.getElementById('wh_in_period').addEventListener('change', renderWhInputTable);
-  document.getElementById('wh_in_add').addEventListener('click', whAddDaily);
-  document.getElementById('wh_in_clear').addEventListener('click', () => {
-    ['wh_in_date','wh_in_start','wh_in_end','wh_in_rest','wh_in_hours'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('wh_in_status').value = '出勤';
-    document.getElementById('wh_in_overnight').value = '0';
-    document.getElementById('wh_in_hint').textContent = '';
-  });
-  document.getElementById('whInputBody').addEventListener('click', (e) => {
-    const id = e.target.getAttribute('data-del-whd');
-    if(id) whDeleteDaily(id);
-  });
 
   document.getElementById('wh_m_add').addEventListener('click', whAddMonthly);
   document.getElementById('wh_m_clear').addEventListener('click', () => {
