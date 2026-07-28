@@ -1,0 +1,109 @@
+name: 寄信測試診斷
+# 這支只能手動執行，不會自己定時跑。
+# 目的：不管資料庫裡有幾筆到期項目，一律強制寄一封測試信，
+#       並把 Resend 的回應（HTTP 狀態碼 + email id）完整印在 log 上，
+#       這樣就能分辨到底是「根本沒寄」還是「寄出去了但沒進收件匣」。
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出程式碼
+        uses: actions/checkout@v5
+
+      - name: 安裝 Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: 產生診斷腳本
+        run: |
+          cat > _email_test.js <<'ENDOFSCRIPT'
+          (async () => {
+            const KEY = process.env.RESEND_API_KEY || '';
+            const TO  = process.env.NOTIFY_EMAIL || '';
+            const SURL = process.env.SUPABASE_URL || '';
+            const SKEY = process.env.SUPABASE_KEY || '';
+
+            console.log('===== 1. Secrets 設定檢查 =====');
+            console.log('RESEND_API_KEY :', KEY ? '已設定（長度 ' + KEY.length + '，開頭 ' + KEY.slice(0, 3) + '）' : '★ 沒有設定 ★');
+            console.log('NOTIFY_EMAIL   :', TO ? '已設定' : '★ 沒有設定 ★');
+            console.log('SUPABASE_URL   :', SURL ? '已設定' : '★ 沒有設定 ★');
+            console.log('SUPABASE_KEY   :', SKEY ? '已設定（長度 ' + SKEY.length + '）' : '★ 沒有設定 ★');
+
+            if (!KEY || !TO) {
+              console.log('缺少 RESEND_API_KEY 或 NOTIFY_EMAIL，無法測試。請到 Settings > Secrets and variables > Actions 補上。');
+              process.exit(1);
+            }
+
+            console.log('');
+            console.log('===== 2. 收件人檢查 =====');
+            if (/[，、；;　]/.test(TO)) {
+              console.log('★ 警告：收件人字串裡出現全形逗號、頓號、分號或全形空白。程式只認半形逗號 "," 分隔，請修正 NOTIFY_EMAIL。');
+            }
+            const list = TO.split(',').map(s => s.trim()).filter(Boolean);
+            console.log('收件人數量：' + list.length);
+            list.forEach((a, i) => {
+              const m = a.match(/^([^@]+)@(.+)$/);
+              const masked = m ? (m[1].slice(0, 2) + '***@' + m[2]) : ('無法解析（' + a.length + ' 個字元）');
+              const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a) ? '格式正常' : '★ 格式不正確 ★';
+              console.log('  收件人 ' + (i + 1) + '：' + masked + '  ' + ok);
+            });
+
+            console.log('');
+            console.log('===== 3. 資料庫連線檢查 =====');
+            try {
+              const r = await fetch(SURL + '/rest/v1/vehicle_documents?select=vehicle_id&limit=1', {
+                headers: { apikey: SKEY, Authorization: 'Bearer ' + SKEY, Prefer: 'count=exact' }
+              });
+              console.log('HTTP 狀態：' + r.status);
+              console.log('資料筆數（Content-Range）：' + (r.headers.get('content-range') || '無'));
+              if (!r.ok) console.log('回應內容：' + (await r.text()).slice(0, 300));
+            } catch (e) {
+              console.log('讀取資料庫失敗：' + e.message);
+            }
+
+            console.log('');
+            console.log('===== 4. 強制寄出測試信 =====');
+            const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+            const payload = {
+              from: '順亞運通系統通知 <noreply@dgtt.com.tw>',
+              to: list,
+              subject: '【測試信】順亞運通通知系統寄信測試 ' + stamp,
+              html: '<h3 style="font-family:sans-serif;">這是一封測試信</h3>'
+                  + '<p style="font-family:sans-serif;">如果您看到這封信，表示 GitHub Actions 到 Resend 到您信箱的整條寄信管道是通的。</p>'
+                  + '<p style="font-family:sans-serif;">送出時間：' + stamp + '</p>'
+                  + '<p style="font-family:sans-serif;color:#888;font-size:12px;">若這封信出現在垃圾郵件匣，請按「回報不是垃圾郵件」，並把 noreply@dgtt.com.tw 加入聯絡人，之後的到期通知才會進收件匣。</p>'
+            };
+            const res = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const text = await res.text();
+            console.log('Resend HTTP 狀態：' + res.status);
+            console.log('Resend 回應內容：' + text);
+            console.log('');
+            if (!res.ok) {
+              console.log('★ 結論：Resend 拒收這封信，原因就在上面那行回應內容裡（403 通常是寄件網域還沒驗證，422 通常是收件人格式錯誤，401 是 API Key 不對）。');
+              process.exit(1);
+            }
+            console.log('★ 結論：Resend 已接受這封信，上面回應內容裡的 id 就是這封信的編號。');
+            console.log('   接下來請到 Resend 後台的 Emails（紀錄）頁面，用這個 id 查投遞結果：');
+            console.log('   - 顯示 Delivered：信已經送到對方郵件伺服器，沒看到就是進了垃圾郵件匣，請搜尋 noreply@dgtt.com.tw');
+            console.log('   - 顯示 Bounced：對方伺服器退信，退信原因會寫在該頁，通常是信箱地址打錯');
+            console.log('   - 完全查不到這封信：表示 API Key 屬於別的 Resend 帳號');
+          })();
+          ENDOFSCRIPT
+          node --check _email_test.js && echo "腳本語法檢查通過"
+
+      - name: 執行寄信測試
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: node _email_test.js
