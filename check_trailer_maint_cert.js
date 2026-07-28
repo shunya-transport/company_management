@@ -135,8 +135,8 @@ async function main() {
       (trailer ? trailerMaintRows : vehicleMaintRows).push(row);
     });
   });
-  const maintTable = (rows, title, cols) => rows.length
-    ? `<h4 style="font-family:sans-serif;margin:14px 0 6px;">🔧 ${title}（共${rows.length}筆，依剩餘里程判斷）</h4>
+  const maintTable = (rows, title, cols, note = '依剩餘里程判斷') => rows.length
+    ? `<h4 style="font-family:sans-serif;margin:14px 0 6px;">🔧 ${title}（共${rows.length}筆，${note}）</h4>
        <table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%;" border="1" cellpadding="6">
          <tr style="background:#f2ece5;">${cols.map(c => `<th style="text-align:left;white-space:nowrap;">${c}</th>`).join('')}</tr>
          ${rows.join('')}
@@ -145,10 +145,91 @@ async function main() {
   const vehicleMaintHtml = maintTable(vehicleMaintRows, '車輛保養提醒', ['車號', '保養類型', '狀態', '說明']);
   const trailerMaintHtml = maintTable(trailerMaintRows, '板架保養提醒', ['板架車號', '出租狀態', '保養類型', '狀態', '說明']);
 
+  // ---------- 5. 打油、輪軸保養（判斷方式和儀表板完全一致） ----------
+  // 板架是「時間型」：上次保養日期 + 頻率月數；曳引車輪軸是「里程型」：上次里程 + 頻率公里。
+  // 用有沒有 frequency_km 來區分，不是看類型名稱。
+  const addMonths = (dateStr, n) => {
+    const d = new Date(dateStr.slice(0, 10) + 'T00:00:00');
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + n);
+    if (d.getDate() !== day) d.setDate(0); // 例如 1/31 加一個月要落在 2月底
+    return d.toISOString().slice(0, 10);
+  };
+  const scheduleDue = (s, v) => {
+    if (s.frequency_km) {
+      const cur = latestMileage[s.vehicle_id] ?? v.current_mileage;
+      if (cur == null || s.last_service_mileage == null) return null; // 沒里程資料就沒辦法判斷
+      const next = s.last_service_mileage + s.frequency_km;
+      const rem = next - cur;
+      const buf = Math.max(1000, s.frequency_km * 0.05);
+      if (rem > buf) return null; // 還很遠
+      return {
+        basis: 'km',
+        overdue: rem <= 0,
+        last: s.last_service_mileage + ' km',
+        next: next + ' km',
+        remain: rem <= 0 ? `超出 ${-rem} km` : `剩 ${rem} km`,
+        sortKey: rem,
+      };
+    }
+    if (s.frequency_months && s.last_service_date) {
+      const next = addMonths(s.last_service_date, s.frequency_months);
+      const dd = daysUntil(next);
+      if (dd > 30) return null; // 逾期或30天內才提醒，和儀表板的紅／橘燈一致
+      return {
+        basis: 'time',
+        overdue: dd < 0,
+        last: s.last_service_date.slice(0, 10),
+        next,
+        remain: dd < 0 ? `逾期 ${-dd} 天` : `剩 ${dd} 天`,
+        sortKey: dd,
+      };
+    }
+    return null; // 資料不足
+  };
+  const buildDueRows = (type) => {
+    const out = { vehicle: [], trailer: [] };
+    schedules.filter(s => s.maintenance_type === type).forEach(s => {
+      const v = vehicleById[s.vehicle_id];
+      if (!v) return;
+      const d = scheduleDue(s, v);
+      if (!d) return;
+      out[isTrailer(v) ? 'trailer' : 'vehicle'].push({ plate: v.plate_number, vehicle_id: s.vehicle_id, trailer: isTrailer(v), ...d });
+    });
+    // 同一張表可能同時有里程型和時間型，先照類型分群，各自再依剩餘量由少到多排
+    Object.values(out).forEach(arr => arr.sort((a, b) =>
+      a.basis === b.basis ? a.sortKey - b.sortKey : (a.basis === 'time' ? -1 : 1)));
+    return out;
+  };
+  const dueRowHtml = (d) => `<tr${d.trailer ? rowAttr(d.vehicle_id) : ''}>
+      <td><b>${d.plate}</b></td>${d.trailer ? `<td>${rentTag(d.vehicle_id)}</td>` : ''}
+      <td>${d.overdue ? '🔴 已逾期' : '🟠 即將到期'}</td><td>${d.last}</td><td>${d.next}</td><td>${d.remain}</td>
+    </tr>`;
+  const dueTable = (rows, title) => {
+    if (!rows.length) return '';
+    // 標題要說清楚是照里程還是照時間算的，兩種都有就寫兩種
+    const hasKm = rows.some(r => r.basis === 'km');
+    const hasTime = rows.some(r => r.basis === 'time');
+    const note = hasKm && hasTime ? '里程型與時間型都有' : hasKm ? '依剩餘里程判斷' : '依上次保養日期＋週期月數判斷';
+    return maintTable(rows.map(dueRowHtml), title,
+      rows[0].trailer
+        ? ['板架車號', '出租狀態', '狀態', '上次保養', '預估下次', '剩餘']
+        : ['車號', '狀態', '上次保養', '預估下次', '剩餘'],
+      note);
+  };
+  const grease = buildDueRows('打油');
+  const axle = buildDueRows('輪軸保養');
+  const vehicleGreaseHtml = dueTable(grease.vehicle, '車輛打油提醒');
+  const trailerGreaseHtml = dueTable(grease.trailer, '板架打油提醒');
+  const vehicleAxleHtml = dueTable(axle.vehicle, '車輛輪軸保養提醒');
+  const trailerAxleHtml = dueTable(axle.trailer, '板架輪軸保養提醒');
+
   const totalCount = leaseItems.filter(l => daysUntil(l.lease_end_date) <= 90).length
     + allDocItems.filter(d => daysUntil(d.expiry_date) <= 90).length
     + certItems.filter(t => daysUntil(t.expiry_date) <= 90).length
-    + vehicleMaintRows.length + trailerMaintRows.length;
+    + vehicleMaintRows.length + trailerMaintRows.length
+    + grease.vehicle.length + grease.trailer.length
+    + axle.vehicle.length + axle.trailer.length;
 
   if (totalCount === 0) {
     console.log('目前沒有需要通知的車輛／板架／保養／證照項目，不寄信。');
@@ -161,14 +242,16 @@ async function main() {
 
   let html = `<h2 style="font-family:sans-serif;">車輛／板架／人員證照到期通知（${todayISO()}）</h2>`;
 
-  if (vehicleInspectionHtml || vehicleDocHtml || vehicleMaintHtml) {
+  if (vehicleInspectionHtml || vehicleDocHtml || vehicleMaintHtml || vehicleGreaseHtml || vehicleAxleHtml) {
     html += `<h2 ${groupBar}>🚛 車輛</h2>`;
     if (vehicleInspectionHtml) html += `<h3 ${bar}>🚛 車輛驗車到期</h3>${vehicleInspectionHtml}`;
     if (vehicleDocHtml) html += `<h3 ${bar}>📄 車輛文件到期（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${vehicleDocHtml}`;
     if (vehicleMaintHtml) html += `<h3 ${bar}>🔧 車輛保養</h3>${vehicleMaintHtml}`;
+    if (vehicleGreaseHtml) html += `<h3 ${bar}>🛢 車輛打油</h3>${vehicleGreaseHtml}`;
+    if (vehicleAxleHtml) html += `<h3 ${bar}>⚙️ 車輛輪軸保養</h3>${vehicleAxleHtml}`;
   }
 
-  if (trailerInspectionHtml || trailerDocHtml || trailerMaintHtml || leaseHtml) {
+  if (trailerInspectionHtml || trailerDocHtml || trailerMaintHtml || trailerGreaseHtml || trailerAxleHtml || leaseHtml) {
     html += `<h2 ${groupBar}>🚚 板架</h2>
       <p style="font-family:sans-serif;font-size:13px;margin:6px 0 0;">
         <span style="background:#fff3cd;border:1px solid #d8bf6a;padding:0 14px;">&nbsp;</span>
@@ -177,6 +260,8 @@ async function main() {
     if (trailerInspectionHtml) html += `<h3 ${bar}>🚚 板架驗車到期</h3>${trailerInspectionHtml}`;
     if (trailerDocHtml) html += `<h3 ${bar}>📄 板架文件到期（行照等）</h3>${trailerDocHtml}`;
     if (trailerMaintHtml) html += `<h3 ${bar}>🔧 板架保養</h3>${trailerMaintHtml}`;
+    if (trailerGreaseHtml) html += `<h3 ${bar}>🛢 板架打油</h3>${trailerGreaseHtml}`;
+    if (trailerAxleHtml) html += `<h3 ${bar}>⚙️ 板架輪軸保養</h3>${trailerAxleHtml}`;
     if (leaseHtml) html += `<h3 ${bar}>📋 板架出租合約到期</h3>${leaseHtml}`;
   }
 
