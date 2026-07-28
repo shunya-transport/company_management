@@ -348,6 +348,20 @@
           <label>血壓酒測機代號<input id="sf_bp_code" placeholder="選填，機台上的人員代號"></label>
         </div>
       </div>
+      <div class="detail-section">
+        <h4>門禁卡（入職發卡與通行權限）</h4>
+        <div class="form-grid">
+          <label>門禁卡號<input id="sf_card" placeholder="選填，例：0009044926"></label>
+          <label>卡片區域
+            <select id="sf_card_region"></select>
+          </label>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="font-size:12px;color:var(--text-3);margin-bottom:6px;">可通行門禁（切換上面的「類別」會自動帶入建議權限，仍可自己勾選調整）</div>
+          <div id="sf_gates" style="display:flex;flex-wrap:wrap;gap:8px 18px;"></div>
+        </div>
+        <div class="muted" style="margin-top:8px;font-size:12px;">有填卡號才會發卡；存檔時會同時寫進人員的「門禁卡通行點」和下面的「門禁卡完整清冊」。</div>
+      </div>
       <button class="btn" id="sf_add">新增人員</button>
     </div>
     <div class="card">
@@ -1963,6 +1977,26 @@ function statusLabel(dateStr, soonDays){
 }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+
+// ===== 門禁卡：發卡與通行權限 =====
+// 公司目前實際在用的門禁點就這五個，發卡時直接勾選，不用自己打字避免打錯對不上
+const GATE_LIST = ['酒測系統','新竹大門','新竹小門','台南二場-大門內外','台中'];
+// 依人員類別自動帶入的建議權限（比照現有卡片最常見的組合），帶進來之後仍可自己加減
+const GATE_DEFAULTS = {
+  '直接': ['酒測系統','新竹大門','台南二場-大門內外','台中'],
+  '間接': ['新竹大門','新竹小門']
+};
+// 資料庫裡的 gates 欄位是用「、」串起來的字串，順序固定照 GATE_LIST 排，跟既有資料格式一致
+function gatesJoin(list){ return GATE_LIST.filter(g => list.indexOf(g) >= 0).join('、'); }
+function gatesSplit(str){ return String(str==null?'':str).split(/[、,，]/).map(s=>s.trim()).filter(Boolean); }
+function renderGateChecks(containerId, cls, checked){
+  const box = document.getElementById(containerId);
+  if(!box) return;
+  const on = checked || [];
+  box.innerHTML = GATE_LIST.map(g => `<label style="display:inline-flex;align-items:center;gap:5px;font-weight:400;white-space:nowrap;margin:0;">`
+    + `<input type="checkbox" class="${cls}" value="${esc(g)}" ${on.indexOf(g)>=0?'checked':''} style="width:auto;margin:0;"> ${esc(g)}</label>`).join('');
+}
+function readGateChecks(cls){ return [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.value); }
 // ===== 廠商名稱對照 =====
 // maintenance_records 存的是 vendor_id,表單打的是名稱,沒換成編號的話廠商會存不進去
 function normName(n){ return String(n==null?'':n).trim().replace(/\s+/g,'').toUpperCase(); }
@@ -2164,6 +2198,8 @@ async function authFetch(url, options={}){
 
 // 儲存key名稱 -> 對應的Supabase真實資料表與主鍵欄位
 const TABLE_MAP = {
+  access_cards: {table:'access_cards', pk:'card_id'},
+  access_card_roster: {table:'access_card_roster', pk:'card_id'},
   admin_rewards: {table:'employee_rewards', pk:'reward_id'},
   admin_tolls: {table:'toll_records', pk:'toll_id'},
   axle_maintenance_records: {table:'axle_maintenance_records', pk:'record_id'},
@@ -2570,9 +2606,9 @@ async function loadState(){
   STATE.emissionRecords = await safeGet('emission_test_records', [], true);
   STATE.internalTrainings = SEED.internal_trainings || [];
   STATE.insuranceChanges = await safeGet('insurance_changes', SEED.insurance_changes || [], true);
-  STATE.accessCards = SEED.access_cards || [];
+  STATE.accessCards = await safeGet('access_cards', SEED.access_cards || [], true);
   STATE.insuranceMonthly = SEED.insurance_monthly || [];
-  STATE.accessCardRoster = SEED.access_card_roster || [];
+  STATE.accessCardRoster = await safeGet('access_card_roster', SEED.access_card_roster || [], true);
   STATE.trainingLog = await safeGet('training_log', SEED.training_log || [], true);
   STATE.internalTrainingTypes = SEED.internal_training_types || [];
   STATE.docItems = SEED.doc_items || [];
@@ -2790,6 +2826,15 @@ function renderNewStaffSelects(){
   const regionOptions = STATE.refYards.length ? STATE.refYards.map(y=>y.name)
     : [...new Set(STATE.employees.map(e=>e.region).filter(Boolean))];
   regionSel.innerHTML = regionOptions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+
+  // 門禁卡的區域預設跟著人員區域走，要跨場區發卡時可以自己改
+  const cardRegionSel = document.getElementById('sf_card_region');
+  if(cardRegionSel){
+    const cur = cardRegionSel.value;
+    cardRegionSel.innerHTML = regionOptions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    if(cur && regionOptions.indexOf(cur) >= 0) cardRegionSel.value = cur;
+    else cardRegionSel.value = regionSel.value;
+  }
 }
 
 let editingLeaseLocationId = null;
@@ -4162,9 +4207,16 @@ function renderStaffModalEdit(e){
       <label>血壓酒測機代號<input id="se_bp_code" value="${esc(e.bp_alcohol_code||'')}"></label>
       <label>勞退自提比例(%)<input id="se_pension_rate" type="number" step="0.5" min="0" max="6" value="${esc((STATE.pensionElections.find(p=>p.employee_id===e.id)||{}).self_contribution_rate||0)}"></label>
     </div>
+    <div class="detail-section">
+      <h4>門禁卡通行權限</h4>
+      <div id="se_gates" style="display:flex;flex-wrap:wrap;gap:8px 18px;"></div>
+      <div class="muted" style="margin-top:6px;font-size:12px;">要有門禁卡號才會建卡；存檔時會一併更新門禁卡通行點與門禁卡完整清冊。</div>
+    </div>
     <button class="btn" id="staffModalSaveBtn">儲存</button>
     <button class="btn ghost" id="staffModalCancelBtn">取消</button>
   `;
+  const _curCard = STATE.accessCards.find(c => c.employee_id === e.id);
+  renderGateChecks('se_gates', 'se-gate', gatesSplit(_curCard ? _curCard.gates : ''));
   document.getElementById('staffModalCancelBtn').addEventListener('click', () => renderStaffModalView(e));
   document.getElementById('staffModalSaveBtn').addEventListener('click', async () => {
     e.dept_name = document.getElementById('se_dept').value;
@@ -4195,8 +4247,32 @@ function renderStaffModalEdit(e){
     let elec = STATE.pensionElections.find(p => p.employee_id === e.id);
     if(elec){ elec.self_contribution_rate = rate; elec.effective_date = todayISO(); }
     else{ STATE.pensionElections.push({id: nextId(STATE.pensionElections), employee_id: e.id, self_contribution_rate: rate, effective_date: todayISO(), notes: ''}); }
+    // 門禁卡：卡號和通行權限一起維護，沒有卡的人補一張，清冊同步更新
+    const _cardNo = e.access_card_no;
+    const _gates = gatesJoin(readGateChecks('se-gate'));
+    let _card = STATE.accessCards.find(c => c.employee_id === e.id);
+    if(_cardNo){
+      if(_card){ _card.card_no = _cardNo; _card.region = e.region; _card.gates = _gates; }
+      else{
+        const _cid = nextId(STATE.accessCards);
+        STATE.accessCards.push({id:_cid, card_id:_cid, employee_id:e.id, card_no:_cardNo, region:e.region, gates:_gates});
+      }
+      let _rr = STATE.accessCardRoster.find(r => r.employee_id === e.id);
+      if(_rr){
+        _rr.position_title = e.position_name; _rr.name = e.name; _rr.region = e.region;
+        _rr.card_no = _cardNo; _rr.employee_no = e.employee_no; _rr.gates = _gates;
+      }else{
+        const _rid = nextId(STATE.accessCardRoster);
+        STATE.accessCardRoster.push({id:_rid, card_id:_rid, position_title:e.position_name, name:e.name,
+          region:e.region, card_no:_cardNo, employee_no:e.employee_no, gates:_gates, employee_id:e.id});
+      }
+    }
     await saveState('pension_elections', STATE.pensionElections, true);
     await saveState('roster_employees', STATE.employees, true);
+    if(_cardNo){
+      await saveState('access_cards', STATE.accessCards, true);
+      await saveState('access_card_roster', STATE.accessCardRoster, true);
+    }
     renderAll();
     renderStaffModalView(e);
   });
@@ -6751,6 +6827,19 @@ document.getElementById('sf_add').addEventListener('click', async () => {
   if(!emergencyContact) missing.push('緊急聯絡人');
   if(!emergencyPhone) missing.push('緊急聯絡電話');
   if(missing.length){ alert(`請填寫以下必填欄位：${missing.join('、')}`); return; }
+  // 門禁卡：一人一卡，先確認卡號沒有發給別人（卡號重複的話門禁紀錄會分不出是誰）
+  const cardNo = document.getElementById('sf_card').value.trim();
+  const cardGates = gatesJoin(readGateChecks('sf-gate'));
+  const cardRegion = document.getElementById('sf_card_region').value.trim()
+                     || document.getElementById('sf_region').value.trim();
+  if(cardNo){
+    const dup = STATE.accessCards.find(c => String(c.card_no||'').trim() === cardNo);
+    if(dup){
+      const owner = STATE.employees.find(x => x.id === dup.employee_id);
+      if(!confirm('門禁卡號 ' + cardNo + ' 已經發給「' + (owner ? owner.name : '其他人') + '」了。\n\n確定還是要用這個卡號嗎？')) return;
+    }
+    if(!cardGates && !confirm('這張卡一個門禁點都沒有勾，等於發了一張不能通行的卡。\n\n確定要這樣建立嗎？')) return;
+  }
   const newEmpId = nextId(STATE.employees);
   STATE.employees.push({
     id: newEmpId, employee_no: no, name,
@@ -6773,15 +6862,35 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     bp_alcohol_status: document.getElementById('sf_bp_status').value,
     bp_alcohol_date: document.getElementById('sf_bp_date').value || null,
     bp_alcohol_code: document.getElementById('sf_bp_code').value.trim() || null,
+    access_card_no: cardNo || null,
     status: '在職'
   });
   document.querySelectorAll('#sf_checklist .new-cl-status').forEach(sel => {
     const itemId = parseInt(sel.getAttribute('data-new-item-id'));
     STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: newEmpId, item_id: itemId, status: sel.value, submitted_date: sel.value === '已繳交' ? todayISO() : null});
   });
+  // 入職發卡：個人通行點 + 門禁卡完整清冊，兩邊一起寫，才不會清冊漏人
+  if(cardNo){
+    const cardId = nextId(STATE.accessCards);
+    STATE.accessCards.push({
+      id: cardId, card_id: cardId, employee_id: newEmpId,
+      card_no: cardNo, region: cardRegion, gates: cardGates
+    });
+    const rosterId = nextId(STATE.accessCardRoster);
+    STATE.accessCardRoster.push({
+      id: rosterId, card_id: rosterId,
+      position_title: document.getElementById('sf_position').value.trim(),
+      name, region: cardRegion, card_no: cardNo, employee_no: no,
+      gates: cardGates, employee_id: newEmpId
+    });
+  }
   await saveState('roster_employees', STATE.employees, true);
   await saveState('doc_checklist', STATE.docChecklist, true);
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_empins_date','sf_empins_insurer','sf_bp_date','sf_bp_code'].forEach(id=>document.getElementById(id).value='');
+  if(cardNo){
+    await saveState('access_cards', STATE.accessCards, true);
+    await saveState('access_card_roster', STATE.accessCardRoster, true);
+  }
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_empins_date','sf_empins_insurer','sf_bp_date','sf_bp_code','sf_card'].forEach(id=>document.getElementById(id).value='');
   applyStaffTypeDefaults();
   renderStaffNoBox();
   renderNewStaffChecklist();
@@ -6796,8 +6905,16 @@ function applyStaffTypeDefaults(){
   if(!t || !ins || !bp) return;
   if(t.value === '間接'){ ins.value = '不需加保'; bp.value = '不需登錄'; }
   else { ins.value = '未加保'; bp.value = '未登錄'; }
+  // 門禁權限也依類別帶：司機要開酒測系統和各場區，內勤只開新竹大小門
+  renderGateChecks('sf_gates', 'sf-gate', GATE_DEFAULTS[t.value] || []);
 }
 document.getElementById('sf_type').addEventListener('change', applyStaffTypeDefaults);
+// 人員區域改了，門禁卡的區域跟著改（除非已經自己指定過別的場區）
+document.getElementById('sf_region').addEventListener('change', () => {
+  const cr = document.getElementById('sf_card_region');
+  if(cr && cr.dataset.manual !== '1') cr.value = document.getElementById('sf_region').value;
+});
+document.getElementById('sf_card_region').addEventListener('change', function(){ this.dataset.manual = '1'; });
 
 document.getElementById('staffTableBody').addEventListener('click', async (e) => {
   const viewId = e.target.getAttribute('data-view-staff');
