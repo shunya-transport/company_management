@@ -103,9 +103,10 @@ async function main() {
       employee_name: employeeById[t.employee_id] || '',
       type_name: cleanTypeName(trainingTypeById[t.type_id]) || '（未分類）',
     }));
+  // 證照號碼不列出來：換地方報名就會拿到不同號碼，列了反而誤導，看名稱和到期日就夠
   const certHtml = bucketByDate(certItems, 'expiry_date', t => `<tr>
-    <td>${t.employee_name}</td><td><b>${t.type_name}</b></td><td>${t.certificate_no || ''}</td><td>${t.expiry_date}</td><td>${daysLabel(t.expiry_date)}</td>
-  </tr>`, ['姓名', '證照／訓練名稱', '證照號碼', '到期日', '剩餘天數']);
+    <td>${t.employee_name}</td><td><b>${t.type_name}</b></td><td>${t.expiry_date}</td><td>${daysLabel(t.expiry_date)}</td>
+  </tr>`, ['姓名', '證照／訓練名稱', '到期日', '剩餘天數']);
 
   // ---------- 4. 車輛保養（里程制，不適用90/60/30天分段，改用剩餘里程判斷） ----------
   const latestMileage = {};
