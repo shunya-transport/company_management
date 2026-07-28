@@ -1547,7 +1547,7 @@
 
     <div class="card">
       <h2>每位司機月工時彙總<span class="count-badge" id="wh_driver_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">資料來源是每日工時紀錄，區別以「人員管理」的人員資料為準。年月下拉由近排到遠，預設顯示最新的月份。超過單日或每月上限的司機會標紅，接近上限（達 90%）標黃。</div>
+      <div class="muted" style="margin-bottom:10px;">資料來源是每日工時紀錄，區別以「人員管理」的人員資料為準，在職人員找不到時會再去「離職名冊」找，並在姓名旁標示「離職」。年月下拉由近排到遠，預設顯示最新的月份。超過單日或每月上限的司機會標紅，接近上限（達 90%）標黃。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年月<select id="wh_period"></select></label>
         <label>區別<select id="wh_region"><option value="all">全部區別</option></select></label>
@@ -7299,20 +7299,25 @@ function whSelPeriod(){ const el=document.getElementById('wh_period'); return el
 function whSelRegion(){ const el=document.getElementById('wh_region'); return el ? el.value : 'all'; }
 
 // ----- 區別與人員管理連動 -----
-// 每日工時只存司機姓名，區別一律以「人員管理」的人員資料為準；
-// 人員清單裡找不到的人才退回沿用匯入檔裡的區別。
+// 每日工時只存司機姓名，區別一律以「人員管理」的人員資料為準，查找順序是
+// 在職人員 → 離職名冊 → 匯入檔裡的原值；查到離職名冊的人會另外標示「離職」。
 function whEmpIndex(){
   if(WH_EMP_INDEX) return WH_EMP_INDEX;
   const m = {};
-  (STATE.employees || []).forEach(e => {
+  const put = (e, left) => {
     const n = String(e.name == null ? '' : e.name).trim();
     if(!n) return;
-    if(!m[n] || (e.status === '在職' && m[n].status !== '在職')) m[n] = e;
-  });
+    const rank = left ? 2 : (e.status === '在職' ? 0 : 1);
+    if(!m[n] || rank < m[n]._rank) m[n] = Object.assign({}, e, {_rank: rank, _left: !!left});
+  };
+  (STATE.employees || []).forEach(e => put(e, false));
+  (STATE.employeesHistory || []).forEach(e => put(e, true));
   WH_EMP_INDEX = m;
   return m;
 }
 function whEmpOf(name){ return whEmpIndex()[String(name == null ? '' : name).trim()] || null; }
+function whIsLeft(name){ const e = whEmpOf(name); return !!(e && e._left); }
+function whLeftDate(name){ const e = whEmpOf(name); return (e && e._left && e.resign_date) ? e.resign_date : ''; }
 function whRegionOf(r){
   const e = whEmpOf(r && r.driver_name);
   if(e && e.region) return e.region;
@@ -7504,6 +7509,7 @@ function whDriverSummary(rows){
   rows.forEach(r => {
     const k = (r.driver_name||'');
     const o = by[k] = by[k] || { region:whRegionOf(r), name:r.driver_name||'', employee_id:r.employee_id||null,
+                                 left:whIsLeft(r.driver_name), leftDate:whLeftDate(r.driver_name),
                                  work:0, rest:0, hours:0, maxDay:0, maxDayDate:'', maxCum:0, days:[] };
     o.days.push(r);
     if(r.day_status === '休'){ o.rest++; return; }
@@ -7549,8 +7555,8 @@ function renderWhDrivers(){
     if(o.maxCont >= lim.contDays) flags.push(`<span class="pill amber">連續出勤 ${o.maxCont} 天</span>`);
     if(!flags.length) flags.push(`<span class="pill green">正常</span>`);
     return `<tr>
-      <td style="white-space:nowrap;font-weight:600;">${esc(o.name)}</td>
-      <td>${esc(o.region)}</td>
+      <td style="white-space:nowrap;font-weight:600;">${esc(o.name)}${o.left?` <span class="pill gray" title="${esc(o.leftDate||'')}">離職</span>`:''}</td>
+      <td>${esc(o.region) || '<span class="muted">—</span>'}</td>
       <td style="text-align:right;">${o.work}</td>
       <td style="text-align:right;">${o.rest}</td>
       <td style="text-align:right;font-weight:600;${(monthly && o.hours > lim.month) ? 'color:var(--red);' : ''}">${o.hours.toFixed(1)}</td>
@@ -7767,8 +7773,8 @@ function renderWhInputTable(){
   if(cnt) cnt.textContent = `共 ${all.length} 筆`;
   tb.innerHTML = rows.map(r => `<tr>
       <td style="white-space:nowrap;">${esc(r.work_date||'')}</td>
-      <td style="white-space:nowrap;font-weight:600;">${esc(r.driver_name||'')}</td>
-      <td>${esc(whRegionOf(r))}</td>
+      <td style="white-space:nowrap;font-weight:600;">${esc(r.driver_name||'')}${whIsLeft(r.driver_name)?' <span class="pill gray">離職</span>':''}</td>
+      <td>${esc(whRegionOf(r)) || '<span class="muted">—</span>'}</td>
       <td><span class="pill ${r.day_status==='休'?'gray':'green'}">${esc(r.day_status||'')}</span></td>
       <td>${esc(r.clock_in||'')}</td>
       <td>${esc(r.clock_out||'')}${r.overnight?' <span class="muted">(隔日)</span>':''}</td>
