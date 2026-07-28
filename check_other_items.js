@@ -17,30 +17,45 @@ async function main() {
   const [insurance, docs, vehicles, medExams, employees, instruments] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_insurance?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?doc_type=neq.驗車&select=*'), // 驗車已在另一份板架通知涵蓋，這裡排除避免重複
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'medical_exam_records?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'instruments?select=*'),
   ]);
 
-  const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v.plate_number]));
+  const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v]));
   const employeeById = Object.fromEntries(employees.map(e => [e.employee_id, e.name]));
 
-  // ---------- 1. 車輛保險到期 ----------
-  const insItems = insurance
-    .filter(i => i.expiry_date)
-    .map(i => ({ ...i, plate: vehicleById[i.vehicle_id] || '' }));
-  const insHtml = bucketByDate(insItems, 'expiry_date', i => `<tr>
-    <td>${i.plate}</td><td><b>${i.insurance_type || ''}</b></td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
-  </tr>`, ['車號', '險種', '保險公司', '到期日', '剩餘天數']);
+  // 判斷一台車是「車輛」還是「板架」：優先看 vehicles.vehicle_category，
+  // 少數幾筆舊資料這欄是空的，就退而用車種名稱判斷（半拖車／貨櫃架／40' 都算板架）
+  const isTrailer = (v) => {
+    if (!v) return false;
+    if (v.vehicle_category === '板架') return true;
+    if (v.vehicle_category === '車輛') return false;
+    return /半拖車|貨櫃架|^40/.test(String(v.vehicle_type || ''));
+  };
+  const attachVehicle = (row) => {
+    const v = vehicleById[row.vehicle_id] || {};
+    return { ...row, plate: v.plate_number || '', vehicle_type: v.vehicle_type || '', is_trailer: isTrailer(v) };
+  };
 
-  // ---------- 2. 其他車輛文件到期（行照/滅火器/濾毒罐/自主管理標章/行車記錄器，驗車已排除） ----------
-  const docItems = docs
-    .filter(d => d.expiry_date)
-    .map(d => ({ ...d, plate: vehicleById[d.vehicle_id] || '' }));
-  const docHtml = bucketByDate(docItems, 'expiry_date', d => `<tr>
-    <td>${d.plate}</td><td><b>${d.doc_type}</b></td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
-  </tr>`, ['車號', '文件類型', '到期日', '剩餘天數']);
+  // ---------- 1. 保險到期（車輛與板架分開，車輛在上） ----------
+  const insItems = insurance.filter(i => i.expiry_date).map(attachVehicle);
+  const insRow = i => `<tr>
+    <td><b>${i.plate}</b></td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
+  </tr>`;
+  const insHeaders = ['車號', '險種', '保險公司', '到期日', '剩餘天數'];
+  const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', insRow, insHeaders);
+  const insTrailerHtml = bucketByDate(insItems.filter(i => i.is_trailer), 'expiry_date', insRow, insHeaders);
+
+  // ---------- 2. 其他文件到期（行照/滅火器/濾毒罐/自主管理標章/行車記錄器，驗車已排除） ----------
+  const docItems = docs.filter(d => d.expiry_date).map(attachVehicle);
+  const docRow = d => `<tr>
+    <td><b>${d.plate}</b></td><td>${d.doc_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
+  </tr>`;
+  const docHeaders = ['車號', '文件類型', '到期日', '剩餘天數'];
+  const docVehicleHtml = bucketByDate(docItems.filter(d => !d.is_trailer), 'expiry_date', docRow, docHeaders);
+  const docTrailerHtml = bucketByDate(docItems.filter(d => d.is_trailer), 'expiry_date', docRow, docHeaders);
 
   // ---------- 3. 人員體檢到期 ----------
   const medItems = medExams
@@ -66,12 +81,31 @@ async function main() {
     return;
   }
 
+  // 版面順序：先車輛（保險、文件），再板架（保險、文件），最後人員與儀器
+  const bar = 'style="font-family:sans-serif;border-bottom:2px solid #9d6d2f;"';
+  const groupBar = 'style="font-family:sans-serif;background:#5a4632;color:#fff;padding:8px 12px;margin:26px 0 4px;border-radius:4px;"';
+
   let html = `<h2 style="font-family:sans-serif;">其餘物品到期通知（${todayISO()}）</h2>`;
-  if (insHtml) html += `<h3 style="font-family:sans-serif;border-bottom:2px solid #9d6d2f;">🚗 車輛保險到期</h3>${insHtml}`;
-  if (docHtml) html += `<h3 style="font-family:sans-serif;border-bottom:2px solid #9d6d2f;">📄 車輛文件到期（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${docHtml}`;
-  if (medHtml) html += `<h3 style="font-family:sans-serif;border-bottom:2px solid #9d6d2f;">🏥 人員體檢到期</h3>${medHtml}`;
-  if (calHtml) html += `<h3 style="font-family:sans-serif;border-bottom:2px solid #9d6d2f;">🔬 儀器校正到期</h3>${calHtml}`;
-  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號寄送，資料來源：順亞運通車隊儀表板。板架驗車已在另一份「板架/保養/證照」通知信裡，這裡不重複列出。</p>`;
+
+  if (insVehicleHtml || docVehicleHtml) {
+    html += `<h2 ${groupBar}>🚛 車輛</h2>`;
+    if (insVehicleHtml) html += `<h3 ${bar}>🚗 車輛保險到期</h3>${insVehicleHtml}`;
+    if (docVehicleHtml) html += `<h3 ${bar}>📄 車輛文件到期（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${docVehicleHtml}`;
+  }
+
+  if (insTrailerHtml || docTrailerHtml) {
+    html += `<h2 ${groupBar}>🚚 板架</h2>`;
+    if (insTrailerHtml) html += `<h3 ${bar}>🚗 板架保險到期</h3>${insTrailerHtml}`;
+    if (docTrailerHtml) html += `<h3 ${bar}>📄 板架文件到期（行照等）</h3>${docTrailerHtml}`;
+  }
+
+  if (medHtml || calHtml) {
+    html += `<h2 ${groupBar}>🏥 人員與儀器</h2>`;
+    if (medHtml) html += `<h3 ${bar}>🏥 人員體檢到期</h3>${medHtml}`;
+    if (calHtml) html += `<h3 ${bar}>🔬 儀器校正到期</h3>${calHtml}`;
+  }
+
+  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號寄送，資料來源：順亞運通車隊儀表板。驗車已在另一份「車輛／板架／證照」通知信裡，這裡不重複列出。</p>`;
 
   const recipients = NOTIFY_EMAIL.split(',').map(s => s.trim()).filter(Boolean);
   await sendEmail(RESEND_API_KEY, recipients, `【到期通知】其餘物品 共 ${totalCount} 筆項目`, html);
