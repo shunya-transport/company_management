@@ -1,5 +1,5 @@
 // 每月1號、15號執行：板架到期（合約+驗車）、車輛保養（大/小保養）、人員證照到期
-const { todayISO, daysUntil, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
+const { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -17,7 +17,7 @@ const MAINTENANCE_STANDARDS = require('./maintenance_standards.json');
 async function main() {
   console.log('開始檢查板架／保養／證照到期狀況...', todayISO());
 
-  const [leases, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees] = await Promise.all([
+  const [leases, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,maintenance_model,current_mileage'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
@@ -26,35 +26,46 @@ async function main() {
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employee_trainings?no_expiry=eq.false&select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name'),
+    // 證照名稱存在 training_types 這張對照表，employee_trainings 只存 type_id，
+    // 沒撈這張表的話信裡只會有證照號碼，看不出是危運、六小時還是堆高機
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'training_types?select=type_id,type_name'),
   ]);
 
   const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v]));
   const lesseeById = Object.fromEntries(lessees.map(l => [l.lessee_id, l.lessee_name]));
   const employeeById = Object.fromEntries(employees.map(e => [e.employee_id, e.name]));
+  const trainingTypeById = Object.fromEntries(trainingTypes.map(t => [t.type_id, t.type_name]));
+
+  // 舊資料裡有「職業職業聯結車駕照」這種重複字的名稱，顯示前先修掉
+  const cleanTypeName = n => String(n || '').replace(/^職業職業/, '職業').trim();
 
   // ---------- 1. 板架出租合約到期 ----------
   const leaseItems = leases
     .filter(l => l.lease_end_date)
     .map(l => ({ ...l, plate: (vehicleById[l.vehicle_id] || {}).plate_number || '', lessee_name: lesseeById[l.lessee_id] || '' }));
   const leaseHtml = bucketByDate(leaseItems, 'lease_end_date', l => `<tr>
-    <td>${l.plate}</td><td>${l.lessee_name}</td><td>${l.lease_end_date}</td>
-  </tr>`);
+    <td>${l.plate}</td><td>${l.lessee_name}</td><td>${l.lease_end_date}</td><td>${daysLabel(l.lease_end_date)}</td>
+  </tr>`, ['板架車號', '承租廠商', '合約到期日', '剩餘天數']);
 
   // ---------- 2. 板架驗車到期 ----------
   const inspectionItems = docs
     .filter(d => d.expiry_date)
     .map(d => ({ ...d, plate: (vehicleById[d.vehicle_id] || {}).plate_number || '' }));
   const inspectionHtml = bucketByDate(inspectionItems, 'expiry_date', d => `<tr>
-    <td>${d.plate}</td><td>${d.expiry_date}</td>
-  </tr>`);
+    <td>${d.plate}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
+  </tr>`, ['板架車號', '驗車到期日', '剩餘天數']);
 
   // ---------- 3. 人員證照到期 ----------
   const certItems = trainings
     .filter(t => t.expiry_date)
-    .map(t => ({ ...t, employee_name: employeeById[t.employee_id] || '' }));
+    .map(t => ({
+      ...t,
+      employee_name: employeeById[t.employee_id] || '',
+      type_name: cleanTypeName(trainingTypeById[t.type_id]) || '（未分類）',
+    }));
   const certHtml = bucketByDate(certItems, 'expiry_date', t => `<tr>
-    <td>${t.employee_name}</td><td>${t.certificate_no || ''}</td><td>${t.expiry_date}</td>
-  </tr>`);
+    <td>${t.employee_name}</td><td><b>${t.type_name}</b></td><td>${t.certificate_no || ''}</td><td>${t.expiry_date}</td><td>${daysLabel(t.expiry_date)}</td>
+  </tr>`, ['姓名', '證照／訓練名稱', '證照號碼', '到期日', '剩餘天數']);
 
   // ---------- 4. 車輛保養（里程制，不適用90/60/30天分段，改用剩餘里程判斷） ----------
   const latestMileage = {};

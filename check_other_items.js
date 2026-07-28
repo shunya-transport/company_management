@@ -1,5 +1,5 @@
 // 每月1號執行：其餘物品到期（車輛保險、車輛文件、體檢、儀器校正）
-const { todayISO, daysUntil, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
+const { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -31,30 +31,30 @@ async function main() {
     .filter(i => i.expiry_date)
     .map(i => ({ ...i, plate: vehicleById[i.vehicle_id] || '' }));
   const insHtml = bucketByDate(insItems, 'expiry_date', i => `<tr>
-    <td>${i.plate}</td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td>
-  </tr>`);
+    <td>${i.plate}</td><td><b>${i.insurance_type || ''}</b></td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
+  </tr>`, ['車號', '險種', '保險公司', '到期日', '剩餘天數']);
 
   // ---------- 2. 其他車輛文件到期（行照/滅火器/濾毒罐/自主管理標章/行車記錄器，驗車已排除） ----------
   const docItems = docs
     .filter(d => d.expiry_date)
     .map(d => ({ ...d, plate: vehicleById[d.vehicle_id] || '' }));
   const docHtml = bucketByDate(docItems, 'expiry_date', d => `<tr>
-    <td>${d.plate}</td><td>${d.doc_type}</td><td>${d.expiry_date}</td>
-  </tr>`);
+    <td>${d.plate}</td><td><b>${d.doc_type}</b></td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
+  </tr>`, ['車號', '文件類型', '到期日', '剩餘天數']);
 
   // ---------- 3. 人員體檢到期 ----------
   const medItems = medExams
     .filter(m => m.next_due_date)
     .map(m => ({ ...m, employee_name: employeeById[m.employee_id] || '' }));
   const medHtml = bucketByDate(medItems, 'next_due_date', m => `<tr>
-    <td>${m.employee_name}</td><td>${m.next_due_date}</td>
-  </tr>`);
+    <td>${m.employee_name}</td><td>${m.next_due_date}</td><td>${daysLabel(m.next_due_date)}</td>
+  </tr>`, ['姓名', '下次體檢到期日', '剩餘天數']);
 
   // ---------- 4. 儀器校正到期（直接用 instruments 表上的下次校正日期欄位） ----------
   const calItems = instruments.filter(i => i.next_calibration_due);
   const calHtml = bucketByDate(calItems, 'next_calibration_due', i => `<tr>
-    <td>${i.brand_model || ''}</td><td>${i.asset_no || ''}</td><td>${i.storage_area || ''}</td><td>${i.next_calibration_due}</td>
-  </tr>`);
+    <td><b>${i.brand_model || ''}</b></td><td>${i.asset_no || ''}</td><td>${i.storage_area || ''}</td><td>${i.next_calibration_due}</td><td>${daysLabel(i.next_calibration_due)}</td>
+  </tr>`, ['廠牌型號', '財產編號', '存放位置', '下次校正到期日', '剩餘天數']);
 
   const totalCount = insItems.filter(i => daysUntil(i.expiry_date) <= 90).length
     + docItems.filter(d => daysUntil(d.expiry_date) <= 90).length

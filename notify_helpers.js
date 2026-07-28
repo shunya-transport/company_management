@@ -9,9 +9,19 @@ function daysUntil(dateStr) {
   return Math.round((d - t) / 86400000);
 }
 
+// 把剩餘天數寫成看得懂的文字
+function daysLabel(dateStr) {
+  const d = daysUntil(dateStr);
+  if (d < 0) return `已逾期 ${-d} 天`;
+  if (d === 0) return '今天到期';
+  return `剩 ${d} 天`;
+}
+
 // 把一批「有到期日」的項目，依剩餘天數分成：已逾期 / 30天內 / 31~60天內 / 61~90天內
 // items 需要有 expiryField 指定的日期欄位；renderRow(item) 回傳這筆的 <tr>...</tr> HTML
-function bucketByDate(items, expiryField, renderRow) {
+// headers 是選填的欄位標題陣列，例如 ['姓名','證照名稱','證照號碼','到期日']，
+// 有給的話每個表格上方會多一列標題，收信的人才知道每一欄是什麼
+function bucketByDate(items, expiryField, renderRow, headers) {
   const buckets = { overdue: [], within30: [], within60: [], within90: [] };
   items.forEach(item => {
     const dateVal = item[expiryField];
@@ -25,11 +35,15 @@ function bucketByDate(items, expiryField, renderRow) {
   });
   Object.values(buckets).forEach(arr => arr.sort((a, b) => (a[expiryField] || '').localeCompare(b[expiryField] || '')));
 
+  const headHtml = (headers && headers.length)
+    ? `<tr style="background:#f2ece5;">${headers.map(h => `<th style="text-align:left;white-space:nowrap;">${h}</th>`).join('')}</tr>`
+    : '';
+
   const sectionHtml = (title, arr, color) => {
     if (arr.length === 0) return '';
     return `<h4 style="font-family:sans-serif;color:${color};margin:14px 0 6px;">${title}（共${arr.length}筆）</h4>
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%;" border="1" cellpadding="6">
-        ${arr.map(renderRow).join('')}
+        ${headHtml}${arr.map(renderRow).join('')}
       </table>`;
   };
 
@@ -73,4 +87,4 @@ async function sendEmail(RESEND_API_KEY, recipients, subject, html) {
   }
 }
 
-module.exports = { todayISO, daysUntil, bucketByDate, supaFetch, sendEmail };
+module.exports = { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail };
