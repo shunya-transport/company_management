@@ -252,6 +252,7 @@
       <button data-tab="trainings">外訓証照</button>
       <button data-tab="mileage">車輛里程統計</button>
       <button data-tab="workhour">工時統計</button>
+      <button data-tab="contacts">通訊錄</button>
     </nav>
     <div class="sidebar-motto">
       <strong>安全 準時 用心</strong>
@@ -1470,6 +1471,50 @@
       </div>
     </div>
   </div>
+
+
+      <div id="contacts" class="panel">
+        <div class="card">
+          <h2>人員通訊資料<span class="count-badge" id="cb_emp_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;">資料與車隊管理系統同步（唯讀，不能在這裡修改）。「X」代表沒有配發公務機。依區別分組：新竹／台南／台中。</div>
+          <div class="form-grid no-print" style="margin-bottom:10px;">
+            <label>搜尋<input id="cb_search" placeholder="姓名、職稱、門號、分機都可以"></label>
+            <label>區別<select id="cb_region"><option value="all">全部區別</option></select></label>
+          </div>
+          <div class="table-scroll" style="max-height:640px;">
+            <table id="cbRosterTable" style="font-size:12.5px;">
+              <thead><tr><th>區別</th><th>職稱</th><th>姓名</th><th>門號(簡)</th><th>PNP碼</th><th>行動電話</th><th>(家)電話</th></tr></thead>
+              <tbody id="cbRosterBody"></tbody>
+            </table>
+          </div>
+          <div class="no-print" style="margin-top:10px;">
+            <button class="btn ghost" id="cb_export_roster">匯出 CSV</button>
+            <button class="btn ghost" id="cb_print">列印本頁</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>桌機分機表<span class="count-badge" id="cb_ext_count"></span></h2>
+          <div class="table-scroll" style="max-height:520px;">
+            <table style="font-size:12.5px;">
+              <thead><tr><th>區別</th><th>名稱</th><th>分機</th></tr></thead>
+              <tbody id="cbExtBody"></tbody>
+            </table>
+          </div>
+          <button class="btn ghost no-print" id="cb_export_ext" style="margin-top:10px;">匯出 CSV</button>
+        </div>
+
+        <div class="card">
+          <h2>車場辦公室電話</h2>
+          <div class="table-scroll">
+            <table style="font-size:12.5px;">
+              <thead><tr><th>區別</th><th>TEL</th><th>FAX</th><th>地址</th></tr></thead>
+              <tbody id="cbLocBody"></tbody>
+            </table>
+          </div>
+          <button class="btn ghost no-print" id="cb_export_loc" style="margin-top:10px;">匯出 CSV</button>
+        </div>
+      </div>
 
   <div id="workhour" class="panel">
     <div class="card">
@@ -5793,7 +5838,170 @@ function renderAll(){
   renderInternalYearStatus();
   renderExternalStatusTable();
   renderTrainingLogTable();
+  renderContactsAll();
   renderDatalists();
+}
+
+
+// ==================== 通訊錄（唯讀查詢版）====================
+// 資料與車隊管理系統共用同一份 Supabase 資料表，這裡只讀不寫。
+const CB_REGION_ORDER = ['新竹','台南','台中'];
+
+function cbRegionRank(r){
+  const i = CB_REGION_ORDER.indexOf(r || '');
+  return i < 0 ? CB_REGION_ORDER.length : i;
+}
+
+function cbNormPhone(s){
+  const d = String(s == null ? '' : s).replace(/\D/g, '');
+  if(d.length === 10 && d.charAt(0) === '0') return d.slice(0,4) + '-' + d.slice(4,7) + '-' + d.slice(7);
+  return String(s == null ? '' : s).trim();
+}
+
+function cbCsv(name, head, rows){
+  const lines = [head].concat(rows).map(r => r.map(x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"').join(','));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// 這個檔案本來就載入了人員／公務機／分機／辦公室資料，通訊錄直接沿用，不重抓。
+function cbPhoneOf(empId){
+  return (STATE.companyPhones||[]).find(p => p.employee_id === empId && p.status === '使用中') || null;
+}
+
+function cbSelRegion(){ const el = document.getElementById('cb_region'); return el ? el.value : 'all'; }
+function cbSearch(){ const el = document.getElementById('cb_search'); return el ? el.value.trim() : ''; }
+
+function cbRosterRows(){
+  const rg = cbSelRegion(), q = cbSearch();
+  let list = (STATE.employees||[]).filter(e => e.status === '在職');
+  if(rg !== 'all') list = list.filter(e => (e.region||'') === rg);
+  if(q){
+    list = list.filter(e => {
+      const p = cbPhoneOf(e.id);
+      return [e.name, e.position_name, e.employee_no, e.phone, e.home_phone,
+              p ? p.phone_no : '', p ? p.pnp_code : ''].some(v => String(v||'').includes(q));
+    });
+  }
+  return list.sort((a,b) => cbRegionRank(a.region) - cbRegionRank(b.region) ||
+                            String(a.employee_no||'').localeCompare(String(b.employee_no||'')));
+}
+
+function cbRosterCells(e){
+  const p = cbPhoneOf(e.id);
+  return [e.region||'', e.position_name||'', e.name||'',
+          p ? (p.phone_no||'') : 'X', p ? (p.pnp_code||'X') : 'X',
+          cbNormPhone(e.phone||''), e.home_phone||''];
+}
+
+function renderCbRoster(){
+  const tb = document.getElementById('cbRosterBody');
+  if(!tb) return;
+  const rows = cbRosterRows();
+  const gap = 'height:14px;border:none;padding:0;';
+  let html = '';
+  let last = null;
+  rows.forEach(e => {
+    if((e.region||'') !== last){
+      if(last !== null) html += `<tr><td style="${gap}" colspan="7"></td></tr>`;
+      last = e.region||'';
+    }
+    html += '<tr>' + cbRosterCells(e).map((c,i) =>
+      `<td${i===2 ? ' style="font-weight:600;white-space:nowrap;"' : ''}>${esc(c)}</td>`).join('') + '</tr>';
+  });
+  tb.innerHTML = html || '<tr><td colspan="7" class="empty">沒有符合條件的人員</td></tr>';
+  const cnt = document.getElementById('cb_emp_count');
+  if(cnt) cnt.textContent = '共 ' + rows.length + ' 人';
+}
+
+function cbExtRows(){
+  const rg = cbSelRegion(), q = cbSearch();
+  let list = (STATE.officeExtensions||[]).slice();
+  if(rg !== 'all') list = list.filter(x => (x.region||'') === rg);
+  if(q) list = list.filter(x => [x.display_name, x.ext_no, x.region].some(v => String(v||'').includes(q)));
+  return list.sort((a,b) => cbRegionRank(a.region) - cbRegionRank(b.region) || (a.sort_order||0) - (b.sort_order||0));
+}
+
+function renderCbExt(){
+  const tb = document.getElementById('cbExtBody');
+  if(!tb) return;
+  const rows = cbExtRows();
+  const gap = 'height:14px;border:none;padding:0;';
+  let html = '';
+  let last = null;
+  rows.forEach(x => {
+    if((x.region||'') !== last){
+      if(last !== null) html += `<tr><td style="${gap}" colspan="3"></td></tr>`;
+      last = x.region||'';
+    }
+    html += `<tr><td>${esc(x.region||'')}</td><td>${esc(x.display_name||'')}</td><td style="font-weight:600;">${esc(x.ext_no||'')}</td></tr>`;
+  });
+  tb.innerHTML = html || '<tr><td colspan="3" class="empty">尚未登錄分機</td></tr>';
+  const cnt = document.getElementById('cb_ext_count');
+  if(cnt) cnt.textContent = '共 ' + rows.length + ' 筆';
+}
+
+function cbLocRows(){
+  const rg = cbSelRegion();
+  let list = (STATE.officeLocations||[]).slice();
+  if(rg !== 'all') list = list.filter(l => (l.region||'') === rg);
+  return list.sort((a,b) => cbRegionRank(a.region) - cbRegionRank(b.region));
+}
+
+function renderCbLoc(){
+  const tb = document.getElementById('cbLocBody');
+  if(!tb) return;
+  const rows = cbLocRows();
+  tb.innerHTML = rows.map(l => `<tr>
+      <td style="white-space:nowrap;font-weight:600;">${esc(l.region||'')}</td>
+      <td style="white-space:nowrap;">${esc(l.tel||'')}</td>
+      <td style="white-space:nowrap;">${esc(l.fax||'')}</td>
+      <td>${esc(l.address||'')}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="empty">尚未登錄</td></tr>';
+}
+
+function renderCbSelects(){
+  const sel = document.getElementById('cb_region');
+  if(!sel) return;
+  const regions = [...new Set((STATE.employees||[]).map(e => e.region).filter(Boolean))]
+    .sort((a,b) => cbRegionRank(a) - cbRegionRank(b));
+  const keep = sel.value;
+  sel.innerHTML = '<option value="all">全部區別</option>' +
+    regions.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+  if(regions.includes(keep)) sel.value = keep;
+}
+
+function renderContactsAll(){
+  if(!document.getElementById('cbRosterBody')) return;
+  renderCbSelects();
+  cbRerender();
+}
+
+function cbRerender(){ renderCbRoster(); renderCbExt(); renderCbLoc(); }
+
+if(document.getElementById('cbRosterBody')){
+  document.getElementById('cb_search').addEventListener('input', cbRerender);
+  document.getElementById('cb_region').addEventListener('change', cbRerender);
+  document.getElementById('cb_print').addEventListener('click', () => window.print());
+  document.getElementById('cb_export_roster').addEventListener('click', () => {
+    const out = [];
+    let last = null;
+    cbRosterRows().forEach(e => {
+      if((e.region||'') !== last){ if(last !== null) out.push(['','','','','','','']); last = e.region||''; }
+      out.push(cbRosterCells(e));
+    });
+    cbCsv('DGTT人員通訊資料', ['區別','職稱','姓名','門號(簡)','PNP碼','行動電話','(家)電話'], out);
+  });
+  document.getElementById('cb_export_ext').addEventListener('click', () =>
+    cbCsv('桌機分機表', ['區別','名稱','分機'],
+      cbExtRows().map(x => [x.region||'', x.display_name||'', x.ext_no||''])));
+  document.getElementById('cb_export_loc').addEventListener('click', () =>
+    cbCsv('車場辦公室電話', ['區別','TEL','FAX','地址'],
+      cbLocRows().map(l => [l.region||'', l.tel||'', l.fax||'', l.address||''])));
 }
 
 document.querySelectorAll('nav button').forEach(btn => {
