@@ -250,6 +250,7 @@
       <button data-tab="maintenance">車輛維護</button>
       <button data-tab="leases">板架管理</button>
       <button data-tab="trainings">外訓証照</button>
+      <button data-tab="mileage">車輛里程統計</button>
     </nav>
     <div class="sidebar-motto">
       <strong>安全 準時 用心</strong>
@@ -1329,6 +1330,65 @@
     </div>
   </div>
 
+  <div id="mileage" class="panel">
+    <div class="card">
+      <h2>登錄里程</h2>
+      <div class="muted" style="margin-bottom:10px;">每台車每月月底登錄一次。「里程表讀數」是儀表板上的累積數字，「當月行駛」是這個月實際跑的公里數。兩個只填一個也可以：只填讀數時，系統會用上個月的讀數幫你算出當月行駛；只填當月行駛時，系統會用上個月讀數加上去。</div>
+      <div class="form-grid">
+        <label>車號<select id="ml_plate"></select></label>
+        <label>登錄月份<input id="ml_month" type="month"></label>
+        <label>里程表讀數(km)<input id="ml_odo" type="number" placeholder="儀表板上的累積數字"></label>
+        <label>當月行駛(km)<input id="ml_km" type="number" placeholder="留空自動計算"></label>
+        <label>備註<input id="ml_notes" placeholder="選填，例：里程表更換歸零"></label>
+      </div>
+      <button class="btn" id="ml_add">登錄里程</button>
+    </div>
+
+    <div class="card">
+      <h2>公里數統計表<span class="count-badge" id="ml_stat_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">格式比照行政系統的「公里數統計表」：一列一台車一個年度，1～12月欄位是當月實際行駛的公里數。</div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>年份<select id="ml_year"></select></label>
+        <label>車場<select id="ml_base"><option value="all">全部車場</option></select></label>
+        <label>行號<select id="ml_company"><option value="all">全部行號</option></select></label>
+        <label>搜尋車號<input id="ml_search" placeholder="輸入車號"></label>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>車場</th><th>行號</th><th>廠牌</th><th>噸數</th><th>1月</th><th>2月</th><th>3月</th><th>4月</th><th>5月</th><th>6月</th><th>7月</th><th>8月</th><th>9月</th><th>10月</th><th>11月</th><th>12月</th><th>合計</th></tr></thead>
+          <tbody id="mlStatBody"></tbody>
+          <tfoot id="mlStatFoot"></tfoot>
+        </table>
+      </div>
+      <button class="btn ghost no-print" id="ml_export" style="margin-top:10px;">匯出 CSV</button>
+    </div>
+
+    <div class="card">
+      <h2>平均公里數（季）</h2>
+      <div class="muted" style="margin-bottom:10px;">同一個年度與篩選條件，換算成每季合計與每月平均，方便比較車輛之間的使用強度。</div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>車場</th><th>行號</th><th>第一季</th><th>第二季</th><th>第三季</th><th>第四季</th><th>全年合計</th><th>月平均</th></tr></thead>
+          <tbody id="mlQuarterBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>單車里程趨勢</h2>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>車號<select id="ml_trend_plate"></select></label>
+      </div>
+      <div style="height:260px;margin-bottom:14px;"><canvas id="mlTrendChart"></canvas></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>月份</th><th>里程表讀數</th><th>當月行駛</th><th>較上月</th><th>備註</th><th></th></tr></thead>
+          <tbody id="mlTrendBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="stock" class="panel">
     <div class="card">
       <h2>新增庫存品項</h2>
@@ -1467,6 +1527,8 @@
             <option value="equipment_list">物品領用清單</option>
             <option value="pension_contribution">勞健保提撥計算表</option>
             <option value="personal_leave">個人請假清單</option>
+            <option value="employer_ins_el">僱主險（團保）名冊 — 已加保人員（EL 格式）</option>
+            <option value="employer_ins_en">僱主險（團保）名冊 — 其他人員（EN 格式）</option>
           </select>
         </label>
         <label>人員
@@ -1477,6 +1539,7 @@
       <div class="form-grid" id="form_extra"></div>
       <button class="btn" id="form_generate">產生表單</button>
       <button class="btn ghost no-print" id="form_print" style="display:none;">列印</button>
+      <button class="btn ghost no-print" id="form_export_csv" style="display:none;">匯出 Excel（CSV）</button>
     </div>
 
     <div id="printArea"></div>
@@ -3945,6 +4008,8 @@ const EXTRA_FIELDS = {
     {id:'ex_handler', label:'經辦人', type:'text', placeholder:'選填'},
     {id:'ex_tsmc', label:'台積用（打勾）', type:'select', opts:['否','是']}
   ],
+  employer_ins_el: [{id:'ex_roster_date', label:'名冊製表日期（空白＝今天）', type:'date'}],
+  employer_ins_en: [{id:'ex_roster_date', label:'名冊製表日期（空白＝今天）', type:'date'}],
   personal_leave: [
     {id:'ex_leave_mode', label:'顯示方式', type:'select', opts:['依月','依年']},
     {id:'ex_leave_month', label:'月份（顯示方式選"依月"時使用）', type:'month'},
@@ -3993,7 +4058,9 @@ function generateForm(){
   const empId = parseInt(document.getElementById('form_emp').value);
   const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
   const e = list.find(x => x.id === empId);
-  if(!e && type !== 'pension_contribution'){ alert('請先選擇人員'); return; }
+  // 名冊類表單是整份人員清單，不需要先選人
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en'];
+  if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
   const company = e ? (e.company_name || '＿＿＿＿＿＿＿＿＿＿') : '＿＿＿＿＿＿＿＿＿＿';
   const blank = '＿＿＿＿＿＿＿＿＿＿';
@@ -4156,8 +4223,77 @@ function generateForm(){
       </table>`;
   }
 
-  document.getElementById('printArea').innerHTML = `<div style="max-width:640px;margin:0 auto;padding:40px;border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
+  if(type === 'employer_ins_el' || type === 'employer_ins_en'){
+    bodyHtml = buildEmployerInsRoster(type);
+  }
+
+  const wide = ROSTER_TYPES.includes(type);
+  document.getElementById('printArea').innerHTML = `<div style="max-width:${wide?'900px':'640px'};margin:0 auto;padding:40px;border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
   document.getElementById('form_print').style.display = 'inline-block';
+  document.getElementById('form_export_csv').style.display = wide ? 'inline-block' : 'none';
+}
+
+// ===== 僱主險（團保）人員名冊 =====
+// EL＝已加保人員，欄位比照利福僱主EL名冊（序號/日期/姓名/出生年月日/身分證字號）
+// EN＝其他人員（未加保、不需加保），欄位比照利福僱主EN名冊（序號/姓名/出生年月日/身分證字號），沒有日期欄
+function employerInsRosterRows(type){
+  const onDuty = STATE.employees.filter(e => e.status === '在職');
+  if(type === 'employer_ins_el'){
+    return onDuty.filter(e => e.employer_ins_status === '已加保')
+      .sort((a,b) => (a.employer_ins_date||'9999').localeCompare(b.employer_ins_date||'9999')
+                     || (a.employee_no||'').localeCompare(b.employee_no||''));
+  }
+  return onDuty.filter(e => e.employer_ins_status !== '已加保')
+    .sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
+}
+
+// 名冊上的日期一律用民國格式（例：113/9/4），跟保險公司那邊的表格一致
+function rocSlash(dateStr){
+  if(!dateStr) return '';
+  const p = String(dateStr).slice(0,10).split('-');
+  if(p.length < 3) return dateStr;
+  return `${parseInt(p[0],10)-1911}/${parseInt(p[1],10)}/${parseInt(p[2],10)}`;
+}
+
+function employerInsRosterCsv(type){
+  const rows = employerInsRosterRows(type);
+  const el = (type === 'employer_ins_el');
+  const head = el ? ['序號','日期','姓名','出生年月日','身分證字號'] : ['序號','姓名','出生年月日','身分證字號'];
+  const lines = [head.join(',')];
+  rows.forEach((e,i) => {
+    const cells = el
+      ? [i+1, rocSlash(e.employer_ins_date), e.name, rocSlash(e.birth_date), e.id_number]
+      : [i+1, e.name, rocSlash(e.birth_date), e.id_number];
+    lines.push(cells.map(x => `"${String(x==null?'':x).replace(/"/g,'""')}"`).join(','));
+  });
+  return lines.join('\r\n');
+}
+
+function buildEmployerInsRoster(type){
+  const rows = employerInsRosterRows(type);
+  const el = (type === 'employer_ins_el');
+  const stamp = (extraVal('ex_roster_date') || todayISO()).replace(/-/g,'');
+  const title = el ? `利福僱主EL人員名冊${stamp}` : `利福僱主EN人員名冊${stamp}`;
+  const sub = el ? '本名冊為目前在職且已加保雇主險（團保）之人員。'
+                 : '本名冊為目前在職、未加保雇主險（團保）之其他人員。';
+  const th = 'padding:6px 8px;border:1px solid #333;background:#f5f5f5;text-align:center;font-weight:700;';
+  const td = 'padding:6px 8px;border:1px solid #333;text-align:center;';
+  const head = el
+    ? `<th style="${th}">序號</th><th style="${th}">日期</th><th style="${th}">姓名</th><th style="${th}">出生年月日</th><th style="${th}">身分證字號</th>`
+    : `<th style="${th}">序號</th><th style="${th}">姓名</th><th style="${th}">出生年月日</th><th style="${th}">身分證字號</th>`;
+  const cols = el ? 5 : 4;
+  const body = rows.map((e,i) => el
+    ? `<tr><td style="${td}">${i+1}</td><td style="${td}">${esc(rocSlash(e.employer_ins_date))}</td><td style="${td}">${esc(e.name||'')}</td><td style="${td}">${esc(rocSlash(e.birth_date))}</td><td style="${td}">${esc(e.id_number||'')}</td></tr>`
+    : `<tr><td style="${td}">${i+1}</td><td style="${td}">${esc(e.name||'')}</td><td style="${td}">${esc(rocSlash(e.birth_date))}</td><td style="${td}">${esc(e.id_number||'')}</td></tr>`
+  ).join('') || `<tr><td style="${td}" colspan="${cols}">目前沒有符合條件的人員</td></tr>`;
+  return `
+    <h2 style="text-align:center;letter-spacing:3px;margin-bottom:6px;">${esc(title)}</h2>
+    <div style="text-align:center;font-size:12px;color:#666;margin-bottom:18px;">${esc(sub)}共 ${rows.length} 人</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div style="margin-top:14px;font-size:11.5px;color:#888;">製表日期：${todayROC()}</div>`;
 }
 
 const CURRENT_ROC_YEAR = new Date().getFullYear() - 1911;
@@ -5049,6 +5185,7 @@ function renderAll(){
   renderStatsVehicleSelects();
   renderFfStats();
   renderTlStats();
+  renderMileageAll();
   renderUreaTable();
   renderUreaStats();
   renderAdminStaticTables();
@@ -5351,6 +5488,260 @@ document.getElementById('ar_search').addEventListener('input', renderAdminReward
 document.getElementById('ar_type_filter').addEventListener('change', renderAdminRewards);
 
 document.getElementById('ff_search').addEventListener('input', renderFfTable);
+
+// ===== 車輛里程統計 =====
+// 資料來源：vehicle_mileage_logs。mileage 是里程表讀數（累積），monthly_km 才是當月實際行駛公里數。
+// 舊資料的當月行駛原本只寫在 notes 的「當月行駛 N km」文字裡，已用 SQL 抽成 monthly_km 欄位，
+// 這裡仍保留讀 notes 的後備解析，避免有漏網之魚顯示成空白。
+let mlTrendChartInstance = null;
+
+function mlMonthlyKm(r){
+  if(r.monthly_km !== null && r.monthly_km !== undefined && r.monthly_km !== '') return Number(r.monthly_km);
+  const m = /當月行駛\s*([\d,]+)\s*km/.exec(r.notes || '');
+  if(m) return parseInt(m[1].replace(/,/g,''), 10);
+  return null;
+}
+
+function mlVehicleOf(r){
+  return STATE.vehicles.find(v => v.id === r.vehicle_id) || STATE.vehicles.find(v => v.plate === r.plate) || null;
+}
+
+// 統計表要用到的車輛屬性，找不到就留空白，不要讓整列消失
+function mlAttrs(v){
+  return {
+    base: (v && v.base_location) || '',
+    company: (v && v.company_name) || '',
+    brand: (v && v.brand) || '',
+    tons: (v && v.load_capacity != null) ? v.load_capacity : ''
+  };
+}
+
+function renderMileageSelects(){
+  const powered = STATE.vehicles.filter(v => v.vehicle_category !== '板架');
+  const opts = powered.map(v => `<option value="${esc(v.plate)}">${esc(v.plate)}</option>`).join('');
+  const sel = document.getElementById('ml_plate');
+  const trendSel = document.getElementById('ml_trend_plate');
+  if(!sel || !trendSel) return;
+  const keep = sel.value, keepTrend = trendSel.value;
+  sel.innerHTML = opts;
+  // 趨勢圖只列出真的有里程資料的車
+  const withData = [...new Set(STATE.mileageLogs.map(r => { const v = mlVehicleOf(r); return v ? v.plate : r.plate; }).filter(Boolean))].sort();
+  trendSel.innerHTML = withData.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  if(keep) sel.value = keep;
+  if(withData.includes(keepTrend)) trendSel.value = keepTrend;
+
+  const years = [...new Set(STATE.mileageLogs.map(r => (r.log_date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const ySel = document.getElementById('ml_year');
+  const keepYear = ySel.value;
+  ySel.innerHTML = years.map(y => `<option value="${esc(y)}">${esc(y)} 年（民國 ${parseInt(y,10)-1911}）</option>`).join('');
+  if(years.includes(keepYear)) ySel.value = keepYear;
+
+  const bases = [...new Set(STATE.vehicles.map(v => v.base_location).filter(Boolean))].sort();
+  const bSel = document.getElementById('ml_base');
+  const keepBase = bSel.value;
+  bSel.innerHTML = `<option value="all">全部車場</option>` + bases.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  if(keepBase) bSel.value = keepBase;
+
+  const comps = [...new Set(STATE.vehicles.map(v => v.company_name).filter(Boolean))].sort();
+  const cSel = document.getElementById('ml_company');
+  const keepComp = cSel.value;
+  cSel.innerHTML = `<option value="all">全部行號</option>` + comps.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if(keepComp) cSel.value = keepComp;
+}
+
+// 依畫面上的年份/車場/行號/車號條件，整理成「一列一台車、1~12月」的表
+function mileageMatrix(){
+  const year = document.getElementById('ml_year').value;
+  const base = document.getElementById('ml_base').value;
+  const comp = document.getElementById('ml_company').value;
+  const q = document.getElementById('ml_search').value.trim();
+  const byVehicle = new Map();
+  STATE.mileageLogs.forEach(r => {
+    if(!r.log_date || r.log_date.slice(0,4) !== year) return;
+    const v = mlVehicleOf(r);
+    const plate = (v && v.plate) || r.plate || '（未對應車號）';
+    const a = mlAttrs(v);
+    if(base !== 'all' && a.base !== base) return;
+    if(comp !== 'all' && a.company !== comp) return;
+    if(q && !plate.includes(q)) return;
+    if(!byVehicle.has(plate)) byVehicle.set(plate, {plate, ...a, months: Array(12).fill(null)});
+    const row = byVehicle.get(plate);
+    const mi = parseInt(r.log_date.slice(5,7), 10) - 1;
+    const km = mlMonthlyKm(r);
+    if(km !== null && mi >= 0 && mi < 12) row.months[mi] = (row.months[mi] || 0) + km;
+  });
+  const rows = [...byVehicle.values()].sort((a,b)=>a.plate.localeCompare(b.plate));
+  rows.forEach(r => { r.total = r.months.reduce((s,x)=>s+(x||0),0); });
+  return rows;
+}
+
+function renderMileageStatTable(){
+  const rows = mileageMatrix();
+  document.getElementById('ml_stat_count').textContent = `共 ${rows.length} 台`;
+  document.getElementById('mlStatBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.plate)}</td>
+      <td>${esc(r.base)}</td>
+      <td>${esc(r.company)}</td>
+      <td>${esc(r.brand)}</td>
+      <td>${esc(String(r.tons))}</td>
+      ${r.months.map(m => `<td style="text-align:right;">${m === null ? '' : m.toLocaleString()}</td>`).join('')}
+      <td style="text-align:right;font-weight:700;">${r.total.toLocaleString()}</td>
+    </tr>`).join('') || `<tr><td colspan="18" class="empty">這個年度沒有符合條件的里程資料</td></tr>`;
+
+  const foot = document.getElementById('mlStatFoot');
+  if(rows.length){
+    const sums = Array.from({length:12}, (_,i) => rows.reduce((s,r)=>s+(r.months[i]||0),0));
+    const grand = sums.reduce((s,x)=>s+x,0);
+    foot.innerHTML = `<tr style="font-weight:700;background:var(--gray-bg);">
+      <td colspan="5">合計（${rows.length} 台）</td>
+      ${sums.map(s=>`<td style="text-align:right;">${s ? s.toLocaleString() : ''}</td>`).join('')}
+      <td style="text-align:right;">${grand.toLocaleString()}</td>
+    </tr>`;
+  }else{
+    foot.innerHTML = '';
+  }
+  renderMileageQuarterTable(rows);
+}
+
+function renderMileageQuarterTable(rows){
+  const body = document.getElementById('mlQuarterBody');
+  if(!body) return;
+  body.innerHTML = rows.map(r => {
+    const q = [0,1,2,3].map(i => r.months.slice(i*3, i*3+3).reduce((s,x)=>s+(x||0),0));
+    const filled = r.months.filter(m => m !== null).length;
+    const avg = filled ? Math.round(r.total / filled) : 0;
+    return `<tr>
+      <td>${esc(r.plate)}</td>
+      <td>${esc(r.base)}</td>
+      <td>${esc(r.company)}</td>
+      ${q.map(x=>`<td style="text-align:right;">${x ? x.toLocaleString() : ''}</td>`).join('')}
+      <td style="text-align:right;font-weight:700;">${r.total.toLocaleString()}</td>
+      <td style="text-align:right;">${avg ? avg.toLocaleString() : ''}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty">這個年度沒有符合條件的里程資料</td></tr>`;
+}
+
+function renderMileageTrend(){
+  const sel = document.getElementById('ml_trend_plate');
+  if(!sel) return;
+  const plate = sel.value;
+  const rows = STATE.mileageLogs
+    .filter(r => { const v = mlVehicleOf(r); return ((v && v.plate) || r.plate) === plate; })
+    .slice().sort((a,b)=>(a.log_date||'').localeCompare(b.log_date||''));
+
+  document.getElementById('mlTrendBody').innerHTML = rows.slice().reverse().map((r,i,arr) => {
+    const km = mlMonthlyKm(r);
+    const prev = arr[i+1] ? mlMonthlyKm(arr[i+1]) : null;
+    return `<tr>
+      <td>${esc((r.log_date||'').slice(0,7))}</td>
+      <td style="text-align:right;">${r.mileage != null ? Number(r.mileage).toLocaleString() : ''}</td>
+      <td style="text-align:right;">${km !== null ? km.toLocaleString() : '—'}</td>
+      <td>${(km !== null && prev !== null) ? changePill(km, prev) : ''}</td>
+      <td>${esc(r.notes||'')}</td>
+      <td><button class="del-btn" data-del-mileage="${r.id}">刪除</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">這台車尚無里程資料</td></tr>`;
+
+  const ctx = document.getElementById('mlTrendChart');
+  if(mlTrendChartInstance){ mlTrendChartInstance.destroy(); mlTrendChartInstance = null; }
+  if(typeof Chart !== 'undefined' && ctx && rows.length){
+    const last24 = rows.slice(-24);
+    mlTrendChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: last24.map(r => (r.log_date||'').slice(0,7)),
+        datasets: [{ label: '當月行駛 (km)', data: last24.map(r => mlMonthlyKm(r)), backgroundColor: '#C0562A' }]
+      },
+      options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ title:{display:true, text:'公里'} } } }
+    });
+  }
+}
+
+function renderMileageAll(){
+  if(!document.getElementById('ml_year')) return;
+  renderMileageSelects();
+  renderMileageStatTable();
+  renderMileageTrend();
+}
+
+document.getElementById('ml_year').addEventListener('change', renderMileageStatTable);
+document.getElementById('ml_base').addEventListener('change', renderMileageStatTable);
+document.getElementById('ml_company').addEventListener('change', renderMileageStatTable);
+document.getElementById('ml_search').addEventListener('input', renderMileageStatTable);
+document.getElementById('ml_trend_plate').addEventListener('change', renderMileageTrend);
+
+document.getElementById('ml_export').addEventListener('click', () => {
+  const rows = mileageMatrix();
+  const year = document.getElementById('ml_year').value;
+  const head = ['車號','車場','行號','廠牌','噸數','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'];
+  const lines = [head.join(',')];
+  rows.forEach(r => {
+    lines.push([r.plate, r.base, r.company, r.brand, r.tons, ...r.months.map(m => m===null?'':m), r.total]
+      .map(x => `"${String(x==null?'':x).replace(/"/g,'""')}"`).join(','));
+  });
+  // 加 BOM，Excel 開起來中文才不會變亂碼
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `公里數統計表_${year}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('ml_add').addEventListener('click', async () => {
+  const plate = document.getElementById('ml_plate').value;
+  const month = document.getElementById('ml_month').value; // YYYY-MM
+  if(!plate || !month){ alert('請選擇車號並填寫登錄月份'); return; }
+  const vehicleId = plateToVehicleId(plate);
+  if(!vehicleId){ alert('找不到這台車的車輛編號，請先到車輛管理確認'); return; }
+  // 一律存成該月最後一天，跟既有資料格式一致
+  const y = parseInt(month.slice(0,4),10), m = parseInt(month.slice(5,7),10);
+  const logDate = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2,'0')}`;
+
+  const odoIn = document.getElementById('ml_odo').value;
+  const kmIn = document.getElementById('ml_km').value;
+  if(odoIn === '' && kmIn === ''){ alert('里程表讀數與當月行駛至少要填一個'); return; }
+
+  // 找同一台車上一個月份的紀錄，用來互推里程表讀數與當月行駛
+  const prev = STATE.mileageLogs
+    .filter(r => r.vehicle_id === vehicleId && r.log_date && r.log_date < logDate)
+    .sort((a,b)=>(b.log_date||'').localeCompare(a.log_date||''))[0];
+
+  let odo = odoIn === '' ? null : parseInt(odoIn,10);
+  let km = kmIn === '' ? null : parseInt(kmIn,10);
+  if(odo === null && prev && prev.mileage != null) odo = prev.mileage + km;
+  if(km === null && prev && prev.mileage != null && odo != null) km = odo - prev.mileage;
+  if(odo === null){ alert('這台車還沒有上個月的里程表讀數，第一次登錄請填寫里程表讀數'); return; }
+
+  const existing = STATE.mileageLogs.find(r => r.vehicle_id === vehicleId && r.log_date === logDate);
+  const notes = document.getElementById('ml_notes').value.trim() || null;
+  if(existing){
+    if(!confirm(`${plate} ${month} 已經有登錄過（讀數 ${existing.mileage}），要覆蓋嗎？`)) return;
+    existing.mileage = odo;
+    existing.monthly_km = km;
+    if(notes) existing.notes = notes;
+  }else{
+    STATE.mileageLogs.push({
+      id: nextId(STATE.mileageLogs), vehicle_id: vehicleId, plate,
+      log_date: logDate, mileage: odo, monthly_km: km, notes
+    });
+  }
+  await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
+  ['ml_odo','ml_km','ml_notes'].forEach(id=>document.getElementById(id).value='');
+  renderAll();
+});
+
+document.getElementById('mlTrendBody').addEventListener('click', async (e) => {
+  const id = e.target.getAttribute('data-del-mileage');
+  if(id){
+    if(!confirm('確定要刪除這筆里程登錄嗎？')) return;
+    STATE.mileageLogs = STATE.mileageLogs.filter(r => String(r.id) !== id);
+    await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
+    renderAll();
+  }
+});
+
 document.getElementById('ff_add').addEventListener('click', async () => {
   const plate = document.getElementById('ff_plate').value;
   const date = document.getElementById('ff_date').value;
@@ -6155,6 +6546,19 @@ document.getElementById('staffModal').addEventListener('click', (e) => {
 
 document.getElementById('form_type').addEventListener('change', () => { renderFormEmpSelect(); renderExtraFields(); });
 document.getElementById('form_generate').addEventListener('click', generateForm);
+document.getElementById('form_export_csv').addEventListener('click', () => {
+  const type = document.getElementById('form_type').value;
+  if(type !== 'employer_ins_el' && type !== 'employer_ins_en') return;
+  const stamp = (extraVal('ex_roster_date') || todayISO()).replace(/-/g,'');
+  const name = (type === 'employer_ins_el' ? '利福僱主EL人員名冊' : '利福僱主EN人員名冊') + stamp + '.csv';
+  // 加 BOM，Excel 開起來中文才不會變亂碼
+  const blob = new Blob(['\ufeff' + employerInsRosterCsv(type)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 document.getElementById('form_print').addEventListener('click', () => {
   const content = document.getElementById('printArea').innerHTML;
   const printWin = window.open('', '_blank');
