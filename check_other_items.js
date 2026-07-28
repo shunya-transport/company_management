@@ -71,10 +71,21 @@ async function main() {
   </tr>`, ['姓名', '下次體檢到期日', '剩餘天數']);
 
   // ---------- 4. 儀器校正到期（直接用 instruments 表上的下次校正日期欄位） ----------
+  // 目前持有人：優先用 instruments.current_holder_id 對回員工；
+  // 有幾台舊資料沒填這欄，人名是寫在 notes 備註裡（例如「沈明逸」），就退而用備註，
+  // 但像「台中備用」這種不是人名的字要排除掉，其餘一律標成「未登記」提醒補資料。
+  const NOT_A_NAME = /備用|報廢|維修|保養|庫存|待|借|公用|辦公|倉|廠|站|車/;
+  const holderOf = (i) => {
+    const byId = employeeById[i.current_holder_id];
+    if (byId) return byId;
+    const note = String(i.notes || '').trim();
+    if (/^[一-龥]{2,4}$/.test(note) && !NOT_A_NAME.test(note)) return `${note}（依備註）`;
+    return '<span style="color:#B3261E;">⚠ 未登記</span>';
+  };
   const calItems = instruments.filter(i => i.next_calibration_due);
   const calHtml = bucketByDate(calItems, 'next_calibration_due', i => `<tr>
-    <td><b>${i.brand_model || ''}</b></td><td>${i.asset_no || ''}</td><td>${i.storage_area || ''}</td><td>${i.next_calibration_due}</td><td>${daysLabel(i.next_calibration_due)}</td>
-  </tr>`, ['廠牌型號', '財產編號', '存放位置', '下次校正到期日', '剩餘天數']);
+    <td><b>${i.brand_model || ''}</b></td><td>${i.asset_no || ''}</td><td>${holderOf(i)}</td><td>${i.storage_area || ''}</td><td>${i.next_calibration_due}</td><td>${daysLabel(i.next_calibration_due)}</td>
+  </tr>`, ['廠牌型號', '財產編號', '目前持有人', '存放位置', '下次校正到期日', '剩餘天數']);
 
   const totalCount = insItems.filter(i => daysUntil(i.expiry_date) <= 90).length
     + medItems.filter(m => daysUntil(m.next_due_date) <= 90).length
