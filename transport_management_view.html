@@ -340,16 +340,19 @@
       <div class="detail-section">
         <h4>報到辦理事項（直接人員必辦，間接人員可留「不需辦理」）</h4>
         <div class="form-grid">
-          <label>雇主險（團保）
+          <label>是否加保雇主險（團保）
             <select id="sf_empins_status">
               <option value="未加保">未加保</option>
               <option value="已加保">已加保</option>
               <option value="不需加保">不需加保</option>
             </select>
           </label>
-          <label>團保加保日期<input id="sf_empins_date" type="date"></label>
+          <label>團保加保日期
+            <input id="sf_empins_date" type="date">
+            <span style="font-size:11px;font-weight:400;color:var(--text-3);white-space:nowrap;">可早於到職日，照保單填</span>
+          </label>
           <label>團保保險公司<input id="sf_empins_insurer" placeholder="選填"></label>
-          <label>血壓酒測機登錄
+          <label>是否登錄血壓酒測機
             <select id="sf_bp_status">
               <option value="未登錄">未登錄</option>
               <option value="已登錄">已登錄</option>
@@ -3858,14 +3861,14 @@ function renderStaffModalEdit(e){
       <label>體檢日期<input id="se_medical" type="date" value="${esc(e.medical_exam_date||'')}"></label>
       <label>司機上線日期<input id="se_online" type="date" value="${esc(e.online_date||'')}"></label>
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
-      <label>雇主險（團保）
+      <label>是否加保雇主險（團保）
         <select id="se_empins_status">
           ${['未加保','已加保','不需加保'].map(v=>`<option value="${v}" ${(e.employer_ins_status||'未加保')===v?'selected':''}>${v}</option>`).join('')}
         </select>
       </label>
       <label>團保加保日期<input id="se_empins_date" type="date" value="${esc(e.employer_ins_date||'')}"></label>
       <label>團保保險公司<input id="se_empins_insurer" value="${esc(e.employer_ins_insurer||'')}"></label>
-      <label>血壓酒測機登錄
+      <label>是否登錄血壓酒測機
         <select id="se_bp_status">
           ${['未登錄','已登錄','不需登錄'].map(v=>`<option value="${v}" ${(e.bp_alcohol_status||'未登錄')===v?'selected':''}>${v}</option>`).join('')}
         </select>
