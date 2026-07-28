@@ -380,7 +380,7 @@
             <option value="退保">退保</option>
           </select>
         </label>
-        <label>投保金額<input id="ic_salary" type="number" placeholder="例：38200"></label>
+        <label style="display:none;">投保金額<input id="ic_salary" type="number" placeholder="例：38200"></label>
         <label>生效日期<input id="ic_date" type="date"></label>
         <label>親屬加保
           <select id="ic_has_dep">
@@ -399,7 +399,7 @@
       <div class="toolbar"><input id="ic_search" placeholder="搜尋姓名"></div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>公司別</th><th>異動類別</th><th>投保金額</th><th>生效日期</th><th>親屬加保</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>公司別</th><th>異動類別</th><th>生效日期</th><th>親屬加保</th><th></th></tr></thead>
           <tbody id="icTableBody"></tbody>
         </table>
       </div>
@@ -1040,7 +1040,7 @@
         <label>年月<input id="lvgrid_month" type="month"></label>
       </div>
       <div class="table-scroll" style="max-height:600px;">
-        <table id="leaveGridTable" style="font-size:11.5px;">
+        <table id="leaveGridTable" style="font-size:10.5px;">
           <thead><tr id="leaveGridHead"></tr></thead>
           <tbody id="leaveGridBody"></tbody>
         </table>
@@ -3122,12 +3122,11 @@ function renderIcTable(){
       <td>${esc(emp?emp.name:'')}${isHistory?' <span class="pill gray">已離職</span>':''}</td>
       <td>${esc(emp?emp.company_name:'')}</td>
       <td>${esc(c.change_type||'')}</td>
-      <td>${c.insured_salary??''}</td>
       <td>${esc(c.effective_date||'')}</td>
       <td>${c.has_dependents ? `<span class="pill green">是（${c.dependents_count??0}人）</span>` : `<span class="pill gray">否</span>`}</td>
       <td><button class="del-btn" data-del-ic="${c.id}">刪除</button></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="7" class="empty">尚無投保資料</td></tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">尚無投保資料</td></tr>`;
 }
 
 function renderCompanyInsuredCount(){
@@ -3963,8 +3962,8 @@ function renderStaffModalView(e){
 
     <div class="detail-section">
       <h4>勞健保異動紀錄</h4>
-      ${empInsurance.length ? `<table><thead><tr><th>異動別</th><th>生效日期</th><th>投保薪資</th><th>親屬加保</th></tr></thead><tbody>` +
-        empInsurance.map(i=>`<tr><td>${esc(i.change_type)}</td><td>${esc(i.effective_date||'—')}</td><td>${esc(i.insured_salary||'—')}</td><td>${i.has_dependents ? `是（${i.dependents_count??0}人）` : '否'}</td></tr>`).join('') + `</tbody></table>`
+      ${empInsurance.length ? `<table><thead><tr><th>異動別</th><th>生效日期</th><th>親屬加保</th></tr></thead><tbody>` +
+        empInsurance.map(i=>`<tr><td>${esc(i.change_type)}</td><td>${esc(i.effective_date||'—')}</td><td>${i.has_dependents ? `是（${i.dependents_count??0}人）` : '否'}</td></tr>`).join('') + `</tbody></table>`
         : '<div class="muted">無勞健保異動紀錄</div>'}
     </div>
 
@@ -4432,9 +4431,19 @@ function csvLines(head, rows){
   return out.join('\r\n');
 }
 
+function contactRosterRowsWithGaps(){
+  const out = [];
+  let last = null;
+  contactRosterRows().forEach(e => {
+    if(e.region !== last){ if(last !== null) out.push(['','','','','','','']); last = e.region; }
+    out.push(contactRosterCells(e));
+  });
+  return out;
+}
+
 function contactRosterCsv(){
   return csvLines(['區別','職稱','姓名','門號(簡)','PNP碼','行動電話','(家)電話'],
-                  contactRosterRows().map(contactRosterCells));
+                  contactRosterRowsWithGaps());
 }
 
 function buildContactRoster(){
@@ -4442,10 +4451,12 @@ function buildContactRoster(){
   const th = 'padding:5px 6px;border:1px solid #333;background:#f5f5f5;text-align:center;font-weight:700;';
   const td = 'padding:5px 6px;border:1px solid #333;text-align:center;';
   const rows = contactRosterRows();
+  const gap = 'height:14px;border:none;padding:0;';
   let body = '';
   let lastRegion = null;
   rows.forEach(e => {
     if(e.region !== lastRegion){
+      if(lastRegion !== null) body += `<tr><td style="${gap}" colspan="7"></td></tr>`;
       lastRegion = e.region;
       body += `<tr><th style="${th}">區別</th><th style="${th}">職稱</th><th style="${th}">姓名</th><th style="${th}">門號(簡)</th><th style="${th}">PNP碼</th><th style="${th}">行動電話</th><th style="${th}">(家)電話</th></tr>`;
     }
@@ -4483,10 +4494,12 @@ function buildPhoneSignoff(){
   const th = 'padding:6px 8px;border:1px solid #333;background:#f5f5f5;text-align:center;font-weight:700;';
   const td = 'padding:6px 8px;border:1px solid #333;text-align:center;';
   const rows = phoneSignoffRows();
+  const gap = 'height:14px;border:none;padding:0;';
   let body = '';
   let lastRegion = null;
   rows.forEach(r => {
     if(r.e.region !== lastRegion){
+      if(lastRegion !== null) body += `<tr><td style="${gap}" colspan="6"></td></tr>`;
       lastRegion = r.e.region;
       body += `<tr><th style="${th}">區別</th><th style="${th}">職稱</th><th style="${th}">姓名</th><th style="${th}">門號(簡)</th><th style="${th}">PNP碼</th><th style="${th}">公務機簽收</th></tr>`;
     }
@@ -5464,8 +5477,8 @@ function renderLeaveGrid(){
   const [year, month] = monthInput.value.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  const headCells = ['<th style="position:sticky;left:0;background:#FBF5EC;z-index:2;">姓名</th>'];
-  for(let d=1; d<=daysInMonth; d++){ headCells.push(`<th style="text-align:center;min-width:13px;">${d}</th>`); }
+  const headCells = ['<th style="position:sticky;left:0;background:#FBF5EC;z-index:2;white-space:nowrap;padding:4px 8px;width:1%;">姓名</th>'];
+  for(let d=1; d<=daysInMonth; d++){ headCells.push(`<th style="text-align:center;min-width:11px;padding:4px 1px;font-size:10px;">${d}</th>`); }
   document.getElementById('leaveGridHead').innerHTML = headCells.join('');
 
   const activeEmployees = STATE.employees.slice().sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
@@ -5480,10 +5493,10 @@ function renderLeaveGrid(){
         return s && en && dateStr >= s && dateStr <= en;
       });
       cells.push(match
-        ? `<td style="text-align:center;color:var(--accent-dark);font-weight:700;font-size:9px;" title="${esc(match.leave_type)}${match.notes?'：'+esc(match.notes):''}">●</td>`
-        : `<td></td>`);
+        ? `<td style="text-align:center;color:var(--accent-dark);font-weight:700;font-size:16px;line-height:1;padding:2px 0;" title="${esc(match.leave_type)}${match.notes?'：'+esc(match.notes):''}">●</td>`
+        : `<td style="padding:2px 0;"></td>`);
     }
-    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(e.name)}</td>${cells.join('')}</tr>`;
+    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;white-space:nowrap;padding:2px 8px;width:1%;">${esc(e.name)}</td>${cells.join('')}</tr>`;
   }).join('') || `<tr><td class="empty">目前沒有在職人員</td></tr>`;
 }
 
