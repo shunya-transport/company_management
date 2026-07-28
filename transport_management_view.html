@@ -304,7 +304,10 @@
     <div class="card">
       <h2>新增人員</h2>
       <div class="form-grid">
-        <label>員工編號<input id="sf_no" placeholder="例：D0200"></label>
+        <label>員工編號（自動產生）
+          <input id="sf_no" readonly tabindex="-1" style="background:var(--gray-bg);font-weight:700;color:var(--navy-900);letter-spacing:.05em;cursor:default;">
+          <span style="font-size:11px;font-weight:400;color:var(--text-3);white-space:nowrap;">目前最新 <b id="sf_latest_no">—</b></span>
+        </label>
         <label>姓名<input id="sf_name" placeholder="必填"></label>
         <label>部門
           <select id="sf_dept"></select>
@@ -333,6 +336,29 @@
       <div class="detail-section">
         <h4>必繳文件（新進人員報到時登記，未繳交項目後續可在人員清單補登）</h4>
         <div class="form-grid" id="sf_checklist"></div>
+      </div>
+      <div class="detail-section">
+        <h4>報到辦理事項（直接人員必辦，間接人員可留「不需辦理」）</h4>
+        <div class="form-grid">
+          <label>雇主險（團保）
+            <select id="sf_empins_status">
+              <option value="未加保">未加保</option>
+              <option value="已加保">已加保</option>
+              <option value="不需加保">不需加保</option>
+            </select>
+          </label>
+          <label>團保加保日期<input id="sf_empins_date" type="date"></label>
+          <label>團保保險公司<input id="sf_empins_insurer" placeholder="選填"></label>
+          <label>血壓酒測機登錄
+            <select id="sf_bp_status">
+              <option value="未登錄">未登錄</option>
+              <option value="已登錄">已登錄</option>
+              <option value="不需登錄">不需登錄</option>
+            </select>
+          </label>
+          <label>血壓酒測機登錄日期<input id="sf_bp_date" type="date"></label>
+          <label>血壓酒測機代號<input id="sf_bp_code" placeholder="選填，機台上的人員代號"></label>
+        </div>
       </div>
       <button class="btn" id="sf_add">新增人員</button>
     </div>
@@ -1777,6 +1803,24 @@ function nextOvertimeRegNo(){
     if(m) maxSeq = Math.max(maxSeq, parseInt(m[1],10));
   });
   return 'H110' + String(maxSeq+1).padStart(WIDTH,'0');
+}
+function latestEmployeeNo(){
+  // 目前已經用掉的最後一個員工編號（含離職人員，避免重複發號）
+  const all = [...STATE.employees, ...STATE.employeesHistory];
+  let maxNum = -1, latest = null;
+  all.forEach(e => {
+    const m = /^([A-Za-z]+)(\d+)$/.exec(e.employee_no||'');
+    if(m && parseInt(m[2]) > maxNum){ maxNum = parseInt(m[2]); latest = e.employee_no; }
+  });
+  return latest;
+}
+function renderStaffNoBox(){
+  // 員工編號跟請假登錄編號一樣：系統自動接號、唯讀，不讓人手動輸入
+  const next = nextEmployeeNo();
+  const elNo = document.getElementById('sf_no');
+  const elLatest = document.getElementById('sf_latest_no');
+  if(elNo) elNo.value = next;
+  if(elLatest) elLatest.textContent = latestEmployeeNo() || '（尚無紀錄）';
 }
 function nextEmployeeNo(){
   const all = [...STATE.employees, ...STATE.employeesHistory];
@@ -3700,6 +3744,8 @@ function renderStaffModalView(e){
       <dt>體檢日期</dt><dd>${esc(e.medical_exam_date||'—')}</dd>
       <dt>司機上線日期</dt><dd>${esc(e.online_date||'—')}</dd>
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
+      <dt>雇主險（團保）</dt><dd>${esc(e.employer_ins_status||'—')}${e.employer_ins_date?'（'+esc(e.employer_ins_date)+' 加保）':''}${e.employer_ins_insurer?' '+esc(e.employer_ins_insurer):''}</dd>
+      <dt>血壓酒測機</dt><dd>${esc(e.bp_alcohol_status||'—')}${e.bp_alcohol_date?'（'+esc(e.bp_alcohol_date)+' 登錄）':''}${e.bp_alcohol_code?' 代號 '+esc(e.bp_alcohol_code):''}</dd>
       <dt>勞退自提比例</dt><dd>${(() => { const p = STATE.pensionElections.find(x=>x.employee_id===empId); return p && p.self_contribution_rate ? p.self_contribution_rate+'%' : '未自提'; })()}</dd>
     </dl>
 
@@ -3812,6 +3858,20 @@ function renderStaffModalEdit(e){
       <label>體檢日期<input id="se_medical" type="date" value="${esc(e.medical_exam_date||'')}"></label>
       <label>司機上線日期<input id="se_online" type="date" value="${esc(e.online_date||'')}"></label>
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
+      <label>雇主險（團保）
+        <select id="se_empins_status">
+          ${['未加保','已加保','不需加保'].map(v=>`<option value="${v}" ${(e.employer_ins_status||'未加保')===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </label>
+      <label>團保加保日期<input id="se_empins_date" type="date" value="${esc(e.employer_ins_date||'')}"></label>
+      <label>團保保險公司<input id="se_empins_insurer" value="${esc(e.employer_ins_insurer||'')}"></label>
+      <label>血壓酒測機登錄
+        <select id="se_bp_status">
+          ${['未登錄','已登錄','不需登錄'].map(v=>`<option value="${v}" ${(e.bp_alcohol_status||'未登錄')===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </label>
+      <label>血壓酒測機登錄日期<input id="se_bp_date" type="date" value="${esc(e.bp_alcohol_date||'')}"></label>
+      <label>血壓酒測機代號<input id="se_bp_code" value="${esc(e.bp_alcohol_code||'')}"></label>
       <label>勞退自提比例(%)<input id="se_pension_rate" type="number" step="0.5" min="0" max="6" value="${esc((STATE.pensionElections.find(p=>p.employee_id===e.id)||{}).self_contribution_rate||0)}"></label>
     </div>
     <button class="btn" id="staffModalSaveBtn">儲存</button>
@@ -3837,6 +3897,12 @@ function renderStaffModalEdit(e){
     e.medical_exam_date = document.getElementById('se_medical').value || null;
     e.online_date = document.getElementById('se_online').value || null;
     e.access_card_no = document.getElementById('se_card').value.trim();
+    e.employer_ins_status = document.getElementById('se_empins_status').value;
+    e.employer_ins_date = document.getElementById('se_empins_date').value || null;
+    e.employer_ins_insurer = document.getElementById('se_empins_insurer').value.trim() || null;
+    e.bp_alcohol_status = document.getElementById('se_bp_status').value;
+    e.bp_alcohol_date = document.getElementById('se_bp_date').value || null;
+    e.bp_alcohol_code = document.getElementById('se_bp_code').value.trim() || null;
     const rate = parseFloat(document.getElementById('se_pension_rate').value) || 0;
     let elec = STATE.pensionElections.find(p => p.employee_id === e.id);
     if(elec){ elec.self_contribution_rate = rate; elec.effective_date = todayISO(); }
@@ -4987,6 +5053,7 @@ function renderAll(){
   renderInsuranceLedger();
   renderAccessCardLedger();
   renderLeaveLedger();
+  renderStaffNoBox();
   renderLeaveRegNoBox();
   renderLeaveTable();
   renderOvertimeTable();
@@ -5744,6 +5811,12 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     address: document.getElementById('sf_address').value.trim(),
     emergency_contact: document.getElementById('sf_emergency_contact').value.trim(),
     emergency_phone: document.getElementById('sf_emergency_phone').value.trim(),
+    employer_ins_status: document.getElementById('sf_empins_status').value,
+    employer_ins_date: document.getElementById('sf_empins_date').value || null,
+    employer_ins_insurer: document.getElementById('sf_empins_insurer').value.trim() || null,
+    bp_alcohol_status: document.getElementById('sf_bp_status').value,
+    bp_alcohol_date: document.getElementById('sf_bp_date').value || null,
+    bp_alcohol_code: document.getElementById('sf_bp_code').value.trim() || null,
     status: '在職'
   });
   document.querySelectorAll('#sf_checklist .new-cl-status').forEach(sel => {
@@ -5752,11 +5825,23 @@ document.getElementById('sf_add').addEventListener('click', async () => {
   });
   await saveState('roster_employees', STATE.employees, true);
   await saveState('doc_checklist', STATE.docChecklist, true);
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('sf_no').value = nextEmployeeNo();
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_empins_date','sf_empins_insurer','sf_bp_date','sf_bp_code'].forEach(id=>document.getElementById(id).value='');
+  applyStaffTypeDefaults();
+  renderStaffNoBox();
   renderNewStaffChecklist();
   renderAll();
 });
+
+// 類別切成間接時，雇主險和血壓酒測機預設帶「不需辦理」，直接人員則帶回「未辦理」
+function applyStaffTypeDefaults(){
+  const t = document.getElementById('sf_type');
+  const ins = document.getElementById('sf_empins_status');
+  const bp = document.getElementById('sf_bp_status');
+  if(!t || !ins || !bp) return;
+  if(t.value === '間接'){ ins.value = '不需加保'; bp.value = '不需登錄'; }
+  else { ins.value = '未加保'; bp.value = '未登錄'; }
+}
+document.getElementById('sf_type').addEventListener('change', applyStaffTypeDefaults);
 
 document.getElementById('staffTableBody').addEventListener('click', async (e) => {
   const viewId = e.target.getAttribute('data-view-staff');
@@ -6289,7 +6374,8 @@ document.getElementById('maintScheduleTableBody').addEventListener('click', asyn
   renderIcSelects();
   renderLeaveSelects();
   renderOvertimeSelects();
-  document.getElementById('sf_no').value = nextEmployeeNo();
+  renderStaffNoBox();
+  applyStaffTypeDefaults();
   renderStockSelects();
   renderInstrumentSelects();
   renderAll();
