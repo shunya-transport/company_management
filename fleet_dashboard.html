@@ -1704,6 +1704,8 @@
             <option value="phone_signoff">公務機領用簽收表</option>
             <option value="phone_pool">待領用門號清單</option>
             <option value="ext_list">桌機分機表</option>
+            <option value="stocktake_vehicle">車用物品盤點表</option>
+            <option value="stocktake_staff">人員物品盤點表</option>
           </select>
         </label>
         <label>人員
@@ -3856,6 +3858,38 @@ function closeLicenseModal(){ document.getElementById('licenseModal').classList.
 // ===== 公務機 ↔ 個人物品連動 =====
 // 公務機一律在「行政資料 → 公務機」登記，這裡只把「使用中」的門號帶進個人物品一起顯示，
 // 不另外存一份，才不會兩邊數字對不起來。
+// ===== 制服尺寸 =====
+// 一般制服／防焰衣／防焰褲都要分 M～4XL，領用時一定要選，才有辦法按尺寸叫貨和盤點
+const UNIFORM_CAT = '制服類';
+const SIZE_ORDER = ['M','L','XL','2XL','3XL','4XL'];
+function sizeRank(s){ const i = SIZE_ORDER.indexOf(String(s||'').toUpperCase()); return i < 0 ? 99 : i; }
+function isUniformType(typeId){
+  const t = STATE.equipmentTypes.find(x => x.id === typeId);
+  return !!t && t.category === UNIFORM_CAT;
+}
+function sizeOfStockItem(itemId){
+  const i = STATE.stockItems.find(x => x.item_id === itemId);
+  return i ? (i.size || '') : '';
+}
+function eqAutoDetail(typeId, stockItemId){
+  const t = STATE.equipmentTypes.find(x => x.id === typeId);
+  const s = stockItemId ? sizeOfStockItem(stockItemId) : '';
+  return (t ? t.name : '') + (s ? ' ' + s : '');
+}
+// 舊資料的制服沒有尺寸，在領用清單直接給一個下拉補選
+function uniformDetailCell(x){
+  const plain = esc(x.item_detail || '');
+  if(!isUniformType(x.type_id)) return plain;
+  const cur = x.stock_item_id ? sizeOfStockItem(x.stock_item_id) : '';
+  if(cur) return plain + ' <span class="pill gray">' + esc(cur) + '</span>';
+  const opts = STATE.stockItems.filter(i => i.type_id === x.type_id)
+    .sort((a,b) => sizeRank(a.size) - sizeRank(b.size))
+    .map(i => `<option value="${i.item_id}">${esc(i.size||'（無尺寸）')}</option>`).join('');
+  if(!opts) return plain + ' <span class="muted">（尚未建立尺寸品項）</span>';
+  return plain + ` <select data-fill-size="${x.id}" style="width:auto;display:inline-block;padding:2px 4px;">`
+       + `<option value="">補選尺寸</option>${opts}</select>`;
+}
+
 function equipPhonesOf(empId){
   return (STATE.companyPhones || []).filter(p => p.employee_id === empId && p.status === '使用中');
 }
@@ -3883,7 +3917,7 @@ function renderEquipModalBody(){
     const statusCls = x.status==='使用中' ? 'green' : x.status==='已歸還' ? 'gray' : 'red';
     return `<tr>
       <td>${esc(type?type.name:'')}${x.stock_item_id?' 📦':''}</td>
-      <td class="muted">${esc(x.item_detail||'')}</td>
+      <td class="muted">${uniformDetailCell(x)}</td>
       <td>${x.quantity??1}</td>
       <td>${esc(x.issue_date||'—')}</td>
       <td><span class="pill ${statusCls}">${esc(x.status)}</span></td>
@@ -3897,22 +3931,33 @@ function renderEquipModalBody(){
     || `<tr><td colspan="6" class="empty">尚無領用紀錄</td></tr>`;
 }
 function renderEquipTypeSelect(){
-  document.getElementById('eq_type').innerHTML = STATE.equipmentTypes.map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
+  // 公務機一律在「行政資料 → 公務機」登記門號，這裡不再開放領用，
+  // 不然同一支手機會有兩筆紀錄，盤點時對不起來
+  document.getElementById('eq_type').innerHTML = STATE.equipmentTypes
+    .filter(t => t.name !== '公務機')
+    .map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
   updateEqStockItemOptions();
 }
 function updateEqStockItemOptions(){
   const typeId = parseInt(document.getElementById('eq_type').value);
-  const matches = STATE.stockItems.filter(i => i.type_id === typeId);
+  const uniform = isUniformType(typeId);
+  const matches = STATE.stockItems.filter(i => i.type_id === typeId)
+    .slice().sort((a,b) => sizeRank(a.size) - sizeRank(b.size));
   const sel = document.getElementById('eq_stock_item');
   if(matches.length === 0){
     sel.innerHTML = '<option value="">此配備尚未建立庫存品項</option>';
-    document.getElementById('eq_stock_hint').textContent = '此配備類型還沒有在「配備庫存」建立追蹤，這筆領用不會影響庫存數字。';
+    document.getElementById('eq_stock_hint').textContent = uniform
+      ? '制服要先在「配備管理 → 新增庫存品項」把 M～4XL 各建一筆，才能登記領用。'
+      : '此配備類型還沒有在「配備庫存」建立追蹤，這筆領用不會影響庫存數字。';
   }else{
-    sel.innerHTML = '<option value="">不連結庫存</option>' + matches.map(i => {
-      const level = computeStockLevel(i.item_id);
-      return `<option value="${i.item_id}">${esc(i.size||'（無尺寸）')} — 目前庫存 ${level}</option>`;
-    }).join('');
-    document.getElementById('eq_stock_hint').textContent = '選擇對應尺寸的庫存品項，領用時會自動從配備庫存扣除，歸還時自動補回。';
+    sel.innerHTML = (uniform ? '<option value="">請選擇尺寸</option>' : '<option value="">不連結庫存</option>')
+      + matches.map(i => {
+          const level = computeStockLevel(i.item_id);
+          return `<option value="${i.item_id}">${esc(i.size||'（無尺寸）')} — 目前庫存 ${level}</option>`;
+        }).join('');
+    document.getElementById('eq_stock_hint').textContent = uniform
+      ? '制服（一般制服／防焰衣／防焰褲）一定要選尺寸，領用時會從該尺寸的庫存扣除。'
+      : '選擇對應尺寸的庫存品項，領用時會自動從配備庫存扣除，歸還時自動補回。';
   }
 }
 function openEquipModal(empId){
@@ -4312,6 +4357,14 @@ const EXTRA_FIELDS = {
   phone_signoff: [{id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'}],
   phone_pool: [{id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'}],
   ext_list: [{id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'}],
+  stocktake_vehicle: [
+    {id:'ex_take_mode', label:'列印方式', type:'select', opts:['空白盤點表','現況數量表']},
+    {id:'ex_roster_date', label:'盤點日期（空白＝今天）', type:'date'}
+  ],
+  stocktake_staff: [
+    {id:'ex_take_mode', label:'列印方式', type:'select', opts:['空白盤點表','現況數量表']},
+    {id:'ex_roster_date', label:'盤點日期（空白＝今天）', type:'date'}
+  ],
   employer_ins_el: [{id:'ex_roster_date', label:'名冊製表日期（空白＝今天）', type:'date'}],
   employer_ins_en: [{id:'ex_roster_date', label:'名冊製表日期（空白＝今天）', type:'date'}],
   personal_leave: [
@@ -4357,13 +4410,172 @@ function todayROC(){
   return `中華民國 ${y} 年 ${d.getMonth()+1} 月 ${d.getDate()} 日`;
 }
 
+
+// ===== 物品盤點表（車用／人員分開）=====
+// 車用＝掛在車上的安全配備，人員＝個人配發的制服、防護具、鞋類等。
+// 兩邊都是「一個品項一列」，數字是全公司總量：帳面合計 ＝ 已配發 ＋ 倉庫庫存。
+// 公務機不列入這兩張表，門號有自己的「公務機領用簽收表」和「待領用門號清單」。
+function stocktakeRows(scope){
+  const isVeh = scope === 'vehicle';
+  const map = new Map();
+  const keyOf = (typeId, size) => typeId + '||' + (size || '');
+  const touch = (typeId, size) => {
+    const k = keyOf(typeId, size);
+    if(!map.has(k)){
+      const t = STATE.equipmentTypes.find(x => x.id === typeId);
+      map.set(k, {
+        typeId: typeId, size: size || '',
+        name: t ? t.name : ('（未知品項 #' + typeId + '）'),
+        category: t ? (t.category || '') : '',
+        holders: 0, issued: 0, stock: 0, hasStockItem: false
+      });
+    }
+    return map.get(k);
+  };
+  const belongs = (t) => {
+    if(!t) return false;
+    if(t.name === '公務機') return false;
+    return isVeh ? (t.category === '車輛安全配備') : (t.category !== '車輛安全配備');
+  };
+
+  // 先放庫存品項（同一個品項不同尺寸各算一列）
+  STATE.stockItems.forEach(i => {
+    const t = STATE.equipmentTypes.find(x => x.id === i.type_id);
+    if(!belongs(t)) return;
+    const r = touch(i.type_id, i.size);
+    r.stock += computeStockLevel(i.item_id);
+    r.hasStockItem = true;
+  });
+
+  // 再疊上已經配發出去的數量
+  if(isVeh){
+    STATE.vehicleEquipment.filter(x => x.status === '使用中').forEach(x => {
+      const t = STATE.equipmentTypes.find(y => y.id === x.type_id);
+      if(!belongs(t)) return;
+      const r = touch(x.type_id, '');
+      r.issued += (x.quantity == null ? 1 : x.quantity);
+      r.holders += 1;
+    });
+  }else{
+    STATE.employeeEquipment.filter(x => x.status === '使用中').forEach(x => {
+      const t = STATE.equipmentTypes.find(y => y.id === x.type_id);
+      if(!belongs(t)) return;
+      const size = x.stock_item_id ? sizeOfStockItem(x.stock_item_id) : '';
+      const r = touch(x.type_id, size);
+      r.issued += (x.quantity == null ? 1 : x.quantity);
+      r.holders += 1;
+    });
+  }
+
+  return [...map.values()]
+    .map(r => ({...r, total: r.issued + r.stock}))
+    .sort((a, b) => String(a.category).localeCompare(String(b.category), 'zh-Hant')
+                 || String(a.name).localeCompare(String(b.name), 'zh-Hant')
+                 || sizeRank(a.size) - sizeRank(b.size));
+}
+
+function stocktakeCells(scope, r, i){
+  const isVeh = scope === 'vehicle';
+  const cells = [i + 1, r.name];
+  if(!isVeh) cells.push(r.size || (isUniformType(r.typeId) ? '未填尺寸' : '—'));
+  cells.push(r.category, r.holders, r.issued, r.stock, r.total);
+  return cells;
+}
+
+function stocktakeHead(scope, blank){
+  const isVeh = scope === 'vehicle';
+  const head = ['序號', '品項'];
+  if(!isVeh) head.push('尺寸');
+  head.push('類別', isVeh ? '配發車數' : '配發人數', isVeh ? '車上數量' : '已配發數量', '庫存數量', '帳面合計');
+  if(blank) head.push('實際數量', '差異', '備註');
+  return head;
+}
+
+function stocktakeIsBlank(){
+  return (extraVal('ex_take_mode') || '空白盤點表') === '空白盤點表';
+}
+
+function stocktakeCsv(scope){
+  const blank = stocktakeIsBlank();
+  const rows = stocktakeRows(scope).map((r, i) => {
+    const c = stocktakeCells(scope, r, i);
+    return blank ? c.concat(['', '', '']) : c;
+  });
+  return csvLines(stocktakeHead(scope, blank), rows);
+}
+
+function buildStocktake(scope){
+  const isVeh = scope === 'vehicle';
+  const blank = stocktakeIsBlank();
+  const rows = stocktakeRows(scope);
+  const head = stocktakeHead(scope, blank);
+  const th = 'padding:6px 8px;border:1px solid #333;background:#f5f5f5;text-align:center;font-weight:700;';
+  const td = 'padding:6px 8px;border:1px solid #333;text-align:center;';
+  const tdL = 'padding:6px 8px;border:1px solid #333;';
+  const tdBlank = 'padding:10px 8px;border:1px solid #333;background:#fffdf6;';
+  const takeDate = extraVal('ex_roster_date') || todayISO();
+
+  const body = rows.map((r, i) => {
+    const c = stocktakeCells(scope, r, i);
+    let html = '<tr>';
+    c.forEach((v, idx) => {
+      const isName = (idx === 1);
+      html += `<td style="${isName ? tdL : td}">${esc(String(v))}</td>`;
+    });
+    if(blank) html += `<td style="${tdBlank}"></td><td style="${tdBlank}"></td><td style="${tdBlank}"></td>`;
+    return html + '</tr>';
+  }).join('') || `<tr><td style="${td}" colspan="${head.length}">目前沒有可盤點的品項</td></tr>`;
+
+  const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const spanBefore = isVeh ? 3 : 4;   // 序號＋品項(＋尺寸)＋類別
+  const foot = rows.length ? `<tr>
+      <td style="${td}font-weight:700;" colspan="${spanBefore}">合計</td>
+      <td style="${td}font-weight:700;">${sum('holders')}</td>
+      <td style="${td}font-weight:700;">${sum('issued')}</td>
+      <td style="${td}font-weight:700;">${sum('stock')}</td>
+      <td style="${td}font-weight:700;">${sum('total')}</td>
+      ${blank ? `<td style="${tdBlank}"></td><td style="${tdBlank}"></td><td style="${tdBlank}"></td>` : ''}
+    </tr>` : '';
+
+  const note = isVeh
+    ? '「配發車數」是有登記這個品項的車輛數，「車上數量」是這些車上的總數量（登記為 0 的代表該車沒有配發）。'
+    : '「配發人數」是目前持有這個品項的人數。制服依尺寸分列，尺寸空白代表舊資料還沒補登，可到「人員管理 → 物品」補選。';
+
+  return `
+    <h2 style="text-align:center;letter-spacing:4px;margin-bottom:6px;">${isVeh ? '車用物品盤點表' : '人員物品盤點表'}</h2>
+    <div style="text-align:center;font-size:12px;color:#666;margin-bottom:14px;">
+      ${blank ? '空白盤點表：請於現場清點後填寫「實際數量」與「差異」' : '現況數量表：系統帳面數字，僅供存查'}
+      　｜　共 ${rows.length} 個品項
+    </div>
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:12px;">
+      <tr>
+        <td style="padding:4px 0;width:34%;">盤點日期：${esc(takeDate)}</td>
+        <td style="padding:4px 0;width:33%;">盤點範圍：${isVeh ? '車輛安全配備' : '個人配發物品'}</td>
+        <td style="padding:4px 0;">列印日期：${todayROC()}</td>
+      </tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr>${head.map(h => `<th style="${th}">${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${body}</tbody>
+      ${foot ? `<tfoot>${foot}</tfoot>` : ''}
+    </table>
+    <div style="margin-top:10px;font-size:11.5px;color:#666;">帳面合計 ＝ 已配發 ＋ 倉庫庫存。${note}公務機不列入本表，請用「公務機領用簽收表」。</div>
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-top:26px;">
+      <tr>
+        <td style="padding:16px 8px;border:1px solid #333;width:33%;">盤點人簽章：</td>
+        <td style="padding:16px 8px;border:1px solid #333;width:33%;">複核：</td>
+        <td style="padding:16px 8px;border:1px solid #333;">主管：</td>
+      </tr>
+    </table>`;
+}
+
 function generateForm(){
   const type = document.getElementById('form_type').value;
   const empId = parseInt(document.getElementById('form_emp').value);
   const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
   const e = list.find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list'];
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff'];
   if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
   const company = e ? (e.company_name || '＿＿＿＿＿＿＿＿＿＿') : '＿＿＿＿＿＿＿＿＿＿';
@@ -4541,6 +4753,8 @@ function generateForm(){
   if(type === 'phone_signoff')  bodyHtml = buildPhoneSignoff();
   if(type === 'phone_pool')     bodyHtml = buildPhonePool();
   if(type === 'ext_list')       bodyHtml = buildExtList();
+  if(type === 'stocktake_vehicle') bodyHtml = buildStocktake('vehicle');
+  if(type === 'stocktake_staff')   bodyHtml = buildStocktake('staff');
 
   const wide = ROSTER_TYPES.includes(type);
   document.getElementById('printArea').innerHTML = `<div style="max-width:${wide?'900px':'640px'};margin:0 auto;padding:40px;border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
@@ -7127,11 +7341,15 @@ document.getElementById('equipModalAdd').addEventListener('click', async () => {
   const typeId = parseInt(document.getElementById('eq_type').value);
   const stockItemId = document.getElementById('eq_stock_item').value ? parseInt(document.getElementById('eq_stock_item').value) : null;
   const qty = parseInt(document.getElementById('eq_qty').value) || 1;
+  if(isUniformType(typeId) && !stockItemId){
+    alert('制服要選尺寸（M～4XL）才能登記領用，不然之後盤點和叫貨都對不出來。');
+    return;
+  }
   const issueDate = document.getElementById('eq_issue').value || todayISO();
   const newRecordId = nextId(STATE.employeeEquipment);
   STATE.employeeEquipment.push({
     id: newRecordId, employee_id: currentEquipEmpId, type_id: typeId, stock_item_id: stockItemId,
-    item_detail: document.getElementById('eq_detail').value.trim(),
+    item_detail: document.getElementById('eq_detail').value.trim() || eqAutoDetail(typeId, stockItemId),
     quantity: qty,
     issue_date: issueDate,
     return_date: null, status: '使用中'
@@ -7149,6 +7367,21 @@ document.getElementById('equipModalAdd').addEventListener('click', async () => {
   document.getElementById('eq_detail').value = '';
   renderEquipModalBody();
   updateEqStockItemOptions();
+  renderAll();
+});
+document.getElementById('equipModalBody').addEventListener('change', async (e) => {
+  const fillId = e.target && e.target.getAttribute ? e.target.getAttribute('data-fill-size') : null;
+  if(!fillId || !e.target.value) return;
+  const rec = STATE.employeeEquipment.find(x => String(x.id) === fillId);
+  if(!rec) return;
+  const itemId = parseInt(e.target.value);
+  const t = STATE.equipmentTypes.find(x => x.id === rec.type_id);
+  const size = sizeOfStockItem(itemId);
+  rec.stock_item_id = itemId;
+  rec.item_detail = (t ? t.name : '') + (size ? ' ' + size : '');
+  // 這是補登舊資料的尺寸，當初領用本來就沒扣過庫存，所以這裡也不產生庫存異動
+  await saveState('employee_equipment', STATE.employeeEquipment, true);
+  renderEquipModalBody();
   renderAll();
 });
 document.getElementById('equipModalBody').addEventListener('click', async (e) => {
@@ -7987,6 +8220,8 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
     phone_signoff:   {name:'公務機領用簽收表',   fn: phoneSignoffCsv},
     phone_pool:      {name:'待領用門號清單',     fn: phonePoolCsv},
     ext_list:        {name:'桌機分機表',         fn: extListCsv},
+    stocktake_vehicle: {name:'車用物品盤點表', fn: () => stocktakeCsv('vehicle')},
+    stocktake_staff:   {name:'人員物品盤點表', fn: () => stocktakeCsv('staff')},
   };
   const b = CSV_BUILDERS[type];
   if(!b) return;
