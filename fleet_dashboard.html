@@ -1128,46 +1128,6 @@
     </div>
 
     <div class="card">
-      <h2>職務代理人</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>部門</th><th>職務</th><th>代理人</th><th>備註</th></tr></thead>
-          <tbody id="adminDeputiesBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>講師資格能力需求表</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>講師類別</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
-          <tbody id="adminInstructorBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>專責人員能力需求表</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>需求部門</th><th>專責名稱</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
-          <tbody id="adminSpecialistBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>年度訓練計劃表</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>月份</th><th>課程名稱</th><th>主辦單位</th><th>講師</th><th>地點</th><th>時數</th></tr></thead>
-          <tbody id="adminPlanBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
       <h2>新增公務機門號</h2>
       <div class="muted" style="margin-bottom:10px;">新登記一支門號。剛新增時狀態是「待領用」，等實際發給人員後再到下面的「配發／收回」把它配給人。門號會自動整理成 09XX-XXX-XXX 的格式。</div>
       <div class="form-grid">
@@ -1246,6 +1206,46 @@
         </table>
       </div>
       <button class="btn" id="ol_save" style="margin-top:10px;">儲存辦公室資料</button>
+    </div>
+
+    <div class="card">
+      <h2>職務代理人</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>部門</th><th>職務</th><th>代理人</th><th>備註</th></tr></thead>
+          <tbody id="adminDeputiesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>講師資格能力需求表</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>講師類別</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
+          <tbody id="adminInstructorBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>專責人員能力需求表</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>需求部門</th><th>專責名稱</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
+          <tbody id="adminSpecialistBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>年度訓練計劃表</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>月份</th><th>課程名稱</th><th>主辦單位</th><th>講師</th><th>地點</th><th>時數</th></tr></thead>
+          <tbody id="adminPlanBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -1469,23 +1469,68 @@
       <div class="muted" style="margin-top:10px;">休息時間規定：繼續作業 4 小時至少休息 1.5 小時（含用膳）；連續作業 2 小時至少休息 0.5 小時以上。</div>
     </div>
 
+    <div class="card no-print">
+      <h2>輸入月度工時里程</h2>
+      <div class="muted" style="margin-bottom:10px;">輸入同一個「民國年＋月份」會直接覆蓋原本那一列，不會重複新增。累計列（例如「113年8月以前累計」）請勾選「這是累計列」，它不會進折線圖、也不會參與「較上期」的比較。</div>
+      <div class="form-grid">
+        <label>民國年<input id="wh_m_year" type="number" step="1" placeholder="例：115"></label>
+        <label>月份<input id="wh_m_month" type="number" step="1" min="1" max="12" placeholder="累計列可空白"></label>
+        <label>期間名稱<input id="wh_m_label" placeholder="留空會自動帶「民國115年6月」"></label>
+        <label>總工時<input id="wh_m_hours" type="number" step="0.1" placeholder="例：4378"></label>
+        <label>總里程 (km)<input id="wh_m_km" type="number" step="1" placeholder="例：108000"></label>
+        <label>這是累計列<select id="wh_m_cum"><option value="0">否（逐月）</option><option value="1">是（累計）</option></select></label>
+      </div>
+      <button class="btn" id="wh_m_add">存入月度資料</button>
+      <button class="btn ghost" id="wh_m_clear">清空欄位</button>
+      <div class="muted" id="wh_m_hint" style="margin-top:10px;"></div>
+    </div>
+
     <div class="card">
       <h2>月度工時 × 里程統計</h2>
-      <div class="muted" style="margin-bottom:10px;">113 年 8 月（含）以前為累計數，之後逐月列出。「每小時里程」＝該期間里程 ÷ 工時，可以看出單位工時的產出效率。</div>
+      <div class="muted" style="margin-bottom:10px;">由近排到遠，最新的月份在最上面；第一列是全期間的「累計總合」。「每小時里程」＝該期間里程 ÷ 工時，可以看出單位工時的產出效率。折線圖仍依時間由左到右排列。</div>
       <div style="height:300px;margin-bottom:16px;"><canvas id="whMonthlyChart"></canvas></div>
       <div class="table-scroll" style="max-height:520px;">
         <table>
-          <thead><tr><th>期間</th><th style="text-align:right;">工時</th><th style="text-align:right;">里程 (km)</th><th style="text-align:right;">每小時里程</th><th>工時較上期</th><th>里程較上期</th></tr></thead>
+          <thead><tr><th>期間</th><th style="text-align:right;">工時</th><th style="text-align:right;">里程 (km)</th><th style="text-align:right;">每小時里程</th><th>工時較上期</th><th>里程較上期</th><th class="no-print"></th></tr></thead>
           <tbody id="whMonthlyBody"></tbody>
-          <tfoot id="whMonthlyFoot"></tfoot>
         </table>
       </div>
       <button class="btn ghost no-print" id="wh_export_monthly" style="margin-top:10px;">匯出 CSV</button>
     </div>
 
+    <div class="card no-print">
+      <h2>輸入每日工時<span class="count-badge" id="wh_in_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">司機清單直接取自「人員管理」的在職人員，區別也會跟著人員資料自動帶入（需要時仍可手動改）。填了上下班時間就會自動算出刷卡時數與工時；「連續累計工時」由系統依日期自動重算，不用自己填。同一位司機的同一天再輸入一次，會覆蓋原本那筆。</div>
+      <div class="form-grid">
+        <label>司機<select id="wh_in_emp"></select></label>
+        <label>區別<select id="wh_in_region"></select></label>
+        <label>日期<input id="wh_in_date" type="date"></label>
+        <label>出勤狀態<select id="wh_in_status"><option value="出勤">出勤</option><option value="休">休</option></select></label>
+        <label>上班時間<input id="wh_in_start" type="time"></label>
+        <label>下班時間<input id="wh_in_end" type="time"></label>
+        <label>下班跨隔日<select id="wh_in_overnight"><option value="0">否</option><option value="1">是</option></select></label>
+        <label>休息時數<input id="wh_in_rest" type="number" step="0.5" placeholder="自動建議"></label>
+        <label>工時（可手動覆寫）<input id="wh_in_hours" type="number" step="0.1" placeholder="自動計算"></label>
+      </div>
+      <button class="btn" id="wh_in_add">存入每日工時</button>
+      <button class="btn ghost" id="wh_in_clear">清空欄位</button>
+      <div class="muted" id="wh_in_hint" style="margin-top:10px;"></div>
+      <div class="toolbar" style="margin-top:14px;">
+        <input id="wh_in_search" placeholder="搜尋司機姓名">
+        <select id="wh_in_period"><option value="all">全部月份</option></select>
+      </div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table>
+          <thead><tr><th>日期</th><th>司機</th><th>區別</th><th>狀態</th><th>上班</th><th>下班</th><th style="text-align:right;">刷卡時數</th><th style="text-align:right;">休息</th><th style="text-align:right;">工時</th><th style="text-align:right;">連續累計</th><th></th></tr></thead>
+          <tbody id="whInputBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" style="margin-top:8px;">為避免畫面過重，這裡最多顯示最新 300 筆，可用搜尋或月份縮小範圍。</div>
+    </div>
+
     <div class="card">
       <h2>每位司機月工時彙總<span class="count-badge" id="wh_driver_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">資料來源是每日刷卡明細。超過單日或每月上限的司機會標紅，接近上限（達 90%）標黃。</div>
+      <div class="muted" style="margin-bottom:10px;">資料來源是每日工時紀錄，區別以「人員管理」的人員資料為準。年月下拉由近排到遠，預設顯示最新的月份。超過單日或每月上限的司機會標紅，接近上限（達 90%）標黃。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年月<select id="wh_period"></select></label>
         <label>區別<select id="wh_region"><option value="all">全部區別</option></select></label>
@@ -1504,7 +1549,7 @@
 
     <div class="card">
       <h2>違規與連續出勤清單<span class="count-badge" id="wh_vio_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">依上面的控管標準自動判定，跟著「年月」「區別」篩選一起變動。連續出勤是跨月計算的，中間有「休」或缺日就會斷開。</div>
+      <div class="muted" style="margin-bottom:10px;">依上面的控管標準自動判定，跟著「年月」「區別」篩選一起變動，並由近排到遠。連續出勤是跨月計算的，中間有「休」或缺日就會斷開。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>類別<select id="wh_vio_type">
           <option value="all">全部類別</option>
@@ -1841,6 +1886,7 @@
   <div class="modal-box">
     <button class="modal-close" id="equipModalClose">✕</button>
     <h3 id="equipModalTitle">物品領用管理</h3>
+    <div class="muted" style="margin-bottom:10px;">底色標示的「📱 公務機」是從「行政資料 → 公務機」自動帶進來的，要配發或收回請到那邊操作，這裡不用重複登記。</div>
     <div class="table-scroll" style="max-height:220px;margin-bottom:16px;">
       <table>
         <thead><tr><th>品項</th><th>細節</th><th>數量</th><th>領用日</th><th>狀態</th><th></th></tr></thead>
@@ -3241,7 +3287,7 @@ function renderStaffTable(){
       <td>${esc(e.region||'')}</td>
       <td>${(() => { const s = checklistSummary(e.id); const cls = s.missing>0 ? 'amber' : 'green'; return `<button class="name-link" data-edit-checklist="${e.id}"><span class="pill ${cls}">${s.done}/${s.total}</span></button>`; })()}</td>
       <td><button class="name-link" data-edit-license="${e.id}">證照 (${STATE.trainings.filter(l=>l.employee_id===e.id).length})</button></td>
-      <td><button class="name-link" data-edit-equip="${e.id}">物品 (${STATE.employeeEquipment.filter(x=>x.employee_id===e.id && x.status==='使用中').length})</button></td>
+      <td><button class="name-link" data-edit-equip="${e.id}">物品 (${equipInUseCount(e.id)})${equipPhonesOf(e.id).length?' 📱':''}</button></td>
       <td><button class="name-link" data-edit-medical="${e.id}">體檢 (${STATE.medicalExamRecords.filter(x=>x.employee_id===e.id).length})</button></td>
       <td><button class="move-btn" data-move-staff="${e.id}">移至歷史</button></td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有人員資料</td></tr>`;
@@ -3769,10 +3815,32 @@ function openLicenseModal(empId){
 }
 function closeLicenseModal(){ document.getElementById('licenseModal').classList.remove('show'); }
 
+// ===== 公務機 ↔ 個人物品連動 =====
+// 公務機一律在「行政資料 → 公務機」登記，這裡只把「使用中」的門號帶進個人物品一起顯示，
+// 不另外存一份，才不會兩邊數字對不起來。
+function equipPhonesOf(empId){
+  return (STATE.companyPhones || []).filter(p => p.employee_id === empId && p.status === '使用中');
+}
+function equipInUseCount(empId){
+  return STATE.employeeEquipment.filter(x => x.employee_id === empId && x.status === '使用中').length
+       + equipPhonesOf(empId).length;
+}
+function equipPhoneDetail(p){
+  return (p.phone_no || '') + (p.pnp_code ? '\u3000PNP ' + p.pnp_code : '') + (p.carrier ? '\u3000' + p.carrier : '');
+}
+
 let currentEquipEmpId = null;
 function renderEquipModalBody(){
   const rows = STATE.employeeEquipment.filter(x => x.employee_id === currentEquipEmpId);
-  document.getElementById('equipModalBody').innerHTML = rows.map(x => {
+  const phoneHtml = equipPhonesOf(currentEquipEmpId).map(p => `<tr style="background:#F7F1E6;">
+      <td style="font-weight:600;">📱 公務機</td>
+      <td class="muted">${esc(equipPhoneDetail(p))}</td>
+      <td>1</td>
+      <td>${esc(p.issue_date||'—')}</td>
+      <td><span class="pill green">使用中</span></td>
+      <td><span class="muted">於「行政資料 → 公務機」管理</span></td>
+    </tr>`).join('');
+  const itemHtml = rows.map(x => {
     const type = STATE.equipmentTypes.find(t => t.id === x.type_id);
     const statusCls = x.status==='使用中' ? 'green' : x.status==='已歸還' ? 'gray' : 'red';
     return `<tr>
@@ -3786,7 +3854,9 @@ function renderEquipModalBody(){
         <button class="del-btn" data-del-equip="${x.id}">刪除</button>
       </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="6" class="empty">尚無領用紀錄</td></tr>`;
+  }).join('');
+  document.getElementById('equipModalBody').innerHTML = (phoneHtml + itemHtml)
+    || `<tr><td colspan="6" class="empty">尚無領用紀錄</td></tr>`;
 }
 function renderEquipTypeSelect(){
   document.getElementById('eq_type').innerHTML = STATE.equipmentTypes.map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
@@ -3993,8 +4063,10 @@ function renderStaffModalView(e){
       <h4>物品領用（使用中）</h4>
       ${(() => {
         const inUse = STATE.employeeEquipment.filter(x => x.employee_id === empId && x.status==='使用中');
-        if(!inUse.length) return '<div class="muted">無領用中的物品</div>';
-        return inUse.map(x => {
+        const phones = equipPhonesOf(empId);
+        if(!inUse.length && !phones.length) return '<div class="muted">無領用中的物品</div>';
+        return phones.map(p => `<div>📱 公務機 ${esc(p.phone_no||'')}${p.pnp_code?'（PNP '+esc(p.pnp_code)+'）':''}：${esc(p.issue_date||'')}</div>`).join('')
+             + inUse.map(x => {
           const type = STATE.equipmentTypes.find(t => t.id === x.type_id);
           return `<div>${esc(type?type.name:'')}${x.item_detail?'（'+esc(x.item_detail)+'）':''} x${x.quantity??1}：${esc(x.issue_date||'')}</div>`;
         }).join('');
@@ -4238,8 +4310,14 @@ function generateForm(){
   if(type === 'equipment_list'){
     const items = STATE.employeeEquipment.filter(x => x.employee_id === e.id)
       .sort((a,b) => (a.status==='使用中'?0:1) - (b.status==='使用中'?0:1) || (b.issue_date||'').localeCompare(a.issue_date||''));
-    const rowsHtml = items.length ? items.map((x,i) => {
-      const t = STATE.equipmentTypes.find(t => t.id === x.type_id);
+    // 公務機來自「行政資料 → 公務機」，一起列進領用清單
+    const phoneItems = equipPhonesOf(e.id).map(p => ({
+      _typeName: '公務機', item_detail: equipPhoneDetail(p), quantity: 1,
+      issue_date: p.issue_date || '', status: '使用中', return_date: null
+    }));
+    const allItems = phoneItems.concat(items);
+    const rowsHtml = allItems.length ? allItems.map((x,i) => {
+      const t = x._typeName ? {name:x._typeName} : STATE.equipmentTypes.find(t => t.id === x.type_id);
       return `<tr>
         <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${i+1}</td>
         <td style="padding:6px 8px;border:1px solid #ccc;">${esc(t?t.name:'')}</td>
@@ -7183,10 +7261,16 @@ if(document.getElementById('ol_save')) document.getElementById('ol_save').addEve
 
 // ==================== 工時統計 ====================
 let whMonthlyChartInstance = null;
+let WH_EMP_INDEX = null;
 
 function whAll(){ return STATE.workHourDaily || []; }
 function whPeriodKey(r){ return r.year_roc + '-' + String(r.month).padStart(2,'0'); }
+function whPeriodText(k){
+  if(!k || k === 'all') return '全部月份';
+  return '民國 ' + parseInt(k.slice(0,3),10) + ' 年 ' + parseInt(k.slice(4),10) + ' 月';
+}
 function whNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function whRound(v, d){ const m = Math.pow(10, d==null?1:d); return Math.round(whNum(v)*m)/m; }
 function whLimit(id, fallback){
   const el = document.getElementById(id);
   const v = el ? parseFloat(el.value) : NaN;
@@ -7200,6 +7284,33 @@ function whLimits(){
 function whSelPeriod(){ const el=document.getElementById('wh_period'); return el ? el.value : 'all'; }
 function whSelRegion(){ const el=document.getElementById('wh_region'); return el ? el.value : 'all'; }
 
+// ----- 區別與人員管理連動 -----
+// 每日工時只存司機姓名，區別一律以「人員管理」的人員資料為準；
+// 人員清單裡找不到的人才退回沿用匯入檔裡的區別。
+function whEmpIndex(){
+  if(WH_EMP_INDEX) return WH_EMP_INDEX;
+  const m = {};
+  (STATE.employees || []).forEach(e => {
+    const n = String(e.name == null ? '' : e.name).trim();
+    if(!n) return;
+    if(!m[n] || (e.status === '在職' && m[n].status !== '在職')) m[n] = e;
+  });
+  WH_EMP_INDEX = m;
+  return m;
+}
+function whEmpOf(name){ return whEmpIndex()[String(name == null ? '' : name).trim()] || null; }
+function whRegionOf(r){
+  const e = whEmpOf(r && r.driver_name);
+  if(e && e.region) return e.region;
+  return (r && r.region) || '';
+}
+function whAllRegions(){
+  const s = new Set();
+  (STATE.employees || []).forEach(e => { if(e.region) s.add(e.region); });
+  whAll().forEach(r => { const g = whRegionOf(r); if(g) s.add(g); });
+  return [...s].sort();
+}
+
 // 該月平日天數（週一～週五），當作標準日數的預設值
 function whWeekdayCount(periodKey){
   if(periodKey === 'all') return 0;
@@ -7211,69 +7322,123 @@ function whWeekdayCount(periodKey){
   return n;
 }
 
+function whPeriodKeys(){
+  // 由近排到遠
+  return [...new Set(whAll().map(whPeriodKey))].sort().reverse();
+}
+
 function renderWhSelects(){
   const pSel = document.getElementById('wh_period');
   if(!pSel) return;
-  const keys = [...new Set(whAll().map(whPeriodKey))].sort();
+  const keys = whPeriodKeys();
   const keep = pSel.value;
   pSel.innerHTML = '<option value="all">全部月份</option>' +
-    keys.map(k => `<option value="${k}">民國 ${parseInt(k.slice(0,3),10)} 年 ${parseInt(k.slice(4),10)} 月</option>`).join('');
+    keys.map(k => `<option value="${k}">${whPeriodText(k)}</option>`).join('');
   if(keys.includes(keep)) pSel.value = keep;
-  else if(keys.length) pSel.value = keys[keys.length-1];
+  else if(keys.length) pSel.value = keys[0];
 
   const rSel = document.getElementById('wh_region');
-  const regions = [...new Set(whAll().map(r => r.region).filter(Boolean))].sort();
+  const regions = whAllRegions();
   const keepR = rSel.value;
   rSel.innerHTML = '<option value="all">全部區別</option>' + regions.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
   if(regions.includes(keepR)) rSel.value = keepR;
+
+  const iSel = document.getElementById('wh_in_period');
+  if(iSel){
+    const keepI = iSel.value;
+    iSel.innerHTML = '<option value="all">全部月份</option>' +
+      keys.map(k => `<option value="${k}">${whPeriodText(k)}</option>`).join('');
+    if(keys.includes(keepI)) iSel.value = keepI;
+  }
+
+  const eSel = document.getElementById('wh_in_emp');
+  if(eSel){
+    const keepE = eSel.value;
+    const list = (STATE.employees || []).filter(e => e.status === '在職')
+      .slice().sort((a,b) => String(a.employee_no||'').localeCompare(String(b.employee_no||''), undefined, {numeric:true}));
+    eSel.innerHTML = list.map(e =>
+      `<option value="${e.id}">${esc(e.name)}${e.region?'（'+esc(e.region)+'）':''}</option>`).join('')
+      || '<option value="">人員資料尚未載入</option>';
+    if(list.some(e => String(e.id) === keepE)) eSel.value = keepE;
+  }
+  const gSel = document.getElementById('wh_in_region');
+  if(gSel){
+    const keepG = gSel.value;
+    const regs = whAllRegions();
+    gSel.innerHTML = regs.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('')
+      || '<option value="新竹">新竹</option>';
+    if(regs.includes(keepG)) gSel.value = keepG;
+    else whSyncInRegion();
+  }
+}
+
+function whSyncInRegion(){
+  const eSel = document.getElementById('wh_in_emp'), gSel = document.getElementById('wh_in_region');
+  if(!eSel || !gSel) return;
+  const e = (STATE.employees || []).find(x => String(x.id) === eSel.value);
+  if(e && e.region && [...gSel.options].some(o => o.value === e.region)) gSel.value = e.region;
 }
 
 // ----- 月度工時 × 里程 -----
-function whMonthlyRows(){
+function whMonthlyAsc(){
   return (STATE.workHourMonthly || []).slice().sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
 }
 
-function whMonthlyCsvRows(){
-  return whMonthlyRows().map(r => {
+// 依時間由遠到近先算好「較上期」，再整個反轉成由近排到遠
+function whMonthlyView(){
+  let prev = null;
+  const asc = whMonthlyAsc().map(r => {
     const h = whNum(r.total_hours), km = whNum(r.total_km);
-    return [r.period_label, h, km, h ? (km/h).toFixed(1) : ''];
+    const cum = !!r.is_cumulative;
+    const o = { r, h, km, cum, prev: cum ? null : prev };
+    if(!cum) prev = { h, km };
+    return o;
   });
+  return asc.reverse();
+}
+
+function whMonthlyTotals(){
+  return whMonthlyAsc().reduce((s,r) => ({ h: s.h + whNum(r.total_hours), km: s.km + whNum(r.total_km) }), {h:0, km:0});
+}
+
+function whMonthlyCsvRows(){
+  const tot = whMonthlyTotals();
+  const head = [['累計總合', whRound(tot.h,1), whRound(tot.km,0), tot.h ? (tot.km/tot.h).toFixed(1) : '']];
+  return head.concat(whMonthlyView().map(o =>
+    [o.r.period_label, whRound(o.h,1), whRound(o.km,0), o.h ? (o.km/o.h).toFixed(1) : '']));
 }
 
 function renderWhMonthly(){
   const tb = document.getElementById('whMonthlyBody');
   if(!tb) return;
-  const rows = whMonthlyRows();
-  let prev = null;
-  tb.innerHTML = rows.map(r => {
-    const h = whNum(r.total_hours), km = whNum(r.total_km);
-    const kmh = h ? km/h : 0;
-    const cum = !!r.is_cumulative;
-    const html = `<tr${cum ? ' style="background:#F7F1E6;font-weight:600;"' : ''}>
-      <td style="white-space:nowrap;">${esc(r.period_label)}</td>
-      <td style="text-align:right;">${h.toLocaleString()}</td>
-      <td style="text-align:right;">${km.toLocaleString()}</td>
-      <td style="text-align:right;">${h ? kmh.toFixed(1) : '—'}</td>
-      <td>${(prev && !cum) ? changePill(h, prev.h) : ''}</td>
-      <td>${(prev && !cum) ? changePill(km, prev.km) : ''}</td>
-    </tr>`;
-    if(!cum) prev = { h, km };
-    return html;
-  }).join('') || `<tr><td colspan="6" class="empty">尚無工時里程彙總資料</td></tr>`;
+  const view = whMonthlyView();
+  const tot = whMonthlyTotals();
 
-  const tot = rows.reduce((s,r) => ({ h: s.h + whNum(r.total_hours), km: s.km + whNum(r.total_km) }), {h:0, km:0});
-  document.getElementById('whMonthlyFoot').innerHTML = rows.length
-    ? `<tr style="font-weight:700;background:#FBF5EC;">
-        <td>累計合計</td>
-        <td style="text-align:right;">${tot.h.toLocaleString()}</td>
-        <td style="text-align:right;">${tot.km.toLocaleString()}</td>
+  // 累計總合固定放在最上面
+  const totalRow = view.length
+    ? `<tr style="font-weight:700;background:#FBF5EC;border-bottom:2px solid var(--line,#e5ddd0);">
+        <td style="white-space:nowrap;">累計總合</td>
+        <td style="text-align:right;">${whRound(tot.h,1).toLocaleString()}</td>
+        <td style="text-align:right;">${whRound(tot.km,0).toLocaleString()}</td>
         <td style="text-align:right;">${tot.h ? (tot.km/tot.h).toFixed(1) : '—'}</td>
-        <td></td><td></td></tr>`
+        <td></td><td></td><td class="no-print"></td></tr>`
     : '';
+
+  const body = view.map(o => `<tr${o.cum ? ' style="background:#F7F1E6;font-weight:600;"' : ''}>
+      <td style="white-space:nowrap;">${esc(o.r.period_label)}</td>
+      <td style="text-align:right;">${whRound(o.h,1).toLocaleString()}</td>
+      <td style="text-align:right;">${whRound(o.km,0).toLocaleString()}</td>
+      <td style="text-align:right;">${o.h ? (o.km/o.h).toFixed(1) : '—'}</td>
+      <td>${o.prev ? changePill(o.h, o.prev.h) : ''}</td>
+      <td>${o.prev ? changePill(o.km, o.prev.km) : ''}</td>
+      <td class="no-print"><button class="del-btn" data-del-whm="${o.r.id}">刪除</button></td>
+    </tr>`).join('');
+
+  tb.innerHTML = (totalRow + body) || `<tr><td colspan="7" class="empty">尚無工時里程彙總資料</td></tr>`;
 
   const ctx = document.getElementById('whMonthlyChart');
   if(whMonthlyChartInstance){ whMonthlyChartInstance.destroy(); whMonthlyChartInstance = null; }
-  const chartRows = rows.filter(r => !r.is_cumulative);
+  const chartRows = whMonthlyAsc().filter(r => !r.is_cumulative);
   if(typeof Chart !== 'undefined' && ctx && chartRows.length){
     whMonthlyChartInstance = new Chart(ctx, {
       data: {
@@ -7300,7 +7465,7 @@ function renderWhMonthly(){
 // ----- 每位司機彙總 -----
 function whFilteredDaily(){
   const p = whSelPeriod(), rg = whSelRegion();
-  return whAll().filter(r => (p === 'all' || whPeriodKey(r) === p) && (rg === 'all' || r.region === rg));
+  return whAll().filter(r => (p === 'all' || whPeriodKey(r) === p) && (rg === 'all' || whRegionOf(r) === rg));
 }
 
 function whMaxConsecutive(days){
@@ -7323,8 +7488,8 @@ function whIsNextDay(a, b){
 function whDriverSummary(rows){
   const by = {};
   rows.forEach(r => {
-    const k = (r.region||'') + '｜' + (r.driver_name||'');
-    const o = by[k] = by[k] || { region:r.region||'', name:r.driver_name||'', employee_id:r.employee_id||null,
+    const k = (r.driver_name||'');
+    const o = by[k] = by[k] || { region:whRegionOf(r), name:r.driver_name||'', employee_id:r.employee_id||null,
                                  work:0, rest:0, hours:0, maxDay:0, maxDayDate:'', maxCum:0, days:[] };
     o.days.push(r);
     if(r.day_status === '休'){ o.rest++; return; }
@@ -7412,18 +7577,17 @@ function renderWhDrivers(){
 function whRuns(){
   const by = {};
   whAll().forEach(r => {
-    const k = (r.region||'') + '｜' + (r.driver_name||'');
+    const k = (r.driver_name||'');
     (by[k] = by[k] || []).push(r);
   });
   const out = [];
   Object.keys(by).forEach(k => {
     const days = by[k].slice().sort((a,b) => String(a.work_date||'').localeCompare(String(b.work_date||'')));
-    const parts = k.split('｜');
     let run = [];
     const flush = () => {
       if(run.length){
         const last = run[run.length-1];
-        out.push({ region: parts[0], name: parts[1], days: run.length,
+        out.push({ region: whRegionOf(last), name: k, days: run.length,
                    start: run[0].work_date, end: last.work_date,
                    year_roc: last.year_roc, month: last.month,
                    hours: run.reduce((s,r) => s + whNum(r.work_hours), 0),
@@ -7452,9 +7616,10 @@ function whViolations(){
   // 1. 單日超時
   whAll().forEach(r => {
     const h = whNum(r.work_hours);
-    if(r.day_status !== '休' && h > lim.day && inScope(r.year_roc, r.month, r.region)){
-      list.push({ type:'單日超時', name:r.driver_name||'', region:r.region||'', period:r.work_date||'',
-                  value:h, std:lim.day, over:h - lim.day,
+    const g = whRegionOf(r);
+    if(r.day_status !== '休' && h > lim.day && inScope(r.year_roc, r.month, g)){
+      list.push({ type:'單日超時', name:r.driver_name||'', region:g, period:r.work_date||'',
+                  sortKey:r.work_date||'', value:h, std:lim.day, over:h - lim.day,
                   note:`${r.clock_in||''}～${r.clock_out||''}${r.overnight?'(隔日)':''}，休息 ${whNum(r.rest_hours).toFixed(1)}H` });
     }
   });
@@ -7463,14 +7628,15 @@ function whViolations(){
   const byDM = {};
   whAll().forEach(r => {
     if(r.day_status === '休') return;
-    const k = [r.region||'', r.driver_name||'', r.year_roc, r.month].join('｜');
-    const o = byDM[k] = byDM[k] || { region:r.region||'', name:r.driver_name||'', yr:r.year_roc, mo:r.month, hours:0, days:0 };
+    const k = [r.driver_name||'', r.year_roc, r.month].join('｜');
+    const o = byDM[k] = byDM[k] || { region:whRegionOf(r), name:r.driver_name||'', yr:r.year_roc, mo:r.month, hours:0, days:0 };
     o.hours += whNum(r.work_hours); o.days++;
   });
   Object.keys(byDM).forEach(k => {
     const o = byDM[k];
     if(o.hours > lim.month && inScope(o.yr, o.mo, o.region)){
       list.push({ type:'月總工時超標', name:o.name, region:o.region, period:`民國${o.yr}年${o.mo}月`,
+                  sortKey:(o.yr+1911) + '-' + String(o.mo).padStart(2,'0') + '-31',
                   value:o.hours, std:lim.month, over:o.hours - lim.month, note:`出勤 ${o.days} 天` });
     }
   });
@@ -7480,12 +7646,12 @@ function whViolations(){
     if(!inScope(run.year_roc, run.month, run.region)) return;
     if(run.maxCum > lim.cont){
       list.push({ type:'連續累計超時', name:run.name, region:run.region,
-                  period:`${run.start} ～ ${run.end}`, value:run.maxCum, std:lim.cont,
+                  period:`${run.start} ～ ${run.end}`, sortKey:run.end||'', value:run.maxCum, std:lim.cont,
                   over:run.maxCum - lim.cont, note:`連續出勤 ${run.days} 天` });
     }
     if(run.days >= lim.contDays){
       list.push({ type:'連續出勤過長', name:run.name, region:run.region,
-                  period:`${run.start} ～ ${run.end}`, value:run.days, std:lim.contDays,
+                  period:`${run.start} ～ ${run.end}`, sortKey:run.end||'', value:run.days, std:lim.contDays,
                   over:run.days - lim.contDays, note:`期間總工時 ${run.hours.toFixed(1)}H` });
     }
   });
@@ -7494,7 +7660,10 @@ function whViolations(){
   const tv = t ? t.value : 'all';
   const filtered = (tv === 'all') ? list : list.filter(v => v.type === tv);
   const ORDER = { '單日超時':1, '月總工時超標':2, '連續累計超時':3, '連續出勤過長':4 };
-  return filtered.sort((a,b) => (ORDER[a.type]-ORDER[b.type]) || (b.over-a.over) || a.name.localeCompare(b.name));
+  // 由近排到遠：先看日期（新的在前），同一天再依類別、超出幅度
+  return filtered.sort((a,b) => String(b.sortKey||'').localeCompare(String(a.sortKey||'')) ||
+                                (ORDER[a.type]-ORDER[b.type]) || (b.over-a.over) ||
+                                a.name.localeCompare(b.name));
 }
 
 function renderWhViolations(){
@@ -7515,10 +7684,221 @@ function renderWhViolations(){
     </tr>`).join('') || `<tr><td colspan="8" class="empty">這個條件下沒有超標紀錄</td></tr>`;
 }
 
+// ----- 每日工時輸入 -----
+function whCalcHours(start, end, overnight, rest){
+  if(!start || !end) return null;
+  const toMin = s => { const p = String(s).split(':'); return parseInt(p[0],10)*60 + (parseInt(p[1],10)||0); };
+  let d = toMin(end) - toMin(start);
+  if(overnight || d < 0) d += 1440;
+  const card = d / 60;
+  return { card: whRound(card,2), work: whRound(Math.max(0, card - whNum(rest)),2) };
+}
+
+function whSuggestRest(card){
+  if(card >= 8) return 2;
+  if(card >= 4) return 1.5;
+  if(card >= 2) return 0.5;
+  return 0;
+}
+
+function whUpdateInputHint(){
+  const hint = document.getElementById('wh_in_hint');
+  if(!hint) return;
+  const status = document.getElementById('wh_in_status').value;
+  if(status === '休'){ hint.textContent = '狀態為「休」，工時、刷卡時數都會存 0。'; return; }
+  const start = document.getElementById('wh_in_start').value;
+  const end = document.getElementById('wh_in_end').value;
+  const ov = document.getElementById('wh_in_overnight').value === '1';
+  const restEl = document.getElementById('wh_in_rest');
+  const raw = whCalcHours(start, end, ov, 0);
+  if(!raw){ hint.textContent = '填上下班時間後會自動計算刷卡時數與工時。'; return; }
+  if(restEl.value === '') restEl.value = whSuggestRest(raw.card);
+  const r = whCalcHours(start, end, ov, restEl.value);
+  const hEl = document.getElementById('wh_in_hours');
+  hEl.placeholder = String(r.work);
+  const lim = whLimits();
+  hint.textContent = `刷卡時數 ${r.card} H － 休息 ${whNum(restEl.value)} H ＝ 工時 ${r.work} H` +
+    (r.work > lim.day ? `　⚠ 已超過單日上限 ${lim.day} H` : '');
+}
+
+// 依日期順序重算某位司機的「連續出勤累計工時」（遇到「休」或斷日就歸零）
+function whRecalcCum(name){
+  const rows = whAll().filter(r => (r.driver_name||'') === name)
+    .sort((a,b) => String(a.work_date||'').localeCompare(String(b.work_date||'')));
+  let cum = 0, prevDate = null;
+  rows.forEach(r => {
+    if(r.day_status === '休'){ r.cum_hours = 0; cum = 0; prevDate = r.work_date; return; }
+    if(prevDate && !whIsNextDay(prevDate, r.work_date)) cum = 0;
+    cum += whNum(r.work_hours);
+    r.cum_hours = whRound(cum,2);
+    prevDate = r.work_date;
+  });
+}
+
+function whInputRows(){
+  const q = (document.getElementById('wh_in_search') ? document.getElementById('wh_in_search').value.trim() : '');
+  const p = (document.getElementById('wh_in_period') ? document.getElementById('wh_in_period').value : 'all');
+  let list = whAll().filter(r => (p === 'all' || whPeriodKey(r) === p));
+  if(q) list = list.filter(r => String(r.driver_name||'').includes(q));
+  return list.slice().sort((a,b) => String(b.work_date||'').localeCompare(String(a.work_date||'')) ||
+                                    String(a.driver_name||'').localeCompare(String(b.driver_name||'')));
+}
+
+function renderWhInputTable(){
+  const tb = document.getElementById('whInputBody');
+  if(!tb) return;
+  const all = whInputRows();
+  const rows = all.slice(0, 300);
+  const cnt = document.getElementById('wh_in_count');
+  if(cnt) cnt.textContent = `共 ${all.length} 筆`;
+  tb.innerHTML = rows.map(r => `<tr>
+      <td style="white-space:nowrap;">${esc(r.work_date||'')}</td>
+      <td style="white-space:nowrap;font-weight:600;">${esc(r.driver_name||'')}</td>
+      <td>${esc(whRegionOf(r))}</td>
+      <td><span class="pill ${r.day_status==='休'?'gray':'green'}">${esc(r.day_status||'')}</span></td>
+      <td>${esc(r.clock_in||'')}</td>
+      <td>${esc(r.clock_out||'')}${r.overnight?' <span class="muted">(隔日)</span>':''}</td>
+      <td style="text-align:right;">${r.card_hours==null?'—':whRound(r.card_hours,2)}</td>
+      <td style="text-align:right;">${r.rest_hours==null?'—':whRound(r.rest_hours,2)}</td>
+      <td style="text-align:right;font-weight:600;">${r.work_hours==null?'—':whRound(r.work_hours,2)}</td>
+      <td style="text-align:right;">${r.cum_hours==null?'—':whRound(r.cum_hours,1)}</td>
+      <td><button class="del-btn" data-del-whd="${r.id}">刪除</button></td>
+    </tr>`).join('') || `<tr><td colspan="11" class="empty">這個條件下沒有每日工時紀錄</td></tr>`;
+}
+
+async function whAddDaily(){
+  const eSel = document.getElementById('wh_in_emp');
+  const emp = (STATE.employees || []).find(x => String(x.id) === eSel.value);
+  if(!emp){ alert('請先選擇司機。如果下拉是空的，代表人員資料還沒載入完成。'); return; }
+  const date = document.getElementById('wh_in_date').value;
+  if(!date){ alert('請選擇日期。'); return; }
+  const region = document.getElementById('wh_in_region').value || emp.region || '';
+  if(!region){ alert('請選擇區別。'); return; }
+
+  const status = document.getElementById('wh_in_status').value;
+  const ov = document.getElementById('wh_in_overnight').value === '1';
+  const start = status === '休' ? '' : document.getElementById('wh_in_start').value;
+  const end   = status === '休' ? '' : document.getElementById('wh_in_end').value;
+  const restV = document.getElementById('wh_in_rest').value;
+  const manual = document.getElementById('wh_in_hours').value;
+
+  let card = null, work = 0, rest = null;
+  if(status !== '休'){
+    const calc = whCalcHours(start, end, ov, restV);
+    if(calc){ card = calc.card; work = calc.work; rest = whNum(restV); }
+    if(manual !== '') work = whRound(parseFloat(manual), 2);
+    if(!calc && manual === ''){ alert('請填上下班時間，或直接在「工時」欄位輸入時數。'); return; }
+  }
+
+  const y = parseInt(date.slice(0,4),10) - 1911;
+  const mo = parseInt(date.slice(5,7),10);
+  const dd = parseInt(date.slice(8,10),10);
+
+  const existing = whAll().find(r => (r.driver_name||'') === emp.name && r.work_date === date);
+  const target = existing || { id: nextId(whAll()) };
+  if(!existing) target.wh_id = target.id;
+
+  target.region = region;
+  target.driver_name = emp.name;
+  target.employee_id = emp.id;
+  target.year_roc = y;
+  target.month = mo;
+  target.day = dd;
+  target.work_date = date;
+  target.day_status = status;
+  target.clock_in = start || null;
+  target.clock_out = end || null;
+  target.overnight = ov ? 1 : 0;
+  target.card_hours = status === '休' ? 0 : card;
+  target.rest_hours = status === '休' ? 0 : rest;
+  target.work_hours = status === '休' ? 0 : work;
+  if(!existing){ target.cum_hours = 0; STATE.workHourDaily.push(target); }
+
+  whRecalcCum(emp.name);
+
+  try{
+    await saveState('work_hour_daily', STATE.workHourDaily, true);
+  }catch(err){
+    if(!existing) STATE.workHourDaily = STATE.workHourDaily.filter(r => r.id !== target.id);
+    return;
+  }
+  document.getElementById('wh_in_hours').value = '';
+  document.getElementById('wh_in_hint').textContent =
+    (existing ? '已更新 ' : '已新增 ') + emp.name + ' ' + date + ' 的工時紀錄。';
+  renderWorkHourAll();
+}
+
+async function whDeleteDaily(id){
+  const rec = whAll().find(r => String(r.id) === String(id));
+  if(!rec) return;
+  if(!confirm(`確定要刪除 ${rec.driver_name} ${rec.work_date} 這筆工時紀錄嗎？`)) return;
+  const name = rec.driver_name;
+  const backup = STATE.workHourDaily.slice();
+  STATE.workHourDaily = STATE.workHourDaily.filter(r => String(r.id) !== String(id));
+  whRecalcCum(name);
+  try{ await saveState('work_hour_daily', STATE.workHourDaily, true); }
+  catch(err){ STATE.workHourDaily = backup; return; }
+  renderWorkHourAll();
+}
+
+// ----- 月度輸入 -----
+async function whAddMonthly(){
+  const y = parseInt(document.getElementById('wh_m_year').value, 10);
+  if(!y || y < 1 || y > 999){ alert('請輸入民國年，例如 115。'); return; }
+  const mRaw = document.getElementById('wh_m_month').value;
+  const mo = mRaw === '' ? null : parseInt(mRaw, 10);
+  if(mo !== null && (isNaN(mo) || mo < 1 || mo > 12)){ alert('月份請填 1～12，累計列可以留白。'); return; }
+  const cum = document.getElementById('wh_m_cum').value === '1';
+  let label = document.getElementById('wh_m_label').value.trim();
+  if(!label) label = mo ? `民國${y}年${mo}月` : `民國${y}年以前累計`;
+  const hours = whRound(document.getElementById('wh_m_hours').value, 2);
+  const km = whRound(document.getElementById('wh_m_km').value, 2);
+
+  const list = STATE.workHourMonthly || (STATE.workHourMonthly = []);
+  const existing = list.find(r => r.year_roc === y && (r.month == null ? mo === null : r.month === mo));
+  const target = existing || { id: nextId(list) };
+  if(!existing) target.whm_id = target.id;
+
+  target.year_roc = y;
+  target.month = mo;
+  target.period_label = label;
+  target.total_hours = hours;
+  target.total_km = km;
+  target.is_cumulative = cum ? 1 : 0;
+  if(mo){
+    target.sort_order = y * 100 + mo;
+  }else if(!existing){
+    target.sort_order = Math.min(0, ...list.map(r => r.sort_order || 0)) - 1;
+  }
+  if(!existing) list.push(target);
+
+  try{ await saveState('work_hour_monthly', list, true); }
+  catch(err){
+    if(!existing) STATE.workHourMonthly = list.filter(r => r.id !== target.id);
+    return;
+  }
+  document.getElementById('wh_m_hint').textContent = (existing ? '已更新「' : '已新增「') + label + '」。';
+  renderWhMonthly();
+}
+
+async function whDeleteMonthly(id){
+  const list = STATE.workHourMonthly || [];
+  const rec = list.find(r => String(r.id) === String(id));
+  if(!rec) return;
+  if(!confirm(`確定要刪除「${rec.period_label}」這一列嗎？`)) return;
+  const backup = list.slice();
+  STATE.workHourMonthly = list.filter(r => String(r.id) !== String(id));
+  try{ await saveState('work_hour_monthly', STATE.workHourMonthly, true); }
+  catch(err){ STATE.workHourMonthly = backup; return; }
+  renderWhMonthly();
+}
+
 function renderWorkHourAll(){
   if(!document.getElementById('wh_period')) return;
+  WH_EMP_INDEX = null;
   renderWhSelects();
   renderWhMonthly();
+  renderWhInputTable();
   renderWhDrivers();
   renderWhViolations();
 }
@@ -7542,13 +7922,41 @@ if(document.getElementById('wh_period')){
   ['wh_lim_day','wh_lim_month','wh_lim_cont','wh_lim_contdays','wh_std_days','wh_std_hours'].forEach(id =>
     document.getElementById(id).addEventListener('input', whRerender));
 
+  document.getElementById('wh_in_emp').addEventListener('change', whSyncInRegion);
+  ['wh_in_status','wh_in_start','wh_in_end','wh_in_overnight'].forEach(id =>
+    document.getElementById(id).addEventListener('change', whUpdateInputHint));
+  document.getElementById('wh_in_rest').addEventListener('input', whUpdateInputHint);
+  document.getElementById('wh_in_search').addEventListener('input', renderWhInputTable);
+  document.getElementById('wh_in_period').addEventListener('change', renderWhInputTable);
+  document.getElementById('wh_in_add').addEventListener('click', whAddDaily);
+  document.getElementById('wh_in_clear').addEventListener('click', () => {
+    ['wh_in_date','wh_in_start','wh_in_end','wh_in_rest','wh_in_hours'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('wh_in_status').value = '出勤';
+    document.getElementById('wh_in_overnight').value = '0';
+    document.getElementById('wh_in_hint').textContent = '';
+  });
+  document.getElementById('whInputBody').addEventListener('click', (e) => {
+    const id = e.target.getAttribute('data-del-whd');
+    if(id) whDeleteDaily(id);
+  });
+
+  document.getElementById('wh_m_add').addEventListener('click', whAddMonthly);
+  document.getElementById('wh_m_clear').addEventListener('click', () => {
+    ['wh_m_year','wh_m_month','wh_m_label','wh_m_hours','wh_m_km'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('wh_m_cum').value = '0';
+    document.getElementById('wh_m_hint').textContent = '';
+  });
+  document.getElementById('whMonthlyBody').addEventListener('click', (e) => {
+    const id = e.target.getAttribute('data-del-whm');
+    if(id) whDeleteMonthly(id);
+  });
+
   document.getElementById('wh_export_monthly').addEventListener('click', () =>
     whDownloadCsv('月度工時里程統計', ['期間','工時','里程(km)','每小時里程'], whMonthlyCsvRows()));
 
   document.getElementById('wh_export_driver').addEventListener('click', () => {
     const p = whSelPeriod();
-    const label = (p === 'all') ? '全部月份' : ('民國' + parseInt(p.slice(0,3),10) + '年' + parseInt(p.slice(4),10) + '月');
-    whDownloadCsv('司機工時彙總_' + label,
+    whDownloadCsv('司機工時彙總_' + whPeriodText(p).replace(/\s/g,''),
       ['司機','區別','出勤天數','休假天數','總工時','日均工時','最高單日','最長連續出勤','連續累計最高'],
       whDriverRows().map(o => [o.name, o.region, o.work, o.rest, o.hours.toFixed(1), o.avg.toFixed(1),
                                o.maxDay.toFixed(1), o.maxCont, o.maxCum.toFixed(1)]));
