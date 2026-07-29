@@ -4685,16 +4685,13 @@ function generateForm(){
       </div>`;
 
   }else if(type === 'pension_contribution'){
-    const rowsData = STATE.employees.map(emp => {
-      const records = STATE.insuranceMonthly.filter(r => r.employee_id === emp.id)
-        .sort((a,b) => (b.year_roc*100+b.month) - (a.year_roc*100+a.month));
-      const latest = records[0];
-      if(!latest) return null;
-      const total = (latest.employer_labor_general||0) + (latest.employer_labor_injury||0) + (latest.employer_health||0) + (latest.employer_pension||0);
-      return { emp, latest, total };
-    }).filter(Boolean);
+    const rowsData = pensionContributionRows();
 
-    const grandTotal = rowsData.reduce((sum, r) => sum + r.total, 0);
+    const grandTotal    = rowsData.reduce((sum, r) => sum + r.total, 0);
+    const grandPersonal = rowsData.reduce((sum, r) => sum + r.personal, 0);
+    const grandAll      = grandTotal + grandPersonal;
+    const sumOf = (list, fn) => list.reduce((s, r) => s + (fn(r)||0), 0);
+    const money = (v) => '$' + (v||0).toFixed(0);
     const period = rowsData[0] ? `民國 ${rowsData[0].latest.year_roc} 年 ${rowsData[0].latest.month} 月` : '';
 
     const byCompany = {};
@@ -4704,21 +4701,39 @@ function generateForm(){
       byCompany[key].push(r);
     });
 
+    const CELL  = 'padding:5px 8px;border:1px solid #ccc;text-align:right;';
+    const CELLE = CELL + 'background:#FAFCFB;';
+    const CELLP = CELL + 'background:#FBF8F3;';
+
     const rowsHtml = Object.entries(byCompany).map(([companyName, list]) => {
-      const companySubtotal = list.reduce((sum, r) => sum + r.total, 0);
-      const header = `<tr style="background:#EEF3F1;"><td colspan="8" style="padding:6px 8px;border:1px solid #ccc;font-weight:700;">${esc(companyName)}</td></tr>`;
+      const header = `<tr style="background:#EEF3F1;"><td colspan="12" style="padding:6px 8px;border:1px solid #ccc;font-weight:700;">${esc(companyName)}</td></tr>`;
       const memberRows = list.map((r,i) => `
         <tr>
           <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${i+1}</td>
           <td style="padding:5px 8px;border:1px solid #ccc;">${esc(r.emp.name)}</td>
           <td style="padding:5px 8px;border:1px solid #ccc;">${esc(r.emp.dept_name||'')}</td>
-          <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">$${(r.latest.employer_labor_general||0).toFixed(0)}</td>
-          <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">$${(r.latest.employer_labor_injury||0).toFixed(0)}</td>
-          <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">$${(r.latest.employer_health||0).toFixed(0)}</td>
-          <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">$${(r.latest.employer_pension||0).toFixed(0)}</td>
-          <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;font-weight:700;">$${r.total.toFixed(0)}</td>
+          <td style="${CELLE}">${money(r.latest.employer_labor_general)}</td>
+          <td style="${CELLE}">${money(r.latest.employer_labor_injury)}</td>
+          <td style="${CELLE}">${money(r.latest.employer_health)}</td>
+          <td style="${CELLE}">${money(r.latest.employer_pension)}</td>
+          <td style="${CELLE}font-weight:700;">${money(r.total)}</td>
+          <td style="${CELLP}">${money(r.latest.personal_labor)}</td>
+          <td style="${CELLP}">${money(r.latest.personal_health)}</td>
+          <td style="${CELLP}font-weight:700;">${money(r.personal)}</td>
+          <td style="${CELL}font-weight:700;">${money(r.all)}</td>
         </tr>`).join('');
-      const subtotalRow = `<tr style="font-weight:700;"><td colspan="7" style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${esc(companyName)} 小計</td><td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">$${companySubtotal.toFixed(0)}</td></tr>`;
+      const subtotalRow = `<tr style="font-weight:700;background:#fdfdfd;">
+          <td colspan="3" style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${esc(companyName)} 小計</td>
+          <td style="${CELLE}">${money(sumOf(list, r => r.latest.employer_labor_general))}</td>
+          <td style="${CELLE}">${money(sumOf(list, r => r.latest.employer_labor_injury))}</td>
+          <td style="${CELLE}">${money(sumOf(list, r => r.latest.employer_health))}</td>
+          <td style="${CELLE}">${money(sumOf(list, r => r.latest.employer_pension))}</td>
+          <td style="${CELLE}">${money(sumOf(list, r => r.total))}</td>
+          <td style="${CELLP}">${money(sumOf(list, r => r.latest.personal_labor))}</td>
+          <td style="${CELLP}">${money(sumOf(list, r => r.latest.personal_health))}</td>
+          <td style="${CELLP}">${money(sumOf(list, r => r.personal))}</td>
+          <td style="${CELL}">${money(sumOf(list, r => r.all))}</td>
+        </tr>`;
       return header + memberRows + subtotalRow;
     }).join('');
 
@@ -4726,25 +4741,44 @@ function generateForm(){
       <h2 style="text-align:center;letter-spacing:6px;">勞健保提撥計算表</h2>
       <p style="text-align:center;color:#666;font-size:12px;margin:4px 0 16px;">全體人員彙總，依行號分組 ・ 資料期間：${esc(period)}（依各人最近一期投保紀錄）</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">序號</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">姓名</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">部門</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞保(一般)</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞保(職災)</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">健保</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞退(6%)</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">小計</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">序號</th>
+            <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">姓名</th>
+            <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">部門</th>
+            <th colspan="5" style="padding:6px 8px;border:1px solid #ccc;background:#EEF3F1;">雇主提撥</th>
+            <th colspan="3" style="padding:6px 8px;border:1px solid #ccc;background:#F6EFE3;">人員自付</th>
+            <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">合計</th>
+          </tr>
+          <tr>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞保(一般)</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞保(職災)</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">健保</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞退(6%)</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">雇主小計</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞保</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">健保</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">人員小計</th>
+          </tr>
+        </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr style="font-weight:700;background:#fafafa;">
-            <td style="padding:6px 8px;border:1px solid #ccc;" colspan="7">全公司提撥合計</td>
-            <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;">$${grandTotal.toFixed(0)}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc;" colspan="3">全公司合計</td>
+            <td style="${CELLE}">${money(sumOf(rowsData, r => r.latest.employer_labor_general))}</td>
+            <td style="${CELLE}">${money(sumOf(rowsData, r => r.latest.employer_labor_injury))}</td>
+            <td style="${CELLE}">${money(sumOf(rowsData, r => r.latest.employer_health))}</td>
+            <td style="${CELLE}">${money(sumOf(rowsData, r => r.latest.employer_pension))}</td>
+            <td style="${CELLE}">${money(grandTotal)}</td>
+            <td style="${CELLP}">${money(sumOf(rowsData, r => r.latest.personal_labor))}</td>
+            <td style="${CELLP}">${money(sumOf(rowsData, r => r.latest.personal_health))}</td>
+            <td style="${CELLP}">${money(grandPersonal)}</td>
+            <td style="${CELL}">${money(grandAll)}</td>
           </tr>
         </tfoot>
       </table>
       <p style="font-size:11px;color:#999;margin-top:20px;">
+        ※「雇主提撥」為公司負擔（勞保一般＋職災、健保、勞退 6%），「人員自付」為由薪資扣繳的勞保、健保自付額；勞退自提未計入。<br>
         ※本表金額取自公司內部勞健保登錄系統之最近一期實際投保紀錄，僅供公司內部參考；正式數據請以勞保局、健保署核定資料為準。
       </p>`;
 
@@ -4815,10 +4849,56 @@ function generateForm(){
   if(type === 'stocktake_vehicle') bodyHtml = buildStocktake('vehicle');
   if(type === 'stocktake_staff')   bodyHtml = buildStocktake('staff');
 
-  const wide = ROSTER_TYPES.includes(type);
+  const wide = ROSTER_TYPES.includes(type) || type === 'pension_contribution';
   document.getElementById('printArea').innerHTML = `<div style="max-width:${wide?'900px':'640px'};margin:0 auto;padding:40px;border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
   document.getElementById('form_print').style.display = 'inline-block';
   document.getElementById('form_export_csv').style.display = wide ? 'inline-block' : 'none';
+}
+
+// ===== 勞健保提撥計算表 =====
+// 每人取「最近一期」投保紀錄；雇主提撥＝勞保(一般)＋勞保(職災)＋健保＋勞退6%，
+// 人員自付＝勞保自付＋健保自付（勞退自提未計入）。
+function pensionContributionRows(){
+  return STATE.employees.map(emp => {
+    const records = STATE.insuranceMonthly.filter(r => r.employee_id === emp.id)
+      .sort((a,b) => (b.year_roc*100+b.month) - (a.year_roc*100+a.month));
+    const latest = records[0];
+    if(!latest) return null;
+    const total = (latest.employer_labor_general||0) + (latest.employer_labor_injury||0) + (latest.employer_health||0) + (latest.employer_pension||0);
+    const personal = (latest.personal_labor||0) + (latest.personal_health||0);
+    return { emp, latest, total, personal, all: total + personal };
+  }).filter(Boolean);
+}
+
+function pensionContributionCsv(){
+  const head = ['行號','序號','姓名','部門','雇主-勞保(一般)','雇主-勞保(職災)','雇主-健保','雇主-勞退(6%)','雇主小計','人員-勞保','人員-健保','人員小計','合計'];
+  const data = pensionContributionRows();
+  const byCompany = {};
+  data.forEach(r => {
+    const key = r.emp.company_name || '未設定公司別';
+    (byCompany[key] = byCompany[key] || []).push(r);
+  });
+  const rows = [];
+  const n = (v) => String(Math.round(v||0));
+  Object.entries(byCompany).forEach(([companyName, list]) => {
+    list.forEach((r,i) => rows.push([
+      companyName, String(i+1), r.emp.name||'', r.emp.dept_name||'',
+      n(r.latest.employer_labor_general), n(r.latest.employer_labor_injury),
+      n(r.latest.employer_health), n(r.latest.employer_pension), n(r.total),
+      n(r.latest.personal_labor), n(r.latest.personal_health), n(r.personal), n(r.all)
+    ]));
+    const s = (fn) => list.reduce((a,r) => a + (fn(r)||0), 0);
+    rows.push([companyName + ' 小計','','','',
+      n(s(r => r.latest.employer_labor_general)), n(s(r => r.latest.employer_labor_injury)),
+      n(s(r => r.latest.employer_health)), n(s(r => r.latest.employer_pension)), n(s(r => r.total)),
+      n(s(r => r.latest.personal_labor)), n(s(r => r.latest.personal_health)), n(s(r => r.personal)), n(s(r => r.all))]);
+  });
+  const t = (fn) => data.reduce((a,r) => a + (fn(r)||0), 0);
+  rows.push(['全公司合計','','','',
+    n(t(r => r.latest.employer_labor_general)), n(t(r => r.latest.employer_labor_injury)),
+    n(t(r => r.latest.employer_health)), n(t(r => r.latest.employer_pension)), n(t(r => r.total)),
+    n(t(r => r.latest.personal_labor)), n(t(r => r.latest.personal_health)), n(t(r => r.personal)), n(t(r => r.all))]);
+  return csvLines(head, rows);
 }
 
 // ===== 僱主險（團保）人員名冊 =====
@@ -8444,6 +8524,7 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
     ext_list:        {name:'桌機分機表',         fn: extListCsv},
     stocktake_vehicle: {name:'車用物品盤點表', fn: () => stocktakeCsv('vehicle')},
     stocktake_staff:   {name:'人員物品盤點表', fn: () => stocktakeCsv('staff')},
+    pension_contribution: {name:'勞健保提撥計算表', fn: pensionContributionCsv},
   };
   const b = CSV_BUILDERS[type];
   if(!b) return;
