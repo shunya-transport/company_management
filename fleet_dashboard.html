@@ -1423,7 +1423,7 @@
 
     <div class="card">
       <h2>公里數統計表<span class="count-badge" id="ml_stat_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">格式比照行政系統的「公里數統計表」：一列一台車一個年度，1～12月欄位是當月實際行駛的公里數。</div>
+      <div class="muted" style="margin-bottom:10px;">格式比照行政系統的「公里數統計表」：一列一台車一個年度，1～12月欄位是當月實際行駛的公里數（依油耗表計算）。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年份<select id="ml_year"></select></label>
         <label>車場<select id="ml_base"><option value="all">全部車場</option></select></label>
@@ -1449,6 +1449,24 @@
           <tbody id="mlQuarterBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>碼錶 × 油耗里程 對帳<span class="count-badge" id="ml_recon_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">上面的統計表用的是「油耗表算出來的里程」，保養到期用的是「路碼錶讀數」，兩者本來就會有落差。這張表把每台車每個月的兩個數字並排，差太多的先挑出來查。</div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>只看差異超過<select id="ml_recon_th">
+          <option value="0.03">3%</option><option value="0.05" selected>5%</option>
+          <option value="0.1">10%</option><option value="0">全部列出</option>
+        </select></label>
+      </div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table class="km-table">
+          <thead><tr><th>車號</th><th>月份</th><th class="km-num">月初碼錶</th><th class="km-num">月底碼錶</th><th class="km-num">碼錶差</th><th class="km-num">油耗里程</th><th class="km-num">差異</th><th class="km-num">差異率</th><th>判讀</th></tr></thead>
+          <tbody id="mlReconBody"></tbody>
+        </table>
+      </div>
+      <button class="btn ghost no-print" id="ml_recon_export" style="margin-top:10px;">匯出 CSV</button>
     </div>
 
     <div class="card">
@@ -3617,6 +3635,26 @@ function renderTireLayout(){
     <div class="muted" style="text-align:center;margin-top:10px;">綠色：1年內安裝 ・ 黃色：安裝滿1年 ・ 紅色：安裝滿18個月建議檢查</div>`;
 }
 
+// 近 N 個月的月均行駛公里數，用來把「還剩幾公里」換算成「大概什麼時候要保養」
+function avgMonthlyKm(plate, n){
+  const logs = STATE.mileageLogs
+    .filter(m => m.plate === plate)
+    .sort((a,b)=>String(b.log_date||'').localeCompare(String(a.log_date||'')))
+    .slice(0, n || 6)
+    .map(mlMonthlyKm)
+    .filter(k => k !== null && k > 0);
+  if(!logs.length) return null;
+  return logs.reduce((s,k)=>s+k,0) / logs.length;
+}
+function etaByMileage(plate, remaining){
+  const avg = avgMonthlyKm(plate, 6);
+  if(!avg) return '';
+  if(remaining <= 0) return `（月均 ${Math.round(avg).toLocaleString()} km，已逾期約 ${(-remaining/avg).toFixed(1)} 個月）`;
+  const months = remaining / avg;
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + Math.round(months));
+  return `（月均 ${Math.round(avg).toLocaleString()} km，預估 ${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')} 到期）`;
+}
+
 function computeMaintenanceDue(vehicle){
   const std = STATE.maintenanceStandards.find(s => s.model_name === vehicle.maintenance_model);
   if(!std) return [];
@@ -3636,7 +3674,9 @@ function computeMaintenanceDue(vehicle){
     let status = 'green';
     if(remaining <= 0) status = 'red';
     else if(remaining <= buffer) status = 'amber';
-    results.push({label, status, text:`剩餘約 ${remaining} km（下次保養里程 ${nextDue} km）`, remaining, nextDue});
+    const etaTxt = etaByMileage(vehicle.plate, remaining);
+    const head = remaining <= 0 ? `已超出 ${(-remaining).toLocaleString()} km` : `剩餘約 ${remaining.toLocaleString()} km`;
+    results.push({label, status, text:`${head}（下次保養里程 ${nextDue.toLocaleString()} km）${etaTxt}`, remaining, nextDue});
   });
   return results;
 }
@@ -5281,7 +5321,7 @@ function renderMaintHistoryTable(){
       <td title="${esc(r.plate)}">${esc(r.plate)}</td>
       <td>${esc(r.maintenance_type)}</td>
       <td>${esc((r.maintenance_date||'').slice(0,10))}</td>
-      <td>${r.mileage_at_service ? esc(r.mileage_at_service)+' km' : '—'}</td>
+      <td>${r.mileage_at_service ? (r.mileage_estimated ? '≈ ' : '')+esc(Number(r.mileage_at_service).toLocaleString())+' km' : '—'}</td>
       <td>${esc(r.vendor_name||'—')}</td>
       <td class="muted mh-desc" title="${esc(r.description||'')}">${esc(r.description||'')}</td>
       <td class="muted mh-parts" title="${esc(r.parts_replaced||'')}">${esc(r.parts_replaced||'—')}</td>
@@ -5606,7 +5646,7 @@ function scheduleDueStatus(s){
     const next=s.last_service_mileage+s.frequency_km, rem=next-cur, buf=Math.max(1000,s.frequency_km*0.05);
     return {status: rem<=0?'red':(rem<=buf?'amber':'green'),
       last: s.last_service_mileage+' km', next: next+' km',
-      remain: rem<=0?`超出 ${-rem} km`:`剩 ${rem} km`, dd:null, sortKey:rem};
+      remain: (rem<=0?`超出 ${(-rem).toLocaleString()} km`:`剩 ${rem.toLocaleString()} km`) + etaByMileage(s.plate, rem), dd:null, sortKey:rem};
   } else if(s.frequency_months && s.last_service_date){
     const next=addMonthsN(s.last_service_date, s.frequency_months), dd=daysUntil(next);
     return {status: dd<0?'red':(dd<=30?'amber':'green'),
@@ -6523,6 +6563,66 @@ function mileageMatrix(){
   return rows;
 }
 
+
+// ===== 碼錶 × 油耗里程 對帳 =====
+// mileage 是路碼錶讀數（累積），monthly_km 是依油耗表計算出來的當月行駛里程。
+// 空車調度、進廠移車不會登記，所以碼錶差通常會比油耗里程大；反過來差太多就要查。
+function mileageReconRows(){
+  const year = document.getElementById('ml_year').value;
+  const base = document.getElementById('ml_base').value;
+  const comp = document.getElementById('ml_company').value;
+  const q    = (document.getElementById('ml_search').value || '').trim();
+  const byV = new Map();
+  STATE.mileageLogs.forEach(r => {
+    if(!r.log_date) return;
+    const v = mlVehicleOf(r);
+    const plate = (v && v.plate) || r.plate || '（未對應車號）';
+    const a = mlAttrs(v);
+    if(base !== 'all' && a.base !== base) return;
+    if(comp !== 'all' && a.company !== comp) return;
+    if(q && !plate.includes(q)) return;
+    if(!byV.has(plate)) byV.set(plate, []);
+    byV.get(plate).push(r);
+  });
+  const out = [];
+  [...byV.keys()].sort().forEach(plate => {
+    const logs = byV.get(plate).slice().sort((a,b)=>String(a.log_date).localeCompare(String(b.log_date)));
+    let prev = null;
+    logs.forEach(r => {
+      const km = mlMonthlyKm(r);
+      const odo = (r.mileage === null || r.mileage === undefined || r.mileage === '') ? null : Number(r.mileage);
+      if(String(r.log_date).slice(0,4) === year && prev !== null && odo !== null && km !== null){
+        const diffOdo = odo - prev;
+        const gap = diffOdo - km;
+        const rate = km ? gap / km : null;
+        out.push({plate, month:String(r.log_date).slice(0,7), start:prev, end:odo, diffOdo, km, gap, rate,
+                  verdict: diffOdo < 0 ? '碼錶倒退（換錶或輸入錯誤）' : (Math.abs(rate||0) > 0.1 ? '差異偏大，建議查核' : '正常範圍')});
+      }
+      if(odo !== null) prev = odo;
+    });
+  });
+  return out;
+}
+function renderMileageReconTable(){
+  const th = parseFloat((document.getElementById('ml_recon_th')||{}).value || '0.05');
+  const rows = mileageReconRows().filter(r => th === 0 ? true : (r.diffOdo < 0 || Math.abs(r.rate||0) >= th))
+                                 .sort((a,b)=> Math.abs(b.rate||0) - Math.abs(a.rate||0));
+  const cnt = document.getElementById('ml_recon_count'); if(cnt) cnt.textContent = `${rows.length} 筆`;
+  const body = document.getElementById('mlReconBody'); if(!body) return;
+  const pct = v => v === null ? '' : (v*100).toFixed(1) + '%';
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.plate)}</td><td>${esc(r.month)}</td>
+      <td class="km-num">${r.start.toLocaleString()}</td>
+      <td class="km-num">${r.end.toLocaleString()}</td>
+      <td class="km-num">${r.diffOdo.toLocaleString()}</td>
+      <td class="km-num">${r.km.toLocaleString()}</td>
+      <td class="km-num" style="color:${Math.abs(r.rate||0)>=0.1?'var(--red)':'inherit'}">${r.gap.toLocaleString()}</td>
+      <td class="km-num">${pct(r.rate)}</td>
+      <td class="muted">${esc(r.verdict)}</td>
+    </tr>`).join('') || `<tr><td colspan="9" class="empty">這個條件下沒有需要查核的月份</td></tr>`;
+}
+
 function renderMileageStatTable(){
   const rows = mileageMatrix();
   document.getElementById('ml_stat_count').textContent = `共 ${rows.length} 台`;
@@ -6550,6 +6650,7 @@ function renderMileageStatTable(){
     foot.innerHTML = '';
   }
   renderMileageQuarterTable(rows);
+  renderMileageReconTable();
 }
 
 function renderMileageQuarterTable(rows){
@@ -6613,6 +6714,22 @@ function renderMileageAll(){
   renderMileageTrend();
 }
 
+const _mlReconTh = document.getElementById('ml_recon_th');
+if(_mlReconTh) _mlReconTh.addEventListener('change', renderMileageReconTable);
+const _mlReconEx = document.getElementById('ml_recon_export');
+if(_mlReconEx) _mlReconEx.addEventListener('click', () => {
+  const th = parseFloat((document.getElementById('ml_recon_th')||{}).value || '0.05');
+  const rows = mileageReconRows().filter(r => th === 0 ? true : (r.diffOdo < 0 || Math.abs(r.rate||0) >= th));
+  const csv = csvLines(
+    ['車號','月份','月初碼錶','月底碼錶','碼錶差','油耗里程','差異','差異率','判讀'],
+    rows.map(r => [r.plate, r.month, r.start, r.end, r.diffOdo, r.km, r.gap,
+                   r.rate === null ? '' : (r.rate*100).toFixed(2)+'%', r.verdict]));
+  const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '碼錶油耗里程對帳_' + todayISO().replace(/-/g,'') + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
 document.getElementById('ml_year').addEventListener('change', renderMileageStatTable);
 document.getElementById('ml_base').addEventListener('change', renderMileageStatTable);
 document.getElementById('ml_company').addEventListener('change', renderMileageStatTable);
