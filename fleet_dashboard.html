@@ -144,6 +144,13 @@
   .table-scroll table{margin:0;}
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
   /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
+  /* 公里數統計表／平均公里數（季）：欄位多，改用緊湊版面且不換行 */
+  table.km-table{font-size:12px;}
+  table.km-table th{padding:8px 8px;font-size:11.5px;white-space:nowrap;}
+  table.km-table td{padding:7px 8px;white-space:nowrap;vertical-align:middle;}
+  table.km-table td.km-num,table.km-table th.km-num{text-align:right;font-variant-numeric:tabular-nums;}
+  table.km-table td.km-total{font-weight:700;}
+  table.km-table tbody tr:hover{background:rgba(13,27,44,.03);}
   table.mh-table{table-layout:fixed;min-width:940px;font-size:14px;}
   table.mh-table th{font-size:12.5px;padding:12px 10px;}
   table.mh-table td{padding:11px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -1424,8 +1431,8 @@
         <label>搜尋車號<input id="ml_search" placeholder="輸入車號"></label>
       </div>
       <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>車場</th><th>行號</th><th>廠牌</th><th>噸數</th><th>1月</th><th>2月</th><th>3月</th><th>4月</th><th>5月</th><th>6月</th><th>7月</th><th>8月</th><th>9月</th><th>10月</th><th>11月</th><th>12月</th><th>合計</th></tr></thead>
+        <table class="km-table">
+          <thead><tr><th>車號</th><th>車場</th><th>行號</th><th>廠牌</th><th class="km-num">噸數</th><th class="km-num">1月</th><th class="km-num">2月</th><th class="km-num">3月</th><th class="km-num">4月</th><th class="km-num">5月</th><th class="km-num">6月</th><th class="km-num">7月</th><th class="km-num">8月</th><th class="km-num">9月</th><th class="km-num">10月</th><th class="km-num">11月</th><th class="km-num">12月</th><th class="km-num">合計</th></tr></thead>
           <tbody id="mlStatBody"></tbody>
           <tfoot id="mlStatFoot"></tfoot>
         </table>
@@ -1437,8 +1444,8 @@
       <h2>平均公里數（季）</h2>
       <div class="muted" style="margin-bottom:10px;">同一個年度與篩選條件，換算成每季合計與每月平均，方便比較車輛之間的使用強度。</div>
       <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>車場</th><th>行號</th><th>第一季</th><th>第二季</th><th>第三季</th><th>第四季</th><th>全年合計</th><th>月平均</th></tr></thead>
+        <table class="km-table">
+          <thead><tr><th>車號</th><th>車場</th><th>行號</th><th class="km-num">第一季</th><th class="km-num">第二季</th><th class="km-num">第三季</th><th class="km-num">第四季</th><th class="km-num">全年合計</th><th class="km-num">月平均</th></tr></thead>
           <tbody id="mlQuarterBody"></tbody>
         </table>
       </div>
@@ -6479,8 +6486,15 @@ function renderMileageSelects(){
   const comps = [...new Set(STATE.vehicles.map(v => v.company_name).filter(Boolean))].sort();
   const cSel = document.getElementById('ml_company');
   const keepComp = cSel.value;
-  cSel.innerHTML = `<option value="all">全部行號</option>` + comps.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  cSel.innerHTML = `<option value="all">全部行號</option>` + comps.map(c => `<option value="${esc(c)}">${esc(shortCompany(c))}</option>`).join('');
   if(keepComp) cSel.value = keepComp;
+}
+
+// 行號在表格裡只顯示簡稱（去掉「股份有限公司」「有限公司」等字尾），欄位才不會被撐爆；
+// 完整名稱放在 title，滑鼠移上去看得到。篩選用的 value 一律還是用全名。
+function shortCompany(name){
+  if(!name) return '';
+  return String(name).replace(/股份有限公司$|有限公司$|企業社$|公司$/, '') || String(name);
 }
 
 // 依畫面上的年份/車場/行號/車號條件，整理成「一列一台車、1~12月」的表
@@ -6516,11 +6530,11 @@ function renderMileageStatTable(){
     <tr>
       <td>${esc(r.plate)}</td>
       <td>${esc(r.base)}</td>
-      <td>${esc(r.company)}</td>
+      <td title="${esc(r.company)}">${esc(shortCompany(r.company))}</td>
       <td>${esc(r.brand)}</td>
-      <td>${esc(String(r.tons))}</td>
-      ${r.months.map(m => `<td style="text-align:right;">${m === null ? '' : m.toLocaleString()}</td>`).join('')}
-      <td style="text-align:right;font-weight:700;">${r.total.toLocaleString()}</td>
+      <td class="km-num">${esc(String(r.tons))}</td>
+      ${r.months.map(m => `<td class="km-num">${m === null ? '' : m.toLocaleString()}</td>`).join('')}
+      <td class="km-num km-total">${r.total.toLocaleString()}</td>
     </tr>`).join('') || `<tr><td colspan="18" class="empty">這個年度沒有符合條件的里程資料</td></tr>`;
 
   const foot = document.getElementById('mlStatFoot');
@@ -6529,8 +6543,8 @@ function renderMileageStatTable(){
     const grand = sums.reduce((s,x)=>s+x,0);
     foot.innerHTML = `<tr style="font-weight:700;background:var(--gray-bg);">
       <td colspan="5">合計（${rows.length} 台）</td>
-      ${sums.map(s=>`<td style="text-align:right;">${s ? s.toLocaleString() : ''}</td>`).join('')}
-      <td style="text-align:right;">${grand.toLocaleString()}</td>
+      ${sums.map(s=>`<td class="km-num">${s ? s.toLocaleString() : ''}</td>`).join('')}
+      <td class="km-num">${grand.toLocaleString()}</td>
     </tr>`;
   }else{
     foot.innerHTML = '';
@@ -6548,10 +6562,10 @@ function renderMileageQuarterTable(rows){
     return `<tr>
       <td>${esc(r.plate)}</td>
       <td>${esc(r.base)}</td>
-      <td>${esc(r.company)}</td>
-      ${q.map(x=>`<td style="text-align:right;">${x ? x.toLocaleString() : ''}</td>`).join('')}
-      <td style="text-align:right;font-weight:700;">${r.total.toLocaleString()}</td>
-      <td style="text-align:right;">${avg ? avg.toLocaleString() : ''}</td>
+      <td title="${esc(r.company)}">${esc(shortCompany(r.company))}</td>
+      ${q.map(x=>`<td class="km-num">${x ? x.toLocaleString() : ''}</td>`).join('')}
+      <td class="km-num km-total">${r.total.toLocaleString()}</td>
+      <td class="km-num">${avg ? avg.toLocaleString() : ''}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="9" class="empty">這個年度沒有符合條件的里程資料</td></tr>`;
 }
