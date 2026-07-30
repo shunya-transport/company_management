@@ -606,24 +606,44 @@
     </div>
     <div class="card">
       <h2>板架打油登錄<span class="count-badge" id="grease_rec_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">板架、貨櫃架、堆高機、吊掛機的打油一律從這裡登錄。存檔後會自動更新該車的「上次打油日」並重算下次到期日，總覽與車輛維護的「板架打油到期提醒」會同步變動。</div>
+      <div class="muted" style="margin-bottom:10px;">板架、貨櫃架、堆高機、吊掛機的打油一律從這裡登錄。<b>司機用電話或 LINE 回報時，只要填車號、打油日期、回報人就可以先存檔</b>，廠商、費用、發票號碼留空，之後在下方「待補打油費用」補登即可。到期日只看打油日期，所以一存檔「上次打油日」與「下次到期日」就會立刻更新，不必等費用回來。</div>
       <div class="form-grid">
         <label>車號<input id="gr_plate" placeholder="例：HBD-3200" list="greasePlateList" autocomplete="off"></label>
         <label>打油日期<input id="gr_date" type="date"></label>
-        <label>施作廠商<input id="gr_vendor" placeholder="選填，可從清單選取" list="vendorList" autocomplete="off"></label>
-        <label>費用<input id="gr_cost" type="number" min="0" step="1" placeholder="選填"></label>
+        <label>回報人<select id="gr_reporter"></select></label>
+        <label>施作廠商<input id="gr_vendor" placeholder="可留空，之後再補" list="vendorList" autocomplete="off"></label>
+        <label>費用<input id="gr_cost" type="number" min="0" step="1" placeholder="可留空，之後再補"></label>
+        <label>發票號碼<input id="gr_invoice" placeholder="可留空，之後再補"></label>
         <label>備註<input id="gr_notes" placeholder="選填"></label>
       </div>
       <div id="gr_preview" class="muted" style="margin:8px 0;"></div>
       <button class="btn" id="gr_add">新增打油紀錄</button>
       <datalist id="greasePlateList"></datalist>
       <div class="toolbar" style="margin-top:14px;">
-        <input id="grease_search" placeholder="搜尋車號 / 廠商">
+        <input id="grease_search" placeholder="搜尋車號 / 廠商 / 回報人">
+        <select id="grease_rec_filter">
+          <option value="all">全部狀態</option>
+          <option value="pending">待補資料</option>
+          <option value="done">已完結</option>
+        </select>
       </div>
       <div class="table-scroll" style="max-height:320px;">
         <table>
-          <thead><tr><th>打油日期</th><th>車號</th><th>週期</th><th>下次到期</th><th>施作廠商</th><th>費用</th><th>備註</th><th></th></tr></thead>
+          <thead><tr><th>打油日期</th><th>車號</th><th>週期</th><th>下次到期</th><th>回報人</th><th>施作廠商</th><th>費用</th><th>發票號碼</th><th>狀態</th><th>備註</th><th></th></tr></thead>
           <tbody id="greaseRecordBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>待補打油費用<span class="count-badge" id="grease_pending_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">司機已回報打油、但廠商或費用還沒補上來的紀錄都會列在這裡。按「補登」就地填廠商、金額、發票號碼，存檔後這筆會移出清單。<b>補登只會補這三格，不會動到打油日期，所以下次到期日不會因為補登而改變。</b>若是自行施作、本來就沒有費用，補登時把金額填 0 或直接存檔並選擇標記完結即可。</div>
+      <div class="toolbar">
+        <input id="grease_pending_search" placeholder="搜尋車號 / 回報人">
+      </div>
+      <div class="table-scroll" style="max-height:360px;">
+        <table>
+          <thead><tr><th>打油日期</th><th>車號</th><th>回報人</th><th>施作廠商</th><th>費用</th><th>發票號碼</th><th>已等待</th><th></th></tr></thead>
+          <tbody id="greasePendingBody"></tbody>
         </table>
       </div>
     </div>
@@ -2423,7 +2443,20 @@ async function enrichDenormalizedFields(){
     r.vendor_name = vendorById[r.vendor_id] || r.vendor_name || '';
   });
   STATE.maintSchedules.forEach(r => { const v = vehById[r.vehicle_id]; r.plate = v ? v.plate : r.plate; });
-  (STATE.greaseRecords||[]).forEach(r => { const v = vehById[r.vehicle_id]; r.plate = v ? v.plate : r.plate; r.vendor_name = vendorById[r.vendor_id] || r.vendor_name || ''; });
+  (STATE.greaseRecords||[]).forEach(r => {
+    const v = vehById[r.vehicle_id];
+    r.plate = v ? v.plate : r.plate;
+    r.vendor_name = vendorById[r.vendor_id] || r.vendor_name || '';
+    // reported_by_name 是真欄位（人員離職後名字要留著），只在空白時才用員工主檔補
+    if(!r.reported_by_name && r.reported_by){
+      const _e = empById[r.reported_by];
+      if(_e) r.reported_by_name = _e.name;
+    }
+    if(!r.status){
+      const _done = r.vendor_name && String(r.vendor_name).trim() && r.cost != null && r.cost !== '';
+      r.status = _done ? '已完結' : '待補資料';
+    }
+  });
   STATE.leases.forEach(r => {
     const v = vehById[r.vehicle_id];
     r.plate = v ? v.plate : r.plate;
@@ -2871,6 +2904,7 @@ function renderDatalists(){
     vendorListEl.innerHTML = (STATE.vendors||[]).map(v=>`<option value="${esc(v.name)}">`).join('');
   }
   renderGreasePlateOptions();
+  renderGreaseReporterOptions();
 }
 
 function renderNewStaffSelects(){
@@ -5828,27 +5862,104 @@ function renderGreaseStatusTable(){
       `<td>${esc(r.d.remain)}</td><td><span class="pill ${r.d.status}">${label[r.d.status]}</span></td>`+
     `</tr>`).join('') : '<tr><td colspan="8" class="muted">目前沒有符合條件的板架</td></tr>';
 }
+// ---- 司機先行回報／費用後補：狀態只有「待補資料」與「已完結」兩種 ----
+const GREASE_ST_PENDING = '待補資料';
+const GREASE_ST_DONE = '已完結';
+let editingGreaseId = null;
+function greaseStatusOf(r){
+  return (r && r.status) ? String(r.status) : GREASE_ST_PENDING;
+}
+// 廠商與金額都補齊了才算完結；金額 0 元（自行施作）也算補齊
+function greaseLooksComplete(r){
+  const hasVendor = !!(r.vendor_name && String(r.vendor_name).trim());
+  const hasCost = r.cost != null && r.cost !== '';
+  return hasVendor && hasCost;
+}
+function greaseReporterCandidates(){
+  return (STATE.employees||[]).filter(e => e.status === '在職' && e.employee_type === '直接')
+    .slice().sort((a,b)=> String(a.name||'').localeCompare(String(b.name||'')));
+}
+function renderGreaseReporterOptions(){
+  const el = document.getElementById('gr_reporter');
+  if(!el) return;
+  const cur = el.value;
+  el.innerHTML = '<option value="">未填（可稍後補）</option>' +
+    greaseReporterCandidates().map(e => `<option value="${e.id}">${esc(e.name)}${e.fleet_team ? '（' + esc(e.fleet_team) + '）' : ''}</option>`).join('');
+  if(cur) el.value = cur;
+}
+function greaseReporterLabel(r){
+  if(r.reported_by_name) return r.reported_by_name;
+  const emp = (STATE.employees||[]).find(e => e.id === r.reported_by);
+  return emp ? emp.name : '';
+}
+// 補登用的三格輸入（scope 讓同一筆在兩張表格裡的 input id 不會撞名）
+function greaseEditInputs(r, scope){
+  return `<td><input id="gre_vendor_${scope}_${esc(r.id)}" list="vendorList" autocomplete="off" value="${esc(r.vendor_name||'')}" placeholder="廠商" style="width:130px"></td>`+
+         `<td><input id="gre_cost_${scope}_${esc(r.id)}" type="number" min="0" step="1" value="${(r.cost==null||r.cost==='')?'':esc(r.cost)}" placeholder="金額" style="width:90px"></td>`+
+         `<td><input id="gre_invoice_${scope}_${esc(r.id)}" value="${esc(r.invoice_no||'')}" placeholder="發票號碼" style="width:120px"></td>`;
+}
+function greaseEditButtons(r, scope, editing){
+  return editing
+    ? `<button class="name-link" data-save-grease="${esc(r.id)}" data-grease-scope="${scope}">存檔</button> <button class="del-btn" data-cancel-grease="${esc(r.id)}">取消</button>`
+    : `<button class="name-link" data-edit-grease="${esc(r.id)}">補登</button>`;
+}
+function greaseWaitDays(r){
+  const d = String(r.service_date||'').slice(0,10);
+  if(!d) return '';
+  const diff = Math.floor((new Date(todayISO()) - new Date(d)) / 86400000);
+  return isNaN(diff) ? '' : (diff < 0 ? '—' : diff + ' 天');
+}
+function renderGreasePendingTable(){
+  const body = document.getElementById('greasePendingBody');
+  if(!body) return;
+  const kw = ((document.getElementById('grease_pending_search')||{}).value || '').trim().toUpperCase();
+  const rows = (STATE.greaseRecords||[]).filter(r => greaseStatusOf(r) === GREASE_ST_PENDING)
+    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw) || String(greaseReporterLabel(r)).toUpperCase().includes(kw))
+    .slice().sort((a,b)=> String(a.service_date||'').localeCompare(String(b.service_date||'')));
+  const total = (STATE.greaseRecords||[]).filter(r => greaseStatusOf(r) === GREASE_ST_PENDING).length;
+  const cEl = document.getElementById('grease_pending_count'); if(cEl) cEl.textContent = `${total} 筆待補`;
+  body.innerHTML = rows.length ? rows.map(r => {
+    const editing = String(editingGreaseId) === String(r.id);
+    const cells = editing ? greaseEditInputs(r, 'p')
+      : `<td>${esc(r.vendor_name||'')}</td><td>${(r.cost==null||r.cost==='') ? '' : fmt2(r.cost)}</td><td>${esc(r.invoice_no||'')}</td>`;
+    return `<tr>`+
+      `<td>${esc(String(r.service_date||'').slice(0,10))}</td><td>${esc(r.plate||'')}</td>`+
+      `<td>${esc(greaseReporterLabel(r))}</td>`+ cells +
+      `<td class="muted">${esc(greaseWaitDays(r))}</td>`+
+      `<td>${greaseEditButtons(r, 'p', editing)}</td>`+
+    `</tr>`;
+  }).join('') : '<tr><td colspan="8" class="muted">目前沒有待補費用的打油紀錄</td></tr>';
+}
 function renderGreaseRecords(){
   const body = document.getElementById('greaseRecordBody');
   if(!body) return;
   const all = STATE.greaseRecords || [];
   const kw = ((document.getElementById('grease_search')||{}).value || '').trim().toUpperCase();
+  const st = (document.getElementById('grease_rec_filter')||{}).value || 'all';
   const rows = all.slice()
     .sort((a,b)=> String(b.service_date||'').localeCompare(String(a.service_date||'')))
-    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw) || String(r.vendor_name||'').toUpperCase().includes(kw));
-  const cEl = document.getElementById('grease_rec_count'); if(cEl) cEl.textContent = `${all.length} 筆`;
+    .filter(r => st === 'all' || (st === 'pending' ? greaseStatusOf(r) === GREASE_ST_PENDING : greaseStatusOf(r) !== GREASE_ST_PENDING))
+    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw) || String(r.vendor_name||'').toUpperCase().includes(kw) || String(greaseReporterLabel(r)).toUpperCase().includes(kw));
+  const nPend = all.filter(r => greaseStatusOf(r) === GREASE_ST_PENDING).length;
+  const cEl = document.getElementById('grease_rec_count');
+  if(cEl) cEl.textContent = nPend ? `${all.length} 筆／待補 ${nPend}` : `${all.length} 筆`;
   body.innerHTML = rows.length ? rows.map(r => {
     const v = vehicleByPlate(r.plate);
     const months = v ? greaseMonthsForModel(v.maintenance_model) : null;
     const next = (months && r.service_date) ? addMonthsN(String(r.service_date).slice(0,10), months) : '—';
+    const pending = greaseStatusOf(r) === GREASE_ST_PENDING;
+    const editing = String(editingGreaseId) === String(r.id);
+    const cells = editing ? greaseEditInputs(r, 'r')
+      : `<td>${esc(r.vendor_name||'')}</td><td>${(r.cost==null||r.cost==='') ? '' : fmt2(r.cost)}</td><td>${esc(r.invoice_no||'')}</td>`;
     return `<tr>`+
       `<td>${esc(String(r.service_date||'').slice(0,10))}</td><td>${esc(r.plate||'')}</td>`+
       `<td>${months ? months + ' 個月' : '—'}</td><td class="muted">${esc(next)}</td>`+
-      `<td>${esc(r.vendor_name||'')}</td><td>${(r.cost==null||r.cost==='') ? '' : fmt2(r.cost)}</td>`+
+      `<td>${esc(greaseReporterLabel(r))}</td>`+ cells +
+      `<td><span class="pill ${pending ? 'amber' : 'green'}">${esc(greaseStatusOf(r))}</span></td>`+
       `<td class="muted">${esc(r.notes||'')}</td>`+
-      `<td><button class="del-btn" data-del-grease="${esc(r.id)}">刪除</button></td>`+
+      `<td>${greaseEditButtons(r, 'r', editing)} <button class="del-btn" data-del-grease="${esc(r.id)}">刪除</button></td>`+
     `</tr>`;
-  }).join('') : '<tr><td colspan="8" class="muted">目前沒有打油紀錄</td></tr>';
+  }).join('') : '<tr><td colspan="11" class="muted">目前沒有打油紀錄</td></tr>';
 }
 // 依打油紀錄重算某台車的「上次打油日」；沒有排程就依保養標準自動建立(這是「連動」的核心)
 function syncGreaseSchedule(v){
@@ -5878,6 +5989,8 @@ function syncGreaseSchedule(v){
   if(el){ el.addEventListener('change', updateGreasePreview); el.addEventListener('input', updateGreasePreview); }
 });
 ['grease_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreaseRecords); });
+['grease_rec_filter'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('change', renderGreaseRecords); });
+['grease_pending_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreasePendingTable); });
 ['grease_status_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreaseStatusTable); });
 ['grease_status_filter'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('change', renderGreaseStatusTable); });
 const _grAddBtn = document.getElementById('gr_add');
@@ -5892,41 +6005,99 @@ if(_grAddBtn) _grAddBtn.addEventListener('click', async () => {
   const vendorName = (document.getElementById('gr_vendor').value || '').trim();
   const _v = (STATE.vendors||[]).find(x => x.name === vendorName);
   const costRaw = document.getElementById('gr_cost').value;
-  STATE.greaseRecords = STATE.greaseRecords || [];
-  STATE.greaseRecords.unshift({
+  const invoiceNo = ((document.getElementById('gr_invoice')||{}).value || '').trim();
+  const repSel = document.getElementById('gr_reporter');
+  const repId = repSel && repSel.value ? parseInt(repSel.value) : null;
+  const repEmp = repId ? (STATE.employees||[]).find(e => e.id === repId) : null;
+  if(!repId && !confirm('還沒選「回報人」。\n\n沒有回報人以後查不出這筆是誰報的，仍要存檔嗎？')) return;
+  const rec = {
     id: nextId(STATE.greaseRecords), plate: v.plate, vehicle_id: v.id,
     service_date: date, vendor_id: _v ? _v.id : null, vendor_name: vendorName || null,
     cost: costRaw === '' ? null : parseFloat(costRaw),
+    invoice_no: invoiceNo || null,
+    reported_by: repId, reported_by_name: repEmp ? repEmp.name : null,
+    status: GREASE_ST_PENDING,
     notes: (document.getElementById('gr_notes').value || '').trim() || null,
     created_at: new Date().toISOString()
-  });
+  };
+  rec.status = greaseLooksComplete(rec) ? GREASE_ST_DONE : GREASE_ST_PENDING;
+  STATE.greaseRecords = STATE.greaseRecords || [];
+  STATE.greaseRecords.unshift(rec);
   await saveState('grease_records', STATE.greaseRecords, true);
   const sched = syncGreaseSchedule(v);
   await saveState('maintenance_schedules', STATE.maintSchedules, true);
-  ['gr_plate','gr_date','gr_vendor','gr_cost','gr_notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['gr_plate','gr_date','gr_vendor','gr_cost','gr_invoice','gr_notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const _rs = document.getElementById('gr_reporter'); if(_rs) _rs.value = '';
   renderAll();
   updateGreasePreview();
   const nextDue = (sched && sched.last_service_date && sched.frequency_months)
     ? addMonthsN(String(sched.last_service_date).slice(0,10), sched.frequency_months) : null;
   alert('已存檔到雲端\n\n車號：' + v.plate + '\n打油日期：' + date +
+        (rec.reported_by_name ? '\n回報人：' + rec.reported_by_name : '') +
         (months ? '\n打油週期：' + months + ' 個月／次' : '') +
         (nextDue ? '\n下次到期日：' + nextDue : '') +
-        '\n\n「板架打油到期提醒」已同步重新計算。');
+        '\n狀態：' + rec.status +
+        '\n\n「板架打油到期提醒」已同步重新計算。' +
+        (rec.status === GREASE_ST_PENDING ? '\n這筆已列入下方「待補打油費用」，等廠商與費用回來再補登。' : ''));
 });
-const _grBody = document.getElementById('greaseRecordBody');
-if(_grBody) _grBody.addEventListener('click', async (e) => {
+// 打油紀錄清單與待補清單共用同一組刪除／補登處理
+async function greaseBodyClick(e){
   const gId = e.target.getAttribute('data-del-grease');
-  if(!gId) return;
-  if(!confirm('確定要刪除這筆打油紀錄嗎？\n\n刪除後會依剩下的紀錄重新計算該車的「上次打油日」。')) return;
-  const rec = (STATE.greaseRecords||[]).find(r => String(r.id) === gId);
-  STATE.greaseRecords = (STATE.greaseRecords||[]).filter(r => String(r.id) !== gId);
-  await saveState('grease_records', STATE.greaseRecords, true);
-  if(rec){
-    const v = STATE.vehicles.find(x => x.id === rec.vehicle_id) || vehicleByPlate(rec.plate);
-    if(v){ syncGreaseSchedule(v); await saveState('maintenance_schedules', STATE.maintSchedules, true); }
+  const editId = e.target.getAttribute('data-edit-grease');
+  const cancelId = e.target.getAttribute('data-cancel-grease');
+  const saveId = e.target.getAttribute('data-save-grease');
+
+  if(gId){
+    if(!confirm('確定要刪除這筆打油紀錄嗎？\n\n刪除後會依剩下的紀錄重新計算該車的「上次打油日」。')) return;
+    const rec = (STATE.greaseRecords||[]).find(r => String(r.id) === gId);
+    STATE.greaseRecords = (STATE.greaseRecords||[]).filter(r => String(r.id) !== gId);
+    if(String(editingGreaseId) === gId) editingGreaseId = null;
+    await saveState('grease_records', STATE.greaseRecords, true);
+    if(rec){
+      const v = STATE.vehicles.find(x => x.id === rec.vehicle_id) || vehicleByPlate(rec.plate);
+      if(v){ syncGreaseSchedule(v); await saveState('maintenance_schedules', STATE.maintSchedules, true); }
+    }
+    renderAll();
+  }else if(editId){
+    editingGreaseId = editId;
+    renderGreaseRecords();
+    renderGreasePendingTable();
+  }else if(cancelId){
+    editingGreaseId = null;
+    renderGreaseRecords();
+    renderGreasePendingTable();
+  }else if(saveId){
+    const scope = e.target.getAttribute('data-grease-scope') || 'p';
+    const rec = (STATE.greaseRecords||[]).find(r => String(r.id) === saveId);
+    if(!rec){ editingGreaseId = null; renderAll(); return; }
+    const vEl = document.getElementById('gre_vendor_' + scope + '_' + saveId);
+    const cEl2 = document.getElementById('gre_cost_' + scope + '_' + saveId);
+    const iEl = document.getElementById('gre_invoice_' + scope + '_' + saveId);
+    const vendorName = vEl ? (vEl.value || '').trim() : '';
+    const costRaw = cEl2 ? cEl2.value : '';
+    const invoiceNo = iEl ? (iEl.value || '').trim() : '';
+    const _v = (STATE.vendors||[]).find(x => x.name === vendorName);
+    if(vendorName && !_v && !confirm('廠商「' + vendorName + '」不在廠商清單裡。\n\n仍要照這樣存檔嗎？（建議先去「運輸費用」新增廠商，或從清單選取）')) return;
+    rec.vendor_name = vendorName || null;
+    rec.vendor_id = _v ? _v.id : null;
+    rec.cost = costRaw === '' ? null : parseFloat(costRaw);
+    rec.invoice_no = invoiceNo || null;
+    if(greaseLooksComplete(rec)){
+      rec.status = GREASE_ST_DONE;
+    }else{
+      rec.status = confirm('廠商或金額還沒填完。\n\n按「確定」＝標記為已完結（例如自行施作、本來就沒有費用）\n按「取消」＝保留在「待補打油費用」清單裡')
+        ? GREASE_ST_DONE : GREASE_ST_PENDING;
+    }
+    // 補登只改廠商／金額／發票號碼，不動 service_date，所以到期日不會變
+    await saveState('grease_records', STATE.greaseRecords, true);
+    editingGreaseId = null;
+    renderAll();
   }
-  renderAll();
-});
+}
+const _grBody = document.getElementById('greaseRecordBody');
+if(_grBody) _grBody.addEventListener('click', greaseBodyClick);
+const _grPendBody = document.getElementById('greasePendingBody');
+if(_grPendBody) _grPendBody.addEventListener('click', greaseBodyClick);
 
 function renderMaintDueTable(){
   const rows = [];
@@ -6384,6 +6555,7 @@ function renderAll(){
   renderSelfUseTrailers();
   renderGreaseStatusTable();
   renderGreaseRecords();
+  renderGreasePendingTable();
   renderTrainingTable();
   renderStaffTable();
   renderEmpSelect();
