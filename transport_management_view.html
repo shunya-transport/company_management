@@ -812,19 +812,38 @@
         </label>
         <label>日期<input id="mr_date" type="date"></label>
         <label>里程數(km)<input id="mr_mileage" type="number" placeholder="例：120000"></label>
-        <label>廠商<input id="mr_vendor" placeholder="選填，可從清單選取" list="vendorList" autocomplete="off"></label>
-        <label>費用<input id="mr_cost" type="number" placeholder="選填"></label>
+        <label>廠商<input id="mr_vendor" placeholder="可留空，之後再補" list="vendorList" autocomplete="off"></label>
+        <label>費用<input id="mr_cost" type="number" min="0" step="1" placeholder="可留空，之後再補"></label>
+        <label>發票號碼<input id="mr_invoice" placeholder="可留空，之後再補"></label>
         <label>內容說明<input id="mr_desc" placeholder="例：機油、來令片更換"></label>
         <label>更換零件名稱<input id="mr_parts" placeholder="選填，例：機油芯、來令片"></label>
       </div>
       <button class="btn" id="mr_add">新增維修保養記錄</button>
-      <div class="muted" style="margin-top:8px;">選「小保養」或「大保養」時，系統會自動更新這台車的保養週期紀錄（供下方到期估算使用），填寫的里程數也會一併記錄為最新里程。</div>
+      <div class="muted" style="margin-top:8px;">選「小保養」或「大保養」時，系統會自動更新這台車的保養週期紀錄（供下方到期估算使用），填寫的里程數也會一併記錄為最新里程。<br><b>維修先做、金額與發票之後才來時，費用與發票號碼可以留空先存檔</b>，之後在下方「待補維修費用」補登即可；補登不會動到日期與里程，保養週期紀錄也不會受影響。</div>
     </div>
 
+    <div class="card">
+      <h2>待補維修費用<span class="count-badge" id="maint_pending_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">維修保養已經做了、但金額或發票號碼還沒補上來的紀錄都會列在這裡。按「補登」就地填廠商、金額、發票號碼，存檔後這筆會移出清單。<b>補登只會補這三格，不會動到日期與里程，保養週期紀錄與到期估算都不受影響。</b>若這次確實沒有費用（廠商沒收費、保固內、自行處理），金額填 0 即可。</div>
+      <div class="toolbar">
+        <input id="maint_pending_search" placeholder="搜尋車號 / 內容">
+      </div>
+      <div class="table-scroll" style="max-height:360px;">
+        <table>
+          <thead><tr><th>日期</th><th>車號</th><th>類型</th><th>內容</th><th>廠商</th><th>金額</th><th>發票號碼</th><th>已等待</th><th></th></tr></thead>
+          <tbody id="maintPendingBody"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="card">
       <h2>維修保養歷史記錄<span class="count-badge" id="maint_history_count"></span></h2>
       <div class="toolbar">
         <input id="mh_search" placeholder="搜尋車號">
+        <select id="mh_status_filter">
+          <option value="all">全部狀態</option>
+          <option value="pending">待補資料</option>
+          <option value="done">已完成</option>
+        </select>
         <select id="mh_type_filter">
           <option value="all">全部類型</option>
           <option value="定期保養">定期保養</option>
@@ -836,10 +855,11 @@
       <div class="table-scroll">
         <table class="mh-table">
           <colgroup>
-            <col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%">
-            <col style="width:10%"><col style="width:25%"><col style="width:15%"><col style="width:9%">
+            <col style="width:8%"><col style="width:8%"><col style="width:9%"><col style="width:9%">
+            <col style="width:9%"><col style="width:19%"><col style="width:11%"><col style="width:7%">
+            <col style="width:10%"><col style="width:6%"><col style="width:4%">
           </colgroup>
-          <thead><tr><th>車號</th><th>類型</th><th>日期</th><th>里程</th><th>廠商</th><th>內容</th><th>更換零件</th><th>費用</th></tr></thead>
+          <thead><tr><th>車號</th><th>類型</th><th>日期</th><th>里程</th><th>廠商</th><th>內容</th><th>更換零件</th><th>費用</th><th>發票號碼</th><th>狀態</th><th></th></tr></thead>
           <tbody id="maintHistoryBody"></tbody>
         </table>
       </div>
@@ -2503,6 +2523,8 @@ async function enrichDenormalizedFields(){
     const v = vehById[r.vehicle_id];
     r.plate = v ? v.plate : r.plate;
     r.vendor_name = vendorById[r.vendor_id] || r.vendor_name || '';
+    // 舊資料沒有狀態欄位:有金額就算已完成(含 0 元),金額空白才列入待補
+    if(!r.status){ r.status = (r.cost != null && r.cost !== '') ? '已完成' : '待補資料'; }
   });
   STATE.maintSchedules.forEach(r => { const v = vehById[r.vehicle_id]; r.plate = v ? v.plate : r.plate; });
   (STATE.greaseRecords||[]).forEach(r => {
@@ -5426,12 +5448,126 @@ function updateIlEmpCount(){
   document.getElementById('il_emp_count').textContent = n ? `已選 ${n} 人` : '';
 }
 
+const MAINT_ST_PENDING = '待補資料';
+const MAINT_ST_DONE = '已完成';
+let editingMaintId = null;
+// 金額有填就算完成（含 0 元，代表這次確實沒有費用）；廠商不強制，因為早期 989 筆維修紀錄的廠商欄位本來就是空的
+function maintLooksComplete(r){ return !!r && r.cost != null && r.cost !== ''; }
+function maintStatusOf(r){
+  if(r && r.status) return String(r.status);
+  return maintLooksComplete(r) ? MAINT_ST_DONE : MAINT_ST_PENDING;
+}
+function maintStatusPill(r){
+  const st = maintStatusOf(r);
+  return `<span class="pill ${st === MAINT_ST_PENDING ? 'amber' : 'green'}">${esc(st)}</span>`;
+}
+function maintWaitDays(r){
+  const d = String(r.maintenance_date||'').slice(0,10);
+  if(!d) return '';
+  const diff = Math.floor((new Date(todayISO()) - new Date(d)) / 86400000);
+  return isNaN(diff) ? '' : (diff < 0 ? '—' : diff + ' 天');
+}
+// 同一筆紀錄可能同時出現在「維修保養歷史記錄」與「待補維修費用」兩張表，輸入框 id 必須用 scope 區隔，否則會撞號
+function maintVendorCell(r, scope, editing){
+  return editing
+    ? `<td><input id="mre_vendor_${scope}_${esc(r.id)}" list="vendorList" autocomplete="off" value="${esc(r.vendor_name||'')}" placeholder="廠商" style="width:120px"></td>`
+    : `<td>${esc(r.vendor_name||'—')}</td>`;
+}
+function maintCostCell(r, scope, editing){
+  return editing
+    ? `<td><input id="mre_cost_${scope}_${esc(r.id)}" type="number" min="0" step="1" value="${(r.cost==null||r.cost==='')?'':esc(r.cost)}" placeholder="金額" style="width:90px"></td>`
+    : `<td>${(r.cost==null||r.cost==='') ? '—' : '$'+esc(r.cost)}</td>`;
+}
+function maintInvoiceCell(r, scope, editing){
+  return editing
+    ? `<td><input id="mre_invoice_${scope}_${esc(r.id)}" value="${esc(r.invoice_no||'')}" placeholder="發票號碼" style="width:120px"></td>`
+    : `<td>${esc(r.invoice_no||'—')}</td>`;
+}
+function maintEditButtons(r, scope, editing){
+  return editing
+    ? `<button class="name-link" data-save-maint="${esc(r.id)}" data-maint-scope="${scope}">存檔</button> <button class="del-btn" data-cancel-maint="${esc(r.id)}">取消</button>`
+    : `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button>`;
+}
+function renderMaintPendingTable(){
+  const body = document.getElementById('maintPendingBody');
+  if(!body) return;
+  const kw = ((document.getElementById('maint_pending_search')||{}).value || '').trim().toUpperCase();
+  const all = (STATE.maintRecords||[]).filter(r => maintStatusOf(r) === MAINT_ST_PENDING);
+  const rows = all
+    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw) || String(r.description||'').toUpperCase().includes(kw))
+    .slice().sort((a,b)=> String(a.maintenance_date||'').slice(0,10).localeCompare(String(b.maintenance_date||'').slice(0,10)));
+  const cEl = document.getElementById('maint_pending_count');
+  if(cEl) cEl.textContent = all.length ? `${all.length} 筆待補` : '目前沒有待補';
+  body.innerHTML = rows.map(r => {
+    const editing = String(editingMaintId) === String(r.id);
+    return `
+    <tr>
+      <td>${esc(String(r.maintenance_date||'').slice(0,10))}</td>
+      <td>${esc(r.plate||'')}</td>
+      <td>${esc(r.maintenance_type||'')}</td>
+      <td class="muted" title="${esc(r.description||'')}">${esc(r.description||'')}</td>
+      ${maintVendorCell(r,'p',editing)}${maintCostCell(r,'p',editing)}${maintInvoiceCell(r,'p',editing)}
+      <td>${esc(maintWaitDays(r))}</td>
+      <td>${maintEditButtons(r,'p',editing)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty">${kw ? '沒有符合條件的紀錄' : '目前沒有等待補金額或發票的維修紀錄'}</td></tr>`;
+}
+async function maintBodyClick(e){
+  const editId = e.target.getAttribute('data-edit-maint');
+  const cancelId = e.target.getAttribute('data-cancel-maint');
+  const saveId = e.target.getAttribute('data-save-maint');
+  if(editId){
+    editingMaintId = editId;
+    renderMaintHistoryTable(); renderMaintPendingTable();
+  }else if(cancelId){
+    editingMaintId = null;
+    renderMaintHistoryTable(); renderMaintPendingTable();
+  }else if(saveId){
+    const scope = e.target.getAttribute('data-maint-scope') || 'p';
+    const rec = (STATE.maintRecords||[]).find(x => String(x.id) === String(saveId));
+    if(!rec) return;
+    const vEl = document.getElementById('mre_vendor_' + scope + '_' + saveId);
+    const cEl = document.getElementById('mre_cost_' + scope + '_' + saveId);
+    const iEl = document.getElementById('mre_invoice_' + scope + '_' + saveId);
+    const vendorName = vEl ? vEl.value.trim() : '';
+    const costRaw = cEl ? String(cEl.value).trim() : '';
+    const invoiceNo = iEl ? iEl.value.trim() : '';
+    // maintenance_records 只有 vendor_id 這個真欄位,廠商名稱一定要換成編號才存得進去
+    let vendorId = null;
+    if(vendorName){
+      const _vd = vendorByName(vendorName);
+      if(_vd){
+        vendorId = _vd.id;
+      }else if(confirm('廠商「' + vendorName + '」不在系統的廠商清單裡。\n\n按「確定」:自動建立這家廠商並記錄下來。\n按「取消」:回去重新輸入(可從欄位的下拉清單選取現有廠商)。')){
+        vendorId = await createVendor(vendorName);
+      }else{
+        return;
+      }
+    }
+    rec.vendor_id = vendorId;
+    rec.vendor_name = vendorName || '';
+    rec.cost = costRaw === '' ? null : parseFloat(costRaw);
+    rec.invoice_no = invoiceNo || null;
+    if(maintLooksComplete(rec)){
+      rec.status = MAINT_ST_DONE;
+    }else{
+      rec.status = confirm('金額還沒填。\n\n按「確定」＝標記為已完成(例如這次確實沒有費用)\n按「取消」＝保留在「待補維修費用」清單裡') ? MAINT_ST_DONE : MAINT_ST_PENDING;
+    }
+    // 補登只改廠商／金額／發票號碼,不動日期與里程,所以保養週期紀錄與到期估算完全不受影響
+    await saveState('maint_records', STATE.maintRecords, true);
+    editingMaintId = null;
+    renderAll();
+  }
+}
 function renderMaintHistoryTable(){
   const q = document.getElementById('mh_search').value.trim();
   const typeF = document.getElementById('mh_type_filter').value;
+  const stF = ((document.getElementById('mh_status_filter')||{}).value) || 'all';
   let rows = STATE.maintRecords;
   if(q) rows = rows.filter(r => (r.plate||'').includes(q));
   if(typeF !== 'all') rows = rows.filter(r => r.maintenance_type === typeF);
+  if(stF === 'pending') rows = rows.filter(r => maintStatusOf(r) === MAINT_ST_PENDING);
+  else if(stF === 'done') rows = rows.filter(r => maintStatusOf(r) === MAINT_ST_DONE);
   // 依保養日期由新到舊排序,新輸入的記錄才會出現在最上面
   // (資料庫的 record_id 順序不等於日期順序,不排序的話新記錄會被擠到200筆之外看不到)
   rows = rows.slice().sort((a,b) => {
@@ -5439,19 +5575,25 @@ function renderMaintHistoryTable(){
     if(d !== 0) return d;
     return String(b.created_at||'').localeCompare(String(a.created_at||''));
   });
-  document.getElementById('maint_history_count').textContent = `共 ${rows.length} 筆`;
+  const _pendCnt = (STATE.maintRecords||[]).filter(x => maintStatusOf(x) === MAINT_ST_PENDING).length;
+  document.getElementById('maint_history_count').textContent = _pendCnt ? `共 ${rows.length} 筆／待補 ${_pendCnt}` : `共 ${rows.length} 筆`;
   const shown = rows.slice(0,200);
-  document.getElementById('maintHistoryBody').innerHTML = shown.map(r => `
+  document.getElementById('maintHistoryBody').innerHTML = shown.map(r => {
+    const editing = String(editingMaintId) === String(r.id);
+    return `
     <tr>
       <td title="${esc(r.plate)}">${esc(r.plate)}</td>
       <td>${esc(r.maintenance_type)}</td>
       <td>${esc((r.maintenance_date||'').slice(0,10))}</td>
       <td>${r.mileage_at_service ? (r.mileage_estimated ? '≈ ' : '')+esc(Number(r.mileage_at_service).toLocaleString())+' km' : '—'}</td>
-      <td>${esc(r.vendor_name||'—')}</td>
+      ${maintVendorCell(r,'h',editing)}
       <td class="muted mh-desc" title="${esc(r.description||'')}">${esc(r.description||'')}</td>
       <td class="muted mh-parts" title="${esc(r.parts_replaced||'')}">${esc(r.parts_replaced||'—')}</td>
-      <td>${r.cost ? '$'+esc(r.cost) : '—'}</td>
-    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
+      ${maintCostCell(r,'h',editing)}${maintInvoiceCell(r,'h',editing)}
+      <td>${maintStatusPill(r)}</td>
+      <td>${maintEditButtons(r,'h',editing)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
 let adminFiltersInit = false;
@@ -6630,6 +6772,7 @@ function renderAll(){
   renderMaintenanceTables();
   renderTireLayout();
   renderMaintHistoryTable();
+  renderMaintPendingTable();
   renderMaintStandardsTable();
   renderAdminRewards();
   renderFfTable();
@@ -7101,6 +7244,14 @@ document.getElementById('viTableBody').addEventListener('click', async (e) => {
   }
 });
 document.getElementById('mh_search').addEventListener('input', renderMaintHistoryTable);
+const _mhStatusF = document.getElementById('mh_status_filter');
+if(_mhStatusF) _mhStatusF.addEventListener('change', renderMaintHistoryTable);
+const _mpSearchEl = document.getElementById('maint_pending_search');
+if(_mpSearchEl) _mpSearchEl.addEventListener('input', renderMaintPendingTable);
+const _mhBodyEl = document.getElementById('maintHistoryBody');
+if(_mhBodyEl) _mhBodyEl.addEventListener('click', maintBodyClick);
+const _mpBodyEl = document.getElementById('maintPendingBody');
+if(_mpBodyEl) _mpBodyEl.addEventListener('click', maintBodyClick);
 document.getElementById('ar_search').addEventListener('input', renderAdminRewards);
 document.getElementById('ar_type_filter').addEventListener('change', renderAdminRewards);
 
@@ -9102,7 +9253,10 @@ document.getElementById('mr_add').addEventListener('click', async () => {
       return;
     }
   }
-  const cost = document.getElementById('mr_cost').value ? parseFloat(document.getElementById('mr_cost').value) : null;
+  const _costRaw = String(document.getElementById('mr_cost').value).trim();
+  const cost = _costRaw === '' ? null : parseFloat(_costRaw);
+  const _invEl = document.getElementById('mr_invoice');
+  const invoiceNo = _invEl ? _invEl.value.trim() : '';
   const desc = document.getElementById('mr_desc').value.trim();
   const partsEl = document.getElementById('mr_parts');
   const parts = partsEl ? partsEl.value.trim() : '';
@@ -9113,7 +9267,8 @@ document.getElementById('mr_add').addEventListener('click', async () => {
     id: nextId(STATE.maintRecords), plate: _mv.plate, vehicle_id: _mv.id, maintenance_type: recordType,
     maintenance_date: date, mileage_at_service: mileage,
     vendor_id: _vendorId, vendor_name: vendorName || null,
-    description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, status:'已完成',
+    description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, invoice_no: invoiceNo || null,
+    status: (cost == null) ? '待補資料' : '已完成',
     created_at: new Date().toISOString()
   });
   await saveState('maint_records', STATE.maintRecords, true);
@@ -9140,11 +9295,12 @@ document.getElementById('mr_add').addEventListener('click', async () => {
     await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
   }
 
-  ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_desc','mr_parts'].forEach(id=>document.getElementById(id).value='');
+  ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_invoice','mr_desc','mr_parts'].forEach(id=>{ const _el=document.getElementById(id); if(_el) _el.value=''; });
   renderAll();
   // 存檔成功才會執行到這裡(saveState 失敗會丟出錯誤),明確告知使用者已寫入雲端
   alert('已存檔到雲端\n\n車號:' + _mv.plate + '\n日期:' + date + '\n類型:' + type +
-        '\n\n目前維修保養記錄共 ' + STATE.maintRecords.length + ' 筆,新記錄已顯示在歷史記錄最上方。');
+        '\n\n目前維修保養記錄共 ' + STATE.maintRecords.length + ' 筆,新記錄已顯示在歷史記錄最上方。' +
+        (cost == null ? '\n\n費用還沒填,這筆已列入「待補維修費用」清單,單據到了再回來補登即可。' : ''));
 });
 
 document.getElementById('tire_plate').addEventListener('change', updateTirePositionOptions);
