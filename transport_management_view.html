@@ -623,6 +623,50 @@
       <button class="btn" id="lf_add">新增租賃紀錄</button>
     </div>
     <div class="card">
+      <h2>板架打油登錄<span class="count-badge" id="grease_rec_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">板架、貨櫃架、堆高機、吊掛機的打油一律從這裡登錄。存檔後會自動更新該車的「上次打油日」並重算下次到期日，總覽與車輛維護的「板架打油到期提醒」會同步變動。</div>
+      <div class="form-grid">
+        <label>車號<input id="gr_plate" placeholder="例：HBD-3200" list="greasePlateList" autocomplete="off"></label>
+        <label>打油日期<input id="gr_date" type="date"></label>
+        <label>施作廠商<input id="gr_vendor" placeholder="選填，可從清單選取" list="vendorList" autocomplete="off"></label>
+        <label>費用<input id="gr_cost" type="number" min="0" step="1" placeholder="選填"></label>
+        <label>備註<input id="gr_notes" placeholder="選填"></label>
+      </div>
+      <div id="gr_preview" class="muted" style="margin:8px 0;"></div>
+      <button class="btn" id="gr_add">新增打油紀錄</button>
+      <datalist id="greasePlateList"></datalist>
+      <div class="toolbar" style="margin-top:14px;">
+        <input id="grease_search" placeholder="搜尋車號 / 廠商">
+      </div>
+      <div class="table-scroll" style="max-height:320px;">
+        <table>
+          <thead><tr><th>打油日期</th><th>車號</th><th>週期</th><th>下次到期</th><th>施作廠商</th><th>費用</th><th>備註</th><th></th></tr></thead>
+          <tbody id="greaseRecordBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>板架打油狀態總表<span class="count-badge" id="grease_status_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">依保養標準的打油週期計算：調度用板架 2 個月／次，長租板架、貨櫃架、堆高機、吊掛機 6 個月／次。顯示「尚未登錄」的車輛請從上方登錄第一次打油日期。</div>
+      <div class="toolbar">
+        <input id="grease_status_search" placeholder="搜尋車號">
+        <select id="grease_status_filter">
+          <option value="all">全部狀態</option>
+          <option value="overdue">已逾期</option>
+          <option value="soon30">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="normal">正常</option>
+          <option value="unset">尚未登錄</option>
+        </select>
+      </div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table>
+          <thead><tr><th>車號</th><th>車型</th><th>保養標準</th><th>週期</th><th>上次打油</th><th>下次到期</th><th>剩餘</th><th>狀態</th></tr></thead>
+          <tbody id="greaseStatusBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
       <h2>自用板架目前位置<span class="count-badge" id="selfuse_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">未出租、公司自行調度使用的板架，可自行修改目前放置的位置。</div>
       <div class="toolbar">
@@ -2194,7 +2238,7 @@ function nextEmployeeNo(){
 let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employees: [], employeesHistory: [], vehicles: [],
   mileageLogs: [], fuelLogs: [], maintSchedules: [], axleRecords: [], emissionRecords: [], licenses: [],
   internalTrainings: [], insuranceChanges: [], accessCards: [], insuranceMonthly: [], accessCardRoster: [], trainingLog: [],
-  docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [], vendors: [],
+  docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [], vendors: [], greaseRecords: [],
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
   adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
@@ -2289,6 +2333,7 @@ const TABLE_MAP = {
   employee_equipment: {table:'employee_equipment', pk:'record_id'},
   employee_trainings: {table:'employee_trainings', pk:'record_id'},
   fuel_logs: {table:'fuel_logs', pk:'fuel_id'},
+  grease_records: {table:'grease_records', pk:'record_id'},
   instruments: {table:'instruments', pk:'instrument_id'},
   insurance_changes: {table:'insurance_change_records', pk:'record_id'},
   leave_records: {table:'leave_records', pk:'record_id'},
@@ -2440,6 +2485,7 @@ async function enrichDenormalizedFields(){
     r.vendor_name = vendorById[r.vendor_id] || r.vendor_name || '';
   });
   STATE.maintSchedules.forEach(r => { const v = vehById[r.vehicle_id]; r.plate = v ? v.plate : r.plate; });
+  (STATE.greaseRecords||[]).forEach(r => { const v = vehById[r.vehicle_id]; r.plate = v ? v.plate : r.plate; r.vendor_name = vendorById[r.vendor_id] || r.vendor_name || ''; });
   STATE.leases.forEach(r => {
     const v = vehById[r.vehicle_id];
     r.plate = v ? v.plate : r.plate;
@@ -2460,6 +2506,7 @@ const COMPUTED_FIELDS = {
   admin_tolls: ['plate'],
   employee_trainings: ['employee_name','type_name','cert_no'],
   fuel_logs: ['plate'],
+  grease_records: ['plate'],
   maint_records: ['plate','vendor_name'],
   maintenance_schedules: ['plate'],
   trailer_leases: ['plate','vtype','lessee_name','inspection_expiry'],
@@ -2492,6 +2539,7 @@ const REQUIRED_FIELDS = {
   'employees': ['name','employee_type'],
   'equipment_types': ['name'],
   'fuel_logs': ['vehicle_id','fuel_date'],
+  'grease_records': ['vehicle_id','service_date'],
   'instruments': ['asset_no'],
   'insurance_change_records': ['employee_id'],
   'insurance_monthly_records': ['year_roc','month'],
@@ -2682,6 +2730,7 @@ async function loadState(){
   STATE.fuelLogs = await safeGet('fuel_logs', SEED.fuel_logs || [], true);
   STATE.maintSchedules = await safeGet('maintenance_schedules', SEED.maint_schedules || [], true);
   STATE.axleRecords = await safeGet('axle_maintenance_records', [], true);
+  STATE.greaseRecords = await safeGet('grease_records', [], true);
   STATE.emissionRecords = await safeGet('emission_test_records', [], true);
   STATE.internalTrainings = SEED.internal_trainings || [];
   STATE.insuranceChanges = await safeGet('insurance_changes', SEED.insurance_changes || [], true);
@@ -2883,6 +2932,7 @@ function renderDatalists(){
   if(vendorListEl){
     vendorListEl.innerHTML = (STATE.vendors||[]).map(v=>`<option value="${esc(v.name)}">`).join('');
   }
+  renderGreasePlateOptions();
 }
 
 function renderNewStaffSelects(){
@@ -5759,6 +5809,184 @@ function renderDueReminders(){
   renderDueAlertTable('maintAxleAlerts','maint_axle_count','輪軸保養', af);
 }
 ['maint_grease_filter','maint_axle_filter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', renderDueReminders); });
+
+// ===== 板架打油：統一從「板架管理」畫面登錄，連動保養排程與到期提醒 =====
+const GREASE_MODELS = ['車體-板架 (調度用)','車體-板架 (長租用)','車體-貨櫃架','吊掛機','堆高機'];
+function greaseMonthsForModel(model){
+  if(!model) return null;
+  const std = (STATE.maintenanceStandards||[]).find(s => s.model_name === model);
+  if(std && std.trailer_months) return std.trailer_months;
+  if(model === '車體-板架 (調度用)') return 2;
+  return GREASE_MODELS.includes(model) ? 6 : null;
+}
+function greaseEligibleVehicles(){
+  return STATE.vehicles.filter(v => v.status === '在役' && GREASE_MODELS.includes(v.maintenance_model));
+}
+function greaseScheduleFor(v){
+  if(!v) return null;
+  return STATE.maintSchedules.find(s => s.maintenance_type === '打油' && (s.vehicle_id === v.id || s.plate === v.plate)) || null;
+}
+function greaseRowFor(v){
+  const sched = greaseScheduleFor(v);
+  const freq = (sched && sched.frequency_months) || greaseMonthsForModel(v.maintenance_model);
+  const d = scheduleDueStatus({plate: v.plate, frequency_months: freq, last_service_date: sched ? sched.last_service_date : null});
+  return {plate: v.plate, vtype: v.vehicle_type || '', model: v.maintenance_model || '', months: freq, d: d, hasSched: !!sched};
+}
+function renderGreasePlateOptions(){
+  const el = document.getElementById('greasePlateList');
+  if(!el) return;
+  el.innerHTML = greaseEligibleVehicles().slice()
+    .sort((a,b)=> String(a.plate||'').localeCompare(String(b.plate||'')))
+    .map(v => `<option value="${esc(v.plate)}">${esc(v.maintenance_model||'')}</option>`).join('');
+}
+function updateGreasePreview(){
+  const el = document.getElementById('gr_preview');
+  if(!el) return;
+  const plate = ((document.getElementById('gr_plate')||{}).value || '').trim();
+  const date = (document.getElementById('gr_date')||{}).value || '';
+  if(!plate){ el.textContent = '選好車號後，這裡會顯示打油週期與下次到期日。'; return; }
+  const v = vehicleByPlate(plate);
+  if(!v){ el.textContent = '找不到車號「' + plate + '」，請點一下車號欄位從下拉清單選取。'; return; }
+  const months = greaseMonthsForModel(v.maintenance_model);
+  if(!months){
+    el.textContent = v.plate + '（' + (v.maintenance_model || '未設定保養標準') + '）依保養標準不需定期打油，仍可登錄，但不會產生到期提醒。';
+    return;
+  }
+  const sched = greaseScheduleFor(v);
+  const last = (sched && sched.last_service_date) ? String(sched.last_service_date).slice(0,10) : '尚未登錄';
+  const base = date || ((sched && sched.last_service_date) ? String(sched.last_service_date).slice(0,10) : '');
+  const next = base ? addMonthsN(base, months) : '—';
+  el.textContent = v.plate + '｜' + (v.maintenance_model||'') + '｜週期 ' + months + ' 個月／次｜目前上次打油：' + last +
+    (date ? '｜本次登錄後下次到期：' + next : '｜填入打油日期後會算出下次到期日') +
+    (sched ? '' : '｜這台目前沒有打油排程，存檔時會依保養標準自動建立');
+}
+function greaseStatusPassFilter(r, filter){
+  if(filter === 'unset') return r.d.status === 'gray';
+  if(filter === 'overdue') return r.d.status === 'red';
+  if(filter === 'normal') return r.d.status === 'green';
+  if(filter === 'soon30' || filter === 'soon60'){
+    const n = filter === 'soon30' ? 30 : 60;
+    return r.d.dd != null && r.d.dd >= 0 && r.d.dd <= n;
+  }
+  return true;
+}
+function renderGreaseStatusTable(){
+  const body = document.getElementById('greaseStatusBody');
+  if(!body) return;
+  const kw = ((document.getElementById('grease_status_search')||{}).value || '').trim().toUpperCase();
+  const filter = (document.getElementById('grease_status_filter')||{}).value || 'all';
+  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄'};
+  const rows = greaseEligibleVehicles().map(greaseRowFor)
+    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw))
+    .filter(r => greaseStatusPassFilter(r, filter))
+    .sort((a,b)=> (a.d.sortKey - b.d.sortKey) || String(a.plate||'').localeCompare(String(b.plate||'')));
+  const cEl = document.getElementById('grease_status_count'); if(cEl) cEl.textContent = `${rows.length} 台`;
+  body.innerHTML = rows.length ? rows.map(r => `<tr>`+
+      `<td>${esc(r.plate)}</td><td class="muted">${esc(r.vtype)}</td><td class="muted">${esc(r.model)}</td>`+
+      `<td>${r.months ? r.months + ' 個月' : '—'}</td><td>${esc(r.d.last)}</td><td>${esc(r.d.next)}</td>`+
+      `<td>${esc(r.d.remain)}</td><td><span class="pill ${r.d.status}">${label[r.d.status]}</span></td>`+
+    `</tr>`).join('') : '<tr><td colspan="8" class="muted">目前沒有符合條件的板架</td></tr>';
+}
+function renderGreaseRecords(){
+  const body = document.getElementById('greaseRecordBody');
+  if(!body) return;
+  const all = STATE.greaseRecords || [];
+  const kw = ((document.getElementById('grease_search')||{}).value || '').trim().toUpperCase();
+  const rows = all.slice()
+    .sort((a,b)=> String(b.service_date||'').localeCompare(String(a.service_date||'')))
+    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw) || String(r.vendor_name||'').toUpperCase().includes(kw));
+  const cEl = document.getElementById('grease_rec_count'); if(cEl) cEl.textContent = `${all.length} 筆`;
+  body.innerHTML = rows.length ? rows.map(r => {
+    const v = vehicleByPlate(r.plate);
+    const months = v ? greaseMonthsForModel(v.maintenance_model) : null;
+    const next = (months && r.service_date) ? addMonthsN(String(r.service_date).slice(0,10), months) : '—';
+    return `<tr>`+
+      `<td>${esc(String(r.service_date||'').slice(0,10))}</td><td>${esc(r.plate||'')}</td>`+
+      `<td>${months ? months + ' 個月' : '—'}</td><td class="muted">${esc(next)}</td>`+
+      `<td>${esc(r.vendor_name||'')}</td><td>${(r.cost==null||r.cost==='') ? '' : fmt2(r.cost)}</td>`+
+      `<td class="muted">${esc(r.notes||'')}</td>`+
+      `<td><button class="del-btn" data-del-grease="${esc(r.id)}">刪除</button></td>`+
+    `</tr>`;
+  }).join('') : '<tr><td colspan="8" class="muted">目前沒有打油紀錄</td></tr>';
+}
+// 依打油紀錄重算某台車的「上次打油日」；沒有排程就依保養標準自動建立(這是「連動」的核心)
+function syncGreaseSchedule(v){
+  if(!v) return null;
+  const dates = (STATE.greaseRecords||[])
+    .filter(r => r.vehicle_id === v.id && r.service_date)
+    .map(r => String(r.service_date).slice(0,10)).sort();
+  const latest = dates.length ? dates[dates.length - 1] : null;
+  const months = greaseMonthsForModel(v.maintenance_model);
+  let sched = greaseScheduleFor(v);
+  if(sched){
+    sched.last_service_date = latest;
+    if(!sched.vehicle_id) sched.vehicle_id = v.id;
+    if(!sched.frequency_months && months) sched.frequency_months = months;
+  }else if(months){
+    sched = {
+      id: nextId(STATE.maintSchedules), plate: v.plate, vehicle_id: v.id, maintenance_type: '打油',
+      frequency_km: null, frequency_months: months, last_service_date: latest, last_service_mileage: null,
+      notes: '【板架打油登錄自動建立】' + (v.maintenance_model||'') + ' 週期 ' + months + ' 個月／次'
+    };
+    STATE.maintSchedules.push(sched);
+  }
+  return sched;
+}
+['gr_plate','gr_date'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el){ el.addEventListener('change', updateGreasePreview); el.addEventListener('input', updateGreasePreview); }
+});
+['grease_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreaseRecords); });
+['grease_status_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreaseStatusTable); });
+['grease_status_filter'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('change', renderGreaseStatusTable); });
+const _grAddBtn = document.getElementById('gr_add');
+if(_grAddBtn) _grAddBtn.addEventListener('click', async () => {
+  const plate = (document.getElementById('gr_plate').value || '').trim();
+  const date = document.getElementById('gr_date').value;
+  if(!plate || !date){ alert('請填寫車號與打油日期'); return; }
+  const v = vehicleByPlate(plate);
+  if(!v){ alert('系統找不到車號「' + plate + '」。\n\n請點一下車號欄位，從下拉建議清單直接選取正確的車號。'); return; }
+  const months = greaseMonthsForModel(v.maintenance_model);
+  if(!months && !confirm(v.plate + '（' + (v.maintenance_model || '未設定保養標準') + '）依保養標準不需定期打油。\n\n仍要登錄這筆紀錄嗎？（不會產生到期提醒）')) return;
+  const vendorName = (document.getElementById('gr_vendor').value || '').trim();
+  const _v = (STATE.vendors||[]).find(x => x.name === vendorName);
+  const costRaw = document.getElementById('gr_cost').value;
+  STATE.greaseRecords = STATE.greaseRecords || [];
+  STATE.greaseRecords.unshift({
+    id: nextId(STATE.greaseRecords), plate: v.plate, vehicle_id: v.id,
+    service_date: date, vendor_id: _v ? _v.id : null, vendor_name: vendorName || null,
+    cost: costRaw === '' ? null : parseFloat(costRaw),
+    notes: (document.getElementById('gr_notes').value || '').trim() || null,
+    created_at: new Date().toISOString()
+  });
+  await saveState('grease_records', STATE.greaseRecords, true);
+  const sched = syncGreaseSchedule(v);
+  await saveState('maintenance_schedules', STATE.maintSchedules, true);
+  ['gr_plate','gr_date','gr_vendor','gr_cost','gr_notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  renderAll();
+  updateGreasePreview();
+  const nextDue = (sched && sched.last_service_date && sched.frequency_months)
+    ? addMonthsN(String(sched.last_service_date).slice(0,10), sched.frequency_months) : null;
+  alert('已存檔到雲端\n\n車號：' + v.plate + '\n打油日期：' + date +
+        (months ? '\n打油週期：' + months + ' 個月／次' : '') +
+        (nextDue ? '\n下次到期日：' + nextDue : '') +
+        '\n\n「板架打油到期提醒」已同步重新計算。');
+});
+const _grBody = document.getElementById('greaseRecordBody');
+if(_grBody) _grBody.addEventListener('click', async (e) => {
+  const gId = e.target.getAttribute('data-del-grease');
+  if(!gId) return;
+  if(!confirm('確定要刪除這筆打油紀錄嗎？\n\n刪除後會依剩下的紀錄重新計算該車的「上次打油日」。')) return;
+  const rec = (STATE.greaseRecords||[]).find(r => String(r.id) === gId);
+  STATE.greaseRecords = (STATE.greaseRecords||[]).filter(r => String(r.id) !== gId);
+  await saveState('grease_records', STATE.greaseRecords, true);
+  if(rec){
+    const v = STATE.vehicles.find(x => x.id === rec.vehicle_id) || vehicleByPlate(rec.plate);
+    if(v){ syncGreaseSchedule(v); await saveState('maintenance_schedules', STATE.maintSchedules, true); }
+  }
+  renderAll();
+});
+
 function renderMaintDueTable(){
   const rows = [];
   STATE.vehicles.forEach(v => {
@@ -6213,6 +6441,8 @@ function renderAll(){
   renderDueReminders();
   renderLeaseTable();
   renderSelfUseTrailers();
+  renderGreaseStatusTable();
+  renderGreaseRecords();
   renderTrainingTable();
   renderStaffTable();
   renderEmpSelect();
