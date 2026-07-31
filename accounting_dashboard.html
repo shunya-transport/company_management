@@ -225,6 +225,8 @@
   #balanceCard .n,#balanceCard .l{color:#fff;}
   /* 卡片右上角的裝飾圓會讓卡片多出 70px 的可捲動寬度，按鈕取得焦點時整張卡會被瀏覽器往左捲。改用 clip 就不會產生捲動軸。 */
   .card{overflow:clip;}
+  /* ghost 按鈕被按下去（例如「只看逾期」）。要比 core 的 button.btn.ghost 更具體才蓋得過去。 */
+  button.btn.ghost.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
   .subj-btn.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
   @media print{
     .sidebar,.banner,.toolbar,.no-print,#bookPickCard{display:none !important;}
@@ -395,6 +397,17 @@
       <select id="pd_sort"><option value="due">依預計收付日</option><option value="date">依發生日</option><option value="amount">依金額</option></select>
       <button class="btn ghost" id="pd_export">匯出 CSV</button>
     </div>
+    <div class="toolbar" style="margin-top:-4px;">
+      <select id="pd_datefield"><option value="due">用預計收付日找</option><option value="entry">用發生日找</option></select>
+      <label class="muted">起 <input id="pd_from" type="date"></label>
+      <label class="muted">訖 <input id="pd_to" type="date"></label>
+      <button class="btn ghost tiny" id="pd_thismonth">本月</button>
+      <button class="btn ghost tiny" id="pd_nextmonth">下個月</button>
+      <button class="btn ghost tiny" id="pd_thisyear">今年</button>
+      <button class="btn ghost tiny" id="pd_overdue">只看逾期</button>
+      <button class="btn ghost tiny" id="pd_clear">清除條件</button>
+    </div>
+    <div class="muted" id="pdRangeNote" style="margin-bottom:8px;"></div>
     <div class="table-scroll">
       <table><thead><tr><th>傳票編號</th><th>發生日</th><th>預計收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>來源</th><th>操作</th></tr></thead><tbody id="pdBody"></tbody></table>
     </div>
@@ -766,12 +779,14 @@ function accountStats(){
   Object.values(m).forEach(r => { r.balance = num(r.acc.opening_balance) + r.inc - r.exp; });
   return m;
 }
-function pendingTotals(){
+// 不帶參數＝全部掛帳中（總覽在用）；帶了就只算畫面上這幾列（掛帳中分頁在用）。
+// 金額一律用 grossAmt()（含稅），因為稅列已經併進主列了，再加一次會重複。
+function pendingTotals(rows){
   let inc = 0, exp = 0, overdue = 0;
   const t = todayISO();
-  STATE.entries.forEach(e => {
-    if(e.status !== '掛帳中') return;
-    const amt = num(e.amount);
+  const list = rows || STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e));
+  list.forEach(e => {
+    const amt = grossAmt(e);
     if(e.direction === '收入') inc += amt; else exp += amt;
     if(e.due_date && e.due_date < t) overdue++;
   });
@@ -1160,11 +1175,28 @@ function statusPill(s){
 }
 
 // ---------- 掛帳中 ----------
+let PD_OVERDUE = false, PD_HIDDEN_NODATE = 0;
 function pendingRows(){
   const kw = (document.getElementById('pd_search').value || '').trim().toLowerCase();
   const dir = document.getElementById('pd_dir').value;
   const sort = document.getElementById('pd_sort').value;
+  const field = document.getElementById('pd_datefield').value;   // due=預計收付日 / entry=發生日
+  const from = document.getElementById('pd_from').value;
+  const to = document.getElementById('pd_to').value;
+  const t = todayISO();
   let rows = STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e));
+  PD_HIDDEN_NODATE = 0;
+  if(from || to){
+    rows = rows.filter(e => {
+      const d = field === 'entry' ? e.entry_date : e.due_date;
+      // 預計收付日可以是「未定」，設了期間就找不到它。不要靜靜吃掉，下面會提示有幾筆。
+      if(!d){ PD_HIDDEN_NODATE++; return false; }
+      if(from && d < from) return false;
+      if(to && d > to) return false;
+      return true;
+    });
+  }
+  if(PD_OVERDUE) rows = rows.filter(e => e.due_date && e.due_date < t);
   if(dir) rows = rows.filter(e => e.direction === dir);
   if(kw) rows = rows.filter(e => [e.voucher_no,e.counterparty,e.description,e.subject_name,e.subject_code,e.notes]
     .map(v => String(v==null?'':v).toLowerCase()).join(' ').indexOf(kw) >= 0);
@@ -1178,12 +1210,33 @@ function pendingRows(){
 }
 function renderPending(){
   const rows = pendingRows();
-  const pt = pendingTotals();
+  const pt = pendingTotals(rows);
+  const allCnt = STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e)).length;
+  const field = document.getElementById('pd_datefield').value;
+  const from = document.getElementById('pd_from').value, to = document.getElementById('pd_to').value;
+  const filtering = !!(from || to || PD_OVERDUE || document.getElementById('pd_dir').value || (document.getElementById('pd_search').value || '').trim());
+  const btnOv = document.getElementById('pd_overdue');
+  if(btnOv) btnOv.classList.toggle('active', PD_OVERDUE);
+  const note = document.getElementById('pdRangeNote');
+  if(note){
+    const parts = [];
+    if(from || to) parts.push((field === 'entry' ? '發生日' : '預計收付日') + ' ' + (from || '不限') + ' ～ ' + (to || '不限'));
+    if(PD_OVERDUE) parts.push('只看已過預計收付日的');
+    if(parts.length){
+      note.innerHTML = '目前條件：' + esc(parts.join('　')) + '　共 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）'
+        + (PD_HIDDEN_NODATE ? '　<span class="pill amber">另有 ' + PD_HIDDEN_NODATE + ' 筆' + (field === 'entry' ? '沒有發生日' : '預計收付日未定') + '，設了期間就不會出現</span>' : '')
+        + '　上面四張卡與匯出 CSV 都只算這 ' + rows.length + ' 筆。';
+    }else if(filtering){
+      note.innerHTML = '目前條件：篩選後 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）';
+    }else{
+      note.textContent = '';
+    }
+  }
   document.getElementById('pdStatRow').innerHTML =
     `<div class="stat-card green"><div class="n">${money(pt.inc)}</div><div class="l">應收合計</div></div>
      <div class="stat-card red"><div class="n">${money(pt.exp)}</div><div class="l">應付合計</div></div>
      <div class="stat-card ${pt.overdue?'red':''}"><div class="n">${pt.overdue}</div><div class="l">已過預計收付日</div></div>
-     <div class="stat-card"><div class="n">${STATE.entries.filter(e=>e.status==='掛帳中'&&!isMergedTax(e)).length}</div><div class="l">掛帳中總筆數</div></div>`;
+     <div class="stat-card"><div class="n">${rows.length}</div><div class="l">${filtering ? '符合條件筆數' : '掛帳中總筆數'}</div></div>`;
   document.getElementById('pdCount').textContent = rows.length;
   const t = todayISO();
   document.getElementById('pdBody').innerHTML = rows.map(e => {
@@ -1623,10 +1676,30 @@ function bindEvents(){
   document.getElementById('ne_add_settled').addEventListener('click', () => neAdd(true));
   document.getElementById('ne_clear').addEventListener('click', neClear);
 
-  ['pd_search','pd_dir','pd_sort'].forEach(id => document.getElementById(id).addEventListener('input', renderPending));
+  ['pd_search','pd_dir','pd_sort','pd_datefield','pd_from','pd_to'].forEach(id => document.getElementById(id).addEventListener('input', renderPending));
+  document.getElementById('pd_thismonth').addEventListener('click', () => {
+    document.getElementById('pd_from').value = monthStart(); document.getElementById('pd_to').value = monthEnd(); renderPending();
+  });
+  document.getElementById('pd_nextmonth').addEventListener('click', () => {
+    const d = new Date(); const n = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    document.getElementById('pd_from').value = monthStart(n); document.getElementById('pd_to').value = monthEnd(n); renderPending();
+  });
+  document.getElementById('pd_thisyear').addEventListener('click', () => {
+    const y = new Date().getFullYear();
+    document.getElementById('pd_from').value = y + '-01-01'; document.getElementById('pd_to').value = y + '-12-31'; renderPending();
+  });
+  document.getElementById('pd_overdue').addEventListener('click', () => { PD_OVERDUE = !PD_OVERDUE; renderPending(); });
+  document.getElementById('pd_clear').addEventListener('click', () => {
+    ['pd_search','pd_from','pd_to'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pd_dir').value = '';
+    document.getElementById('pd_datefield').value = 'due';
+    PD_OVERDUE = false;
+    renderPending();
+  });
   document.getElementById('pd_export').addEventListener('click', () => {
     const rows = pendingRows();
-    csvDownload('掛帳中_' + todayISO() + '.csv',
+    const _f = document.getElementById('pd_from').value, _t = document.getElementById('pd_to').value;
+    csvDownload('掛帳中_' + ((_f || _t) ? (_f || '起') + '至' + (_t || '訖') + '_' : '') + todayISO() + '.csv',
       ['傳票編號','發生日','預計收付日','方向','科目代號','科目','對象','摘要','稅前','稅額','合計','來源','備註'],
       rows.map(e => [e.voucher_no, e.entry_date, e.due_date, e.direction, e.subject_code, e.subject_name, e.counterparty, e.description, num(e.amount), taxAmt(e), grossAmt(e), e.source, e.notes]));
   });
