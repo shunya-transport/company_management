@@ -245,9 +245,6 @@
       <strong>安全 準時 用心</strong>
       <span>Since Establishment</span>
     </div>
-    <button id="legacyExportBtn" class="no-print" style="margin-top:8px;font-size:11px;padding:8px 10px;background:none;border:1px dashed var(--border-strong);border-radius:10px;color:var(--text-3);cursor:pointer;">
-      匯出舊資料備份
-    </button>
   </div>
   <div class="main">
     <header class="banner">
@@ -9141,44 +9138,6 @@ document.getElementById('maintScheduleTableBody').addEventListener('click', asyn
   }
 });
 
-document.getElementById('legacyExportBtn').addEventListener('click', async () => {
-  if(!window.storage){
-    alert('這個畫面偵測不到 window.storage，代表這裡沒有舊資料可以匯出（可能是用下載後開啟、或本來就是新的空白畫面）。');
-    return;
-  }
-  const btn = document.getElementById('legacyExportBtn');
-  btn.disabled = true;
-  btn.textContent = '匯出中...';
-  const keys = Object.keys(TABLE_MAP);
-  const result = {};
-  const summary = [];
-  for(const key of keys){
-    try{
-      const res = await window.storage.get(key, true);
-      if(res && res.value){
-        const parsed = JSON.parse(res.value);
-        result[key] = parsed;
-        summary.push(`${key}: ${Array.isArray(parsed) ? parsed.length + '筆' : '有資料'}`);
-      }
-    }catch(e){
-      // 該key沒有舊資料，略過
-    }
-  }
-  if(Object.keys(result).length === 0){
-    alert('沒有讀到任何 window.storage 舊資料。這個畫面可能本來就沒有存過資料，或跟您要找的那個畫面不是同一份。');
-    btn.disabled = false;
-    btn.textContent = '匯出舊資料備份';
-    return;
-  }
-  const blob = new Blob([JSON.stringify(result)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'window_storage_export.json';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  alert('匯出成功！\n\n' + summary.join('\n') + '\n\n請把剛才下載的 window_storage_export.json 上傳回對話給 Claude。');
-  btn.disabled = false;
-  btn.textContent = '匯出舊資料備份';
-});
 
 (async function init(){
   await ensureLogin();
