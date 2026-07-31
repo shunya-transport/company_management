@@ -281,9 +281,16 @@
   <div class="stat-row" id="ovStatRow"></div>
   <div class="card" id="ovPettyCard" style="display:none;">
     <h2>零用金餘額</h2>
-    <div class="muted" style="margin-bottom:10px;">會計系統只看零用金「還剩多少」，每一筆明細不進這裡，請開零用金記帳網頁。代管別人的零用金不會出現在這張表。</div>
+    <div class="muted" style="margin-bottom:10px;">零用金的每一筆明細不會記進會計系統的日記簿，這裡只把餘額跟本月的總金額拉過來給你看，方便判斷哪一本花得比較快、該不該撥補。要看完整明細或記帳，請開零用金記帳網頁。代管別人的零用金不會出現在這張表。</div>
     <div class="table-scroll">
-      <table><thead><tr><th>零用金帳本</th><th>公司</th><th class="num">目前餘額</th><th>更新時間</th></tr></thead><tbody id="ovPettyBody"></tbody></table>
+      <table><thead><tr><th>零用金帳本</th><th>公司</th><th class="num">目前餘額</th><th class="num">定額</th><th>定額差額</th><th class="num">本月支出</th><th class="num">本月收入</th><th class="num">本月筆數</th><th class="num">待補單據</th><th>最後一筆</th><th>更新時間</th></tr></thead><tbody id="ovPettyBody"></tbody></table>
+    </div>
+    <div id="ovPettySubjWrap" style="display:none;margin-top:14px;">
+      <h2 style="font-size:15px;">本月零用金支出科目</h2>
+      <div class="muted" style="margin-bottom:8px;">只算本月、只算支出，不含撥補進來的錢。科目名稱一樣才會併成同一列。</div>
+      <div class="table-scroll">
+        <table><thead id="ovPettySubjHead"></thead><tbody id="ovPettySubjBody"></tbody></table>
+      </div>
     </div>
   </div>
   <div class="card">
@@ -620,7 +627,7 @@ async function authFetch(url, options={}){
 
 
 // ===== 會計管理系統 =====
-const STATE = { accounts: [], subjects: [], entries: [], pettyBooks: [] };
+const STATE = { accounts: [], subjects: [], entries: [], pettyBooks: [], pettyEntries: [] };
 let CURRENT_USER = '';
 const LOAD_FAILED = [];
 
@@ -711,10 +718,18 @@ async function loadAll(){
     document.getElementById('storageWarning').textContent = '⚠️ 讀不到雲端資料：' + e.message + '　（資料表可能還沒建立，請先執行 supabase_accounting_1150731.sql）';
     throw e;
   }
-  // 零用金：只讀「餘額」這一個數字，明細完全不進會計系統
+  // 零用金：帳本餘額，加上「願意露出給會計系統」那幾本的明細（只用來算總數與科目分布，
+  // 不會寫進 acc_entries，也不會跟會計科目連動）。代管的帳本 show_in_accounting = false，連明細都不會載進來。
   try{
-    STATE.pettyBooks = await sbSelect('petty_books?select=book_id,book_name,company_name,book_type,current_balance,balance_updated_at,is_active&show_in_accounting=is.true&order=sort_no.asc');
+    STATE.pettyBooks = await sbSelect('petty_books?select=book_id,book_name,company_name,book_type,current_balance,target_balance,opening_date,balance_updated_at,is_active&show_in_accounting=is.true&order=sort_no.asc');
   }catch(e){ STATE.pettyBooks = []; }
+  STATE.pettyEntries = [];
+  const _pbIds = (STATE.pettyBooks || []).map(b => b.book_id).filter(v => v != null);
+  if(_pbIds.length){
+    try{
+      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
+    }catch(e){ STATE.pettyEntries = []; }
+  }
 }
 
 // ---------- 查表 ----------
@@ -821,10 +836,7 @@ function renderOverview(){
     (books.length ? `<div class="stat-card ${pettyTotal<0?'red':''}"><div class="n">${moneySigned(pettyTotal)}</div><div class="l">零用金餘額（${books.map(b=>esc(b.book_name)).join('、')}）</div></div>` : '');
 
   document.getElementById('ovPettyCard').style.display = books.length ? '' : 'none';
-  document.getElementById('ovPettyBody').innerHTML = books.map(b =>
-    `<tr><td><strong>${esc(b.book_name)}</strong></td><td>${esc(b.company_name)}</td>
-     <td class="num"><strong>${moneySigned(b.current_balance)}</strong></td>
-     <td>${esc(String(b.balance_updated_at||'').slice(0,16).replace('T',' '))}</td></tr>`).join('');
+  renderPettyCard(books, mS, mE);
 
   document.getElementById('ovAccountBody').innerHTML = STATE.accounts.filter(a => a.active !== false).map(a => {
     const r = st[a.account_id] || {inc:0,exp:0,pin:0,pex:0,balance:num(a.opening_balance)};
@@ -854,6 +866,86 @@ function renderOverview(){
      <td class="num">${money(e.amount)}</td></tr>`
   ).join('') || '<tr><td colspan="8" class="empty">本月還沒有已收付的帳</td></tr>';
 }
+// ---------- 總覽的零用金區塊 ----------
+// 這裡的數字全部是從 petty_entries 算出來的，只是拿來看，
+// 不會變成會計分錄，也不會跟會計科目掃在一起。
+function pettyRows(bookId){
+  return (STATE.pettyEntries || []).filter(e => e.book_id === bookId && e.status !== '已作廢');
+}
+function pettyMonthSum(bookId, dir, mS, mE){
+  return pettyRows(bookId).filter(e => e.direction === dir &&
+    String(e.entry_date) >= mS && String(e.entry_date) <= mE)
+    .reduce((s,e) => s + num(e.amount), 0);
+}
+function renderPettyCard(books, mS, mE){
+  const body = document.getElementById('ovPettyBody');
+  if(!body) return;
+  body.innerHTML = books.map(b => {
+    const rows = pettyRows(b.book_id);
+    const inMon = rows.filter(e => String(e.entry_date) >= mS && String(e.entry_date) <= mE);
+    const exp = inMon.filter(e => e.direction === '支出').reduce((s,e) => s + num(e.amount), 0);
+    const inc = inMon.filter(e => e.direction === '收入').reduce((s,e) => s + num(e.amount), 0);
+    const pend = (STATE.pettyEntries || []).filter(e => e.book_id === b.book_id && e.status === '待補單據').length;
+    const last = rows.map(e => String(e.entry_date)).sort().pop() || '';
+    const tgt = num(b.target_balance);
+    const gap = tgt - num(b.current_balance);
+    const gapCell = !b.target_balance ? '<span class="muted">未設定額</span>'
+      : gap > 0 ? '<span class="pill amber">缺 ' + money(gap) + '</span>'
+      : '<span class="pill green">已達定額</span>';
+    const openWarn = b.opening_date ? '' : ' <span class="pill amber">期初未填</span>';
+    return `<tr><td><strong>${esc(b.book_name)}</strong>${openWarn}</td><td>${esc(b.company_name)}</td>
+     <td class="num"><strong>${moneySigned(b.current_balance)}</strong></td>
+     <td class="num">${b.target_balance ? money(b.target_balance) : '－'}</td>
+     <td>${gapCell}</td>
+     <td class="num">${exp ? money(exp) : '－'}</td>
+     <td class="num">${inc ? money(inc) : '－'}</td>
+     <td class="num">${inMon.length || '－'}</td>
+     <td class="num">${pend ? '<span class="pill amber">' + pend + '</span>' : '－'}</td>
+     <td>${esc(last)}</td>
+     <td>${esc(String(b.balance_updated_at||'').slice(0,16).replace('T',' '))}</td></tr>`;
+  }).join('');
+
+  // 本月支出科目交叉表
+  const wrap = document.getElementById('ovPettySubjWrap');
+  const head = document.getElementById('ovPettySubjHead');
+  const sbody = document.getElementById('ovPettySubjBody');
+  if(!wrap || !head || !sbody) return;
+  const map = {}, tot = {};
+  let grand = 0;
+  books.forEach(b => { tot[b.book_id] = 0; });
+  books.forEach(b => {
+    pettyRows(b.book_id).forEach(e => {
+      if(e.direction !== '支出') return;
+      if(String(e.entry_date) < mS || String(e.entry_date) > mE) return;
+      const k = e.subject_name || '（未填科目）';
+      if(!map[k]) map[k] = {};
+      map[k][b.book_id] = (map[k][b.book_id] || 0) + num(e.amount);
+      tot[b.book_id] += num(e.amount);
+      grand += num(e.amount);
+    });
+  });
+  const names = Object.keys(map).sort((a,c) => {
+    const sa = books.reduce((s,b) => s + (map[a][b.book_id] || 0), 0);
+    const sc = books.reduce((s,b) => s + (map[c][b.book_id] || 0), 0);
+    return sc - sa;
+  });
+  if(!names.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  head.innerHTML = '<tr><th>支出科目</th>' +
+    books.map(b => '<th class="num">' + esc(b.book_name) + '</th>').join('') +
+    '<th class="num">合計</th><th class="num">佔比</th></tr>';
+  sbody.innerHTML = names.map(k => {
+    const sum = books.reduce((s,b) => s + (map[k][b.book_id] || 0), 0);
+    return '<tr><td>' + esc(k) + '</td>' +
+      books.map(b => '<td class="num">' + (map[k][b.book_id] ? money(map[k][b.book_id]) : '－') + '</td>').join('') +
+      '<td class="num"><strong>' + money(sum) + '</strong></td>' +
+      '<td class="num">' + (grand ? (sum * 100 / grand).toFixed(1) + '%' : '－') + '</td></tr>';
+  }).join('') +
+    '<tr style="border-top:2px solid var(--line);"><td><strong>合計</strong></td>' +
+    books.map(b => '<td class="num"><strong>' + money(tot[b.book_id] || 0) + '</strong></td>').join('') +
+    '<td class="num"><strong>' + money(grand) + '</strong></td><td class="num">100.0%</td></tr>';
+}
+
 function dirPill(d){ return d === '收入' ? '<span class="pill green">收入</span>' : '<span class="pill red">支出</span>'; }
 // 沒有掛科目的列（營業稅、匯費那些）在收支表不會被統計，畫面上要標清楚，不要顯示成空白
 function subjCell(e){

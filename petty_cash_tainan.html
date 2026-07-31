@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>順亞運通 零用金記帳</title>
+<title>順亞運通 台南零用金</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
   :root{
@@ -600,7 +600,7 @@ async function authFetch(url, options={}){
 //   petty_cash.html        BOOK_LOCK = null      → 看得到全部帳本，多一個「各帳本比較」分頁
 //   petty_cash_tainan.html BOOK_LOCK = '台南零用金' → 只看得到台南那一本，其他帳本連載入都不會載入
 // 兩邊寫進去的是同一張 petty_entries 表，所以台南記的帳，順亞這邊立刻看得到。
-var BOOK_LOCK = null; // BUILD:BOOK_LOCK
+var BOOK_LOCK = '台南零用金'; // BUILD:BOOK_LOCK
 
 const STATE = { books: [], subjects: [], entries: [], accounts: [] };
 let CUR_BOOK = null;      // 目前帳本物件
