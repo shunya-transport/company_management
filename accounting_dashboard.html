@@ -311,7 +311,13 @@
 <div id="newentry" class="panel">
   <div class="card">
     <h2>記一筆</h2>
-    <div class="muted" style="margin-bottom:14px;">錢還沒進出就按「先掛帳」，錢已經匯出或收到就按「直接入帳」。掛帳的那些之後在「掛帳中」按一下就結案。</div>
+    <div class="muted" style="margin-bottom:10px;">錢還沒進出就按「先掛帳」，錢已經匯出或收到就按「直接入帳」。掛帳的那些之後在「掛帳中」按一下就結案。</div>
+    <div class="muted" style="margin-bottom:14px;padding:10px 12px;background:#fbf7ef;border-left:3px solid #9d6d2f;border-radius:8px;line-height:1.7;">
+      <strong>稅前／稅後怎麼填：</strong>會計帳算的是<strong>稅前金額</strong>，所以「金額」這一格請填<strong>未稅金額</strong>，收支表只統計這個數字。<br>
+      發票上的 5% 營業稅用旁邊的「稅別」選一下就好，系統會<strong>另外幫你開一列稅額</strong>（科目留空白、傳票編號跟這一筆同一張）。
+      稅額只影響帳戶餘額（因為實際匯出去的錢是含稅的），不會被算進任何科目——跟原本的記帳系統做法完全一樣。<br>
+      免稅、或這筆本來就沒有稅額，稅別就留在「不用拆稅」。金額直接填含稅總額也可以，選「自動拆稅」系統會幫你拆。
+    </div>
     <div class="form-grid">
       <label>會計科目
         <select id="ne_subject"></select>
@@ -319,8 +325,18 @@
       <label>收支方向
         <select id="ne_direction"><option value="支出">支出（錢出去）</option><option value="收入">收入（錢進來）</option></select>
       </label>
-      <label>金額
+      <label>金額（稅前，不含營業稅）
         <input id="ne_amount" type="number" min="0" step="1" placeholder="0">
+      </label>
+      <label>稅別
+        <select id="ne_tax_mode">
+          <option value="none">不用拆稅（免稅或本來就沒稅額）</option>
+          <option value="add">上面填的是稅前，另外加 5% 營業稅</option>
+          <option value="incl">上面填的是含稅總額，自動拆出 5% 稅</option>
+        </select>
+      </label>
+      <label>營業稅額（可自己改成發票上的數字）
+        <input id="ne_tax" type="number" min="0" step="1" placeholder="0" disabled>
       </label>
       <label>對象（客戶／廠商）
         <input id="ne_party" list="partyList" placeholder="例：中油、台積電">
@@ -413,7 +429,7 @@
 <div id="report" class="panel">
   <div class="card no-print">
     <h2>收支表</h2>
-    <div class="muted" style="margin-bottom:12px;">格式沿用原本 Excel 的「現金收支表」：直的是科目、橫的是帳戶，只統計已收付的帳。</div>
+    <div class="muted" style="margin-bottom:12px;">格式沿用原本 Excel 的「現金收支表」：直的是科目、橫的是帳戶，只統計已收付的帳。<strong>表上的金額都是稅前金額</strong>——營業稅、匯費那些沒有掛科目的列不會算進來，跟原本的 Excel 一樣。</div>
     <div class="toolbar">
       <label class="muted">起 <input id="rp_from" type="date"></label>
       <label class="muted">訖 <input id="rp_to" type="date"></label>
@@ -429,6 +445,7 @@
   </div>
   <div class="card" id="printArea">
     <h2 id="rp_title">收支表</h2>
+    <div class="muted" id="rp_note" style="margin-bottom:10px;line-height:1.7;"></div>
     <div class="table-scroll" style="max-height:none;">
       <table class="km-table" id="rp_table"><thead id="rp_head"></thead><tbody id="rp_body"></tbody></table>
     </div>
@@ -503,6 +520,7 @@
   <div class="modal-box" style="max-width:560px;">
     <button class="modal-close" id="em_close">×</button>
     <h3>修改這筆帳</h3>
+    <div class="muted" style="margin-bottom:12px;line-height:1.7;">這裡的「金額」一律是<strong>稅前金額</strong>，營業稅是另外獨立的一列。科目選「（不掛科目：稅額、匯費等）」的列不會進收支表，但一樣算進帳戶餘額。</div>
     <div class="form-grid">
       <label>科目<select id="em_subject"></select></label>
       <label>方向<select id="em_direction"><option value="支出">支出</option><option value="收入">收入</option></select></label>
@@ -748,10 +766,11 @@ function pendingTotals(){
 }
 
 // ---------- 下拉選單 ----------
-function fillSubjectSelect(sel, keepValue){
+function fillSubjectSelect(sel, keepValue, allowBlank){
   if(!sel) return;
   const cur = keepValue != null ? String(keepValue) : sel.value;
   sel.innerHTML = '';
+  if(allowBlank){ const o = document.createElement('option'); o.value = ''; o.textContent = '（不掛科目：稅額、匯費等）'; sel.appendChild(o); }
   FLOWS.forEach(flow => {
     const list = STATE.subjects.filter(s => s.flow === flow && s.active !== false);
     if(!list.length) return;
@@ -821,7 +840,7 @@ function renderOverview(){
   document.getElementById('ovOverdueCount').textContent = od.length;
   document.getElementById('ovOverdueBody').innerHTML = od.map(e =>
     `<tr><td>${esc(e.due_date)}</td><td><span class="pill red">逾期 ${daysBetween(e.due_date, t)} 天</span></td>
-     <td>${dirPill(e.direction)}</td><td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+     <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td class="num">${money(e.amount)}</td></tr>`
   ).join('') || '<tr><td colspan="7" class="empty">沒有逾期的帳，很好</td></tr>';
 
@@ -829,18 +848,46 @@ function renderOverview(){
                              .sort((a,b) => a.settle_date < b.settle_date ? 1 : -1);
   document.getElementById('ovMonthCount').textContent = mrows.length;
   document.getElementById('ovMonthBody').innerHTML = mrows.map(e =>
-    `<tr><td>${esc(e.settle_date)}</td><td>${dirPill(e.direction)}</td><td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+    `<tr><td>${esc(e.settle_date)}</td><td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.account_name)}</td>
      <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
      <td class="num">${money(e.amount)}</td></tr>`
   ).join('') || '<tr><td colspan="8" class="empty">本月還沒有已收付的帳</td></tr>';
 }
 function dirPill(d){ return d === '收入' ? '<span class="pill green">收入</span>' : '<span class="pill red">支出</span>'; }
+// 沒有掛科目的列（營業稅、匯費那些）在收支表不會被統計，畫面上要標清楚，不要顯示成空白
+function subjCell(e){
+  if(e.subject_code === null || e.subject_code === undefined || e.subject_code === '')
+    return '<span class="muted">（不掛科目）</span>';
+  return esc(e.subject_code) + ' ' + esc(e.subject_name);
+}
+
+// ---------- 記一筆：稅前／稅額 ----------
+// 會計帳要的是稅前金額，所以「金額」永遠是未稅的，5% 營業稅另外開一列、不掛科目。
+// 這跟原本記帳系統_2026.xlsx 的做法一樣：稅那一列有金額但沒有科目代號，收支表因此不會統計到它。
+const TAX_RATE = 0.05;
+function neTaxAuto(){
+  const mode = document.getElementById('ne_tax_mode').value;
+  const v = Math.round(num(document.getElementById('ne_amount').value));
+  const t = document.getElementById('ne_tax');
+  t.disabled = (mode === 'none');
+  if(mode === 'none' || v <= 0){ t.value = ''; return; }
+  t.value = (mode === 'add') ? Math.round(v * TAX_RATE) : v - Math.round(v / (1 + TAX_RATE));
+}
+function neTaxSplit(){
+  const mode = document.getElementById('ne_tax_mode').value;
+  const v = Math.round(num(document.getElementById('ne_amount').value));
+  if(mode === 'none') return {mode:mode, base:v, tax:0, gross:v};
+  const tax = Math.max(0, Math.round(num(document.getElementById('ne_tax').value)));
+  if(mode === 'add') return {mode:mode, base:v, tax:tax, gross:v + tax};
+  return {mode:mode, base:v - tax, tax:tax, gross:v};
+}
 
 // ---------- 記一筆 ----------
 function neUpdatePreview(){
   const s = subByCode(document.getElementById('ne_subject').value);
-  const amt = num(document.getElementById('ne_amount').value);
+  const sp = neTaxSplit();
+  const amt = sp.base;
   const dir = document.getElementById('ne_direction').value;
   const party = document.getElementById('ne_party').value.trim();
   const acc = accById(document.getElementById('ne_account').value);
@@ -850,7 +897,10 @@ function neUpdatePreview(){
     `即將記錄：<strong>${esc(d)}</strong>　${dir === '收入' ? '收入' : '支出'} <strong>${money(amt)}</strong> 元　科目 <strong>${s.code} ${esc(s.name)}</strong>`
     + (party ? `　對象 <strong>${esc(party)}</strong>` : '')
     + (acc ? `　帳戶 <strong>${esc(acc.name)}</strong>` : '　（還沒選帳戶：先掛帳可以，直接入帳必須選）')
-    + `　傳票編號 <strong>${esc(nextVoucher(d))}</strong>`;
+    + `　傳票編號 <strong>${esc(nextVoucher(d))}</strong>`
+    + (sp.tax > 0
+        ? `<br><span style="color:var(--accent-dark);">會存成兩列：稅前 <strong>${money(sp.base)}</strong> 元記在科目 ${esc(s.code)} ${esc(s.name)}，營業稅 <strong>${money(sp.tax)}</strong> 元另外一列不掛科目，帳戶實際進出 <strong>${money(sp.gross)}</strong> 元。收支表只會算稅前那 ${money(sp.base)} 元。</span>`
+        : '');
 }
 function neReadForm(){
   const s = subByCode(document.getElementById('ne_subject').value);
@@ -866,7 +916,7 @@ function neReadForm(){
     account_id: acc ? acc.account_id : null,
     account_name: acc ? acc.name : null,
     counterparty: document.getElementById('ne_party').value.trim() || null,
-    amount: num(document.getElementById('ne_amount').value),
+    amount: neTaxSplit().base,
     description: document.getElementById('ne_desc').value.trim() || null,
     invoice_no: document.getElementById('ne_invoice').value.trim() || null,
     vehicle_plate: document.getElementById('ne_plate').value.trim() || null,
@@ -879,12 +929,17 @@ function neReadForm(){
 function neClear(){
   ['ne_amount','ne_party','ne_desc','ne_invoice','ne_plate','ne_notes','ne_due'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('ne_date').value = todayISO();
+  neTaxAuto();
   neUpdatePreview();
 }
 async function neAdd(settled){
   const row = neReadForm();
+  const sp = neTaxSplit();
   if(!row.subject_code){ toast('ne_msg','請先選會計科目'); return; }
-  if(!row.amount || row.amount <= 0){ toast('ne_msg','金額要大於 0'); return; }
+  if(!row.amount || row.amount <= 0){
+    toast('ne_msg', sp.mode === 'incl' ? '稅前金額要大於 0（含稅總額扣掉稅額之後是 ' + money(sp.base) + '）' : '金額要大於 0');
+    return;
+  }
   if(settled && !row.account_id){ toast('ne_msg','直接入帳一定要選收付帳戶，因為它會影響帳戶餘額'); return; }
   row.status = settled ? '已收付' : '掛帳中';
   row.settle_date = settled ? (row.due_date || row.entry_date) : null;
@@ -894,7 +949,36 @@ async function neAdd(settled){
   try{
     const saved = await sbInsert('acc_entries', row);
     STATE.entries.unshift(saved);
-    toast('ne_msg', (settled ? '已入帳：' : '已掛帳：') + saved.voucher_no + '　' + money(saved.amount) + ' 元', true);
+    let taxSaved = null;
+    if(sp.tax > 0){
+      const taxRow = {
+        voucher_no: saved.voucher_no, entry_date: saved.entry_date,
+        due_date: saved.due_date || null, settle_date: saved.settle_date || null,
+        status: saved.status, direction: saved.direction,
+        subject_code: null, subject_name: null,
+        account_id: saved.account_id || null, account_name: saved.account_name || null,
+        counterparty: saved.counterparty || null,
+        amount: sp.tax, description: '5%稅',
+        invoice_no: saved.invoice_no || null, vehicle_plate: saved.vehicle_plate || null,
+        pay_method: saved.pay_method || null,
+        notes: '營業稅：傳票 ' + saved.voucher_no + ' 的 5% 稅額，不掛科目、收支表不計入',
+        source: '會計', created_by: CURRENT_USER || null,
+        settled_by: settled ? (CURRENT_USER || null) : null
+      };
+      try{
+        taxSaved = await sbInsert('acc_entries', taxRow);
+        STATE.entries.unshift(taxSaved);
+      }catch(err){
+        // 稅額那一列沒存成功就把主列也收回來，不要留下半筆
+        try{ await sbDelete('acc_entries', 'entry_id', saved.entry_id); }catch(e2){}
+        STATE.entries.shift();
+        toast('ne_msg', '稅額那一列存檔失敗，整筆都沒有存：' + err.message);
+        renderAll();
+        return;
+      }
+    }
+    toast('ne_msg', (settled ? '已入帳：' : '已掛帳：') + saved.voucher_no + '　稅前 ' + money(saved.amount) + ' 元'
+      + (taxSaved ? '＋稅額 ' + money(taxSaved.amount) + ' 元（共 ' + money(sp.gross) + ' 元）' : ''), true);
     neClear();
     renderAll();
   }catch(e){
@@ -908,7 +992,7 @@ function renderRecent(){
   document.getElementById('neRecentCount').textContent = rows.length;
   document.getElementById('neRecentBody').innerHTML = rows.map(e =>
     `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td><td>${statusPill(e.status)}</td><td>${dirPill(e.direction)}</td>
-     <td>${esc(e.subject_code)} ${esc(e.subject_name)}</td><td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
+     <td>${subjCell(e)}</td><td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
      <td class="num">${money(e.amount)}</td>
      <td><button class="del-btn" data-void="${e.entry_id}">作廢</button></td></tr>`
   ).join('') || '<tr><td colspan="9" class="empty">還沒有資料</td></tr>';
@@ -950,7 +1034,7 @@ function renderPending(){
     const late = e.due_date && e.due_date < t;
     return `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td>
       <td>${e.due_date ? (late ? `<span class="pill red">${esc(e.due_date)}</span>` : esc(e.due_date)) : '<span class="muted">未定</span>'}</td>
-      <td>${dirPill(e.direction)}</td><td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+      <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
       <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td class="num"><strong>${money(e.amount)}</strong></td>
       <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
       <td style="white-space:nowrap;">
@@ -994,7 +1078,7 @@ function renderHistory(){
   document.getElementById('hsCount').textContent = rows.length;
   document.getElementById('hsBody').innerHTML = rows.slice(0, 600).map(e =>
     `<tr><td>${esc(e.settle_date)}</td><td>${esc(e.voucher_no)}</td><td>${dirPill(e.direction)}</td>
-     <td>${esc(e.subject_code)} ${esc(e.subject_name)}</td><td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
+     <td>${subjCell(e)}</td><td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
      <td>${esc(e.account_name)}</td><td>${esc(e.invoice_no)}</td>
      <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
      <td class="num"><strong>${money(e.amount)}</strong></td>
@@ -1011,7 +1095,7 @@ function renderHistory(){
   const voids = STATE.entries.filter(e => e.status === '已作廢');
   document.getElementById('voidCount').textContent = voids.length;
   document.getElementById('voidBody').innerHTML = voids.map(e =>
-    `<tr><td>${esc(e.entry_date)}</td><td>${dirPill(e.direction)}</td><td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+    `<tr><td>${esc(e.entry_date)}</td><td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td class="num">${money(e.amount)}</td>
      <td><button class="move-btn" data-restore="${e.entry_id}">還原成掛帳</button><button class="del-btn" data-del="${e.entry_id}">刪除</button></td></tr>`
   ).join('') || '<tr><td colspan="7" class="empty">沒有作廢的資料</td></tr>';
@@ -1025,8 +1109,10 @@ function buildReport(){
   const accounts = STATE.accounts.filter(a => a.active !== false);
   const rows = STATE.entries.filter(e => e.status === '已收付' && (e.settle_date||e.entry_date) >= from && (e.settle_date||e.entry_date) <= to);
   const cell = {};   // code -> accountId -> 金額
+  let noSubCnt = 0, noSubAmt = 0;   // 營業稅、匯費那些沒掛科目的列：不列入本表，但要講出來
   rows.forEach(e => {
-    const s = subByCode(e.subject_code); if(!s) return;
+    const s = subByCode(e.subject_code);
+    if(!s){ noSubCnt++; noSubAmt += num(e.amount); return; }
     const sign = (e.direction === s.default_type) ? 1 : -1;
     cell[s.code] = cell[s.code] || {};
     cell[s.code][e.account_id] = (cell[s.code][e.account_id] || 0) + sign * num(e.amount);
@@ -1087,10 +1173,15 @@ function buildReport(){
   out.push({type:'sum', label:'收入總額', vals:incAll, all:incSum});
   out.push({type:'sum', label:'支出總額', vals:expAll, all:expSum});
   out.push({type:'net', label:'收支淨額', vals:incAll.map((v,i) => v - expAll[i]), all:incSum - expSum});
-  return {out, accounts, from, to};
+  return {out, accounts, from, to, noSubCnt, noSubAmt};
 }
 function renderReport(){
-  const {out, accounts} = buildReport();
+  const {out, accounts, noSubCnt, noSubAmt} = buildReport();
+  const note = document.getElementById('rp_note');
+  if(note) note.innerHTML = '本表的金額都是<strong>稅前金額</strong>。'
+    + (noSubCnt
+        ? `這段期間另外有 <strong>${noSubCnt}</strong> 筆沒有掛科目的列（營業稅、匯費那些）共 <strong>${money(noSubAmt)}</strong> 元，照原本記帳系統的做法不列入本表，但已經算進帳戶餘額。`
+        : '這段期間沒有未掛科目的列。');
   const span = accounts.length + 3;
   document.getElementById('rp_body').innerHTML = out.map(r => {
     if(r.type === 'head') return `<tr style="background:linear-gradient(90deg,#f2ece4,#fbfaf8);"><td colspan="${span}" style="font-weight:700;color:var(--navy-900);letter-spacing:.05em;">${esc(r.label)}</td></tr>`;
@@ -1183,7 +1274,7 @@ function openSettle(id){
   const e = STATE.entries.find(x => String(x.entry_id) === String(id)); if(!e) return;
   SETTLE_ID = id;
   document.getElementById('sm_info').innerHTML =
-    `${esc(e.voucher_no)}　${dirPill(e.direction)}　${esc(e.subject_code)} ${esc(e.subject_name)}　${esc(e.counterparty||'')}　<strong>${money(e.amount)}</strong> 元<br>${esc(e.description||'')}`;
+    `${esc(e.voucher_no)}　${dirPill(e.direction)}　${subjCell(e)}　${esc(e.counterparty||'')}　<strong>${money(e.amount)}</strong> 元<br>${esc(e.description||'')}`;
   document.getElementById('sm_date').value = e.due_date && e.due_date <= todayISO() ? todayISO() : todayISO();
   fillAccountSelect(document.getElementById('sm_account'), '請選擇', e.account_id || '');
   document.getElementById('sm_pay').value = e.pay_method || '';
@@ -1213,7 +1304,7 @@ async function confirmSettle(){
 function openEdit(id){
   const e = STATE.entries.find(x => String(x.entry_id) === String(id)); if(!e) return;
   EDIT_ID = id;
-  fillSubjectSelect(document.getElementById('em_subject'), e.subject_code);
+  fillSubjectSelect(document.getElementById('em_subject'), e.subject_code, true);
   fillAccountSelect(document.getElementById('em_account'), '未指定', e.account_id || '');
   document.getElementById('em_direction').value = e.direction;
   document.getElementById('em_amount').value = num(e.amount);
@@ -1233,14 +1324,14 @@ async function saveEdit(){
   const s = subByCode(document.getElementById('em_subject').value);
   const acc = accById(document.getElementById('em_account').value);
   const amt = num(document.getElementById('em_amount').value);
-  if(!s){ toast('em_msg','請選科目'); return; }
+  if(!s && document.getElementById('em_subject').value !== ''){ toast('em_msg','請選科目'); return; }
   if(amt <= 0){ toast('em_msg','金額要大於 0'); return; }
   const settle = document.getElementById('em_settle').value || null;
   if(e.status === '已收付' && !settle){ toast('em_msg','已收付的帳一定要有實際收付日'); return; }
   if(e.status === '已收付' && !acc){ toast('em_msg','已收付的帳一定要有收付帳戶'); return; }
   try{
     const saved = await sbUpdate('acc_entries', 'entry_id', e.entry_id, {
-      subject_code:s.code, subject_name:s.name,
+      subject_code: s ? s.code : null, subject_name: s ? s.name : null,
       direction: document.getElementById('em_direction').value,
       amount: amt,
       counterparty: document.getElementById('em_party').value.trim() || null,
@@ -1303,6 +1394,9 @@ function bindEvents(){
     if(s) document.getElementById('ne_direction').value = s.default_type || '支出';
     neUpdatePreview();
   });
+  document.getElementById('ne_tax_mode').addEventListener('change', () => { neTaxAuto(); neUpdatePreview(); });
+  document.getElementById('ne_amount').addEventListener('input', neTaxAuto);
+  document.getElementById('ne_tax').addEventListener('input', neUpdatePreview);
   ['ne_amount','ne_party','ne_date','ne_account','ne_direction'].forEach(id =>
     document.getElementById(id).addEventListener('input', neUpdatePreview));
   document.getElementById('ne_add_pending').addEventListener('click', () => neAdd(false));
