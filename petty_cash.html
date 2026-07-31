@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>順亞運通 零用金記帳</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy-950:#071525; --navy-900:#0d1b2c; --navy-850:#102238; --navy-800:#152a43; --navy-700:#203e61;
+    --gold-700:#9d6d2f; --gold-600:#b9843f; --gold-500:#c99a56; --gold-400:#d8b374; --gold-300:#ead3a4;
+    --ivory-50:#fffdf9; --ivory-100:#fbf8f3; --ivory-200:#f2ede5;
+    --accent:#9d6d2f; --accent-dark:#7d5624; --accent-bg:#f6ead6;
+    --navy:#0d1b2c; --navy-2:#152a43;
+    --red:#B3261E; --red-bg:#FBEAE8;
+    --amber:#9C6B00; --amber-bg:#FDF1DC;
+    --green:#3F7D44; --green-bg:#EAF3E7;
+    --gray:#6B5A48; --gray-bg:#F1E9DD;
+    --radius:14px; --radius-sm:11px;
+    --shadow-sm:0 1px 2px rgba(13,27,44,.07);
+    --shadow-md:0 12px 32px rgba(20,32,51,.09), 0 1px 2px rgba(13,27,44,.05);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:
+      radial-gradient(circle at 88% 8%, rgba(216,179,116,.14), transparent 20%),
+      radial-gradient(circle at 10% 75%, rgba(32,62,97,.07), transparent 24%),
+      linear-gradient(145deg, #fff 0%, #f8f5f1 54%, #eef1f5 100%);
+    color:var(--text); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{
+    max-width:1600px;margin:0 auto;min-height:100vh;display:grid;
+    grid-template-columns:190px minmax(0,1fr);
+    background:rgba(255,255,255,.32);box-shadow:0 0 80px rgba(9,24,41,.08);
+  }
+  .sidebar{
+    position:sticky;top:0;z-index:50;height:100vh;padding:26px 12px 20px;display:flex;flex-direction:column;gap:18px;
+    background:linear-gradient(180deg, rgba(255,255,255,.97), rgba(249,248,246,.96)), radial-gradient(circle at 20% 10%, rgba(216,179,116,.18), transparent 42%);
+    border-right:1px solid rgba(13,27,44,.08);overflow-y:auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 10px;}
+  .brand-mark{
+    font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;line-height:1;color:transparent;
+    background:linear-gradient(140deg,#8d5b21 3%,#f5e4bc 36%,#b2782f 67%,#f0d59d 100%);
+    -webkit-background-clip:text;background-clip:text;
+  }
+  .brand-copy{color:var(--gold-700);font-family:Montserrat,sans-serif;font-size:9px;font-weight:600;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 0 60px;}
+  header.banner{
+    background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 55%,var(--accent-dark) 100%);
+    color:#fff;padding:30px 28px 34px;position:relative;overflow:hidden;
+  }
+  header.banner::after{
+    content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.10),transparent 70%);
+  }
+  .hero-kicker{margin:0 0 8px;color:var(--gold-300);font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;position:relative;}
+  header.banner h1{font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;margin:0 0 8px;letter-spacing:.5px;position:relative;}
+  header.banner .sub{color:rgba(255,255,255,.72);font-size:13px;position:relative;max-width:640px;line-height:1.7;}
+  .content{padding:20px 26px 40px;position:relative;}
+  .content-pad{padding:0 24px;}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
+  .sub{color:var(--text-2);font-size:13px;}
+  nav{display:flex;flex-direction:column;gap:6px;}
+  nav button{
+    appearance:none;border:1px solid transparent;background:none;text-align:left;padding:10px 12px;font-size:12.5px;font-weight:600;
+    color:#3f4650;cursor:pointer;border-radius:13px;transition:background .2s,color .15s,transform .15s;
+  }
+  nav button:hover{background:rgba(255,255,255,.9);border-color:rgba(13,27,44,.08);transform:translateX(2px);}
+  nav button.active{
+    color:var(--gold-700);
+    background:linear-gradient(100deg, rgba(246,240,230,.98), rgba(236,205,155,.76));
+    border-color:rgba(201,154,86,.28);box-shadow:0 9px 22px rgba(157,109,47,.13);
+  }
+  .sidebar-motto{
+    margin-top:auto;padding:14px 12px;border:1px solid rgba(201,154,86,.48);border-radius:16px;color:#725426;text-align:center;
+    background:linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,244,223,.88));box-shadow:0 12px 30px rgba(201,154,86,.13);
+  }
+  .sidebar-motto strong{display:block;font-size:12px;letter-spacing:.04em;}
+  .sidebar-motto span{display:block;margin-top:6px;color:#a57632;font-family:Montserrat,sans-serif;font-size:8px;letter-spacing:.045em;text-transform:uppercase;}
+  .panel{display:none;} .panel.active{display:block;animation:fadein .18s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px;
+    box-shadow:var(--shadow-sm);
+  }
+  .stat-card .n{font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.5px;}
+  .stat-card .l{font-size:12px;color:var(--text-2);margin-top:6px;font-weight:500;}
+  .stat-card.red .n{color:var(--red);} .stat-card.amber .n{color:var(--amber);} .stat-card.green .n{color:var(--green);}
+  .card{
+    position:relative;background:linear-gradient(160deg, rgba(255,255,255,.98), rgba(252,252,252,.94));
+    border:1px solid rgba(255,255,255,.82);border-radius:20px;padding:22px 24px;
+    margin-bottom:16px;box-shadow:var(--shadow-md);overflow:hidden;
+  }
+  .card::after{
+    content:"";position:absolute;top:-60px;right:-70px;width:190px;height:190px;border:1px solid rgba(201,154,86,.30);
+    border-radius:50%;opacity:.10;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, rgba(13,27,44,.98) 0 10%, transparent 10.5% 18%, rgba(201,154,86,.88) 18.5% 28%, transparent 28.5%);
+  }
+  .card h2{font-size:15px;font-weight:700;margin:0 0 14px;color:var(--navy-900);position:relative;letter-spacing:.02em;}
+  .card h2 .count-badge{
+    display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--accent);
+    background:var(--accent-bg);padding:2px 8px;border-radius:99px;vertical-align:middle;
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;color:#263240;font-weight:600;padding:12px 14px;border-bottom:1px solid rgba(13,27,44,.08);
+    white-space:nowrap;font-size:11.5px;letter-spacing:.3px;background:linear-gradient(90deg,#fbfaf8,#f2ece4);
+  }
+  td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
+  tbody tr:hover td{background:#fffaf0;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .pill.red{background:var(--red-bg);color:var(--red);}
+  .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.green{background:var(--green-bg);color:var(--green);}
+  .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input{
+    font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
+    background:rgba(255,255,255,.88);color:var(--text);transition:border-color .15s,box-shadow .15s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  select:focus,input:focus{outline:none;border-color:var(--gold-500);background:#fff;box-shadow:0 0 0 4px rgba(201,154,86,.15);}
+  button.btn{
+    appearance:none;border:none;color:#fff;padding:10px 20px;border-radius:13px;
+    font-size:13px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .2s,filter .15s;
+    background:linear-gradient(105deg,var(--navy-900) 0%,var(--navy-800) 56%,var(--gold-400) 100%);
+    box-shadow:0 10px 23px rgba(13,27,44,.18);
+  }
+  button.btn:hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 15px 29px rgba(13,27,44,.23);}
+  button.btn:active{transform:translateY(0);}
+  button.btn.ghost{background:none;color:var(--text-2);border:1px solid var(--border-strong);box-shadow:none;}
+  button.btn.ghost:hover{background:var(--gray-bg);color:var(--text);transform:none;filter:none;}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
+  .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
+  .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
+  .table-scroll table{margin:0;}
+  .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
+  /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
+  /* 公里數統計表／平均公里數（季）：欄位多，改用緊湊版面且不換行 */
+  table.km-table{font-size:12px;}
+  table.km-table th{padding:8px 8px;font-size:11.5px;white-space:nowrap;}
+  table.km-table td{padding:7px 8px;white-space:nowrap;vertical-align:middle;}
+  table.km-table td.km-num,table.km-table th.km-num{text-align:right;font-variant-numeric:tabular-nums;}
+  table.km-table td.km-total{font-weight:700;}
+  table.km-table tbody tr:hover{background:rgba(13,27,44,.03);}
+  table.mh-table{table-layout:fixed;min-width:940px;font-size:14px;}
+  table.mh-table th{font-size:12.5px;padding:12px 10px;}
+  table.mh-table td{padding:11px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  table.mh-table td.mh-desc,table.mh-table td.mh-parts{white-space:normal;overflow:visible;font-size:11.5px;line-height:1.5;word-break:break-word;color:#5b6672;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .lessee-bar{display:flex;align-items:center;gap:10px;padding:7px 0;}
+  .lessee-bar .name{width:70px;font-size:13px;flex-shrink:0;font-weight:500;}
+  .lessee-bar .track{flex:1;height:8px;background:var(--gray-bg);border-radius:99px;overflow:hidden;}
+  .lessee-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:99px;}
+  .lessee-bar .count{width:90px;text-align:right;font-size:12px;color:var(--text-2);flex-shrink:0;}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .del-btn:hover{background:var(--red-bg);}
+  .move-btn{background:none;border:none;color:var(--amber);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .move-btn:hover{background:var(--amber-bg);}
+  .name-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;font-weight:600;}
+  .name-link:hover{text-decoration:underline;}
+  .modal-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(43,33,26,.55);z-index:100;
+    align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;backdrop-filter:blur(2px);
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal-box{background:#fff;border-radius:16px;max-width:640px;width:100%;padding:26px;position:relative;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .modal-box h3{margin:0 0 16px;font-size:18px;font-weight:700;}
+  .modal-close{position:absolute;top:18px;right:18px;background:var(--gray-bg);border:none;font-size:15px;color:var(--text-2);cursor:pointer;width:28px;height:28px;border-radius:50%;}
+  .modal-close:hover{background:var(--border-strong);}
+  .detail-grid{display:grid;grid-template-columns:120px 1fr;gap:9px 12px;font-size:13px;margin-bottom:16px;}
+  .detail-grid dt{color:var(--text-2);font-weight:500;}
+  .detail-grid dd{margin:0;}
+  .detail-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .detail-section h4{font-size:12.5px;margin:0 0 10px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+  .badge-team{display:inline-block;padding:2px 9px;background:var(--gray-bg);border-radius:99px;font-size:12px;color:var(--text-2);}
+  .tire-body{max-width:260px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:20px 16px;position:relative;}
+  .tire-row{display:flex;justify-content:space-between;margin-bottom:14px;gap:16px;}
+  .tire-slot{
+    flex:1;background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:8px 6px;
+    text-align:center;font-size:11.5px;cursor:default;
+  }
+  .tire-slot.green{border-color:var(--green);background:var(--green-bg);}
+  .tire-slot.amber{border-color:var(--amber);background:var(--amber-bg);}
+  .tire-slot.red{border-color:var(--red);background:var(--red-bg);}
+  .tire-slot.gray{border-color:var(--border-strong);background:#fafafa;color:var(--text-3);}
+  .tire-slot .pos-label{font-weight:700;font-size:11px;color:var(--text-2);margin-bottom:3px;}
+  .tire-slot .tire-info{font-size:11px;line-height:1.5;}
+  @media (max-width:860px){
+    .app-shell{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;top:auto;}
+    nav{flex-direction:row;flex-wrap:wrap;}
+    nav button{flex:0 0 auto;}
+  }
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;padding:40px;}
+    .no-print{display:none !important;}
+  }
+</style>
+
+<style>
+  /* ===== 會計／零用金頁面補充樣式（不影響原有儀表板） ===== */
+  .stat-row{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+  table td.num, table th.num{text-align:right;font-family:Montserrat,'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .btn.tiny{padding:5px 11px;font-size:11.5px;border-radius:9px;}
+  .btn.ghost.tiny:hover{transform:none;}
+  .btn.primary{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;box-shadow:0 10px 22px rgba(125,86,36,.28);}
+  label.inline{flex-direction:row;align-items:center;gap:6px;display:inline-flex;font-size:12px;color:var(--text-2);font-weight:600;}
+  label.inline input{padding:7px 9px;}
+  .form-grid input,.form-grid select,.toolbar input,.toolbar select{
+    padding:9px 10px;border:1px solid var(--border-strong);border-radius:9px;font-size:13px;
+    font-family:inherit;background:#fff;color:var(--text);box-sizing:border-box;
+  }
+  .form-grid input:focus,.form-grid select:focus{outline:2px solid rgba(157,109,47,.35);outline-offset:1px;}
+  #balanceCard .n,#balanceCard .l{color:#fff;}
+  @media print{
+    .sidebar,.banner,.toolbar,.no-print{display:none !important;}
+    .app-shell{grid-template-columns:1fr;box-shadow:none;background:#fff;}
+    .card{break-inside:avoid;box-shadow:none;}
+  }
+</style>
+
+</head>
+<body>
+<div id="loginOverlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0d1b2c,#152a43);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="background:#fff;padding:34px 30px;border-radius:16px;width:340px;box-shadow:0 24px 70px rgba(0,0,0,.45);">
+    <div style="font-size:20px;font-weight:700;color:#142033;margin-bottom:4px;">順亞運通 管理系統</div>
+    <div style="font-size:12.5px;color:#8b929b;margin-bottom:20px;">請登入以存取資料</div>
+    <input id="login_email" type="email" placeholder="帳號 (Email)" autocomplete="username" style="width:100%;padding:11px;margin-bottom:11px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <input id="login_pw" type="password" placeholder="密碼" autocomplete="current-password" style="width:100%;padding:11px;margin-bottom:16px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <button id="login_btn" style="width:100%;padding:12px;background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;">登入</button>
+    <div id="login_msg" style="margin-top:13px;font-size:12.5px;color:#B3261E;min-height:17px;text-align:center;"></div>
+  </div>
+</div>
+
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">順亞</div>
+      <div class="brand-copy">Shun Ya<br>Transportation</div>
+    </div>
+    <nav>
+      <button data-tab="cash" class="active">記一筆</button>
+      <button data-tab="month">本月明細</button>
+      <button data-tab="pendingp">掛帳中</button>
+      <button data-tab="refill">撥補紀錄</button>
+    </nav>
+    <div class="sidebar-motto">
+      <strong>安全 準時 用心</strong>
+      <span>Since Establishment</span>
+    </div>
+  </div>
+  <div class="main">
+    <header class="banner">
+      <p class="hero-kicker">Shun Ya Transportation</p>
+      <h1>零用金記帳</h1>
+      <div class="sub">花掉就記一筆 ・ 記完會計系統立刻看得到 ・ 錢還沒付就勾「先掛帳」</div>
+    </header>
+    <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
+    <div class="content">
+
+<!-- ============ 記一筆 ============ -->
+<div id="cash" class="panel active">
+
+  <div class="card" id="balanceCard" style="background:linear-gradient(120deg,#14263c,#1d3854);color:#fff;border:none;">
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:26px;">
+      <div>
+        <div style="font-size:13px;opacity:.72;letter-spacing:.08em;">目前零用金餘額</div>
+        <div id="pcBalance" style="font-family:Montserrat,sans-serif;font-size:46px;font-weight:700;line-height:1.1;">—</div>
+        <div id="pcBalanceNote" style="font-size:12.5px;opacity:.72;margin-top:4px;"></div>
+      </div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;">
+        <div><div style="font-size:12px;opacity:.7;">本月支出</div><div id="pcMonthOut" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+        <div><div style="font-size:12px;opacity:.7;">本月撥補</div><div id="pcMonthIn" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+        <div><div style="font-size:12px;opacity:.7;">本月筆數</div><div id="pcMonthCnt" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+        <div><div style="font-size:12px;opacity:.7;">掛帳中未付</div><div id="pcPendSum" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>花了什麼？</h2>
+    <div class="muted" style="margin-bottom:12px;">先按下面的常用科目，再填金額就可以送出。錢已經從零用金付出去了就直接送出；還沒付（例如先收到單據）就勾「先掛帳」。</div>
+    <div id="quickBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+    <div class="form-grid">
+      <label>科目<select id="pc_subject"></select></label>
+      <label>方向<select id="pc_direction"><option value="支出">支出</option><option value="收入">收入</option></select></label>
+      <label>金額<input id="pc_amount" type="number" step="1" placeholder="0" style="font-size:22px;font-weight:700;"></label>
+      <label>日期<input id="pc_date" type="date"></label>
+      <label>對象／店家<input id="pc_party" list="partyList" placeholder="例：全聯、中油、7-11"></label>
+      <label>摘要<input id="pc_desc" placeholder="例：辦公室茶水"></label>
+      <label>車號（選填）<input id="pc_plate" placeholder="例：KLC-9289"></label>
+      <label>發票號碼（選填）<input id="pc_invoice"></label>
+      <label>經手人<input id="pc_by" placeholder="登入帳號"></label>
+      <label>備註<input id="pc_notes"></label>
+    </div>
+    <div style="margin:12px 0;padding:10px 14px;background:var(--bg);border-radius:10px;font-size:13px;">
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+        <input type="checkbox" id="pc_pending" style="width:16px;height:16px;">
+        先掛帳（錢還沒從零用金付出去）
+      </label>
+      <span class="muted" style="margin-left:10px;">勾了就不扣餘額，之後在「掛帳中」按一下結案。</span>
+    </div>
+    <div class="muted" id="pc_preview" style="margin-bottom:12px;"></div>
+    <div class="toolbar">
+      <button class="btn" id="pc_submit" style="font-size:16px;padding:12px 26px;">記下來</button>
+      <button class="btn ghost" id="pc_clear">清空</button>
+      <span class="muted" id="pc_msg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>最近 15 筆</h2>
+    <div class="table-scroll" style="max-height:360px;">
+      <table><thead><tr><th>日期</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">金額</th><th>狀態</th><th>經手</th><th>操作</th></tr></thead><tbody id="pcRecentBody"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>零用金撥補</h2>
+    <div class="muted" style="margin-bottom:12px;">從銀行帳戶提錢補進零用金。系統會同時記一筆「調撥轉出」（銀行）和一筆「調撥轉入」（零用金），兩筆共用同一個傳票編號。</div>
+    <div class="form-grid">
+      <label>從哪個帳戶提<select id="rf_account"></select></label>
+      <label>金額<input id="rf_amount" type="number" step="1" placeholder="0"></label>
+      <label>日期<input id="rf_date" type="date"></label>
+      <label>摘要<input id="rf_desc" placeholder="零用金撥補"></label>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="rf_submit">撥補</button>
+      <span class="muted" id="rf_msg"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 本月明細 ============ -->
+<div id="month" class="panel">
+  <div class="card">
+    <h2>零用金明細</h2>
+    <div class="toolbar" style="margin-bottom:12px;">
+      <label class="inline">起<input id="mo_from" type="date"></label>
+      <label class="inline">訖<input id="mo_to" type="date"></label>
+      <button class="btn ghost" id="mo_thismonth">本月</button>
+      <button class="btn ghost" id="mo_lastmonth">上月</button>
+      <button class="btn ghost" id="mo_thisyear">今年</button>
+      <input id="mo_search" placeholder="搜尋 科目／對象／摘要／車號" style="min-width:220px;">
+      <button class="btn ghost" id="mo_export">匯出 CSV</button>
+    </div>
+    <div class="stat-row" id="moStatRow"></div>
+    <div class="table-scroll">
+      <table><thead><tr><th>日期</th><th>傳票</th><th>科目</th><th>對象</th><th>摘要</th><th>車號</th><th class="num">支出</th><th class="num">收入</th><th>狀態</th><th>經手</th><th>操作</th></tr></thead><tbody id="moBody"></tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>本期科目小計</h2>
+    <div class="table-scroll" style="max-height:420px;">
+      <table><thead><tr><th>科目</th><th class="num">筆數</th><th class="num">支出</th><th class="num">收入</th></tr></thead><tbody id="moSubjBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 掛帳中 ============ -->
+<div id="pendingp" class="panel">
+  <div class="card">
+    <h2>零用金掛帳中<span class="count-badge" id="pdCount">0</span></h2>
+    <div class="muted" style="margin-bottom:12px;">這些是記了但錢還沒從零用金付出去的。實際付掉之後按「已付款」就會結案，餘額才會扣。</div>
+    <div class="table-scroll">
+      <table><thead><tr><th>發生日</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">金額</th><th>經手</th><th>操作</th></tr></thead><tbody id="pdBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 撥補紀錄 ============ -->
+<div id="refill" class="panel">
+  <div class="card">
+    <h2>撥補紀錄<span class="count-badge" id="rfCount">0</span></h2>
+    <div class="muted" style="margin-bottom:12px;">歷次從銀行提錢補進零用金的紀錄。</div>
+    <div class="table-scroll">
+      <table><thead><tr><th>日期</th><th>傳票</th><th>來源帳戶</th><th>摘要</th><th class="num">金額</th><th>經手</th><th>操作</th></tr></thead><tbody id="rfBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="editModal">
+  <div class="modal-box">
+    <button class="modal-close" id="em_close">×</button>
+    <h3>修改這筆</h3>
+    <div class="form-grid">
+      <label>科目<select id="em_subject"></select></label>
+      <label>方向<select id="em_direction"><option value="支出">支出</option><option value="收入">收入</option></select></label>
+      <label>金額<input id="em_amount" type="number" step="1"></label>
+      <label>日期<input id="em_date" type="date"></label>
+      <label>對象<input id="em_party"></label>
+      <label>摘要<input id="em_desc"></label>
+      <label>車號<input id="em_plate"></label>
+      <label>發票號碼<input id="em_invoice"></label>
+      <label>經手人<input id="em_by"></label>
+      <label>備註<input id="em_notes"></label>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="em_save">儲存</button>
+      <button class="btn ghost" id="em_cancel">取消</button>
+      <span class="muted" id="em_msg"></span>
+    </div>
+  </div>
+</div>
+
+<datalist id="partyList"></datalist>
+
+<script>
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+// ===== 登入驗證(Supabase Auth)=====
+let AUTH_TOKEN=null, REFRESH_TOKEN=null;
+function ensureLogin(){
+  return new Promise((resolve)=>{
+    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='flex';
+    async function doLogin(){
+      const email=(document.getElementById('login_email').value||'').trim();
+      const pw=document.getElementById('login_pw').value||'';
+      const msg=document.getElementById('login_msg');
+      if(!email||!pw){ msg.textContent='請輸入帳號與密碼'; return; }
+      msg.textContent='登入中…';
+      try{
+        const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+        const d=await r.json();
+        if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
+        AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
+        setInterval(refreshToken, 30*60*1000);
+        document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshToken(); });
+        if(ov) ov.style.display='none';
+        resolve();
+      }catch(e){ msg.textContent='連線錯誤:'+e.message; }
+    }
+    const btn=document.getElementById('login_btn'); if(btn) btn.onclick=doLogin;
+    const pwEl=document.getElementById('login_pw'); if(pwEl) pwEl.onkeydown=(e)=>{ if(e.key==='Enter') doLogin(); };
+  });
+}
+async function refreshToken(){
+  if(!REFRESH_TOKEN) return false;
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
+    const d=await r.json();
+    if(r.ok && d && d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token||REFRESH_TOKEN; return true; }
+  }catch(e){}
+  return false;
+}
+// ===== 連線階段逾時自動處理:先試著續期,續期失敗才跳出登入框 =====
+let _reauthPromise=null;
+function _reauth(){
+  if(!_reauthPromise){
+    _reauthPromise=(async ()=>{
+      if(await refreshToken()) return true;
+      AUTH_TOKEN=null;
+      const msg=document.getElementById('login_msg');
+      if(msg) msg.textContent='連線階段已逾時,請重新登入(您未存檔的內容仍保留在畫面上)';
+      await ensureLogin();
+      return true;
+    })().finally(()=>{ _reauthPromise=null; });
+  }
+  return _reauthPromise;
+}
+// 統一帶上「目前最新」的 token;遇到 401/403 先續期再重試一次
+async function authFetch(url, options={}){
+  const build=()=>{
+    const h=Object.assign({}, options.headers||{});
+    delete h.apikey; delete h.Authorization;
+    return Object.assign({}, options, {headers: Object.assign({
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    }, h)});
+  };
+  let res = await fetch(url, build());
+  if(res.status===401 || res.status===403){
+    await _reauth();
+    res = await fetch(url, build());
+  }
+  return res;
+}
+
+
+// ===== 零用金記帳 =====
+const STATE = { accounts: [], subjects: [], entries: [] };
+let CURRENT_USER = '';
+let PETTY = null;          // 零用現金帳戶
+let EDIT_ID = null;
+
+// ---------- 小工具 ----------
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function num(v){ const n = Number(v); return isFinite(n) ? n : 0; }
+function money(v){ const n = Math.round(num(v)); return (n<0?'-':'') + Math.abs(n).toLocaleString('en-US'); }
+function todayISO(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function monthStart(d){ d = d || new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; }
+function monthEnd(d){ d = d || new Date(); const e = new Date(d.getFullYear(), d.getMonth()+1, 0); return e.getFullYear()+'-'+String(e.getMonth()+1).padStart(2,'0')+'-'+String(e.getDate()).padStart(2,'0'); }
+function toast(el, text, ok){ const n = document.getElementById(el); if(!n) return; n.textContent = text; n.style.color = ok ? 'var(--green)' : 'var(--red)'; setTimeout(()=>{ if(n.textContent===text) n.textContent=''; }, 6000); }
+function csvDownload(name, head, rows){
+  const q = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  const lines = [head.map(q).join(',')].concat(rows.map(r => r.map(q).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ---------- 資料層 ----------
+async function sbSelect(path){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`);
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+async function sbInsert(table, row){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method:'POST', headers:{'Prefer':'return=representation'}, body: JSON.stringify(row)
+  });
+  if(!res.ok) throw new Error(await res.text());
+  const d = await res.json();
+  return Array.isArray(d) ? d[0] : d;
+}
+async function sbUpdate(table, pk, id, patch){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}?${pk}=eq.${encodeURIComponent(id)}`, {
+    method:'PATCH', headers:{'Prefer':'return=representation'}, body: JSON.stringify(patch)
+  });
+  if(!res.ok) throw new Error(await res.text());
+  const d = await res.json();
+  return Array.isArray(d) ? d[0] : d;
+}
+async function sbDelete(table, pk, id){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}?${pk}=eq.${encodeURIComponent(id)}`, {method:'DELETE'});
+  if(!res.ok) throw new Error(await res.text());
+}
+
+async function loadAll(){
+  try{
+    STATE.accounts = await sbSelect('acc_accounts?select=*&order=sort_order.asc,account_id.asc');
+    STATE.subjects = await sbSelect('acc_subjects?select=*&order=code.asc');
+    STATE.entries  = await sbSelect('acc_entries?select=*&order=entry_date.desc,entry_id.desc');
+  }catch(e){
+    const w = document.getElementById('storageWarning');
+    w.style.display = 'block';
+    w.textContent = '⚠️ 讀不到雲端資料：' + e.message + '　（資料表可能還沒建立，請先執行 supabase_accounting_1150731.sql）';
+    throw e;
+  }
+  PETTY = STATE.accounts.filter(a => a.is_petty)[0] || STATE.accounts.filter(a => a.name === '零用現金NT')[0] || null;
+  if(!PETTY){
+    const w = document.getElementById('storageWarning');
+    w.style.display = 'block';
+    w.textContent = '⚠️ 找不到零用金帳戶（acc_accounts 裡沒有 is_petty = true 的帳戶），請先在會計系統的「帳戶與科目」把零用現金勾為零用金帳戶。';
+  }
+}
+
+// ---------- 查詢輔助 ----------
+function accById(id){ return STATE.accounts.filter(a => String(a.account_id) === String(id))[0] || null; }
+function subByCode(c){ return STATE.subjects.filter(s => String(s.code) === String(c))[0] || null; }
+function pettyId(){ return PETTY ? PETTY.account_id : null; }
+// 零用金的帳：帳戶就是零用現金
+function pettyEntries(){ return STATE.entries.filter(e => String(e.account_id) === String(pettyId())); }
+function isRefill(e){ return num(e.subject_code) === 501; }
+
+function nextVoucher(dateISO, prefixChar){
+  const d = dateISO || todayISO();
+  const pre = (prefixChar||'P') + d.slice(2,4) + d.slice(5,7) + '-';
+  let mx = 0;
+  STATE.entries.forEach(e => {
+    if(e.voucher_no && String(e.voucher_no).indexOf(pre) === 0){
+      const n = parseInt(String(e.voucher_no).slice(pre.length), 10);
+      if(isFinite(n) && n > mx) mx = n;
+    }
+  });
+  return pre + String(mx+1).padStart(3,'0');
+}
+
+// ---------- 餘額 ----------
+function pettyBalance(){
+  let inc = 0, exp = 0, pend = 0;
+  pettyEntries().forEach(e => {
+    if(e.status === '已作廢') return;
+    if(e.status === '掛帳中'){ if(e.direction === '支出') pend += num(e.amount); return; }
+    if(e.direction === '收入') inc += num(e.amount); else exp += num(e.amount);
+  });
+  const open = PETTY ? num(PETTY.opening_balance) : 0;
+  return { open, inc, exp, pend, balance: open + inc - exp };
+}
+
+function renderBalance(){
+  const b = pettyBalance();
+  document.getElementById('pcBalance').textContent = 'NT$ ' + money(b.balance);
+  document.getElementById('pcBalanceNote').textContent =
+    '期初 ' + money(b.open) + '　＋ 已入帳收入 ' + money(b.inc) + '　－ 已入帳支出 ' + money(b.exp) + (PETTY && PETTY.opening_date ? '　（期初日 ' + PETTY.opening_date + '）' : '');
+  const f = monthStart(), t = monthEnd();
+  let mo = 0, mi = 0, cnt = 0;
+  pettyEntries().forEach(e => {
+    if(e.status !== '已收付') return;
+    const d = e.settle_date || e.entry_date;
+    if(d < f || d > t) return;
+    cnt++;
+    if(e.direction === '收入') mi += num(e.amount); else mo += num(e.amount);
+  });
+  document.getElementById('pcMonthOut').textContent = money(mo);
+  document.getElementById('pcMonthIn').textContent  = money(mi);
+  document.getElementById('pcMonthCnt').textContent = cnt;
+  document.getElementById('pcPendSum').textContent  = money(b.pend);
+}
+
+// ---------- 下拉 ----------
+function fillSubjectSelect(sel){
+  if(!sel) return;
+  const cur = sel.value;
+  const groups = {};
+  STATE.subjects.forEach(s => { if(s.active === false) return; (groups[s.flow] = groups[s.flow] || []).push(s); });
+  let h = '';
+  Object.keys(groups).forEach(f => {
+    h += `<optgroup label="${esc(f)}">`;
+    groups[f].forEach(s => { h += `<option value="${s.code}">${s.code} ${esc(s.name)}</option>`; });
+    h += '</optgroup>';
+  });
+  sel.innerHTML = h;
+  if(cur) sel.value = cur;
+  if(!sel.value){ const d = subByCode(237) || STATE.subjects[0]; if(d) sel.value = d.code; }
+}
+function fillBankSelect(sel){
+  if(!sel) return;
+  sel.innerHTML = STATE.accounts.filter(a => a.active !== false && !a.is_petty)
+    .map(a => `<option value="${a.account_id}">${esc(a.name)}</option>`).join('');
+}
+function fillPartyList(){
+  const seen = {};
+  STATE.entries.forEach(e => { if(e.counterparty) seen[e.counterparty] = 1; });
+  document.getElementById('partyList').innerHTML = Object.keys(seen).sort().map(p => `<option value="${esc(p)}">`).join('');
+}
+
+// ---------- 常用科目快捷鍵 ----------
+function renderQuickBtns(){
+  const box = document.getElementById('quickBtns');
+  const list = STATE.subjects.filter(s => s.is_common && s.active !== false);
+  if(!list.length){ box.innerHTML = '<span class="muted">尚未設定常用科目。到會計系統的「帳戶與科目」把常跑的科目勾成常用，這裡就會出現快捷鍵。</span>'; return; }
+  box.innerHTML = list.map(s =>
+    `<button type="button" class="btn ghost quick" data-code="${s.code}" style="font-size:14px;padding:10px 16px;">${esc(s.name)}</button>`
+  ).join('');
+  box.querySelectorAll('.quick').forEach(b => {
+    b.onclick = () => {
+      const code = b.getAttribute('data-code');
+      document.getElementById('pc_subject').value = code;
+      const s = subByCode(code);
+      if(s) document.getElementById('pc_direction').value = s.default_type || '支出';
+      box.querySelectorAll('.quick').forEach(x => x.classList.remove('primary'));
+      b.classList.add('primary');
+      document.getElementById('pc_amount').focus();
+      pcPreview();
+    };
+  });
+}
+
+// ---------- 記一筆 ----------
+function pcPreview(){
+  const s = subByCode(document.getElementById('pc_subject').value);
+  const amt = num(document.getElementById('pc_amount').value);
+  const dir = document.getElementById('pc_direction').value;
+  const pend = document.getElementById('pc_pending').checked;
+  const d = document.getElementById('pc_date').value || todayISO();
+  const b = pettyBalance();
+  let after = b.balance;
+  if(!pend) after = dir === '收入' ? b.balance + amt : b.balance - amt;
+  document.getElementById('pc_preview').innerHTML =
+    (s ? `科目 <strong>${s.code} ${esc(s.name)}</strong>　` : '') +
+    `${dir} <strong>${money(amt)}</strong>　傳票 <strong>${esc(nextVoucher(d))}</strong>　` +
+    (pend ? '<span style="color:var(--amber);font-weight:600;">先掛帳，餘額不變</span>'
+          : `記完餘額 <strong style="color:${after<0?'var(--red)':'var(--green)'};">${money(after)}</strong>`);
+}
+
+async function pcSubmit(){
+  if(!PETTY){ toast('pc_msg','找不到零用金帳戶，無法記帳', false); return; }
+  const s = subByCode(document.getElementById('pc_subject').value);
+  const amt = num(document.getElementById('pc_amount').value);
+  if(!s){ toast('pc_msg','請選科目', false); return; }
+  if(amt <= 0){ toast('pc_msg','金額要大於 0', false); return; }
+  const d = document.getElementById('pc_date').value || todayISO();
+  const pend = document.getElementById('pc_pending').checked;
+  const row = {
+    voucher_no: nextVoucher(d),
+    entry_date: d,
+    due_date: null,
+    settle_date: pend ? null : d,
+    direction: document.getElementById('pc_direction').value,
+    subject_code: s.code,
+    subject_name: s.name,
+    account_id: PETTY.account_id,
+    account_name: PETTY.name,
+    counterparty: document.getElementById('pc_party').value.trim() || null,
+    amount: amt,
+    description: document.getElementById('pc_desc').value.trim() || null,
+    invoice_no: document.getElementById('pc_invoice').value.trim() || null,
+    status: pend ? '掛帳中' : '已收付',
+    source: '零用金',
+    vehicle_plate: document.getElementById('pc_plate').value.trim() || null,
+    pay_method: '現金',
+    notes: document.getElementById('pc_notes').value.trim() || null,
+    created_by: document.getElementById('pc_by').value.trim() || CURRENT_USER,
+    settled_by: pend ? null : (document.getElementById('pc_by').value.trim() || CURRENT_USER)
+  };
+  const btn = document.getElementById('pc_submit'); btn.disabled = true;
+  try{
+    const saved = await sbInsert('acc_entries', row);
+    STATE.entries.unshift(saved);
+    toast('pc_msg', (pend ? '已掛帳：' : '已記下：') + s.name + ' ' + money(amt), true);
+    document.getElementById('pc_amount').value = '';
+    document.getElementById('pc_desc').value = '';
+    document.getElementById('pc_party').value = '';
+    document.getElementById('pc_invoice').value = '';
+    document.getElementById('pc_plate').value = '';
+    document.getElementById('pc_notes').value = '';
+    document.getElementById('pc_pending').checked = false;
+    renderAll();
+    document.getElementById('pc_amount').focus();
+  }catch(e){ toast('pc_msg','存檔失敗：' + e.message, false); }
+  finally{ btn.disabled = false; }
+}
+
+function pcClear(){
+  ['pc_amount','pc_desc','pc_party','pc_invoice','pc_plate','pc_notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pc_pending').checked = false;
+  document.getElementById('pc_date').value = todayISO();
+  pcPreview();
+}
+
+// ---------- 撥補 ----------
+async function refillSubmit(){
+  if(!PETTY){ toast('rf_msg','找不到零用金帳戶', false); return; }
+  const from = accById(document.getElementById('rf_account').value);
+  const amt = num(document.getElementById('rf_amount').value);
+  const d = document.getElementById('rf_date').value || todayISO();
+  const desc = document.getElementById('rf_desc').value.trim() || '零用金撥補';
+  if(!from){ toast('rf_msg','請選來源帳戶', false); return; }
+  if(amt <= 0){ toast('rf_msg','金額要大於 0', false); return; }
+  const v = nextVoucher(d, 'T');
+  const out = {
+    voucher_no: v, entry_date: d, settle_date: d, direction:'支出',
+    subject_code: 601, subject_name:'調撥轉出',
+    account_id: from.account_id, account_name: from.name,
+    counterparty: PETTY.name, amount: amt, description: desc,
+    status:'已收付', source:'零用金', pay_method:'轉帳',
+    created_by: CURRENT_USER, settled_by: CURRENT_USER
+  };
+  const inn = {
+    voucher_no: v, entry_date: d, settle_date: d, direction:'收入',
+    subject_code: 501, subject_name:'調撥轉入',
+    account_id: PETTY.account_id, account_name: PETTY.name,
+    counterparty: from.name, amount: amt, description: desc,
+    status:'已收付', source:'零用金', pay_method:'現金',
+    created_by: CURRENT_USER, settled_by: CURRENT_USER
+  };
+  const btn = document.getElementById('rf_submit'); btn.disabled = true;
+  try{
+    const a = await sbInsert('acc_entries', out);
+    STATE.entries.unshift(a);
+    try{
+      const b = await sbInsert('acc_entries', inn);
+      STATE.entries.unshift(b);
+    }catch(e2){
+      await sbDelete('acc_entries','entry_id', a.entry_id);
+      STATE.entries = STATE.entries.filter(x => x.entry_id !== a.entry_id);
+      throw new Error('轉入那筆失敗，已把轉出那筆一起取消：' + e2.message);
+    }
+    toast('rf_msg','已撥補 ' + money(amt) + '（傳票 ' + v + '，轉出＋轉入共 2 筆）', true);
+    document.getElementById('rf_amount').value = '';
+    renderAll();
+  }catch(e){ toast('rf_msg','撥補失敗：' + e.message, false); }
+  finally{ btn.disabled = false; }
+}
+
+// ---------- 表格 ----------
+function rowActions(e){
+  let h = '';
+  if(e.status === '掛帳中') h += `<button class="btn ghost tiny" data-act="settle" data-id="${e.entry_id}">已付款</button> `;
+  h += `<button class="btn ghost tiny" data-act="edit" data-id="${e.entry_id}">修改</button> `;
+  if(e.status !== '已作廢') h += `<button class="btn ghost tiny" data-act="void" data-id="${e.entry_id}">作廢</button>`;
+  else h += `<button class="btn ghost tiny" data-act="restore" data-id="${e.entry_id}">還原</button>`;
+  return h;
+}
+function statusChip(s){
+  const c = s === '已收付' ? 'var(--green)' : (s === '掛帳中' ? 'var(--amber)' : 'var(--text-3)');
+  return `<span style="color:${c};font-weight:600;">${esc(s)}</span>`;
+}
+
+function renderRecent(){
+  const rows = pettyEntries().slice().sort((a,b)=>{
+    const d = String(b.entry_date).localeCompare(String(a.entry_date));
+    return d !== 0 ? d : (b.entry_id - a.entry_id);
+  }).slice(0,15);
+  document.getElementById('pcRecentBody').innerHTML = rows.length ? rows.map(e => `<tr>
+    <td>${esc(e.entry_date)}</td><td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+    <td>${esc(e.counterparty||'')}</td><td>${esc(e.description||'')}</td>
+    <td class="num" style="color:${e.direction==='收入'?'var(--green)':'inherit'};">${e.direction==='收入'?'+':'-'}${money(e.amount)}</td>
+    <td>${statusChip(e.status)}</td><td>${esc(e.created_by||'')}</td>
+    <td class="no-print">${rowActions(e)}</td></tr>`).join('')
+    : '<tr><td colspan="8" class="muted">還沒有零用金紀錄。</td></tr>';
+}
+
+function moFilter(){
+  const f = document.getElementById('mo_from').value, t = document.getElementById('mo_to').value;
+  const kw = (document.getElementById('mo_search').value || '').trim().toLowerCase();
+  return pettyEntries().filter(e => {
+    const d = e.entry_date || '';
+    if(f && d < f) return false;
+    if(t && d > t) return false;
+    if(kw){
+      const hay = [e.subject_name, e.counterparty, e.description, e.vehicle_plate, e.voucher_no, e.notes].join(' ').toLowerCase();
+      if(hay.indexOf(kw) < 0) return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const d = String(a.entry_date).localeCompare(String(b.entry_date));
+    return d !== 0 ? d : (a.entry_id - b.entry_id);
+  });
+}
+
+function renderMonth(){
+  const rows = moFilter();
+  let out = 0, inn = 0, pend = 0;
+  rows.forEach(e => {
+    if(e.status === '已作廢') return;
+    if(e.status === '掛帳中'){ pend += num(e.amount); return; }
+    if(e.direction === '收入') inn += num(e.amount); else out += num(e.amount);
+  });
+  document.getElementById('moStatRow').innerHTML = [
+    ['筆數', rows.length, ''],
+    ['已入帳支出', money(out), 'red'],
+    ['已入帳收入', money(inn), 'green'],
+    ['掛帳中', money(pend), 'amber'],
+    ['淨變動', money(inn-out), (inn-out)<0?'red':'green']
+  ].map(x => `<div class="stat-card ${x[2]}"><div class="n">${x[1]}</div><div class="l">${x[0]}</div></div>`).join('');
+
+  document.getElementById('moBody').innerHTML = rows.length ? rows.map(e => `<tr${e.status==='已作廢'?' style="opacity:.45;text-decoration:line-through;"':''}>
+    <td>${esc(e.entry_date)}</td><td>${esc(e.voucher_no||'')}</td>
+    <td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+    <td>${esc(e.counterparty||'')}</td><td>${esc(e.description||'')}</td><td>${esc(e.vehicle_plate||'')}</td>
+    <td class="num">${e.direction==='支出'&&e.status!=='已作廢'?money(e.amount):''}</td>
+    <td class="num">${e.direction==='收入'&&e.status!=='已作廢'?money(e.amount):''}</td>
+    <td>${statusChip(e.status)}</td><td>${esc(e.created_by||'')}</td>
+    <td class="no-print">${rowActions(e)}</td></tr>`).join('')
+    : '<tr><td colspan="11" class="muted">這段期間沒有資料。</td></tr>';
+
+  const agg = {};
+  rows.forEach(e => {
+    if(e.status === '已作廢') return;
+    const k = e.subject_code + ' ' + e.subject_name;
+    const a = agg[k] = agg[k] || {n:0, out:0, inn:0};
+    a.n++;
+    if(e.direction === '收入') a.inn += num(e.amount); else a.out += num(e.amount);
+  });
+  const keys = Object.keys(agg).sort((a,b) => (agg[b].out+agg[b].inn) - (agg[a].out+agg[a].inn));
+  document.getElementById('moSubjBody').innerHTML = keys.length ? keys.map(k =>
+    `<tr><td>${esc(k)}</td><td class="num">${agg[k].n}</td><td class="num">${agg[k].out?money(agg[k].out):''}</td><td class="num">${agg[k].inn?money(agg[k].inn):''}</td></tr>`
+  ).join('') : '<tr><td colspan="4" class="muted">無資料。</td></tr>';
+}
+
+function renderPending(){
+  const rows = pettyEntries().filter(e => e.status === '掛帳中')
+    .sort((a,b) => String(a.entry_date).localeCompare(String(b.entry_date)));
+  document.getElementById('pdCount').textContent = rows.length;
+  document.getElementById('pdBody').innerHTML = rows.length ? rows.map(e => `<tr>
+    <td>${esc(e.entry_date)}</td><td>${esc(e.subject_code)} ${esc(e.subject_name)}</td>
+    <td>${esc(e.counterparty||'')}</td><td>${esc(e.description||'')}</td>
+    <td class="num">${money(e.amount)}</td><td>${esc(e.created_by||'')}</td>
+    <td class="no-print">${rowActions(e)}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="muted">沒有掛帳中的零用金項目。</td></tr>';
+}
+
+function renderRefill(){
+  const rows = pettyEntries().filter(isRefill)
+    .sort((a,b) => String(b.entry_date).localeCompare(String(a.entry_date)));
+  document.getElementById('rfCount').textContent = rows.length;
+  document.getElementById('rfBody').innerHTML = rows.length ? rows.map(e => `<tr${e.status==='已作廢'?' style="opacity:.45;text-decoration:line-through;"':''}>
+    <td>${esc(e.entry_date)}</td><td>${esc(e.voucher_no||'')}</td><td>${esc(e.counterparty||'')}</td>
+    <td>${esc(e.description||'')}</td><td class="num">${money(e.amount)}</td><td>${esc(e.created_by||'')}</td>
+    <td class="no-print">${rowActions(e)}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="muted">還沒有撥補紀錄。</td></tr>';
+}
+
+function renderAll(){
+  renderBalance();
+  renderRecent();
+  renderMonth();
+  renderPending();
+  renderRefill();
+  fillPartyList();
+}
+
+// ---------- 列操作 ----------
+async function settleEntry(id){
+  const e = STATE.entries.filter(x => String(x.entry_id) === String(id))[0];
+  if(!e) return;
+  const d = prompt('實際付款日（YYYY-MM-DD）', todayISO());
+  if(!d) return;
+  try{
+    const saved = await sbUpdate('acc_entries','entry_id', id, {status:'已收付', settle_date:d, settled_by: CURRENT_USER});
+    Object.assign(e, saved);
+    renderAll();
+  }catch(err){ alert('結案失敗：' + err.message); }
+}
+async function setStatus(id, st){
+  const e = STATE.entries.filter(x => String(x.entry_id) === String(id))[0];
+  if(!e) return;
+  if(st === '已作廢' && !confirm('要把這筆作廢嗎？作廢後不計入餘額，但紀錄會留著。')) return;
+  try{
+    const patch = st === '已作廢' ? {status:'已作廢'} : {status: e.settle_date ? '已收付' : '掛帳中'};
+    const saved = await sbUpdate('acc_entries','entry_id', id, patch);
+    Object.assign(e, saved);
+    renderAll();
+  }catch(err){ alert('操作失敗：' + err.message); }
+}
+function openEdit(id){
+  const e = STATE.entries.filter(x => String(x.entry_id) === String(id))[0];
+  if(!e) return;
+  EDIT_ID = id;
+  fillSubjectSelect(document.getElementById('em_subject'));
+  document.getElementById('em_subject').value = e.subject_code || '';
+  document.getElementById('em_direction').value = e.direction || '支出';
+  document.getElementById('em_amount').value = e.amount || 0;
+  document.getElementById('em_date').value = e.entry_date || '';
+  document.getElementById('em_party').value = e.counterparty || '';
+  document.getElementById('em_desc').value = e.description || '';
+  document.getElementById('em_plate').value = e.vehicle_plate || '';
+  document.getElementById('em_invoice').value = e.invoice_no || '';
+  document.getElementById('em_by').value = e.created_by || '';
+  document.getElementById('em_notes').value = e.notes || '';
+  document.getElementById('em_msg').textContent = '';
+  document.getElementById('editModal').classList.add('show');
+}
+function closeEdit(){ document.getElementById('editModal').classList.remove('show'); EDIT_ID = null; }
+async function saveEdit(){
+  if(!EDIT_ID) return;
+  const e = STATE.entries.filter(x => String(x.entry_id) === String(EDIT_ID))[0];
+  const s = subByCode(document.getElementById('em_subject').value);
+  const amt = num(document.getElementById('em_amount').value);
+  if(!s){ toast('em_msg','請選科目', false); return; }
+  if(amt <= 0){ toast('em_msg','金額要大於 0', false); return; }
+  const patch = {
+    subject_code: s.code, subject_name: s.name,
+    direction: document.getElementById('em_direction').value,
+    amount: amt,
+    entry_date: document.getElementById('em_date').value || todayISO(),
+    counterparty: document.getElementById('em_party').value.trim() || null,
+    description: document.getElementById('em_desc').value.trim() || null,
+    vehicle_plate: document.getElementById('em_plate').value.trim() || null,
+    invoice_no: document.getElementById('em_invoice').value.trim() || null,
+    created_by: document.getElementById('em_by').value.trim() || null,
+    notes: document.getElementById('em_notes').value.trim() || null
+  };
+  try{
+    const saved = await sbUpdate('acc_entries','entry_id', EDIT_ID, patch);
+    Object.assign(e, saved);
+    closeEdit();
+    renderAll();
+  }catch(err){ toast('em_msg','儲存失敗：' + err.message, false); }
+}
+
+// ---------- 綁定 ----------
+function bindEvents(){
+  document.querySelectorAll('.sidebar nav button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.sidebar nav button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    document.getElementById(b.getAttribute('data-tab')).classList.add('active');
+  });
+
+  document.getElementById('pc_submit').onclick = pcSubmit;
+  document.getElementById('pc_clear').onclick = pcClear;
+  document.getElementById('pc_pending').onchange = pcPreview;
+  ['pc_amount','pc_direction','pc_date'].forEach(id => {
+    const el = document.getElementById(id);
+    el.oninput = pcPreview; el.onchange = pcPreview;
+  });
+  document.getElementById('pc_subject').onchange = () => {
+    const s = subByCode(document.getElementById('pc_subject').value);
+    if(s) document.getElementById('pc_direction').value = s.default_type || '支出';
+    pcPreview();
+  };
+  document.getElementById('pc_amount').onkeydown = ev => { if(ev.key === 'Enter') pcSubmit(); };
+
+  document.getElementById('rf_submit').onclick = refillSubmit;
+
+  document.getElementById('mo_thismonth').onclick = () => { document.getElementById('mo_from').value = monthStart(); document.getElementById('mo_to').value = monthEnd(); renderMonth(); };
+  document.getElementById('mo_lastmonth').onclick = () => {
+    const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth()-1, 1);
+    document.getElementById('mo_from').value = monthStart(d); document.getElementById('mo_to').value = monthEnd(d); renderMonth();
+  };
+  document.getElementById('mo_thisyear').onclick = () => {
+    const y = new Date().getFullYear();
+    document.getElementById('mo_from').value = y + '-01-01'; document.getElementById('mo_to').value = y + '-12-31'; renderMonth();
+  };
+  ['mo_from','mo_to'].forEach(id => document.getElementById(id).onchange = renderMonth);
+  document.getElementById('mo_search').oninput = renderMonth;
+  document.getElementById('mo_export').onclick = () => {
+    const rows = moFilter().map(e => [e.entry_date, e.voucher_no||'', e.subject_code, e.subject_name,
+      e.counterparty||'', e.description||'', e.vehicle_plate||'',
+      e.direction==='支出'?num(e.amount):'', e.direction==='收入'?num(e.amount):'',
+      e.status, e.settle_date||'', e.invoice_no||'', e.created_by||'', e.notes||'']);
+    csvDownload('零用金明細_' + todayISO() + '.csv',
+      ['日期','傳票','科目代號','科目名稱','對象','摘要','車號','支出','收入','狀態','收付日','發票號碼','經手人','備註'], rows);
+  };
+
+  document.getElementById('em_save').onclick = saveEdit;
+  document.getElementById('em_cancel').onclick = closeEdit;
+  document.getElementById('em_close').onclick = closeEdit;
+
+  document.body.addEventListener('click', ev => {
+    const b = ev.target.closest ? ev.target.closest('button[data-act]') : null;
+    if(!b) return;
+    const id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+    if(act === 'settle') settleEntry(id);
+    else if(act === 'edit') openEdit(id);
+    else if(act === 'void') setStatus(id, '已作廢');
+    else if(act === 'restore') setStatus(id, '還原');
+  });
+}
+
+// ---------- 啟動 ----------
+(async function init(){
+  await ensureLogin();
+  CURRENT_USER = (document.getElementById('login_email').value || '').trim();
+  await loadAll();
+  fillSubjectSelect(document.getElementById('pc_subject'));
+  fillBankSelect(document.getElementById('rf_account'));
+  renderQuickBtns();
+  document.getElementById('pc_date').value = todayISO();
+  document.getElementById('rf_date').value = todayISO();
+  document.getElementById('pc_by').value = CURRENT_USER;
+  document.getElementById('mo_from').value = monthStart();
+  document.getElementById('mo_to').value = monthEnd();
+  const s0 = subByCode(document.getElementById('pc_subject').value);
+  if(s0) document.getElementById('pc_direction').value = s0.default_type || '支出';
+  bindEvents();
+  renderAll();
+  pcPreview();
+})();
+
+</script>
+</body>
+</html>
