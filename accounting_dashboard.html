@@ -223,8 +223,11 @@
   }
   .form-grid input:focus,.form-grid select:focus{outline:2px solid rgba(157,109,47,.35);outline-offset:1px;}
   #balanceCard .n,#balanceCard .l{color:#fff;}
+  /* 卡片右上角的裝飾圓會讓卡片多出 70px 的可捲動寬度，按鈕取得焦點時整張卡會被瀏覽器往左捲。改用 clip 就不會產生捲動軸。 */
+  .card{overflow:clip;}
+  .subj-btn.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
   @media print{
-    .sidebar,.banner,.toolbar,.no-print{display:none !important;}
+    .sidebar,.banner,.toolbar,.no-print,#bookPickCard{display:none !important;}
     .app-shell{grid-template-columns:1fr;box-shadow:none;background:#fff;}
     .card{break-inside:avoid;box-shadow:none;}
   }
@@ -266,7 +269,7 @@
     <header class="banner">
       <p class="hero-kicker">Shun Ya Transportation</p>
       <h1>會計管理系統</h1>
-      <div class="sub">收入與費用先掛帳 ・ 匯款完成後結案入歷史 ・ 零用金記的每一筆這裡都看得到</div>
+      <div class="sub">收入與費用先掛帳 ・ 匯款完成後結案入歷史 ・ 零用金只看餘額，明細在零用金網頁</div>
     </header>
     <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;">
       ⚠️ 目前無法連線到雲端資料庫——請檢查網路連線，若持續發生請聯絡管理員確認 Supabase 專案是否正常運作。
@@ -276,6 +279,13 @@
 <!-- ============ 總覽 ============ -->
 <div id="overview" class="panel active">
   <div class="stat-row" id="ovStatRow"></div>
+  <div class="card" id="ovPettyCard" style="display:none;">
+    <h2>零用金餘額</h2>
+    <div class="muted" style="margin-bottom:10px;">會計系統只看零用金「還剩多少」，每一筆明細不進這裡，請開零用金記帳網頁。代管別人的零用金不會出現在這張表。</div>
+    <div class="table-scroll">
+      <table><thead><tr><th>零用金帳本</th><th>公司</th><th class="num">目前餘額</th><th>更新時間</th></tr></thead><tbody id="ovPettyBody"></tbody></table>
+    </div>
+  </div>
   <div class="card">
     <h2>各帳戶餘額</h2>
     <div class="muted" style="margin-bottom:10px;">餘額 ＝ 期初餘額 ＋ 已收付的收入 － 已收付的支出。掛帳中的金額不算進餘額，另外列在應收／應付。</div>
@@ -382,7 +392,7 @@
       <select id="hs_account"><option value="">全部帳戶</option></select>
       <select id="hs_flow"><option value="">全部大類</option></select>
       <select id="hs_dir"><option value="">全部方向</option><option value="收入">收入</option><option value="支出">支出</option></select>
-      <select id="hs_source"><option value="">全部來源</option><option value="會計">會計</option><option value="零用金">零用金</option></select>
+      <select id="hs_source"><option value="">全部來源</option><option value="會計">會計</option><option value="零用金">零用金撥補</option></select>
       <input id="hs_search" placeholder="關鍵字" style="min-width:180px;">
       <button class="btn ghost" id="hs_thismonth">本月</button>
       <button class="btn ghost" id="hs_thisyear">今年</button>
@@ -430,7 +440,7 @@
     <h2>帳戶</h2>
     <div class="muted" style="margin-bottom:12px;">「期初餘額」是開始用這套系統那天的帳戶餘額，填了之後總覽的餘額才會跟銀行對得起來。改完按「儲存帳戶」。</div>
     <div class="table-scroll" style="max-height:none;">
-      <table><thead><tr><th>帳戶名稱</th><th>簡稱</th><th>種類</th><th class="num">期初餘額</th><th>期初日</th><th>零用金</th><th>啟用</th><th>操作</th></tr></thead><tbody id="stAccountBody"></tbody></table>
+      <table><thead><tr><th>帳戶名稱</th><th>簡稱</th><th>種類</th><th class="num">期初餘額</th><th>期初日</th><th>啟用</th><th>操作</th></tr></thead><tbody id="stAccountBody"></tbody></table>
     </div>
     <div class="toolbar" style="margin-top:12px;">
       <input id="st_acc_name" placeholder="新帳戶名稱">
@@ -443,13 +453,13 @@
   </div>
   <div class="card">
     <h2>會計科目<span class="count-badge" id="stSubjectCount">0</span></h2>
-    <div class="muted" style="margin-bottom:12px;">代號與名稱沿用原本的 Excel。勾「零用金常用」的科目，會出現在零用金網頁的快捷按鈕上。改完按「儲存科目」。</div>
+    <div class="muted" style="margin-bottom:12px;">代號與名稱沿用原本的 Excel。勾「常用」的科目會排在「記一筆」下拉選單最前面。零用金有自己一套科目，跟這裡不連動。改完按「儲存科目」。</div>
     <div class="toolbar">
       <select id="st_sub_flow"><option value="">全部大類</option></select>
       <input id="st_sub_search" placeholder="搜尋科目" style="min-width:180px;">
     </div>
     <div class="table-scroll">
-      <table><thead><tr><th>代號</th><th>科目名稱</th><th>大類</th><th>預設方向</th><th>零用金常用</th><th>啟用</th></tr></thead><tbody id="stSubjectBody"></tbody></table>
+      <table><thead><tr><th>代號</th><th>科目名稱</th><th>大類</th><th>預設方向</th><th>常用</th><th>啟用</th></tr></thead><tbody id="stSubjectBody"></tbody></table>
     </div>
     <div class="toolbar" style="margin-top:12px;">
       <input id="st_sub_code" type="number" placeholder="代號" style="max-width:110px;">
@@ -591,7 +601,7 @@ async function authFetch(url, options={}){
 
 
 // ===== 會計管理系統 =====
-const STATE = { accounts: [], subjects: [], entries: [] };
+const STATE = { accounts: [], subjects: [], entries: [], pettyBooks: [] };
 let CURRENT_USER = '';
 const LOAD_FAILED = [];
 
@@ -651,12 +661,15 @@ async function loadAll(){
     document.getElementById('storageWarning').textContent = '⚠️ 讀不到雲端資料：' + e.message + '　（資料表可能還沒建立，請先執行 supabase_accounting_1150731.sql）';
     throw e;
   }
+  // 零用金：只讀「餘額」這一個數字，明細完全不進會計系統
+  try{
+    STATE.pettyBooks = await sbSelect('petty_books?select=book_id,book_name,company_name,book_type,current_balance,balance_updated_at,is_active&show_in_accounting=is.true&order=sort_no.asc');
+  }catch(e){ STATE.pettyBooks = []; }
 }
 
 // ---------- 查表 ----------
 function accById(id){ return STATE.accounts.find(a => String(a.account_id) === String(id)) || null; }
 function subByCode(code){ return STATE.subjects.find(s => String(s.code) === String(code)) || null; }
-function pettyAccount(){ return STATE.accounts.find(a => a.is_petty) || null; }
 const FLOWS = ['營業收入','營業支出','理財收入','理財支出','調撥轉入','調撥轉出'];
 
 function nextVoucher(dateISO){
@@ -747,15 +760,24 @@ function renderOverview(){
     if(e.settle_date < mS || e.settle_date > mE) return;
     if(e.direction === '收入') mi += num(e.amount); else me += num(e.amount);
   });
+  const books = (STATE.pettyBooks || []).filter(b => b.is_active !== false);
+  const pettyTotal = books.reduce((s,b) => s + num(b.current_balance), 0);
   document.getElementById('ovStatRow').innerHTML =
-    `<div class="stat-card"><div class="n">${money(total)}</div><div class="l">所有帳戶目前餘額</div></div>
+    `<div class="stat-card"><div class="n">${money(total)}</div><div class="l">所有帳戶目前餘額（不含零用金）</div></div>
      <div class="stat-card green"><div class="n">${money(pt.inc)}</div><div class="l">掛帳中應收（還沒收到的錢）</div></div>
      <div class="stat-card red"><div class="n">${money(pt.exp)}</div><div class="l">掛帳中應付（還沒付出的錢）</div></div>
-     <div class="stat-card ${mi-me>=0?'green':'red'}"><div class="n">${moneySigned(mi-me)}</div><div class="l">本月收支淨額（收 ${money(mi)}／支 ${money(me)}）</div></div>`;
+     <div class="stat-card ${mi-me>=0?'green':'red'}"><div class="n">${moneySigned(mi-me)}</div><div class="l">本月收支淨額（收 ${money(mi)}／支 ${money(me)}）</div></div>` +
+    (books.length ? `<div class="stat-card ${pettyTotal<0?'red':''}"><div class="n">${moneySigned(pettyTotal)}</div><div class="l">零用金餘額（${books.map(b=>esc(b.book_name)).join('、')}）</div></div>` : '');
+
+  document.getElementById('ovPettyCard').style.display = books.length ? '' : 'none';
+  document.getElementById('ovPettyBody').innerHTML = books.map(b =>
+    `<tr><td><strong>${esc(b.book_name)}</strong></td><td>${esc(b.company_name)}</td>
+     <td class="num"><strong>${moneySigned(b.current_balance)}</strong></td>
+     <td>${esc(String(b.balance_updated_at||'').slice(0,16).replace('T',' '))}</td></tr>`).join('');
 
   document.getElementById('ovAccountBody').innerHTML = STATE.accounts.filter(a => a.active !== false).map(a => {
     const r = st[a.account_id] || {inc:0,exp:0,pin:0,pex:0,balance:num(a.opening_balance)};
-    return `<tr><td><strong>${esc(a.name)}</strong>${a.is_petty?' <span class="pill amber">零用金</span>':''}</td>
+    return `<tr><td><strong>${esc(a.name)}</strong></td>
       <td class="num">${money(a.opening_balance)}</td><td class="num">${money(r.inc)}</td><td class="num">${money(r.exp)}</td>
       <td class="num"><strong>${moneySigned(r.balance)}</strong></td>
       <td class="num">${r.pin?money(r.pin):'—'}</td><td class="num">${r.pex?money(r.pex):'—'}</td></tr>`;
@@ -1060,10 +1082,9 @@ function renderSetup(){
       <td><input data-f="kind" value="${esc(a.kind)}" style="width:70px;"></td>
       <td class="num"><input data-f="opening_balance" type="number" step="1" value="${num(a.opening_balance)}" style="width:120px;text-align:right;"></td>
       <td><input data-f="opening_date" type="date" value="${esc(a.opening_date||'')}"></td>
-      <td style="text-align:center;"><input data-f="is_petty" type="radio" name="pettyPick" ${a.is_petty?'checked':''}></td>
       <td style="text-align:center;"><input data-f="active" type="checkbox" ${a.active!==false?'checked':''}></td>
       <td><button class="del-btn" data-delacc="${a.account_id}">刪除</button></td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty">還沒有帳戶</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">還沒有帳戶</td></tr>';
 
   const flow = document.getElementById('st_sub_flow').value;
   const kw = (document.getElementById('st_sub_search').value || '').trim().toLowerCase();
@@ -1094,7 +1115,6 @@ async function saveAccounts(){
         kind: g('kind').value.trim() || null,
         opening_balance: num(g('opening_balance').value),
         opening_date: g('opening_date').value || null,
-        is_petty: g('is_petty').checked,
         active: g('active').checked
       };
       if(!patch.name){ toast('st_acc_msg','帳戶名稱不能空白'); return; }
