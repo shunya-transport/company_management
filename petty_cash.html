@@ -410,6 +410,7 @@
       <button class="btn primary" id="stm_go">產生</button>
       <button class="btn" id="stm_print">列印／存 PDF</button>
       <button class="btn tiny" id="stm_csv">匯出 CSV</button>
+      <span id="stm_msg" style="font-size:12px;color:#b3261e;"></span>
     </div>
   </div>
   <div class="card" id="stmPaper"><div id="stmOut" style="min-height:60px;color:#6b6357;font-size:13px;">尚未產生。</div></div>
@@ -773,6 +774,37 @@ function download(name, text){
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 
+// ---------- 列印 ----------
+// 直接呼叫 window.print() 在「網頁被嵌在預覽視窗（iframe）裡」時會被瀏覽器靜靜擋掉，按下去完全沒有反應。
+// 所以改成另開一個乾淨的視窗來列印；連新視窗都被擋才退回本頁列印，並把原因寫在畫面上。
+var PRINT_CSS = '@page{size:A4;margin:14mm 12mm;}'
+  + 'body{font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;color:#1d1a15;margin:0;padding:4px 2px;font-size:13px;line-height:1.55;}'
+  + 'h2,h3{font-size:18px;margin:0 0 12px;}'
+  + 'table{width:100%;border-collapse:collapse;margin-bottom:14px;}'
+  + 'th,td{border-bottom:1px solid #d8d2c6;padding:6px 8px;text-align:left;vertical-align:top;}'
+  + 'thead th{background:#f3efe7;border-bottom:1.5px solid #b9ae99;white-space:nowrap;}'
+  + 'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}'
+  + '.muted{color:#6b6357;}tr{break-inside:avoid;}.no-print{display:none !important;}';
+
+function printBlock(title, html, msgEl){
+  var w = null;
+  try{ w = window.open('', '_blank'); }catch(e){ w = null; }
+  if(w && w.document){
+    try{
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>'
+        + esc(title) + '<\/title><style>' + PRINT_CSS + '<\/style><\/head><body>' + html
+        + '<script>window.onload=function(){try{window.focus();window.print();}catch(e){}};<\/script><\/body><\/html>');
+      w.document.close();
+      if(msgEl) msgEl.textContent = '';
+      return true;
+    }catch(e){ try{ w.close(); }catch(e2){} }
+  }
+  try{ window.print(); }catch(e){}
+  if(msgEl) msgEl.textContent = '新視窗被擋住了，已改用本頁列印。如果還是沒反應，代表這個網頁是被嵌在預覽視窗裡（不允許列印），請用瀏覽器分頁直接開 GitHub Pages 網址。';
+  return false;
+}
+
 // 撥補要在會計那邊開一張傳票，編號沿用會計系統的規則：A + 年月 + 三位流水號
 async function nextVoucher(dateISO){
   const d = dateISO || todayISO();
@@ -1045,7 +1077,10 @@ function wire(){
   };
 
   $('stm_go').onclick = buildStatement;
-  $('stm_print').onclick = () => { if(buildStatement()) window.print(); };
+  $('stm_print').onclick = () => {
+    const r = buildStatement(); if(!r) return;
+    printBlock(r.bk.company_name + ' 零用金對帳單', $('stmOut').innerHTML, $('stm_msg'));
+  };
   $('stm_csv').onclick = () => {
     const r = buildStatement(); if(!r) return;
     const rows = r.rows.map((e,i) => [i+1, toROC(e.entry_date), e.subject_name, e.memo,

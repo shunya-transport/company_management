@@ -423,7 +423,8 @@
       <button class="btn ghost" id="rp_thisyear">今年</button>
       <label class="muted"><input type="checkbox" id="rp_hidezero" checked style="vertical-align:middle;"> 隱藏沒有金額的科目</label>
       <button class="btn ghost" id="rp_export">匯出 CSV</button>
-      <button class="btn ghost" id="rp_print">列印</button>
+      <button class="btn ghost" id="rp_print">列印／存 PDF</button>
+      <span id="rp_msg" style="font-size:12px;color:#b3261e;"></span>
     </div>
   </div>
   <div class="card" id="printArea">
@@ -621,6 +622,37 @@ function csvDownload(name, head, rows){
   const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ---------- 列印 ----------
+// 直接呼叫 window.print() 在「網頁被嵌在預覽視窗（iframe）裡」時會被瀏覽器靜靜擋掉，按下去完全沒有反應。
+// 所以改成另開一個乾淨的視窗來列印；連新視窗都被擋才退回本頁列印，並把原因寫在畫面上。
+var PRINT_CSS = '@page{size:A4;margin:14mm 12mm;}'
+  + 'body{font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;color:#1d1a15;margin:0;padding:4px 2px;font-size:13px;line-height:1.55;}'
+  + 'h2,h3{font-size:18px;margin:0 0 12px;}'
+  + 'table{width:100%;border-collapse:collapse;margin-bottom:14px;}'
+  + 'th,td{border-bottom:1px solid #d8d2c6;padding:6px 8px;text-align:left;vertical-align:top;}'
+  + 'thead th{background:#f3efe7;border-bottom:1.5px solid #b9ae99;white-space:nowrap;}'
+  + 'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}'
+  + '.muted{color:#6b6357;}tr{break-inside:avoid;}.no-print{display:none !important;}';
+
+function printBlock(title, html, msgEl){
+  var w = null;
+  try{ w = window.open('', '_blank'); }catch(e){ w = null; }
+  if(w && w.document){
+    try{
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>'
+        + esc(title) + '<\/title><style>' + PRINT_CSS + '<\/style><\/head><body>' + html
+        + '<script>window.onload=function(){try{window.focus();window.print();}catch(e){}};<\/script><\/body><\/html>');
+      w.document.close();
+      if(msgEl) msgEl.textContent = '';
+      return true;
+    }catch(e){ try{ w.close(); }catch(e2){} }
+  }
+  try{ window.print(); }catch(e){}
+  if(msgEl) msgEl.textContent = '新視窗被擋住了，已改用本頁列印。如果還是沒反應，代表這個網頁是被嵌在預覽視窗裡（不允許列印），請用瀏覽器分頁直接開 GitHub Pages 網址。';
+  return false;
 }
 
 // ---------- 資料層：一列一列直接存，不做整批覆蓋 ----------
@@ -1304,7 +1336,10 @@ function bindEvents(){
     document.getElementById('rp_from').value = monthStart(p); document.getElementById('rp_to').value = monthEnd(p); renderReport();
   });
   document.getElementById('rp_thisyear').addEventListener('click', () => { const y = new Date().getFullYear(); document.getElementById('rp_from').value = y + '-01-01'; document.getElementById('rp_to').value = y + '-12-31'; renderReport(); });
-  document.getElementById('rp_print').addEventListener('click', () => window.print());
+  document.getElementById('rp_print').addEventListener('click', () => {
+    const el = document.getElementById('printArea');
+    printBlock('收支表', el ? el.innerHTML : '', document.getElementById('rp_msg'));
+  });
   document.getElementById('rp_export').addEventListener('click', () => {
     const {out, accounts, from, to} = buildReport();
     const head = ['科目代號','科目'].concat(accounts.map(a => a.name)).concat(['合計']);
