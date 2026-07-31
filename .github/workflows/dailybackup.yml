@@ -30,7 +30,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          BACKUP_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          # 備份信的收件人：有設 BACKUP_EMAIL 就寄給它，沒設就沿用 NOTIFY_EMAIL。
+          # 這樣「到期通知寄給大家、備份只寄給指定的人」可以分開，也不會因為忘了設而寄不出去。
+          BACKUP_EMAIL: ${{ secrets.BACKUP_EMAIL || secrets.NOTIFY_EMAIL }}
         run: node backup_monthly.js
 
 # 兩個提醒：
