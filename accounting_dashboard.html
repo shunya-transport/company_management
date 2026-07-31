@@ -968,6 +968,13 @@ let TAX_OF = {};   // 稅那一列的 entry_id → 主列的 entry_id
 let TAX_FOR = {};  // 主列的 entry_id → [稅那幾列]
 function isBlankSubject(e){ return e.subject_code === null || e.subject_code === undefined || e.subject_code === ''; }
 function looksLikeFee(e){ return /匯費|手續費|郵資|工本費|運費/.test(String(e.description || '') + ' ' + String(e.notes || '')); }
+// 摸起來像稅的列：不掛科目，摘要或備註有「稅」或英文 tax（日記簿裡有一整批寫成「5% Tax」的）。
+// 匯費、磅費那種也不掛科目，但不是稅，靠 looksLikeFee() 跟關鍵字排掉。
+function looksLikeTax(e){
+  if(!isBlankSubject(e) || looksLikeFee(e) || num(e.amount) <= 0) return false;
+  const s = String(e.description || '') + ' ' + String(e.notes || '');
+  return /稅/.test(s) || /tax/i.test(s);
+}
 // 這套系統自己開出來的稅列會帶這兩個記號，認得出來就不用靠金額猜。
 // （發票上的稅額常常不是剛好 5%，使用者手改過之後就對不上了。）
 function isTaxTagged(e){
@@ -985,7 +992,7 @@ function buildTaxMap(){
     const taxes = g[k].filter(e => isBlankSubject(e) && !looksLikeFee(e) && num(e.amount) > 0)
                       .sort((a,b) => num(b.amount) - num(a.amount));
     if(!parents.length || !taxes.length) return;
-    const used = {}, left = [];
+    const used = {}, left = [], done = {};
     // 第一輪：金額剛好是主列的 5%（容許 ±1 的四捨五入誤差）。匯入的舊資料只能靠這一輪。
     taxes.forEach(tx => {
       const t = num(tx.amount);
@@ -1005,6 +1012,21 @@ function buildTaxMap(){
       used[p.entry_id] = true;
       TAX_OF[tx.entry_id] = p.entry_id;
       (TAX_FOR[p.entry_id] = TAX_FOR[p.entry_id] || []).push(tx);
+      done[tx.entry_id] = true;
+    });
+    // 第三輪：摘要就寫著「稅」（或 5% Tax），但金額對不上任何一列的 5%。
+    // 實際的帳常常是一張傳票只開一列稅，而那筆稅是整張傳票加總的 5%
+    // （例：51,800 ＋ 22,200 = 74,000，稅 3,700），沒辦法比到單一列。
+    // 這種就掛到同一組裡金額最大的主列，當成它的稅額顯示；傳票總金額不會因此變動。
+    left.forEach(tx => {
+      if(done[tx.entry_id] || !looksLikeTax(tx)) return;
+      const free = parents.filter(x => !used[x.entry_id]);
+      if(!free.length) return;
+      const p = free[0];                                  // parents 已經照金額從大到小排過
+      if(num(tx.amount) > num(p.amount) * 0.5) return;    // 稅不可能比本金還大，對不上就不亂接
+      used[p.entry_id] = true;
+      TAX_OF[tx.entry_id] = p.entry_id;
+      (TAX_FOR[p.entry_id] = TAX_FOR[p.entry_id] || []).push(tx);
     });
   });
 }
@@ -1014,8 +1036,18 @@ function grossAmt(e){ return num(e.amount) + taxAmt(e); }
 // 三個 <td>：稅前／稅額／合計
 function amtCells(e){
   const t = taxAmt(e), b = num(e.amount);
+  // 配不到主列的稅（例如主列已收付、稅還掛帳，兩邊不在同一個分頁）至少把金額
+  // 放到「稅額」那一欄，不要還站在「稅前」欄裝成一筆本金。
+  if(!t && looksLikeTax(e) && !isMergedTax(e)){
+    return '<td class="num"><span class="muted">－</span></td>'
+         + '<td class="num" title="這一列是稅，在本分頁找不到可以併的主列（常見原因：主列已經收付了，稅還掛在這裡）">' + money(b) + '</td>'
+         + '<td class="num"><strong>' + money(b) + '</strong></td>';
+  }
+  const hint = (t && Math.abs(b * TAX_RATE - t) > 1)
+    ? ' title="這筆稅不是本列的 5%（可能是整張傳票加總算的，或是發票上的實際稅額），系統把它掛在金額最大的這一列"'
+    : '';
   return '<td class="num">' + money(b) + '</td>'
-       + '<td class="num">' + (t ? money(t) : '<span class="muted">－</span>') + '</td>'
+       + '<td class="num"' + hint + '>' + (t ? money(t) : '<span class="muted">－</span>') + '</td>'
        + '<td class="num"><strong>' + money(b + t) + '</strong></td>';
 }
 // 主列 ＋ 它底下的稅列（作廢、結案、刪除都要一起動）
@@ -1803,6 +1835,10 @@ function bindEvents(){
     if(EDIT_TAX_TOUCHED) return;
     const cur = document.getElementById('em_tax').value;
     if(cur === '' || num(cur) === 0) return;   // 本來就沒稅就不自作主張加上去
+    // 原本的稅就不是這一列的 5%（整張傳票的稅、或發票上的實際金額）就別動它，
+    // 不然使用者只是改一下金額，真正的稅額會被默默改掉。
+    const _oldBase = EDIT_ID ? num((STATE.entries.find(x => String(x.entry_id) === String(EDIT_ID)) || {}).amount) : 0;
+    if(_oldBase && Math.abs(_oldBase * TAX_RATE - num(cur)) > 1) return;
     document.getElementById('em_tax').value = Math.round(num(document.getElementById('em_amount').value) * TAX_RATE);
   });
 }
