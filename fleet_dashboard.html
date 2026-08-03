@@ -475,7 +475,7 @@
         <label>公司別<input id="vf_company" placeholder="例：順亞運通股份有限公司" list="companyList2"></label>
         <label>發車地<input id="vf_base" placeholder="例：新竹"></label>
         <label>狀態
-          <select id="vf_status"><option value="在役">在役</option><option value="停用">停用</option><option value="報廢">報廢</option></select>
+          <select id="vf_status"><option value="在役">在役</option><option value="停用">停用</option><option value="報廢">報廢</option><option value="繳銷">繳銷</option></select>
         </label>
       </div>
       <datalist id="companyList2"></datalist>
@@ -519,11 +519,17 @@
     </div>
 
     <div class="card">
-      <h2>車輛/板架歷史（近一年賣出/報廢）<span class="count-badge" id="fleet_retired_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">車輛報廢/賣出時會自動歸還車上物品，並移到這裡保留一年，一年後自動不再顯示（資料庫仍保留）。</div>
+      <h2>車輛/板架歷史（賣出／報廢／繳銷）<span class="count-badge" id="fleet_retired_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">車輛狀態改成「報廢」或「繳銷」時會自動歸還車上物品，並移到這裡（資料庫永遠保留）。預設顯示近一年；<b>沒有填日期的車輛一律顯示</b>，不會被一年的期限藏起來。要看更早以前的，勾右邊的「顯示全部」。</div>
+      <div class="toolbar">
+        <input id="fleet_retired_search" placeholder="搜尋車號">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
+          <input type="checkbox" id="fleet_retired_show_all" style="width:auto;"> 顯示全部（不限一年）
+        </label>
+      </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>類別</th><th>車型</th><th>原因</th><th>日期</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>類別</th><th>車型</th><th>狀態</th><th>原因</th><th>日期</th><th></th></tr></thead>
           <tbody id="retiredTableBody"></tbody>
         </table>
       </div>
@@ -572,7 +578,7 @@
           <option value="green">正常</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
-          <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出車輛
+          <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出/繳銷車輛
         </label>
       </div>
       <div class="table-scroll">
@@ -2820,7 +2826,7 @@ function renderOverview(){
 
   const maintAlerts = [];
   STATE.vehicles.forEach(v => {
-    if(!v.maintenance_model || v.status==='報廢') return;
+    if(!v.maintenance_model || isRetiredVehicle(v)) return;
     computeMaintenanceDue(v).forEach(d => {
       if(d.status==='red' || d.status==='amber') maintAlerts.push({plate:v.plate, ...d});
     });
@@ -2839,7 +2845,7 @@ function renderOverview(){
     .filter(i => {
       if(!i.expiry_date || vehicleInsuranceStatus(i) === 'green') return false;
       const v = STATE.vehicles.find(x => x.plate === i.plate);
-      return !v || v.status !== '報廢';
+      return !v || !isRetiredVehicle(v);
     })
     .sort((a,b) => a.expiry_date.localeCompare(b.expiry_date));
   document.getElementById('overview_insurance_count').textContent = `${insuranceAlerts.length} 項`;
@@ -2857,7 +2863,7 @@ function renderOverview(){
     .filter(d => {
       if(!(d.doc_type==='滅火器' || d.doc_type==='濾毒罐') || !d.expiry_date || statusOf(d.expiry_date,30) === 'green') return false;
       const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
-      return !v || v.status !== '報廢';
+      return !v || !isRetiredVehicle(v);
     })
     .map(d => {
       const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
@@ -2867,7 +2873,7 @@ function renderOverview(){
     .filter(x => {
       if(!x.expiry_date || statusOf(x.expiry_date,30) === 'green') return false;
       const v = STATE.vehicles.find(y => y.id === x.vehicle_id);
-      return !v || v.status !== '報廢';
+      return !v || !isRetiredVehicle(v);
     })
     .map(x => {
       const v = STATE.vehicles.find(y => y.id === x.vehicle_id);
@@ -3017,7 +3023,7 @@ let editingLocationId = null;
 let selfUseCompanyFilterInit = false;
 function renderSelfUseTrailers(){
   const leasedPlates = new Set(STATE.leases.filter(l => l.status==='租賃中').map(l => l.plate));
-  let rows = STATE.vehicles.filter(v => v.vehicle_category==='板架' && v.status!=='報廢' && !leasedPlates.has(v.plate));
+  let rows = STATE.vehicles.filter(v => v.vehicle_category==='板架' && !isRetiredVehicle(v) && !leasedPlates.has(v.plate));
   if(!selfUseCompanyFilterInit){
     const companies = [...new Set(rows.map(v=>v.company_name).filter(Boolean))].sort();
     const sel = document.getElementById('selfuse_company_filter');
@@ -3119,6 +3125,73 @@ function isWithinDays(dateStr, days){
   const target = new Date(dateStr+'T00:00:00');
   const cutoff = new Date(target.getTime() + days*86400000);
   return new Date(todayISO()+'T00:00:00') <= cutoff;
+}
+
+// ===== 車輛「已退場」狀態的共用判斷（報廢／繳銷都算退場）=====
+// 加「繳銷」是因為繳銷車輛以前只能掛在「停用」，會一直留在主清單裡礙眼，
+// 使用者只好按刪除，結果連歷史都查不到。現在繳銷會跟報廢一樣進歷史區。
+function isRetiredVehicle(v){
+  return !!v && (v.status === '報廢' || v.status === '繳銷');
+}
+
+// 統計一台車底下還掛著多少筆關聯紀錄（全部都是用 vehicle_id 關聯）
+function countVehicleLinks(vid){
+  const groups = [
+    ['里程登錄', STATE.mileageLogs],
+    ['加油紀錄', STATE.fuelLogs],
+    ['維修紀錄', STATE.maintRecords],
+    ['保養排程', STATE.maintSchedules],
+    ['打油紀錄', STATE.greaseRecords],
+    ['車輛保險', STATE.vehicleInsurance],
+    ['車輛證件／滅火器／濾毒罐', STATE.vehicleDocuments],
+    ['車用物品', STATE.vehicleEquipment],
+    ['醫藥箱', STATE.medicalKitItems],
+    ['輪胎紀錄', STATE.tireRecords],
+    ['輪軸保養', STATE.axleRecords],
+    ['排放紀錄', STATE.emissionRecords],
+    ['尿素登錄', STATE.ureaLogs],
+    ['板架租賃', STATE.leases],
+    ['過路費', STATE.adminTolls]
+  ];
+  const out = [];
+  groups.forEach(g => {
+    const arr = g[1];
+    if(!Array.isArray(arr)) return;
+    const n = arr.filter(x => x && x.vehicle_id === vid).length;
+    if(n > 0) out.push(g[0] + ' ' + n + ' 筆');
+  });
+  return out;
+}
+
+// 車輛主檔刪除的防呆。原本這裡是按一下就直接刪、沒有任何確認，
+// 而且刪掉之後不會進歷史區，底下的里程／保養等紀錄會變成孤兒資料。
+async function deleteVehicleWithGuard(idStr){
+  const v = STATE.vehicles.find(x => String(x.id) === String(idStr));
+  if(!v){ return; }
+  const vid = parseInt(idStr, 10);
+  const links = countVehicleLinks(vid);
+  const linkText = links.length
+    ? '\n\n這台車底下還有這些紀錄：\n・' + links.join('\n・') +
+      '\n刪除主檔之後，這些紀錄仍然留在資料庫，但畫面上會查不到對應的車號（變成孤兒資料）。'
+    : '\n\n這台車底下目前沒有其他關聯紀錄。';
+  const ok = confirm(
+    '⚠️ 你正要「永久刪除」車輛主檔：' + (v.plate || '') + '（' + (v.vehicle_category || '') + '／目前狀態 ' + (v.status || '') + '）' +
+    linkText +
+    '\n\n【建議不要刪除】請按「取消」，改用：點車號 → 編輯 → 把「狀態」改成「報廢」或「繳銷」。' +
+    '\n這樣車輛會移到下面的「車輛/板架歷史」，主清單不再顯示，但隨時查得到，關聯紀錄也不會斷。' +
+    '\n\n真的要永久刪除主檔才按「確定」。'
+  );
+  if(!ok) return;
+  const typed = prompt('最後確認：請輸入車號「' + (v.plate || '') + '」才會永久刪除。\n（輸入不符或按取消都不會刪除）');
+  if(typed === null) return;
+  if(String(typed).trim().toUpperCase() !== String(v.plate || '').trim().toUpperCase()){
+    alert('輸入的車號不符，已取消刪除，沒有動到任何資料。');
+    return;
+  }
+  STATE.vehicles = STATE.vehicles.filter(x => String(x.id) !== String(idStr));
+  await saveState('roster_vehicles', STATE.vehicles, true);
+  renderAll();
+  alert('已永久刪除車輛主檔 ' + (v.plate || '') + '。');
 }
 function tenureYears(hireDate, asOf){
   if(!hireDate) return null;
@@ -3572,6 +3645,7 @@ function renderVehicleModalEdit(v){
           <option value="在役" ${v.status==='在役'?'selected':''}>在役</option>
           <option value="停用" ${v.status==='停用'?'selected':''}>停用</option>
           <option value="報廢" ${v.status==='報廢'?'selected':''}>報廢</option>
+          <option value="繳銷" ${v.status==='繳銷'?'selected':''}>繳銷</option>
         </select>
       </label>
       <label>保養標準車型
@@ -3582,19 +3656,20 @@ function renderVehicleModalEdit(v){
       </label>
       <label>加油卡號<input id="ve_fuel_card" value="${esc(v.fuel_card_no||'')}"></label>
       <label>ETC標籤編號<input id="ve_etc" value="${esc(v.etc_tag_no||'')}"></label>
-      <label>賣出/報廢日期（狀態選報廢時填寫）<input id="ve_retire_date" type="date" value="${esc(v.retirement_date||'')}"></label>
-      <label>賣出/報廢原因
+      <label>賣出/報廢/繳銷日期（狀態選報廢或繳銷時填寫；日期不可考就留白，留白不會被歷史區的一年期限藏起來）<input id="ve_retire_date" type="date" value="${esc(v.retirement_date||'')}"></label>
+      <label>賣出/報廢/繳銷原因
         <select id="ve_retire_reason">
           <option value="" ${!v.retirement_reason?'selected':''}>未設定</option>
           <option value="賣出" ${v.retirement_reason==='賣出'?'selected':''}>賣出</option>
           <option value="報廢" ${v.retirement_reason==='報廢'?'selected':''}>報廢</option>
+          <option value="繳銷" ${v.retirement_reason==='繳銷'?'selected':''}>繳銷</option>
         </select>
       </label>
     </div>
     <div id="ve_retire_confirm" style="display:none;margin-bottom:14px;padding:12px;background:var(--red-bg);border:1px solid var(--red);border-radius:8px;">
-      <div style="color:var(--red);font-weight:700;margin-bottom:8px;">⚠️ 確定要將 ${esc(v.plate)} 設為報廢/賣出嗎？</div>
-      <div class="muted" style="margin-bottom:10px;">這個動作會自動歸還車上所有「使用中」的車用物品，並把這台車移到「車輛/板架歷史」，主清單（車輛清單/板架清單）將不再顯示這台車。</div>
-      <button class="btn" id="ve_retire_confirm_yes" style="background:var(--red);border-color:var(--red);">確認報廢/賣出</button>
+      <div style="color:var(--red);font-weight:700;margin-bottom:8px;">⚠️ 確定要將 ${esc(v.plate)} 設為報廢／賣出／繳銷嗎？</div>
+      <div class="muted" style="margin-bottom:10px;">這個動作會自動歸還車上所有「使用中」的車用物品，並把這台車移到「車輛/板架歷史」，主清單（車輛清單/板架清單）將不再顯示這台車。<b>資料不會被刪除</b>，歷史區隨時查得到，底下的里程、保養、保險等紀錄也都完整保留。</div>
+      <button class="btn" id="ve_retire_confirm_yes" style="background:var(--red);border-color:var(--red);">確認報廢／賣出／繳銷</button>
       <button class="btn ghost" id="ve_retire_confirm_no">取消，我按錯了</button>
     </div>
     <button class="btn" id="vehicleModalSaveBtn">儲存</button>
@@ -3614,14 +3689,17 @@ function renderVehicleModalEdit(v){
     v.purchase_date = document.getElementById('ve_purchase').value || null;
     v.company_name = document.getElementById('ve_company').value.trim();
     v.base_location = document.getElementById('ve_base').value.trim();
+    const _wasRetiredBefore = isRetiredVehicle(v);
     v.status = document.getElementById('ve_status').value;
     v.maintenance_model = document.getElementById('ve_maint_model').value || null;
     v.fuel_card_no = document.getElementById('ve_fuel_card').value.trim();
     v.etc_tag_no = document.getElementById('ve_etc').value.trim();
     v.retirement_date = document.getElementById('ve_retire_date').value || null;
     v.retirement_reason = document.getElementById('ve_retire_reason').value || null;
-    if(v.status === '報廢'){
-      if(!v.retirement_date) v.retirement_date = todayISO();
+    if(isRetiredVehicle(v)){
+      // 日期只有在「這一次才改成報廢/繳銷」時才自動帶今天；
+      // 原本就是退場狀態、日期本來就留白的舊車，維持留白，不用推估值去補。
+      if(!v.retirement_date && !_wasRetiredBefore) v.retirement_date = todayISO();
       let returnedCount = 0;
       STATE.vehicleEquipment.forEach(x => {
         if(x.vehicle_id === v.id && x.status === '使用中'){
@@ -3636,8 +3714,8 @@ function renderVehicleModalEdit(v){
   }
 
   document.getElementById('vehicleModalSaveBtn').addEventListener('click', async () => {
-    const wasNotRetired = v.status !== '報廢';
-    const nowRetiring = document.getElementById('ve_status').value === '報廢';
+    const wasNotRetired = !isRetiredVehicle(v);
+    const nowRetiring = ['報廢','繳銷'].indexOf(document.getElementById('ve_status').value) >= 0;
     if(nowRetiring && wasNotRetired){
       // 新的報廢/賣出動作，先跳出二次確認，不立刻執行
       document.getElementById('ve_retire_confirm').style.display = 'block';
@@ -3802,7 +3880,7 @@ function renderViTable(){
   const showRetired = document.getElementById('vi_show_retired').checked;
   let rows = STATE.vehicleInsurance.filter(i => {
     const v = STATE.vehicles.find(x => x.plate === i.plate);
-    return showRetired || !v || v.status !== '報廢';
+    return showRetired || !v || !isRetiredVehicle(v);
   });
   if(q) rows = rows.filter(i => (i.plate||'').includes(q));
   if(typeF!=='all') rows = rows.filter(i => i.insurance_type===typeF);
@@ -3817,7 +3895,7 @@ function renderViTable(){
   document.getElementById('viTableBody').innerHTML = rows.map(i => {
     const v = STATE.vehicles.find(x => x.plate === i.plate);
     const s = vehicleInsuranceStatus(i);
-    const retiredTag = v && v.status==='報廢' ? ' <span class="pill gray">已報廢/賣出</span>' : '';
+    const retiredTag = v && isRetiredVehicle(v) ? ` <span class="pill gray">已${esc(v.status)}</span>` : '';
     return `<tr>
       <td>${esc(i.plate)}${retiredTag}</td>
       <td>${v ? esc(v.load_capacity||'') : ''}</td>
@@ -3836,7 +3914,7 @@ function renderFleetTable(){
   const statusFilter = document.getElementById('fleet_status_filter').value;
   const fleetQ = document.getElementById('fleet_search').value.trim();
   const vehicleRows = STATE.vehicles.filter(v =>
-    v.vehicle_category==='車輛' && v.status!=='報廢' && (statusFilter==='all' || v.status===statusFilter) &&
+    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && (statusFilter==='all' || v.status===statusFilter) &&
     (!fleetQ || (v.plate||'').includes(fleetQ) || (v.company_name||'').includes(fleetQ) || (v.base_location||'').includes(fleetQ))
   );
   document.getElementById('fleet_vehicle_count').textContent = `共 ${vehicleRows.length} 台`;
@@ -3857,7 +3935,7 @@ function renderFleetTable(){
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
   const trailerQ = document.getElementById('trailer_search').value.trim();
   const trailerRows = STATE.vehicles.filter(v =>
-    v.vehicle_category==='板架' && v.status!=='報廢' && (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
+    v.vehicle_category==='板架' && !isRetiredVehicle(v) && (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
     (!trailerQ || (v.plate||'').includes(trailerQ) || (v.company_name||'').includes(trailerQ) || (v.base_location||'').includes(trailerQ))
   );
   document.getElementById('fleet_trailer_count').textContent = `共 ${trailerRows.length} 台`;
@@ -3872,17 +3950,28 @@ function renderFleetTable(){
       <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="7" class="empty">目前沒有板架資料</td></tr>`;
 
-  const retiredRows = STATE.vehicles.filter(v => v.status==='報廢' && v.retirement_date && isWithinDays(v.retirement_date, 365));
+  const _retEl = document.getElementById('fleet_retired_show_all');
+  const _retQEl = document.getElementById('fleet_retired_search');
+  const retiredShowAll = !!(_retEl && _retEl.checked);
+  const retiredQ = ((_retQEl && _retQEl.value) || '').trim();
+  // 這裡刻意「沒有日期也要顯示」：繳銷/報廢日期不可考的舊車以前會整台消失，
+  // 使用者在清單找不到又刪不得，才會誤按刪除。
+  const retiredRows = STATE.vehicles.filter(v =>
+    isRetiredVehicle(v) &&
+    (retiredShowAll || !v.retirement_date || isWithinDays(v.retirement_date, 365)) &&
+    (!retiredQ || (v.plate||'').includes(retiredQ))
+  );
   document.getElementById('fleet_retired_count').textContent = `共 ${retiredRows.length} 台`;
   document.getElementById('retiredTableBody').innerHTML = retiredRows.map(v => `
     <tr>
       <td>${esc(v.plate)}</td>
       <td>${esc(v.vehicle_category)}</td>
       <td>${esc(v.vehicle_type||'')}</td>
+      <td>${esc(v.status)}</td>
       <td>${esc(v.retirement_reason||'—')}</td>
-      <td>${esc(v.retirement_date)}</td>
+      <td>${esc(v.retirement_date||'—')}</td>
       <td><button class="name-link" data-view-vehicle="${v.id}">查看</button></td>
-    </tr>`).join('') || `<tr><td colspan="6" class="empty">近一年沒有賣出/報廢的車輛</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="7" class="empty">${retiredShowAll ? '目前沒有賣出/報廢/繳銷的車輛' : '近一年沒有賣出/報廢/繳銷的車輛（勾「顯示全部」可以看更早的）'}</td></tr>`;
 }
 
 function renderMaintenanceTables(){
@@ -6241,7 +6330,7 @@ if(_grPendBody) _grPendBody.addEventListener('click', greaseBodyClick);
 function renderMaintDueTable(){
   const rows = [];
   STATE.vehicles.forEach(v => {
-    if(v.status==='報廢') return;
+    if(isRetiredVehicle(v)) return;
     const items = [];
     // 小保/大保(沿用既有計算,不影響總覽)
     if(v.maintenance_model){ computeMaintenanceDue(v).forEach(d => items.push(d)); }
@@ -6975,6 +7064,12 @@ document.getElementById('fleet_status_filter').addEventListener('change', render
 document.getElementById('trailer_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('fleet_search').addEventListener('input', renderFleetTable);
 document.getElementById('trailer_search').addEventListener('input', renderFleetTable);
+{
+  const _rsa = document.getElementById('fleet_retired_show_all');
+  if(_rsa) _rsa.addEventListener('change', renderFleetTable);
+  const _rs = document.getElementById('fleet_retired_search');
+  if(_rs) _rs.addEventListener('input', renderFleetTable);
+}
 document.getElementById('vi_plate').addEventListener('change', updateViAutoFields);
 document.getElementById('vi_insurer').addEventListener('change', (e) => {
   if(e.target.value === '__other__'){
@@ -8995,9 +9090,7 @@ async function handleFleetTableClick(e){
   if(medKitId){ openMedKitModal(parseInt(medKitId)); return; }
   const id = e.target.getAttribute('data-del-vehicle');
   if(id){
-    STATE.vehicles = STATE.vehicles.filter(v => String(v.id) !== id);
-    await saveState('roster_vehicles', STATE.vehicles, true);
-    renderAll();
+    await deleteVehicleWithGuard(id);
   }
 }
 document.getElementById('fleetTableBody').addEventListener('click', handleFleetTableClick);
