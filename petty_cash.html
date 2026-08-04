@@ -225,6 +225,8 @@
   #balanceCard .n,#balanceCard .l{color:#fff;}
   /* 卡片右上角的裝飾圓會讓卡片多出 70px 的可捲動寬度，按鈕取得焦點時整張卡會被瀏覽器往左捲。改用 clip 就不會產生捲動軸。 */
   .card{overflow:clip;}
+  /* ghost 按鈕被按下去（例如「只看逾期」）。要比 core 的 button.btn.ghost 更具體才蓋得過去。 */
+  button.btn.ghost.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
   .subj-btn.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
   @media print{
     .sidebar,.banner,.toolbar,.no-print,#bookPickCard{display:none !important;}
@@ -255,6 +257,7 @@
     <nav>
       <button data-tab="cash" class="active">記一筆</button>
       <button data-tab="month">明細帳</button>
+      <button data-tab="weigh">磅費結清</button>
       <button data-tab="compare">各帳本比較</button>
       <button data-tab="refill">撥補／入零用金</button>
       <button data-tab="statement">對帳單</button>
@@ -299,6 +302,7 @@
         <div><div style="font-size:12px;opacity:.7;">本月支出</div><div id="pcMonthOut" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
         <div><div style="font-size:12px;opacity:.7;">本月收入</div><div id="pcMonthIn" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
         <div><div style="font-size:12px;opacity:.7;">本月筆數</div><div id="pcMonthCnt" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+        <div><div style="font-size:12px;opacity:.7;">本月磅費</div><div id="pcMonthWeigh" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
       </div>
     </div>
   </div>
@@ -315,6 +319,7 @@
       <label>日期<input type="date" id="pc_date"></label>
       <label>科目<select id="pc_subject"></select></label>
       <label>金額<input type="number" id="pc_amount" min="0" step="1" placeholder="0"></label>
+      <label id="pc_weigh_wrap">磅費（司機代墊）<input type="number" id="pc_weigh" min="0" step="1" placeholder="不是磅費就留空"></label>
       <label>領款人<input type="text" id="pc_payee" list="payeeList" placeholder="例：李奕樺"></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="pc_memo" placeholder="例：聯華磅費、KLJ-3207 驗車"></label>
       <label>單據狀態<select id="pc_status"><option>已入帳</option><option>待補單據</option></select></label>
@@ -364,6 +369,61 @@
       <table>
         <thead><tr><th>科目</th><th class="num">筆數</th><th class="num">金額</th><th class="num">佔比</th></tr></thead>
         <tbody id="moPivot"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 磅費結清 ============ -->
+<div id="weigh" class="panel">
+  <div class="card">
+    <h2>磅費結清</h2>
+    <div class="muted">司機自己先墊的磅費，回公司跟零用金請款。這一頁只算「磅費（司機代墊）」那一格有填金額的紀錄，
+      主管一眼就看得到每個司機到目前為止請了多少。<strong>記一筆的時候科目選到磅費，那一格會自動帶入金額</strong>；
+      如果那一筆是磅費和別的費用記在一起（例如磅費＋驗車費），就把磅費那一格改成只有磅費的金額。</div>
+    <div class="toolbar">
+      <label>起<input type="date" id="wg_from"></label>
+      <label>迄<input type="date" id="wg_to"></label>
+      <button class="btn tiny" id="wg_m">本月</button>
+      <button class="btn tiny" id="wg_lm">上個月</button>
+      <button class="btn tiny" id="wg_3m">近三個月</button>
+      <button class="btn tiny" id="wg_ytd">今年以來</button>
+      <button class="btn tiny" id="wg_all">全部</button>
+      <input type="text" id="wg_search" placeholder="搜尋司機／摘要" style="min-width:200px;">
+      <button class="btn tiny" id="wg_csv">匯出 CSV</button>
+      <button class="btn" id="wg_print">列印／存 PDF</button>
+      <span id="wg_msg" style="font-size:12px;color:#b3261e;"></span>
+    </div>
+    <div class="stat-row" id="wgStats"></div>
+  </div>
+
+  <div class="card">
+    <h2>各司機請了多少</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>司機</th><th class="num">筆數</th><th class="num">磅費合計</th><th class="num">佔比</th><th>第一筆</th><th>最近一筆</th><th class="num">其中待補單據</th></tr></thead>
+        <tbody id="wgByDriver"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>磅費明細</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>日期</th><th>司機</th><th>摘要</th><th class="num">磅費</th><th class="num">整筆實付</th><th>狀態</th><th></th></tr></thead>
+        <tbody id="wgDetail"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="wgMissCard" style="display:none;">
+    <h2>科目是磅費、但磅費那一格沒填</h2>
+    <div class="muted">這些筆<strong>沒有</strong>算進上面的統計。按「修改」把磅費那一格補上就會自動進來。</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>日期</th><th>領款人</th><th>科目</th><th>摘要</th><th class="num">實付</th><th></th></tr></thead>
+        <tbody id="wgMissBody"></tbody>
       </table>
     </div>
   </div>
@@ -508,6 +568,7 @@
       <label>收支<select id="em_dir"><option>支出</option><option>收入</option></select></label>
       <label>科目<select id="em_subject"></select></label>
       <label>金額<input type="number" id="em_amount" step="1"></label>
+      <label>磅費（司機代墊）<input type="number" id="em_weigh" step="1" placeholder="不是磅費就留空"></label>
       <label>領款人<input type="text" id="em_payee"></label>
       <label>狀態<select id="em_status"><option>已入帳</option><option>待補單據</option><option>已作廢</option></select></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="em_memo"></label>
@@ -736,6 +797,20 @@ function renderSubjectPicker(){
   const seen = {}; const names = [];
   STATE.entries.forEach(e => { if(e.payee && !seen[e.payee]){ seen[e.payee] = 1; names.push(e.payee); } });
   dl.innerHTML = names.sort().map(n => '<option value="' + esc(n) + '">').join('');
+  syncWeighBox();
+}
+// 磅費那一格：選到磅費科目就自動帶入金額；自己動過就不再自動蓋掉
+var WEIGH_TOUCHED = false;
+function syncWeighBox(){
+  const w = $('pc_weigh'), wrap = $('pc_weigh_wrap');
+  if(!w) return;
+  const on = curDir() === '支出' && isWeighSubject($('pc_subject').value);
+  if(wrap){
+    wrap.style.opacity = on ? '1' : '.5';
+    wrap.style.color   = on ? '#7d5624' : '';
+  }
+  if(WEIGH_TOUCHED) return;
+  w.value = on ? ($('pc_amount').value || '') : '';
 }
 function renderBalanceCard(){
   const bal = calcBalance();
@@ -751,6 +826,7 @@ function renderBalanceCard(){
   $('pcMonthOut').textContent = fmt(rows.filter(e => e.direction === '支出').reduce((s,e) => s + num(e.amount), 0));
   $('pcMonthIn').textContent  = fmt(rows.filter(e => e.direction === '收入').reduce((s,e) => s + num(e.amount), 0));
   $('pcMonthCnt').textContent = rows.length;
+  if($('pcMonthWeigh')) $('pcMonthWeigh').textContent = fmt(rows.reduce((s,e) => s + weighAmt(e), 0));
   $('balanceCard').style.background = bal < 0 ? 'linear-gradient(120deg,#7a2626,#a33636)' : 'linear-gradient(120deg,#14263c,#1d3854)';
   // 期初沒填的話，上面那個「目前餘額」只是把明細加總，跟抽屜裡的錢不會一樣
   const w = $('pcOpenWarn');
@@ -770,7 +846,7 @@ function rowHtml(e, withSeq, idx){
     (withSeq ? '<td>' + idx + '</td>' : '') +
     '<td>' + toROC(e.entry_date) + '</td>' +
     '<td>' + esc(e.subject_name) + '</td>' +
-    '<td>' + esc(e.memo) + auto + '</td>' +
+    '<td>' + esc(e.memo) + auto + weighTag(e) + '</td>' +
     '<td class="num">' + (e.direction === '收入' ? fmt(e.amount) : '') + '</td>' +
     '<td class="num">' + (e.direction === '支出' ? fmt(e.amount) : '') + '</td>' +
     '<td class="num">' + (e._run === undefined ? '' : fmt(e._run)) + '</td>' +
@@ -782,6 +858,113 @@ function renderRecent(){
   const all = withRunning().reverse().slice(0, 30);
   $('pcRecent').innerHTML = all.length ? all.map(e => rowHtml(e, false, 0)).join('')
     : '<tr><td colspan="9" class="muted">還沒有資料。</td></tr>';
+}
+
+// ---------- 磅費（司機代墊） ----------
+// 只有「磅費」那一格有填金額（weigh_fee）的才算數。
+// 金額（amount）是抽屜實際付出去的錢，餘額永遠以它為準；
+// weigh_fee 只是把「這筆裡面有多少是磅費」標出來，給主管看各司機請了多少，不影響任何餘額。
+function isWeighSubject(name){ return String(name || '').indexOf('磅費') >= 0; }
+function weighAmt(e){ return e && e.weigh_fee != null && e.weigh_fee !== '' ? num(e.weigh_fee) : 0; }
+function isWeighEntry(e){ return weighAmt(e) > 0; }
+// 司機是誰：優先用領款人；領款人留白時，才從摘要括號裡的中文姓名帶出來（會標示來源，不會偷改資料）
+function weighDriver(e){
+  const p = String((e && e.payee) || '').trim();
+  if(p) return { name:p, guessed:false };
+  const m = String((e && e.memo) || '').match(/[（(]([\u4e00-\u9fa5]{2,4})[）)]/);
+  if(m) return { name:m[1], guessed:true };
+  return { name:'（未填司機）', guessed:false };
+}
+function weighTag(e){
+  if(!isWeighEntry(e)) return '';
+  const w = weighAmt(e);
+  const partial = w < num(e.amount) - 0.001;
+  return ' <span class="pill ' + (partial ? 'amber' : 'green') + '">磅費 ' + fmt(w) + (partial ? '（其餘非磅費）' : '') + '</span>';
+}
+function wgRange(){
+  return { from: ($('wg_from') && $('wg_from').value) || '0000-01-01',
+           to:   ($('wg_to')   && $('wg_to').value)   || '9999-12-31' };
+}
+function wgRows(){
+  const r = wgRange();
+  const kw = (($('wg_search') && $('wg_search').value) || '').trim();
+  return sortedEntries().filter(e => {
+    if(!isWeighEntry(e)) return false;
+    if(e.status === '已作廢') return false;
+    const d = String(e.entry_date).slice(0,10);
+    if(d < r.from || d > r.to) return false;
+    if(kw){
+      const hay = [weighDriver(e).name, e.payee, e.memo, e.subject_name, e.purpose].join(' ');
+      if(hay.indexOf(kw) < 0) return false;
+    }
+    return true;
+  });
+}
+// 科目寫了磅費、但磅費那一格空白的（統計會漏掉，要提醒補）
+function wgMissing(){
+  return sortedEntries().filter(e =>
+    e.status !== '已作廢' && e.direction === '支出' &&
+    isWeighSubject(e.subject_name) && !isWeighEntry(e));
+}
+function wgAgg(rows){
+  const map = {}, order = [];
+  rows.forEach(e => {
+    const d = weighDriver(e);
+    if(!map[d.name]){ map[d.name] = { name:d.name, guessed:d.guessed, n:0, amt:0, first:'', last:'', pend:0 }; order.push(d.name); }
+    const g = map[d.name];
+    g.n++; g.amt += weighAmt(e);
+    if(e.status === '待補單據') g.pend++;
+    if(d.guessed) g.guessed = true;
+    const dt = String(e.entry_date).slice(0,10);
+    if(!g.first || dt < g.first) g.first = dt;
+    if(!g.last  || dt > g.last)  g.last  = dt;
+  });
+  return order.map(k => map[k]).sort((a,b) => b.amt - a.amt);
+}
+function renderWeigh(){
+  if(!$('wgByDriver')) return;
+  const rows = wgRows();
+  const tot  = rows.reduce((s,e) => s + weighAmt(e), 0);
+  const list = wgAgg(rows);
+  const miss = wgMissing();
+  const pend = rows.filter(e => e.status === '待補單據');
+  $('wgStats').innerHTML =
+    '<div class="stat-card"><div class="n">' + fmt(tot) + '</div><div class="l">期間磅費合計</div></div>' +
+    '<div class="stat-card"><div class="n">' + rows.length + '</div><div class="l">筆數</div></div>' +
+    '<div class="stat-card"><div class="n">' + list.length + '</div><div class="l">司機人數</div></div>' +
+    '<div class="stat-card' + (pend.length ? ' amber' : '') + '"><div class="n">' + fmt(pend.reduce((s,e) => s + weighAmt(e), 0)) + '</div><div class="l">其中待補單據 ' + pend.length + ' 筆</div></div>' +
+    '<div class="stat-card' + (miss.length ? ' red' : '') + '"><div class="n">' + miss.length + '</div><div class="l">磅費金額沒填</div></div>';
+  const base = tot || 1;
+  $('wgByDriver').innerHTML = list.length ? list.map(g =>
+    '<tr><td><strong>' + esc(g.name) + '</strong>' + (g.guessed ? ' <span class="pill gray">姓名取自摘要</span>' : '') + '</td>' +
+    '<td class="num">' + g.n + '</td>' +
+    '<td class="num"><strong>' + fmt(g.amt) + '</strong></td>' +
+    '<td class="num">' + (g.amt / base * 100).toFixed(1) + '%</td>' +
+    '<td>' + toROC(g.first) + '</td><td>' + toROC(g.last) + '</td>' +
+    '<td class="num">' + (g.pend || '') + '</td></tr>').join('') +
+    '<tr style="background:#f3efe7;font-weight:700;"><td>合計</td><td class="num">' + rows.length + '</td>' +
+    '<td class="num">' + fmt(tot) + '</td><td class="num">100.0%</td><td></td><td></td><td class="num">' + (pend.length || '') + '</td></tr>'
+    : '<tr><td colspan="7" class="muted">這個區間沒有磅費紀錄。</td></tr>';
+  $('wgDetail').innerHTML = rows.length ? rows.slice().reverse().map(e => {
+    const d = weighDriver(e);
+    const w = weighAmt(e);
+    const partial = w < num(e.amount) - 0.001;
+    const st = e.status === '待補單據' ? '<span class="pill amber">待補單據</span>' : '<span class="pill green">已入帳</span>';
+    return '<tr><td>' + toROC(e.entry_date) + '</td>' +
+      '<td>' + esc(d.name) + (d.guessed ? ' <span class="pill gray">取自摘要</span>' : '') + '</td>' +
+      '<td>' + esc(e.memo) + '</td>' +
+      '<td class="num"><strong>' + fmt(w) + '</strong></td>' +
+      '<td class="num">' + fmt(e.amount) + (partial ? ' <span class="pill amber">含非磅費</span>' : '') + '</td>' +
+      '<td>' + st + '</td>' +
+      '<td><button class="btn ghost tiny" data-edit="' + e.pe_id + '">修改</button></td></tr>';
+  }).join('') : '<tr><td colspan="7" class="muted">這個區間沒有磅費紀錄。</td></tr>';
+  $('wgMissCard').style.display = miss.length ? '' : 'none';
+  if(miss.length){
+    $('wgMissBody').innerHTML = miss.slice().reverse().map(e =>
+      '<tr><td>' + toROC(e.entry_date) + '</td><td>' + esc(e.payee) + '</td><td>' + esc(e.subject_name) + '</td>' +
+      '<td>' + esc(e.memo) + '</td><td class="num">' + fmt(e.amount) + '</td>' +
+      '<td><button class="btn ghost tiny" data-edit="' + e.pe_id + '">修改</button></td></tr>').join('');
+  }
 }
 
 // ---------- 各帳本比較 ----------
@@ -1101,7 +1284,7 @@ function renderSubjectTable(){
 // ---------- 重畫 ----------
 function renderAll(){
   renderBookPick(); renderSubjectPicker(); renderBalanceCard(); renderRecent();
-  renderMonth(); renderCompare(); renderRefill(); fillBookForm(); renderSubjectTable();
+  renderMonth(); renderWeigh(); renderCompare(); renderRefill(); fillBookForm(); renderSubjectTable();
 }
 
 // ---------- 編輯視窗 ----------
@@ -1112,6 +1295,7 @@ function openEdit(id){
   $('em_dir').value = e.direction;
   fillEditSubjects(e.direction, e.subject_name);
   $('em_amount').value = e.amount; $('em_payee').value = e.payee || '';
+  if($('em_weigh')) $('em_weigh').value = (e.weigh_fee == null || e.weigh_fee === '') ? '' : e.weigh_fee;
   $('em_status').value = e.status || '已入帳';
   $('em_memo').value = e.memo || ''; $('em_purpose').value = e.purpose || '';
   $('em_msg').textContent = '';
@@ -1140,16 +1324,20 @@ function wire(){
     CUR_BOOK = STATE.books.find(b => b.book_id === parseInt($('bookPick').value, 10)) || CUR_BOOK;
     renderAll();
   };
-  document.querySelectorAll('input[name="pcDir"]').forEach(r => { r.onchange = renderSubjectPicker; });
+  document.querySelectorAll('input[name="pcDir"]').forEach(r => {
+    r.onchange = () => { WEIGH_TOUCHED = false; renderSubjectPicker(); };
+  });
   $('pcSubjBtns').onclick = ev => {
     const b = ev.target.closest('.subj-btn'); if(!b) return;
     $('pc_subject').value = b.dataset.s;
     document.querySelectorAll('.subj-btn').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
+    syncWeighBox();
     $('pc_amount').focus();
   };
   $('pc_clear').onclick = () => {
-    ['pc_amount','pc_memo','pc_payee','pc_purpose'].forEach(id => { $(id).value = ''; });
+    ['pc_amount','pc_memo','pc_payee','pc_purpose','pc_weigh'].forEach(id => { if($(id)) $(id).value = ''; });
+    WEIGH_TOUCHED = false; syncWeighBox();
     $('pc_msg').textContent = '';
   };
   $('pc_add').onclick = async () => {
@@ -1160,16 +1348,24 @@ function wire(){
       if(amt <= 0) throw new Error('金額要大於 0');
       if(!$('pc_date').value) throw new Error('請填日期');
       if(!$('pc_subject').value) throw new Error('請選科目');
+      const wf = num($('pc_weigh') ? $('pc_weigh').value : 0);
+      if(wf < 0) throw new Error('磅費不能是負數');
+      if(wf > amt) throw new Error('磅費 ' + fmt(wf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
+      if(wf > 0 && curDir() === '收入') throw new Error('磅費是司機代墊的支出，收入這一邊不用填磅費');
       msg.textContent = '存檔中…';
       const row = {
         book_id: CUR_BOOK.book_id, entry_date: $('pc_date').value, direction: curDir(),
         subject_name: $('pc_subject').value, memo: $('pc_memo').value || null, amount: amt,
         payee: $('pc_payee').value || null, purpose: $('pc_purpose').value || null,
-        status: $('pc_status').value
+        status: $('pc_status').value,
+        weigh_fee: wf > 0 ? wf : null
       };
       const saved = await sbInsert('petty_entries', row);
       STATE.entries.push(saved);
       $('pc_amount').value = ''; $('pc_memo').value = ''; $('pc_purpose').value = '';
+      if($('pc_weigh')) $('pc_weigh').value = '';
+      WEIGH_TOUCHED = false;
+      renderWeigh();
       renderBalanceCard(); renderRecent(); renderMonth(); renderRefill(); renderSubjectTable();
       msg.textContent = '已記入，餘額 NT$ ' + fmt(calcBalance());
     }catch(e){ msg.textContent = '失敗：' + e.message; }
@@ -1184,11 +1380,15 @@ function wire(){
     try{
       const amt = num($('em_amount').value);
       if(amt <= 0) throw new Error('金額要大於 0');
+      const emwf = num($('em_weigh') ? $('em_weigh').value : 0);
+      if(emwf < 0) throw new Error('磅費不能是負數');
+      if(emwf > amt) throw new Error('磅費 ' + fmt(emwf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
       msg.textContent = '存檔中…';
       const patch = {
         entry_date: $('em_date').value, direction: $('em_dir').value, subject_name: $('em_subject').value,
         amount: amt, payee: $('em_payee').value || null, status: $('em_status').value,
-        memo: $('em_memo').value || null, purpose: $('em_purpose').value || null
+        memo: $('em_memo').value || null, purpose: $('em_purpose').value || null,
+        weigh_fee: emwf > 0 ? emwf : null
       };
       const saved = await sbUpdate('petty_entries', 'pe_id', EDIT_ID, patch);
       const i = STATE.entries.findIndex(x => x.pe_id === EDIT_ID);
@@ -1197,6 +1397,64 @@ function wire(){
       renderAll();
     }catch(e){ msg.textContent = '失敗：' + e.message; }
   };
+
+  // ----- 磅費 -----
+  if($('pc_weigh')){
+    $('pc_weigh').oninput  = () => { WEIGH_TOUCHED = true; };
+    $('pc_amount').oninput = syncWeighBox;
+    $('pc_subject').onchange = syncWeighBox;
+  }
+  if($('wg_from')){
+    ['wg_from','wg_to'].forEach(id => { $(id).onchange = renderWeigh; });
+    $('wg_search').oninput = renderWeigh;
+    const wgSet = (f, t) => { $('wg_from').value = f; $('wg_to').value = t; renderWeigh(); };
+    $('wg_m').onclick   = () => wgSet(thisMonth() + '-01', todayISO());
+    $('wg_lm').onclick  = () => { const m = monthsAgo(1); wgSet(m + '-01', prevDay(thisMonth() + '-01')); };
+    $('wg_3m').onclick  = () => wgSet(monthsAgo(2) + '-01', todayISO());
+    $('wg_ytd').onclick = () => wgSet(todayISO().slice(0,4) + '-01-01', todayISO());
+    $('wg_all').onclick = () => wgSet('', '');
+    $('wg_csv').onclick = () => {
+      const rows = wgRows(), list = wgAgg(rows);
+      const out = [];
+      out.push(['【各司機磅費】']);
+      out.push(['司機','筆數','磅費合計','第一筆','最近一筆','其中待補單據']);
+      list.forEach(g => out.push([g.name + (g.guessed ? '（姓名取自摘要）' : ''), g.n, g.amt, toROC(g.first), toROC(g.last), g.pend]));
+      out.push(['合計', rows.length, rows.reduce((s,e) => s + weighAmt(e), 0), '', '', '']);
+      out.push([]);
+      out.push(['【磅費明細】']);
+      out.push(['日期','司機','摘要','磅費','整筆實付','狀態']);
+      rows.forEach(e => out.push([toROC(e.entry_date), weighDriver(e).name, e.memo, weighAmt(e), num(e.amount), e.status]));
+      const miss = wgMissing();
+      if(miss.length){
+        out.push([]);
+        out.push(['【科目是磅費但磅費金額沒填，未列入統計】']);
+        out.push(['日期','領款人','科目','摘要','實付']);
+        miss.forEach(e => out.push([toROC(e.entry_date), e.payee, e.subject_name, e.memo, num(e.amount)]));
+      }
+      download('零用金磅費結清_' + ($('wg_from').value || '全部') + '_' + ($('wg_to').value || '全部') + '.csv',
+        csvLines([(CUR_BOOK ? CUR_BOOK.book_name : '零用金') + ' 磅費結清',
+                  ($('wg_from').value || '最早') + ' ~ ' + ($('wg_to').value || '最新')], out));
+    };
+    $('wg_print').onclick = () => {
+      const rows = wgRows(), list = wgAgg(rows);
+      const tot = rows.reduce((s,e) => s + weighAmt(e), 0);
+      let h = '<h2>' + esc(CUR_BOOK ? CUR_BOOK.book_name : '零用金') + '　磅費結清表</h2>';
+      h += '<div class="muted">期間：' + toROC($('wg_from').value) + ' ~ ' + toROC($('wg_to').value)
+         + '　列印日：' + toROC(todayISO()) + '</div>';
+      h += '<h3>各司機請了多少</h3><table><thead><tr><th>司機</th><th class="num">筆數</th><th class="num">磅費合計</th><th>第一筆</th><th>最近一筆</th><th>簽收</th></tr></thead><tbody>';
+      list.forEach(g => { h += '<tr><td>' + esc(g.name) + '</td><td class="num">' + g.n + '</td><td class="num">' + fmt(g.amt)
+        + '</td><td>' + toROC(g.first) + '</td><td>' + toROC(g.last) + '</td><td style="width:110px;"></td></tr>'; });
+      h += '<tr><td><strong>合計</strong></td><td class="num"><strong>' + rows.length + '</strong></td><td class="num"><strong>'
+         + fmt(tot) + '</strong></td><td></td><td></td><td></td></tr></tbody></table>';
+      h += '<h3>磅費明細</h3><table><thead><tr><th>日期</th><th>司機</th><th>摘要</th><th class="num">磅費</th><th class="num">整筆實付</th><th>狀態</th></tr></thead><tbody>';
+      rows.forEach(e => { h += '<tr><td>' + toROC(e.entry_date) + '</td><td>' + esc(weighDriver(e).name) + '</td><td>'
+        + esc(e.memo) + '</td><td class="num">' + fmt(weighAmt(e)) + '</td><td class="num">' + fmt(e.amount)
+        + '</td><td>' + esc(e.status) + '</td></tr>'; });
+      h += '</tbody></table>';
+      h += '<div style="margin-top:26px;">主管簽核：________________　　記錄人：________________</div>';
+      printBlock('磅費結清表', h, $('wg_msg'));
+    };
+  }
 
   if($('cp_from')){
     ['cp_from','cp_to'].forEach(id => { $(id).onchange = renderCompare; });
@@ -1404,6 +1662,7 @@ async function init(){
   $('pc_date').value = todayISO();
   $('rf_date').value = todayISO();
   $('mo_month').value = thisMonth();
+  if($('wg_from')){ $('wg_from').value = thisMonth() + '-01'; $('wg_to').value = todayISO(); }
   $('stm_from').value = thisMonth() + '-01';
   $('stm_to').value = todayISO();
   if($('cp_from')){ $('cp_from').value = todayISO().slice(0,4) + '-01-01'; $('cp_to').value = todayISO(); }
