@@ -293,9 +293,9 @@
     </div>
     <div id="ovPettyWeighWrap" style="display:none;margin-top:14px;">
       <h2 style="font-size:15px;">本月磅費（各司機）</h2>
-      <div class="muted" style="margin-bottom:8px;">司機自己先墊的過磅費，照領款人分開算，方便直接匯款給司機。「還沒匯款」是零用金記帳網頁的磅費結清那一頁還沒按過「產生匯款清單」的部分；按過之後這裡就會轉成已匯款。系統裡沒有存司機的銀行帳號，帳號請照人事那邊的資料填。</div>
+      <div class="muted" style="margin-bottom:8px;">過磅費分兩種給法：司機自己先墊、公司之後匯錢還他（目前只有台中的張誌元是這樣），以及當場就用零用金的現金付掉、不用再匯（其他司機）。「要匯給司機（還沒匯）」才是主管要匯出去的錢，就是零用金記帳網頁「磅費結清」那一頁還沒按過「產生匯款清單」的部分；按過之後會轉到「已匯款」。系統裡沒有存司機的銀行帳號，帳號請照人事那邊的資料填。</div>
       <div class="table-scroll">
-        <table><thead><tr><th>零用金帳本</th><th>司機</th><th class="num">筆數</th><th class="num">磅費合計</th><th class="num">其中還沒匯款</th><th>期間</th></tr></thead><tbody id="ovPettyWeighBody"></tbody></table>
+        <table><thead><tr><th>零用金帳本</th><th>司機</th><th class="num">筆數</th><th class="num">磅費合計</th><th class="num">要匯給司機（還沒匯）</th><th class="num">當場零用金付掉</th><th class="num">已匯款</th><th>期間</th></tr></thead><tbody id="ovPettyWeighBody"></tbody></table>
       </div>
     </div>
     <div id="ovPettySubjWrap" style="display:none;margin-top:14px;">
@@ -983,6 +983,11 @@ function renderPettyCard(books, mS, mE){
     '<td class="num"><strong>' + money(grand) + '</strong></td><td class="num">100.0%</td></tr>';
 }
 
+// 磅費的 settle_batch：空＝還欠司機、'零用金付訖'＝當場現金付掉、其他＝匯款批號。
+// 這個字串要跟 petty_cash.html 的 WG_CASH_TAG 一模一樣，改一邊就要改另一邊。
+const PW_CASH_TAG = '零用金付訖';
+function PW_CASH_OK(e){ return !!(e && e.settle_batch && String(e.settle_batch).trim()); }
+
 // 本月磅費（各司機）。只看 weigh_fee 有填的列，已作廢不算。
 // 磅費是司機先自己付現金給磅場，之後公司再匯錢還他，所以要按人結算而不是按科目。
 function renderPettyWeigh(books, mS, mE){
@@ -1001,12 +1006,16 @@ function renderPettyWeigh(books, mS, mE){
   rows.forEach(e => {
     const who = String(e.payee || '').trim() || '（未填司機）';
     const k = e.book_id + '|' + who;
-    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, open: 0, first: '', last: '' };
+    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, open: 0, cash: 0, done: 0, first: '', last: '' };
     const o = g[k];
     const d = String(e.entry_date).slice(0,10);
     o.n += 1;
     o.amt += num(e.weigh_fee);
-    if(!e.settle_batch) o.open += num(e.weigh_fee);
+    // settle_batch 是 '零用金付訖' 代表當場用零用金現金付掉了，不用匯款；
+    // 空的代表還欠司機這筆錢；其他值是真的匯款批號（例 1150805-1）。
+    if(!PW_CASH_OK(e)) o.open += num(e.weigh_fee);
+    else if(String(e.settle_batch).trim() === PW_CASH_TAG) o.cash += num(e.weigh_fee);
+    else o.done += num(e.weigh_fee);
     if(!o.first || d < o.first) o.first = d;
     if(!o.last  || d > o.last)  o.last  = d;
   });
@@ -1014,18 +1023,24 @@ function renderPettyWeigh(books, mS, mE){
   const tn = list.reduce((s,o) => s + o.n, 0);
   const ta = list.reduce((s,o) => s + o.amt, 0);
   const to = list.reduce((s,o) => s + o.open, 0);
+  const tc = list.reduce((s,o) => s + o.cash, 0);
+  const td = list.reduce((s,o) => s + o.done, 0);
   wrap.style.display = '';
   body.innerHTML = list.map(o =>
     '<tr><td>' + esc(o.book) + '</td>' +
     '<td><strong>' + esc(o.who) + '</strong></td>' +
     '<td class="num">' + o.n + '</td>' +
     '<td class="num"><strong>' + money(o.amt) + '</strong></td>' +
-    '<td class="num">' + (o.open ? '<span class="pill amber">' + money(o.open) + '</span>' : '<span class="pill green">都匯了</span>') + '</td>' +
+    '<td class="num">' + (o.open ? '<span class="pill amber">' + money(o.open) + '</span>' : '<span class="pill green">不用匯</span>') + '</td>' +
+    '<td class="num">' + (o.cash ? money(o.cash) : '－') + '</td>' +
+    '<td class="num">' + (o.done ? money(o.done) : '－') + '</td>' +
     '<td>' + esc(o.first === o.last ? o.first : o.first + '～' + o.last) + '</td></tr>').join('') +
     '<tr style="border-top:2px solid var(--line);"><td colspan="2"><strong>合計</strong></td>' +
     '<td class="num"><strong>' + tn + '</strong></td>' +
     '<td class="num"><strong>' + money(ta) + '</strong></td>' +
-    '<td class="num"><strong>' + (to ? money(to) : '0') + '</strong></td><td></td></tr>';
+    '<td class="num"><strong>' + (to ? money(to) : '0') + '</strong></td>' +
+    '<td class="num"><strong>' + (tc ? money(tc) : '0') + '</strong></td>' +
+    '<td class="num"><strong>' + (td ? money(td) : '0') + '</strong></td><td></td></tr>';
 }
 
 // ---------- 稅額併列 ----------
