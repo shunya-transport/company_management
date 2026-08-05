@@ -408,7 +408,8 @@
     <h3>我要登記</h3>
     <div class="muted" style="margin:-6px 0 12px;font-size:12.5px;">
       加多少就填多少，<strong>小數點後面可以填到三位</strong>（例：12.345 公升）。
-      車場會依車號自己帶出來，不對的話可以改。
+      車場會依車號自己帶出來，不對的話可以改。<br>
+      <strong>只有本公司在職人員、本公司在役的車可以登記</strong>，姓名要跟人事系統一致。
     </div>
 
     <div class="form-grid">
@@ -416,7 +417,7 @@
         <input type="date" id="ur_date">
       </label>
       <label>誰填充<span class="req">*</span>
-        <input type="text" id="ur_by" list="ur_byList" placeholder="打自己的姓名" autocomplete="off">
+        <input type="text" id="ur_by" list="ur_byList" placeholder="打自己的姓名（要與人事系統一致）" autocomplete="off">
         <datalist id="ur_byList"></datalist>
       </label>
       <label>車號<span class="req">*</span>
@@ -429,6 +430,10 @@
         <select id="ur_region"></select>
       </label>
     </div>
+
+    <div id="ur_bymsg" style="display:none;font-size:12.5px;line-height:1.7;margin:10px 0 0;
+      background:#fdecea;border:1px solid #e39a94;border-left:4px solid #B3261E;border-radius:10px;
+      padding:10px 12px;color:#7a2018;"></div>
 
     <div id="ur_vehmsg" style="display:none;font-size:12.5px;line-height:1.7;margin:10px 0 0;
       background:#fff4e5;border:1px solid #e0a458;border-left:4px solid #c07a20;border-radius:10px;
@@ -608,6 +613,14 @@ async function sbInsert(table, row){
   if(!r.ok) throw new Error(await r.text());
   const d = await r.json(); return Array.isArray(d) ? d[0] : d;
 }
+// 呼叫資料庫函式（RPC）。尿素登記的防呆用它去問「這個名字是不是我們家的人」，
+// 【只會拿到 true / false】，不會、也不可以拿到人事名冊。
+async function sbRpc(fn, args){
+  const r = await authFetch(REST + 'rpc/' + fn, {
+    method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(args || {}) });
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
 async function sbDelete(table, pk, id){
   const r = await authFetch(REST + table + '?' + pk + '=eq.' + encodeURIComponent(id), { method:'DELETE' });
   if(!r.ok) throw new Error(await r.text());
@@ -618,6 +631,15 @@ async function sbDelete(table, pk, id){
 function tidyErr(msg){
   const s = String(msg || '');
   if(s.indexOf('urea_logs_quantity_positive') >= 0) return '使用量要大於 0，請重新確認。';
+  // 防呆（SQL #38 supabase_urea_identity_guard_1150805.sql）擋下來的四種情形
+  if(s.indexOf('urea_person_not_found') >= 0)
+    return '這個姓名不是本公司在職人員，不能登記尿素。請確認有沒有打錯字。';
+  if(s.indexOf('urea_person_required') >= 0) return '請填「誰填充」，這一格不可以空白。';
+  if(s.indexOf('urea_plate_not_found') >= 0)
+    return '這個車號不是本公司在役、且會用到尿素的車輛，不能登記。';
+  if(s.indexOf('urea_plate_required') >= 0) return '請選車號，這一格不可以空白。';
+  if(s.indexOf('urea_person_ok') >= 0 && (s.indexOf('does not exist') >= 0 || s.indexOf('PGRST202') >= 0))
+    return '雲端還沒有建立姓名檢查函式，請先執行 supabase_urea_identity_guard_1150805.sql。';
   if(s.indexOf('filled_by') >= 0 || s.indexOf('plate_number') >= 0 || s.indexOf('vehicle_id') >= 0){
     if(s.indexOf('does not exist') >= 0 || s.indexOf('PGRST204') >= 0)
       return '雲端的尿素資料表還沒有「車號／填充人」欄位，請先執行 supabase_urea_1150805.sql。';
@@ -661,7 +683,19 @@ function allRegions(){
 const NO_UREA_TYPE = /堆高機|夾櫃機|起重機|公務車/;
 function usesUrea(v){ return !NO_UREA_TYPE.test(String((v && v.vehicle_type) || '')); }
 
-// 清單上出現過、但車籍已經不在的車號也要能篩，不然舊資料會找不到
+// 【登記】用的車號清單：只有現在還在役、而且會用到尿素的公司車。
+// 防呆（115/08/05 使用者指示「不是我們家的車不能登記」）就是靠這個清單，
+// 資料庫那一層另外有 trg_urea_identity 觸發器擋，兩層條件一致。
+function fleetPlates(){
+  return STATE.vehicles.filter(usesUrea).map(v => v.plate_number).filter(Boolean).sort();
+}
+function isFleetPlate(p){
+  const k = String(p == null ? '' : p).replace(/[\s\u3000]/g, '').toUpperCase();
+  return !!k && fleetPlates().some(x => String(x).replace(/[\s\u3000]/g, '').toUpperCase() === k);
+}
+
+// 【篩選／統計】用的車號清單：清單上出現過、但車籍已經不在的車號也要能篩，
+// 不然舊資料會找不到。這一份【不可以】拿去當登記的下拉。
 function allPlates(){
   const s = STATE.vehicles.filter(usesUrea).map(v => v.plate_number).filter(Boolean);
   STATE.logs.forEach(u => { const p = String(u.plate_number||'').trim(); if(p && s.indexOf(p) < 0) s.push(p); });
@@ -691,11 +725,14 @@ function renderVehMsg(){
   const n = sel ? sel.options.length - 1 : 0;   // 扣掉「請選車號」
   if(n > 0){ box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = 'block';
-  box.innerHTML = STATE.vehErr
+  box.innerHTML = (STATE.vehErr
     ? '<strong>車號清單讀不回來：</strong>' + esc(STATE.vehErr)
     : '<strong>車號清單目前是空的。</strong>'
       + '<br>雲端的在役車輛沒有讀回來（多半是公開頁面還沒被授權讀車籍）。'
-      + '請運輸行政人員確認 Supabase 已執行 supabase_public_pages_grant_1150805.sql。';
+      + '請運輸行政人員確認 Supabase 已執行 supabase_public_pages_grant_1150805.sql。')
+    // 115/08/05 防呆之後，車號一定要對得上車籍才給登記，
+    // 所以車籍讀不回來的時候就真的登記不了，這裡要講清楚，不要讓人在現場乾等。
+    + '<br><strong>車號清單修好之前沒有辦法登記</strong>（防呆規定車號一定要是本公司在役車輛）。';
 }
 
 // ---------- 下拉 ----------
@@ -703,7 +740,7 @@ function fillPickers(){
   const keepPlate = $('ur_plate').value;
   // 使用者 115/08/05 指示：下拉只要車號，不要再掛車場（車場那格自己會帶出來）
   $('ur_plate').innerHTML = '<option value="">請選車號</option>'
-    + allPlates().map(p => '<option value="' + esc(p) + '">' + esc(p) + '</option>').join('');
+    + fleetPlates().map(p => '<option value="' + esc(p) + '">' + esc(p) + '</option>').join('');
   if(keepPlate) $('ur_plate').value = keepPlate;
   renderVehMsg();
 
@@ -759,6 +796,59 @@ function renderStats(){
       + '</div><div class="s">' + esc(c[2]) + '</div></div>').join('');
 }
 
+// ---------- 防呆：這個名字是不是我們家的人 ----------
+// 【為什麼不是直接抓員工名單】
+//   這一頁沒有登入，任何人開得起來，所以【刻意不去抓 employees】——
+//   在職人員的姓名與電話不可以攤在公開網頁上。
+//   這裡改成問資料庫一個是非題：urea_person_ok('某某某') → true / false。
+//   那個函式在雲端是 SECURITY DEFINER，它自己去查人事表，
+//   但只回一個布林值，名冊一個字都不會傳到瀏覽器來。
+const PERSON_CACHE = {};        // 姓名 → true / false / 'ERR'
+let personSeq = 0;
+
+function nameKey(n){ return String(n == null ? '' : n).replace(/[\s\u3000]/g, ''); }
+
+async function personOk(name){
+  const k = nameKey(name);
+  if(!k) return false;
+  if(Object.prototype.hasOwnProperty.call(PERSON_CACHE, k)) return PERSON_CACHE[k];
+  let v;
+  try{
+    v = (await sbRpc('urea_person_ok', { p_name: k })) === true;
+  }catch(e){
+    // 函式還沒建、或權限被收掉：不要在這裡自己判人家不是員工，
+    // 交給資料庫的觸發器擋。網頁這一層放行，按下登記才會跳錯。
+    v = 'ERR';
+  }
+  if(v !== 'ERR') PERSON_CACHE[k] = v;   // 呼叫失敗不要記進快取，下次還要再試
+  return v;
+}
+
+// 打字的時候即時提示（不擋，只提醒）
+async function checkPersonLive(){
+  const box = $('ur_bymsg'); if(!box) return;
+  const name = ($('ur_by').value || '').trim();
+  if(!nameKey(name)){ box.style.display = 'none'; box.textContent = ''; return; }
+  const seq = ++personSeq;
+  const v = await personOk(name);
+  if(seq !== personSeq) return;              // 中途又打了字，這次結果作廢
+  if(v === 'ERR'){ box.style.display = 'none'; box.textContent = ''; return; }
+  if(v === true){
+    box.style.display = 'block';
+    box.style.background = '#eaf6ee'; box.style.borderColor = '#7fb894';
+    box.style.borderLeftColor = '#2f6f4e'; box.style.color = '#23543c';
+    box.innerHTML = '✓ ' + esc(name) + '　可以登記';
+  }else{
+    box.style.display = 'block';
+    box.style.background = '#fdecea'; box.style.borderColor = '#e39a94';
+    box.style.borderLeftColor = '#B3261E'; box.style.color = '#7a2018';
+    box.innerHTML = '<strong>「' + esc(name) + '」不是本公司在職人員，不能登記。</strong>'
+      + '<br>請確認姓名有沒有打錯字（同音字、簡繁體都會對不起來）。';
+  }
+}
+let personTimer = null;
+function checkPersonLater(){ clearTimeout(personTimer); personTimer = setTimeout(checkPersonLive, 400); }
+
 // ---------- 這台車最近的紀錄 ----------
 function renderRecent(){
   const plate = $('ur_plate').value;
@@ -813,6 +903,31 @@ async function saveLog(){
   if(!plate){ msg.textContent = '請選車號'; return; }
   if(qtyRaw === '' || isNaN(qty)){ msg.textContent = '請填使用量'; return; }
   if(qty <= 0){ msg.textContent = '使用量要大於 0'; return; }
+
+  // ---- 防呆一：不是我們家的車，不給登記 ----
+  // （下拉本來就只放在役可加尿素的車，這裡再擋一次，
+  //   防止有人用開發者工具改選項，或車籍中途被改成停用。）
+  if(!isFleetPlate(plate)){
+    alert('車號「' + plate + '」不是本公司在役、且會用到尿素的車輛，不能登記。\n\n'
+      + '這一筆沒有幫你送出，請重新選車號。');
+    msg.textContent = '車號不在可登記的車輛清單裡，沒有送出';
+    return;
+  }
+
+  // ---- 防呆二：不是我們家的人，不給登記 ----
+  msg.style.color = 'var(--text-3)'; msg.textContent = '確認人員中…';
+  const who = await personOk(by);
+  if(who === false){
+    await checkPersonLive();
+    alert('「' + by + '」不是本公司在職人員，不能登記尿素。\n\n'
+      + '請確認姓名有沒有打錯字（同音字、簡繁體都會對不起來）。\n'
+      + '如果是新報到還沒建檔，請先請運輸行政人員在人事系統建好。\n\n'
+      + '這一筆沒有幫你送出。');
+    msg.style.color = '#B3261E';
+    msg.textContent = '填充人不是在職人員，沒有送出';
+    return;
+  }
+  // who === 'ERR'：檢查函式呼叫不到，放行到資料庫，由觸發器把關
 
   const v = vehByPlate(plate);
   const row = {
@@ -1019,11 +1134,15 @@ function wire(){
     renderRecent();
   };
   $('ur_qty').oninput = refreshHint;
+  $('ur_by').oninput = checkPersonLater;
+  $('ur_by').onchange = checkPersonLive;
+  $('ur_by').onblur  = checkPersonLive;
   $('ur_save').onclick = saveLog;
   $('ur_clear').onclick = () => {
     ['ur_by','ur_qty'].forEach(id => $(id).value = '');
     $('ur_plate').value = ''; $('ur_date').value = todayISO();
     $('ur_msg').textContent = '';
+    $('ur_bymsg').style.display = 'none'; $('ur_bymsg').textContent = '';
     refreshHint(); renderRecent();
   };
 
