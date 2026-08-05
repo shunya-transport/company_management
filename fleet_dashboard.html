@@ -260,6 +260,12 @@
   <div id="overview" class="panel active">
     <div class="stat-row" id="statRow"></div>
     <div class="card">
+      <h2>油壓板車預約<span class="count-badge" id="overview_booking_count"></span>
+        <button class="btn ghost" style="float:right;padding:4px 12px;font-size:12px;"
+                onclick="BOOKING_STATE='idle';renderBookingCard();">重新整理</button></h2>
+      <div id="overviewBookings"><div class="empty">載入中…</div></div>
+    </div>
+    <div class="card">
       <h2>人員證照到期提醒（90天內，含未記錄效期者）</h2>
       <div id="trainingAlerts"></div>
     </div>
@@ -2777,6 +2783,88 @@ async function loadState(){
   STATE.adminAnnualPlan = SEED.admin_annual_plan || [];
   STATE.refRewardTypes = SEED.ref_reward_types || [];
   await enrichDenormalizedFields();
+}
+
+// ===== 油壓板車預約（唯讀）=====
+// 資料是「油壓板車預約登記」那一頁（trailer_booking.html）寫進去的，這裡只讀不寫。
+// 這一段刻意不走 saveState：saveState 會把陣列裡沒有的 id 刪掉，預約資料經不起那種操作。
+// 還沒跑 supabase_trailer_booking_1150804.sql 時只會顯示一行提示，總覽其他卡片照常運作。
+var BOOKING_CACHE = null;
+var BOOKING_STATE = 'idle';   // idle / loading / ok / missing / error
+var BOOKING_ERR   = '';
+var BOOKING_RES   = [];
+
+function bkHM(t){ return String(t==null?'':t).slice(0,5); }
+function bkDay(iso){
+  if(!iso) return '';
+  const d = new Date(String(iso).slice(0,10)+'T00:00:00');
+  const wd = ['日','一','二','三','四','五','六'][d.getDay()];
+  return (d.getFullYear()-1911)+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'（'+wd+'）';
+}
+function bkResName(id){
+  const r = BOOKING_RES.find(x => x.resource_id === id);
+  return r ? r.resource_name : ('板車 #'+id);
+}
+async function loadTrailerBookings(){
+  if(BOOKING_STATE === 'loading') return;
+  BOOKING_STATE = 'loading';
+  try{
+    BOOKING_RES = (await supaFetch('booking_resources?select=resource_id,resource_name,color,is_active&order=sort_no.asc')) || [];
+    BOOKING_CACHE = (await supaFetch('trailer_bookings?select=booking_id,resource_id,booking_date,start_time,end_date,end_time,'
+      + 'driver_name,driver_phone,tractor_plate,purpose,destination,status'
+      + '&status=neq.' + encodeURIComponent('已取消')
+      + '&end_date=gte.' + todayISO()
+      + '&order=booking_date.asc,start_time.asc&limit=500')) || [];
+    BOOKING_STATE = 'ok';
+  }catch(e){
+    const m = String((e && e.message) || e);
+    BOOKING_STATE = (m.indexOf('404')>=0 || m.indexOf('42P01')>=0 || m.indexOf('does not exist')>=0) ? 'missing' : 'error';
+    BOOKING_ERR = m; BOOKING_CACHE = [];
+  }
+  renderBookingCard();
+}
+function renderBookingCard(){
+  const box = document.getElementById('overviewBookings');
+  const badge = document.getElementById('overview_booking_count');
+  if(!box) return;
+  if(BOOKING_STATE === 'idle'){ box.innerHTML = '<div class="empty">載入中…</div>'; loadTrailerBookings(); return; }
+  if(BOOKING_STATE === 'loading'){ box.innerHTML = '<div class="empty">載入中…</div>'; return; }
+  if(BOOKING_STATE === 'missing'){
+    if(badge) badge.textContent = '';
+    box.innerHTML = '<div class="empty">雲端還沒有板車預約資料表。請先在 Supabase 執行 supabase_trailer_booking_1150804.sql，'
+      + '之後司機在「油壓板車預約登記」那一頁登記的內容就會出現在這裡。</div>';
+    return;
+  }
+  if(BOOKING_STATE === 'error'){
+    if(badge) badge.textContent = '';
+    box.innerHTML = '<div class="empty">板車預約讀取失敗：'+esc(BOOKING_ERR)+'</div>';
+    return;
+  }
+  const rows = BOOKING_CACHE || [];
+  if(badge) badge.textContent = rows.length + ' 筆';
+  if(!rows.length){ box.innerHTML = '<div class="empty">今天以後還沒有人預約板車</div>'; return; }
+  const today = todayISO();
+  const now = today + ' ' + new Date().toTimeString().slice(0,5);
+  box.innerHTML = '<div class="table-scroll" style="max-height:320px;"><table><thead><tr>'
+    + '<th>板車</th><th>使用日期</th><th>幾點到幾點</th><th>預約人</th><th>電話</th><th>車頭</th><th>用途／目的地</th><th>狀態</th>'
+    + '</tr></thead><tbody>'
+    + rows.map(function(b){
+        const s = String(b.booking_date).slice(0,10)+' '+bkHM(b.start_time);
+        const ed = String(b.end_date || b.booking_date).slice(0,10);
+        const e = ed+' '+bkHM(b.end_time);
+        const using = (s <= now && now < e);
+        const cross = ed !== String(b.booking_date).slice(0,10);
+        return '<tr'+(using?' style="background:rgba(157,109,47,.10);"':'')+'>'
+          + '<td>'+esc(bkResName(b.resource_id))+'</td>'
+          + '<td>'+bkDay(b.booking_date)+(String(b.booking_date).slice(0,10)===today?' <span class="pill amber">今天</span>':'')+'</td>'
+          + '<td>'+bkHM(b.start_time)+'～'+bkHM(b.end_time)+(cross?' <span class="pill gray">到 '+bkDay(ed)+'</span>':'')+'</td>'
+          + '<td>'+esc(b.driver_name||'')+'</td>'
+          + '<td>'+esc(b.driver_phone||'')+'</td>'
+          + '<td>'+esc(b.tractor_plate||'')+'</td>'
+          + '<td>'+esc([b.purpose,b.destination].filter(Boolean).join(' → '))+'</td>'
+          + '<td>'+(using?'<span class="pill red">使用中</span>':'<span class="pill green">'+esc(b.status)+'</span>')+'</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
 }
 
 function renderOverview(){
@@ -6778,6 +6866,7 @@ function renderLeaveStatTable(){
 
 function renderAll(){
   renderOverview();
+  renderBookingCard();
   renderDueReminders();
   renderLeaseTable();
   renderSelfUseTrailers();
