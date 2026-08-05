@@ -6046,8 +6046,16 @@ function ureaQty(v){
 }
 
 // 車號下拉：在役的動力車，加上舊資料裡出現過但車籍已經不在的車號
+// 115/08/05 使用者指示「這些推高機幫我拿掉，因為不會用到」：
+// 堆高機、夾櫃機、移動式起重機、公務車（小客車）都不加尿素，一律不列進來。
+// 免登入的 urea_log.html 用同一組條件（usesUrea()），資料庫那層由
+// p_anon_vehicle_pick 這條 policy 擋。三個地方要一起改。
+const UREA_EXCLUDE_TYPE = /堆高機|夾櫃機|起重機|公務車/;
 function ureaPlateList(){
-  const list = STATE.vehicles.filter(v => v.vehicle_category !== '板架').map(v => v.plate).filter(Boolean);
+  const list = STATE.vehicles
+    .filter(v => v.vehicle_category !== '板架')
+    .filter(v => !UREA_EXCLUDE_TYPE.test(String(v.vehicle_type || '')))
+    .map(v => v.plate).filter(Boolean);
   STATE.ureaLogs.forEach(u => { const p = (u.plate_number||'').trim(); if(p && !list.includes(p)) list.push(p); });
   return [...new Set(list)].sort();
 }

@@ -653,9 +653,17 @@ function allRegions(){
   STATE.logs.forEach(u => { const r = String(u.region||'').trim(); if(r && s.indexOf(r) < 0) s.push(r); });
   return s;
 }
+// 不會用到尿素的車種：堆高機、夾櫃機、移動式起重機、公務車（小客車）。
+// 使用者 115/08/05 指示「這些推高機幫我拿掉，因為不會用到」。
+// 這裡是前端這一層的過濾；資料庫那一層由 p_anon_vehicle_pick 這條 policy 擋
+// （supabase_public_vehicles_fix_1150805.sql / supabase_urea_plate_filter_1150805.sql），
+// 兩層條件要一起改，不然會有一邊看得到、一邊看不到。
+const NO_UREA_TYPE = /堆高機|夾櫃機|起重機|公務車/;
+function usesUrea(v){ return !NO_UREA_TYPE.test(String((v && v.vehicle_type) || '')); }
+
 // 清單上出現過、但車籍已經不在的車號也要能篩，不然舊資料會找不到
 function allPlates(){
-  const s = STATE.vehicles.map(v => v.plate_number).filter(Boolean);
+  const s = STATE.vehicles.filter(usesUrea).map(v => v.plate_number).filter(Boolean);
   STATE.logs.forEach(u => { const p = String(u.plate_number||'').trim(); if(p && s.indexOf(p) < 0) s.push(p); });
   return s.sort();
 }
@@ -668,7 +676,7 @@ async function loadAll(){
   STATE.vehErr = '';
   try{
     STATE.vehicles = await sbSelect('vehicles',
-      'select=vehicle_id,plate_number,base_location&status=eq.%E5%9C%A8%E5%BD%B9&vehicle_category=eq.%E8%BB%8A%E8%BC%9B&order=plate_number.asc&limit=2000');
+      'select=vehicle_id,plate_number,base_location,vehicle_type&status=eq.%E5%9C%A8%E5%BD%B9&vehicle_category=eq.%E8%BB%8A%E8%BC%9B&order=plate_number.asc&limit=2000');
     if(!Array.isArray(STATE.vehicles)) STATE.vehicles = [];
   }catch(e){
     STATE.vehicles = [];
