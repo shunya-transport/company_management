@@ -428,13 +428,11 @@
       <label>車場
         <select id="ur_region"></select>
       </label>
-      <label>金額（選填）
-        <input type="number" id="ur_cost" step="1" min="0" placeholder="有單據再填">
-      </label>
-      <label>備註（選填）
-        <input type="text" id="ur_notes" placeholder="例：加到滿、桶裝">
-      </label>
     </div>
+
+    <div id="ur_vehmsg" style="display:none;font-size:12.5px;line-height:1.7;margin:10px 0 0;
+      background:#fff4e5;border:1px solid #e0a458;border-left:4px solid #c07a20;border-radius:10px;
+      padding:10px 12px;color:#5b3d10;"></div>
 
     <div id="ur_hint" class="muted" style="font-size:12.5px;margin:10px 0 12px;min-height:19px;"></div>
 
@@ -452,7 +450,7 @@
     </div>
     <div style="overflow-x:auto;">
       <table class="km-table">
-        <thead><tr><th>日期</th><th>填充人</th><th class="num">使用量(L)</th><th class="num">距上次(天)</th><th>備註</th></tr></thead>
+        <thead><tr><th>日期</th><th>填充人</th><th class="num">使用量(L)</th><th class="num">距上次(天)</th></tr></thead>
         <tbody id="ur_recent"></tbody>
       </table>
     </div>
@@ -481,7 +479,7 @@
       <table class="km-table">
         <thead><tr>
           <th>日期</th><th>車號</th><th>車場</th><th>填充人</th>
-          <th class="num">使用量(L)</th><th class="num">金額</th><th>備註</th><th class="no-print">操作</th>
+          <th class="num">使用量(L)</th><th class="no-print">操作</th>
         </tr></thead>
         <tbody id="ls_body"></tbody>
       </table>
@@ -512,7 +510,7 @@
     <div class="muted" style="font-size:12.5px;margin-bottom:8px;">較上月變化超過 ±20% 會標色，方便看出異常。</div>
     <div style="overflow-x:auto;">
       <table class="km-table">
-        <thead><tr><th>月份</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">總金額</th><th>較上月</th></tr></thead>
+        <thead><tr><th>月份</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th>較上月</th></tr></thead>
         <tbody id="st_byMonth"></tbody>
       </table>
     </div>
@@ -627,8 +625,8 @@ function tidyErr(msg){
   if(s.indexOf('urea_logs') >= 0 && s.indexOf('does not exist') >= 0)
     return '雲端還沒有尿素資料表，請先執行 supabase_urea_1150805.sql。';
   if(s.indexOf('permission denied') >= 0 || s.indexOf('42501') >= 0)
-    return '權限不足，寫不進去。請確認 supabase_public_pages_grant_1150805.sql 有跑過。';
-  if(s.indexOf('numeric field overflow') >= 0) return '使用量或金額的位數太多了，請確認有沒有多打。';
+    return '權限不足（公開頁面沒有被授權讀寫這張表）。請確認 supabase_public_pages_grant_1150805.sql 有跑過。';
+  if(s.indexOf('numeric field overflow') >= 0) return '使用量的位數太多了，請確認有沒有多打。';
   return s;
 }
 
@@ -665,19 +663,41 @@ function allPlates(){
 // ---------- 載入 ----------
 async function loadAll(){
   STATE.logs = await sbSelect('urea_logs', 'select=*&order=log_date.desc,log_id.desc&limit=5000');
+  // 車籍讀不到不能讓整頁掛掉（司機還是要能登記），但也不可以像以前那樣默默吞掉，
+  // 不然車號下拉是空的，人在現場只會看到一片空白不知道發生什麼事。
+  STATE.vehErr = '';
   try{
     STATE.vehicles = await sbSelect('vehicles',
       'select=vehicle_id,plate_number,base_location&status=eq.%E5%9C%A8%E5%BD%B9&vehicle_category=eq.%E8%BB%8A%E8%BC%9B&order=plate_number.asc&limit=2000');
-  }catch(e){ STATE.vehicles = []; }
+    if(!Array.isArray(STATE.vehicles)) STATE.vehicles = [];
+  }catch(e){
+    STATE.vehicles = [];
+    STATE.vehErr = tidyErr(e && e.message ? e.message : String(e));
+  }
+}
+
+// 車號下拉是空的時候，把原因寫在畫面上（而且要讓人還是能手打車號）
+function renderVehMsg(){
+  const box = $('ur_vehmsg'); if(!box) return;
+  const sel = $('ur_plate');
+  const n = sel ? sel.options.length - 1 : 0;   // 扣掉「請選車號」
+  if(n > 0){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = STATE.vehErr
+    ? '<strong>車號清單讀不回來：</strong>' + esc(STATE.vehErr)
+    : '<strong>車號清單目前是空的。</strong>'
+      + '<br>雲端的在役車輛沒有讀回來（多半是公開頁面還沒被授權讀車籍）。'
+      + '請運輸行政人員確認 Supabase 已執行 supabase_public_pages_grant_1150805.sql。';
 }
 
 // ---------- 下拉 ----------
 function fillPickers(){
   const keepPlate = $('ur_plate').value;
+  // 使用者 115/08/05 指示：下拉只要車號，不要再掛車場（車場那格自己會帶出來）
   $('ur_plate').innerHTML = '<option value="">請選車號</option>'
-    + STATE.vehicles.map(v => '<option value="' + esc(v.plate_number) + '">' + esc(v.plate_number)
-        + (v.base_location ? '（' + esc(v.base_location) + '）' : '') + '</option>').join('');
+    + allPlates().map(p => '<option value="' + esc(p) + '">' + esc(p) + '</option>').join('');
   if(keepPlate) $('ur_plate').value = keepPlate;
+  renderVehMsg();
 
   const keepReg = $('ur_region').value;
   $('ur_region').innerHTML = allRegions().map(r => '<option value="' + esc(r) + '">' + esc(r) + '</option>').join('');
@@ -717,7 +737,6 @@ function renderStats(){
   const todayRows = STATE.logs.filter(u => String(u.log_date||'').slice(0,10) === t);
   const monthRows = STATE.logs.filter(u => String(u.log_date||'').slice(0,7) === month);
   const monthQty  = monthRows.reduce((s,u) => s + num(u.quantity), 0);
-  const monthCost = monthRows.reduce((s,u) => s + num(u.cost), 0);
   const plates    = {};
   monthRows.forEach(u => { const p = u.plate_number || '（未填車號）'; plates[p] = (plates[p]||0) + num(u.quantity); });
   const top = Object.keys(plates).sort((a,b) => plates[b] - plates[a])[0];
@@ -725,7 +744,8 @@ function renderStats(){
   $('urStats').innerHTML = [
     ['今天登記', todayRows.length + ' 筆', todayRows.length ? fmt3(todayRows.reduce((s,u)=>s+num(u.quantity),0)) + ' 公升' : '還沒有人登記'],
     ['本月用量', fmt3(monthQty) + ' L', toROCMonth(month) + '　共 ' + monthRows.length + ' 筆'],
-    ['本月金額', monthCost ? '$' + fmt(monthCost) : '—', monthCost ? '有填金額的才算得到' : '這個月還沒填過金額'],
+    ['本月台數', Object.keys(plates).length ? Object.keys(plates).length + ' 台' : '—',
+      Object.keys(plates).length ? '這個月有登記過的車' : '這個月還沒有人登記'],
     ['本月用最多', top || '—', top ? fmt3(plates[top]) + ' 公升' : '本月尚無資料']
   ].map(c => '<div class="stat-card"><div class="k">' + esc(c[0]) + '</div><div class="v">' + esc(c[1])
       + '</div><div class="s">' + esc(c[2]) + '</div></div>').join('');
@@ -737,7 +757,7 @@ function renderRecent(){
   const note = $('ur_recent_note');
   if(!plate){
     note.textContent = '選了車號就會列出這台車以前加了幾次';
-    $('ur_recent').innerHTML = '<tr><td colspan="5" class="empty">請先選車號</td></tr>';
+    $('ur_recent').innerHTML = '<tr><td colspan="4" class="empty">請先選車號</td></tr>';
     return;
   }
   const rows = STATE.logs.filter(u => u.plate_number === plate)
@@ -748,9 +768,8 @@ function renderRecent(){
     const gap = prev ? daysBetween(prev.log_date, u.log_date) : null;
     return '<tr><td>' + esc(toROC(u.log_date)) + '</td><td>' + esc(u.filled_by || '') + '</td>'
       + '<td class="num">' + fmt3(u.quantity) + '</td>'
-      + '<td class="num">' + (gap == null ? '—' : gap) + '</td>'
-      + '<td class="muted">' + esc(u.notes || '') + '</td></tr>';
-  }).join('') || '<tr><td colspan="5" class="empty">這台車還沒有登記過</td></tr>';
+      + '<td class="num">' + (gap == null ? '—' : gap) + '</td></tr>';
+  }).join('') || '<tr><td colspan="4" class="empty">這台車還沒有登記過</td></tr>';
 }
 
 function refreshHint(){
@@ -794,9 +813,9 @@ async function saveLog(){
     vehicle_id: v ? v.vehicle_id : null,
     plate_number: plate,
     filled_by: by,
-    quantity: Math.round(qty * 1000) / 1000,   // 只留三位小數
-    cost: $('ur_cost').value.trim() === '' ? null : num($('ur_cost').value),
-    notes: ($('ur_notes').value || '').trim() || null
+    quantity: Math.round(qty * 1000) / 1000    // 只留三位小數
+    // 金額、備註是會計那邊的欄位，司機頁面不填（115/08/05 使用者指示），
+    // 要補的話在運輸行政系統的「車用尿素登錄」裡改。
   };
 
   msg.style.color = 'var(--text-3)'; msg.textContent = '送出中…';
@@ -806,7 +825,7 @@ async function saveLog(){
     msg.style.color = '#2f6f4e';
     msg.textContent = '已登記：' + plate + '　' + toROC(date) + '　' + fmt3(row.quantity) + ' 公升（' + by + '）';
     // 留著日期、填充人、車號，同一個人連加好幾台時比較快
-    ['ur_qty','ur_cost','ur_notes'].forEach(id => $(id).value = '');
+    ['ur_qty'].forEach(id => $(id).value = '');
     refreshHint();
     renderAll();
   }catch(e){
@@ -834,9 +853,7 @@ function listRows(){
 function renderList(){
   const rows = listRows();
   const qty  = rows.reduce((s,u) => s + num(u.quantity), 0);
-  const cost = rows.reduce((s,u) => s + num(u.cost), 0);
-  $('ls_sum').textContent = '共 ' + rows.length + ' 筆，用量合計 ' + fmt3(qty) + ' 公升'
-    + (cost ? '，金額合計 $' + fmt(cost) : '') + '。';
+  $('ls_sum').textContent = '共 ' + rows.length + ' 筆，用量合計 ' + fmt3(qty) + ' 公升。';
   const t = todayISO();
   $('ls_body').innerHTML = rows.map(u => {
     const canDel = String(u.log_date||'').slice(0,10) === t;
@@ -846,13 +863,11 @@ function renderList(){
       + '<td>' + esc(u.region || '') + '</td>'
       + '<td>' + esc(u.filled_by || '') + '</td>'
       + '<td class="num">' + fmt3(u.quantity) + '</td>'
-      + '<td class="num">' + (u.cost ? '$' + fmt(u.cost) : '') + '</td>'
-      + '<td class="muted">' + esc(u.notes || '') + '</td>'
       + '<td class="no-print">' + (canDel
           ? '<button class="btn ghost tiny ls-del" data-id="' + esc(u.log_id) + '">刪除</button>'
           : '<span class="muted" style="font-size:11.5px;">—</span>') + '</td>'
       + '</tr>';
-  }).join('') || '<tr><td colspan="8" class="empty">這個範圍沒有資料</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">這個範圍沒有資料</td></tr>';
 }
 
 async function delLog(id){
@@ -902,17 +917,16 @@ function renderStat(){
   const byMonth = {};
   rows.forEach(u => {
     const m = String(u.log_date||'').slice(0,7); if(!m) return;
-    byMonth[m] = byMonth[m] || { n:0, qty:0, cost:0 };
-    byMonth[m].n++; byMonth[m].qty += num(u.quantity); byMonth[m].cost += num(u.cost);
+    byMonth[m] = byMonth[m] || { n:0, qty:0 };
+    byMonth[m].n++; byMonth[m].qty += num(u.quantity);
   });
   const months = Object.keys(byMonth).sort().reverse();
   $('st_byMonth').innerHTML = months.map((m, i) => {
     const c = byMonth[m], prev = months[i+1] ? byMonth[months[i+1]] : null;
     return '<tr><td>' + esc(toROCMonth(m)) + '</td><td class="num">' + c.n + '</td>'
       + '<td class="num">' + fmt3(c.qty) + '</td>'
-      + '<td class="num">' + (c.cost ? '$' + fmt(c.cost) : '') + '</td>'
       + '<td>' + changePill(c.qty, prev ? prev.qty : null) + '</td></tr>';
-  }).join('') || '<tr><td colspan="5" class="empty">沒有資料</td></tr>';
+  }).join('') || '<tr><td colspan="4" class="empty">沒有資料</td></tr>';
 
   const byPlate = {};
   rows.forEach(u => {
@@ -999,7 +1013,7 @@ function wire(){
   $('ur_qty').oninput = refreshHint;
   $('ur_save').onclick = saveLog;
   $('ur_clear').onclick = () => {
-    ['ur_by','ur_qty','ur_cost','ur_notes'].forEach(id => $(id).value = '');
+    ['ur_by','ur_qty'].forEach(id => $(id).value = '');
     $('ur_plate').value = ''; $('ur_date').value = todayISO();
     $('ur_msg').textContent = '';
     refreshHint(); renderRecent();
@@ -1020,13 +1034,13 @@ function wire(){
   };
   $('ls_csv').onclick = () => {
     const rows = listRows().map(u => [toROC(u.log_date), u.plate_number || '', u.region || '', u.filled_by || '',
-      num(u.quantity).toFixed(3), u.cost == null ? '' : num(u.cost), u.notes || '']);
+      num(u.quantity).toFixed(3)]);
     download('尿素使用登記_' + todayISO().replace(/-/g, '') + '.csv',
-      csvLines(['日期','車號','車場','填充人','使用量(公升)','金額','備註'], rows));
+      csvLines(['日期','車號','車場','填充人','使用量(公升)'], rows));
   };
   $('ls_print').onclick = () => printBlock('尿素使用登記',
     '<h3>車用尿素使用登記</h3><p class="muted">' + esc($('ls_sum').textContent) + '</p><table><thead><tr>'
-    + '<th>日期</th><th>車號</th><th>車場</th><th>填充人</th><th class="num">使用量(L)</th><th class="num">金額</th><th>備註</th>'
+    + '<th>日期</th><th>車號</th><th>車場</th><th>填充人</th><th class="num">使用量(L)</th>'
     + '</tr></thead><tbody>' + $('ls_body').innerHTML + '</tbody></table>', $('ls_msg'));
 
   ['st_year','st_region'].forEach(id => $(id).onchange = renderStat);
@@ -1041,7 +1055,7 @@ function wire(){
   };
   $('st_print').onclick = () => printBlock('尿素用量統計',
     '<h3>車用尿素用量統計</h3>'
-    + '<h4>依月份</h4><table><thead><tr><th>月份</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">總金額</th><th>較上月</th></tr></thead><tbody>'
+    + '<h4>依月份</h4><table><thead><tr><th>月份</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th>較上月</th></tr></thead><tbody>'
     + $('st_byMonth').innerHTML + '</tbody></table>'
     + '<h4>依車號</h4><table><thead><tr><th>車號</th><th>車場</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">平均每次(L)</th><th>最後一次</th></tr></thead><tbody>'
     + $('st_byPlate').innerHTML + '</tbody></table>', $('st_msg'));
