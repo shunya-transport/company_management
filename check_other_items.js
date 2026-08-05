@@ -54,7 +54,22 @@ async function main() {
   const rowAttr = (id) => (id in leasedLesseeByVehicle) ? ' style="background:#fff3cd;"' : '';
 
   // ---------- 1. 保險到期（車輛與板架分開，車輛在上） ----------
-  const insItems = insurance.filter(i => i.expiry_date).map(attachVehicle);
+  // 續保之後舊的那一列還留在資料表裡，如果照單全收，去年那張保單會永遠
+  // 出現在信裡（115/08/05 使用者回報：「我從HTML輸入了新的保險，但舊的提醒依然還在」）。
+  // 同一台車、同一個險種只看最新的那一張；舊的留在資料庫裡查沿革，但不寄信。
+  const insLatest = {};
+  insurance.forEach(i => {
+    const d = String(i.expiry_date || '').slice(0, 10);
+    if (!d) return;
+    const k = `${i.vehicle_id}|${String(i.insurance_type || '').trim()}`;
+    if (!insLatest[k] || d > insLatest[k]) insLatest[k] = d;
+  });
+  const insSuperseded = (i) => {
+    const d = String(i.expiry_date || '').slice(0, 10);
+    const top = insLatest[`${i.vehicle_id}|${String(i.insurance_type || '').trim()}`];
+    return !!(top && d && top > d);
+  };
+  const insItems = insurance.filter(i => i.expiry_date && !insSuperseded(i)).map(attachVehicle);
   const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', i => `<tr>
     <td><b>${i.plate}</b></td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
   </tr>`, ['車號', '險種', '保險公司', '到期日', '剩餘天數']);
