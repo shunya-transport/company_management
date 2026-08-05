@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>順亞運通 油壓板車預約登記</title>
+<title>順亞運通 電動板車預約登記</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
   :root{
@@ -280,8 +280,8 @@
   <div class="main">
     <header class="banner">
       <p class="hero-kicker">Shun Ya Transportation</p>
-      <h1>油壓板車 預約登記</h1>
-      <div class="sub">四台板車 ・ 同一時段只能一個人用 ・ 預約後行政與車隊的總覽都看得到</div>
+      <h1>電動板車 預約登記</h1>
+      <div class="sub">電動板車 01–04 ・ 同一時段只能一個人用 ・ 預約後行政與車隊的總覽都看得到</div>
     </header>
     <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
     <div class="content">
@@ -319,8 +319,8 @@
       <label>聯絡電話
         <input type="text" id="tb_phone" placeholder="選了司機會自動帶">
       </label>
-      <label>車頭車號
-        <input type="text" id="tb_tractor" list="tb_plateList" placeholder="用哪一台車頭拖">
+      <label>搭配車輛（選填）
+        <input type="text" id="tb_tractor" list="tb_plateList" placeholder="有配合哪一台車再填">
         <datalist id="tb_plateList"></datalist>
       </label>
       <label>用途
@@ -398,7 +398,7 @@
       <table class="km-table">
         <thead><tr>
           <th>板車</th><th>日期</th><th>時間</th><th>預約人</th><th>電話</th>
-          <th>車頭</th><th>用途／目的地</th><th>狀態</th><th class="no-print">操作</th>
+          <th>搭配車輛</th><th>用途／目的地</th><th>狀態</th><th class="no-print">操作</th>
         </tr></thead>
         <tbody id="ls_body"></tbody>
       </table>
@@ -426,7 +426,7 @@
       <table class="km-table">
         <thead><tr>
           <th>板車</th><th>日期</th><th>時間</th><th>時數</th><th>預約人</th>
-          <th>車頭</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>
+          <th>搭配車輛</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>
         </tr></thead>
         <tbody id="hs_body"></tbody>
       </table>
@@ -451,9 +451,9 @@
 <!-- ============ 板車設定 ============ -->
 <div id="setup" class="panel">
   <div class="card" style="background:#fbf4e6;border-left:4px solid #c08a2e;font-size:13px;line-height:1.8;">
-    這四台是照資料庫裡「板架、而且不是貨櫃架、還在役」這個條件抓出來的，資料庫沒有任何欄位寫著「油壓」，
-    所以<strong>是推出來的，不是查到的</strong>。如果實際上不是這四台，直接在下面改名稱／車號，或把不對的那台
-    <strong>停用</strong>（不要刪除，刪掉舊預約就對不回來了）。
+電動板車是<strong>獨立的設備</strong>，不掛在車籍資料裡，所以這裡只用編號 01～04 認它們。
+    要改叫法、補財產編號或註明平常放哪個車場，都在下面這張表改。多買一台就按「新增一台」，
+    不用了請把它<strong>停用</strong>（<strong>不要刪除</strong>，刪掉舊預約就對不回來了，系統也會擋）。
   </div>
   <div class="card">
     <div class="toolbar">
@@ -463,7 +463,7 @@
     <div style="overflow-x:auto;">
       <table class="km-table">
         <thead><tr>
-          <th>順序</th><th>名稱</th><th>車號</th><th>車場</th><th>顏色</th><th>啟用</th><th>備註</th><th class="no-print">操作</th>
+          <th>順序</th><th>名稱</th><th>編號</th><th>放置車場</th><th>顏色</th><th>啟用</th><th>備註</th><th class="no-print">操作</th>
         </tr></thead>
         <tbody id="st_body"></tbody>
       </table>
@@ -549,7 +549,7 @@ async function authFetch(url, options={}){
   return res;
 }
 
-// ===================== 油壓板車 預約登記 =====================
+// ===================== 電動板車 預約登記 =====================
 // 資料表：booking_resources（可以被預約的板車）、trailer_bookings（預約紀錄）
 // 兩張表由 supabase_trailer_booking_1150804.sql 建立。沒跑那支 SQL，這一頁會顯示紅色警告。
 //
@@ -614,7 +614,9 @@ function tidyErr(msg){
 
 // ---------- 取用 ----------
 const resById  = id => STATE.resources.find(r => r.resource_id === id) || null;
-const resName  = id => { const r = resById(id); return r ? r.resource_name : ('板車 #' + id); };
+// 統計卡位子小，只留編號：「電動板車01」→「01」
+const shortName = n => String(n||'').replace(/^電動板車\s*/, '').replace(/^板車\s*/, '') || String(n||'');
+const resName  = id => { const r = resById(id); return r ? r.resource_name : ('電動板車 #' + id); };
 const resColor = id => { const r = resById(id); return (r && r.color) || '#8b929b'; };
 function activeRes(){ return STATE.resources.filter(r => r.is_active).sort((a,b) => (a.sort_no||0) - (b.sort_no||0)); }
 function liveBookings(){ return STATE.bookings.filter(b => b.status !== '已取消'); }
@@ -635,7 +637,7 @@ async function loadAll(){
   STATE.resources = await sbSelect('booking_resources', 'select=*&order=sort_no.asc,resource_id.asc');
   STATE.bookings  = await sbSelect('trailer_bookings',
     'select=*&order=booking_date.desc,start_time.desc&limit=5000');
-  // 司機名單與車頭車號拿不到也不影響預約，改成自己打字
+  // 司機名單與車號拿不到也不影響預約，改成自己打字
   try{
     STATE.employees = await sbSelect('employees',
       'select=employee_id,name,phone,region,fleet_team&status=eq.%E5%9C%A8%E8%81%B7&employee_type=eq.%E7%9B%B4%E6%8E%A5&order=name.asc&limit=2000');
@@ -682,8 +684,8 @@ function renderStats(){
     + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
   $('tbStats').innerHTML =
       card(activeRes().length, '可預約板車', '停用的不算')
-    + card(using.length, '現在使用中', using.length ? esc(using.map(b => resName(b.resource_id).replace('板車 ', '')).join('、')) : '目前都空著')
-    + card(free.length, '現在空著的', free.length ? esc(free.map(r => r.resource_name.replace('板車 ', '')).join('、')) : '四台都在用')
+    + card(using.length, '現在使用中', using.length ? esc(using.map(b => shortName(resName(b.resource_id))).join('、')) : '目前都空著')
+    + card(free.length, '現在空著的', free.length ? esc(free.map(r => shortName(r.resource_name)).join('、')) : '四台都在用')
     + card(todayB.length, '今天的預約', '本週共 ' + wk.length + ' 筆');
 }
 
@@ -935,7 +937,7 @@ async function saveResource(id){
   }catch(err){ msg.textContent = '儲存失敗：' + tidyErr(err.message); }
 }
 async function addResource(){
-  const name = prompt('新板車的名稱（例如「板車 F8-85」）：', '');
+  const name = prompt('新板車的名稱（例如「電動板車05」）：', '');
   if(!name || !name.trim()) return;
   const msg = $('st_msg'); msg.style.color = '#B3261E';
   try{
@@ -943,7 +945,7 @@ async function addResource(){
       resource_name: name.trim(), color: '#5b6672',
       sort_no: STATE.resources.reduce((m, r) => Math.max(m, r.sort_no || 0), 0) + 1, is_active: true });
     if(saved) STATE.resources.push(saved);
-    msg.style.color = '#2f6f4e'; msg.textContent = '已新增，請補車號與車場後按儲存。';
+    msg.style.color = '#2f6f4e'; msg.textContent = '已新增，請補編號與放置車場後按儲存。';
     renderAll();
   }catch(err){ msg.textContent = '新增失敗：' + tidyErr(err.message); }
 }
@@ -1018,8 +1020,8 @@ function wire(){
   $('tb_wkNext').onclick  = () => { WEEK_START = addDays(WEEK_START,  7); renderStats(); renderWeek(); };
   $('tb_wkToday').onclick = () => { WEEK_START = mondayOf(todayISO()); renderStats(); renderWeek(); };
   $('tb_wkPrint').onclick = () => {
-    printBlock('油壓板車使用時間表 ' + toROC(WEEK_START),
-      '<h3>油壓板車使用時間表　' + esc(toROC(WEEK_START)) + ' 起這一週</h3><table>'
+    printBlock('電動板車使用時間表 ' + toROC(WEEK_START),
+      '<h3>電動板車使用時間表　' + esc(toROC(WEEK_START)) + ' 起這一週</h3><table>'
       + '<thead>' + $('tb_weekHead').outerHTML + '</thead><tbody>' + $('tb_weekBody').innerHTML + '</tbody></table>', null);
   };
 
@@ -1044,11 +1046,11 @@ function wire(){
       fmt1(hoursOf(b)), b.driver_name || '', b.driver_phone || '', b.tractor_plate || '', b.purpose || '', b.destination || '',
       b.status, b.cancel_reason || '', b.notes || '']);
     download('板車預約紀錄_' + todayISO().replace(/-/g, '') + '.csv',
-      csvLines(['板車','使用日期','開始','結束日期','結束','時數','預約人','電話','車頭','用途','目的地','狀態','取消原因','備註'], rows));
+      csvLines(['板車','使用日期','開始','結束日期','結束','時數','預約人','電話','搭配車輛','用途','目的地','狀態','取消原因','備註'], rows));
   };
   $('hs_print').onclick = () => printBlock('板車預約紀錄',
-    '<h3>油壓板車預約紀錄</h3><p class="muted">' + esc($('hs_sum').textContent) + '</p><table><thead><tr>'
-    + '<th>板車</th><th>日期</th><th>時間</th><th class="num">時數</th><th>預約人</th><th>車頭</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>'
+    '<h3>電動板車預約紀錄</h3><p class="muted">' + esc($('hs_sum').textContent) + '</p><table><thead><tr>'
+    + '<th>板車</th><th>日期</th><th>時間</th><th class="num">時數</th><th>預約人</th><th>搭配車輛</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>'
     + '</tr></thead><tbody>' + $('hs_body').innerHTML + '</tbody></table>', null);
 
   $('st_add').onclick = addResource;

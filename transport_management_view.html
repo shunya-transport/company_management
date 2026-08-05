@@ -281,7 +281,7 @@
   <div id="overview" class="panel active">
     <div class="stat-row" id="statRow"></div>
     <div class="card">
-      <h2>油壓板車預約<span class="count-badge" id="overview_booking_count"></span>
+      <h2>電動板車預約<span class="count-badge" id="overview_booking_count"></span>
         <button class="btn ghost" style="float:right;padding:4px 12px;font-size:12px;"
                 onclick="BOOKING_STATE='idle';renderBookingCard();">重新整理</button></h2>
       <div id="overviewBookings"><div class="empty">載入中…</div></div>
@@ -2850,8 +2850,8 @@ async function loadState(){
   await enrichDenormalizedFields();
 }
 
-// ===== 油壓板車預約（唯讀）=====
-// 資料是「油壓板車預約登記」那一頁（trailer_booking.html）寫進去的，這裡只讀不寫。
+// ===== 電動板車預約（唯讀）=====
+// 資料是「電動板車預約登記」那一頁（trailer_booking.html）寫進去的，這裡只讀不寫。
 // 這一段刻意不走 saveState：saveState 會把陣列裡沒有的 id 刪掉，預約資料經不起那種操作。
 // 還沒跑 supabase_trailer_booking_1150804.sql 時只會顯示一行提示，總覽其他卡片照常運作。
 var BOOKING_CACHE = null;
@@ -2868,7 +2868,7 @@ function bkDay(iso){
 }
 function bkResName(id){
   const r = BOOKING_RES.find(x => x.resource_id === id);
-  return r ? r.resource_name : ('板車 #'+id);
+  return r ? r.resource_name : ('電動板車 #'+id);
 }
 async function loadTrailerBookings(){
   if(BOOKING_STATE === 'loading') return;
@@ -2897,21 +2897,21 @@ function renderBookingCard(){
   if(BOOKING_STATE === 'missing'){
     if(badge) badge.textContent = '';
     box.innerHTML = '<div class="empty">雲端還沒有板車預約資料表。請先在 Supabase 執行 supabase_trailer_booking_1150804.sql，'
-      + '之後司機在「油壓板車預約登記」那一頁登記的內容就會出現在這裡。</div>';
+      + '之後司機在「電動板車預約登記」那一頁登記的內容就會出現在這裡。</div>';
     return;
   }
   if(BOOKING_STATE === 'error'){
     if(badge) badge.textContent = '';
-    box.innerHTML = '<div class="empty">板車預約讀取失敗：'+esc(BOOKING_ERR)+'</div>';
+    box.innerHTML = '<div class="empty">電動板車預約讀取失敗：'+esc(BOOKING_ERR)+'</div>';
     return;
   }
   const rows = BOOKING_CACHE || [];
   if(badge) badge.textContent = rows.length + ' 筆';
-  if(!rows.length){ box.innerHTML = '<div class="empty">今天以後還沒有人預約板車</div>'; return; }
+  if(!rows.length){ box.innerHTML = '<div class="empty">今天以後還沒有人預約電動板車</div>'; return; }
   const today = todayISO();
   const now = today + ' ' + new Date().toTimeString().slice(0,5);
   box.innerHTML = '<div class="table-scroll" style="max-height:320px;"><table><thead><tr>'
-    + '<th>板車</th><th>使用日期</th><th>幾點到幾點</th><th>預約人</th><th>電話</th><th>車頭</th><th>用途／目的地</th><th>狀態</th>'
+    + '<th>板車</th><th>使用日期</th><th>幾點到幾點</th><th>預約人</th><th>電話</th><th>搭配車輛</th><th>用途／目的地</th><th>狀態</th>'
     + '</tr></thead><tbody>'
     + rows.map(function(b){
         const s = String(b.booking_date).slice(0,10)+' '+bkHM(b.start_time);
