@@ -1475,11 +1475,16 @@
           </select>
         </label>
         <label>日期<input id="ur_date" type="date"></label>
-        <label>數量(公升)<input id="ur_qty" type="number" step="0.1"></label>
+        <label>車號<select id="ur_plate"></select></label>
+        <label>誰填充<input id="ur_by" list="ur_byList" placeholder="填充人姓名" autocomplete="off"><datalist id="ur_byList"></datalist></label>
+        <label>使用量(公升)<input id="ur_qty" type="number" step="0.001" placeholder="可填到小數第三位"></label>
         <label>金額<input id="ur_cost" type="number" placeholder="選填"></label>
         <label>備註<input id="ur_notes" placeholder="選填"></label>
       </div>
       <button class="btn" id="ur_add">新增登錄</button>
+      <div class="muted" style="margin-top:8px;font-size:12px;line-height:1.7;">
+        司機也可以自己用免登入的「尿素使用登記」單頁（urea_log.html）登記，登進來的資料就在下面這張清單裡，不用再抄一次。
+      </div>
     </div>
 
     <div class="card">
@@ -1491,10 +1496,11 @@
           <option value="新竹">新竹</option>
           <option value="台南">台南</option>
         </select>
+        <select id="ur_plate_filter"><option value="all">全部車號</option></select>
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車場</th><th>日期</th><th>數量(公升)</th><th>金額</th><th>備註</th><th></th></tr></thead>
+          <thead><tr><th>車場</th><th>日期</th><th>車號</th><th>填充人</th><th>使用量(公升)</th><th>金額</th><th>備註</th><th></th></tr></thead>
           <tbody id="ureaTableBody"></tbody>
         </table>
       </div>
@@ -1514,7 +1520,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>月份</th><th>登錄次數</th><th>總數量(公升)</th><th>總金額</th><th>數量較上月</th></tr></thead>
+          <thead><tr><th>月份</th><th>登錄次數</th><th>總使用量(公升)</th><th>總金額</th><th>數量較上月</th></tr></thead>
           <tbody id="ureaStatsBody"></tbody>
         </table>
       </div>
@@ -6033,20 +6039,60 @@ function renderTlStats(){
   }
 }
 
+// 使用量一律顯示三位小數，跟資料庫的 NUMERIC(12,3) 對齊
+function ureaQty(v){
+  if(v === null || v === undefined || v === '') return '';
+  return Number(v).toLocaleString('en-US', {minimumFractionDigits:3, maximumFractionDigits:3});
+}
+
+// 車號下拉：在役的動力車，加上舊資料裡出現過但車籍已經不在的車號
+function ureaPlateList(){
+  const list = STATE.vehicles.filter(v => v.vehicle_category !== '板架').map(v => v.plate).filter(Boolean);
+  STATE.ureaLogs.forEach(u => { const p = (u.plate_number||'').trim(); if(p && !list.includes(p)) list.push(p); });
+  return [...new Set(list)].sort();
+}
+
+function renderUreaSelects(){
+  const plates = ureaPlateList();
+  const sel = document.getElementById('ur_plate');
+  if(sel){
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">請選車號</option>` + plates.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    if(plates.includes(keep)) sel.value = keep;
+  }
+  const f = document.getElementById('ur_plate_filter');
+  if(f){
+    const keep = f.value;
+    f.innerHTML = `<option value="all">全部車號</option>` + plates.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    f.value = plates.includes(keep) ? keep : 'all';
+  }
+  const dl = document.getElementById('ur_byList');
+  if(dl){
+    const who = [...new Set(STATE.ureaLogs.map(u => (u.filled_by||'').trim()).filter(Boolean))].sort();
+    dl.innerHTML = who.map(n => `<option value="${esc(n)}">`).join('');
+  }
+}
+
 function renderUreaTable(){
+  renderUreaSelects();
   const filter = document.getElementById('ur_region_filter').value;
+  const pf = document.getElementById('ur_plate_filter');
+  const plateFilter = pf ? pf.value : 'all';
   let rows = STATE.ureaLogs.slice().sort((a,b)=>(b.log_date||'').localeCompare(a.log_date||''));
   if(filter!=='all') rows = rows.filter(u => u.region === filter);
+  if(plateFilter!=='all') rows = rows.filter(u => (u.plate_number||'') === plateFilter);
   document.getElementById('ur_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('ureaTableBody').innerHTML = rows.map(u => `
     <tr>
       <td>${esc(u.region)}</td>
       <td>${esc(u.log_date||'')}</td>
-      <td>${u.quantity??''}</td>
+      <td>${esc(u.plate_number||'')}</td>
+      <td>${esc(u.filled_by||'')}</td>
+      <td>${ureaQty(u.quantity)}</td>
       <td>${u.cost?'$'+u.cost:''}</td>
       <td class="muted">${esc(u.notes||'')}</td>
       <td><button class="del-btn" data-del-urea="${u.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="6" class="empty">尚無登錄紀錄</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">尚無登錄紀錄</td></tr>`;
 }
 
 function renderUreaStats(){
@@ -6057,8 +6103,9 @@ function renderUreaStats(){
     const month = u.log_date.slice(0,7);
     byMonth[month] = byMonth[month] || {count:0, quantity:0, cost:0};
     byMonth[month].count += 1;
-    byMonth[month].quantity += u.quantity||0;
-    byMonth[month].cost += u.cost||0;
+    // 雲端 NUMERIC 欄位在 JSON 裡是字串（例 "20.125"），不轉數字會變成字串相接
+    byMonth[month].quantity += Number(u.quantity)||0;
+    byMonth[month].cost += Number(u.cost)||0;
   });
   const months = Object.keys(byMonth).sort().reverse();
   document.getElementById('ureaStatsBody').innerHTML = months.map((m,i) => {
@@ -6068,7 +6115,7 @@ function renderUreaStats(){
     return `<tr>
       <td>${esc(m)}</td>
       <td>${cur.count}</td>
-      <td>${cur.quantity.toFixed(1)}</td>
+      <td>${ureaQty(cur.quantity)}</td>
       <td>$${cur.cost.toFixed(0)}</td>
       <td>${changePill(cur.quantity, prev?prev.quantity:null)}</td>
     </tr>`;
@@ -7727,13 +7774,28 @@ document.getElementById('tl_search').addEventListener('input', renderTlTable);
 document.getElementById('ff_stats_plate').addEventListener('change', renderFfStats);
 document.getElementById('tl_stats_plate').addEventListener('change', renderTlStats);
 
+// 尿素現在有兩個地方會寫：這個儀表板，還有司機用的免登入單頁 urea_log.html。
+// saveState 存檔時會刪掉陣列裡沒有的 id，所以動手改之前一定要先把雲端最新的抓回來，
+// 否則會把司機剛剛登記、但這個畫面還沒載到的那幾筆洗掉。
+async function ureaRefresh(){
+  STATE.ureaLogs = await safeGet('urea_logs', STATE.ureaLogs, true);
+}
+
 document.getElementById('ur_add').addEventListener('click', async () => {
   const date = document.getElementById('ur_date').value;
-  const qty = parseFloat(document.getElementById('ur_qty').value);
-  if(!date || !qty){ alert('請填寫日期並填寫數量'); return; }
+  const qtyRaw = document.getElementById('ur_qty').value;
+  const qty = parseFloat(qtyRaw);
+  const plate = document.getElementById('ur_plate').value;
+  const by = document.getElementById('ur_by').value.trim();
+  if(!date || !qtyRaw || isNaN(qty)){ alert('請填寫日期並填寫使用量'); return; }
+  if(qty <= 0){ alert('使用量要大於 0'); return; }
+  await ureaRefresh();
   STATE.ureaLogs.push({
     id: nextId(STATE.ureaLogs), region: document.getElementById('ur_region').value,
-    log_date: date, quantity: qty,
+    log_date: date, quantity: Math.round(qty * 1000) / 1000,
+    vehicle_id: plate ? plateToVehicleId(plate) : null,
+    plate_number: plate || null,
+    filled_by: by || null,
     cost: document.getElementById('ur_cost').value ? parseFloat(document.getElementById('ur_cost').value) : null,
     notes: document.getElementById('ur_notes').value.trim()
   });
@@ -7742,9 +7804,12 @@ document.getElementById('ur_add').addEventListener('click', async () => {
   renderAll();
 });
 document.getElementById('ur_region_filter').addEventListener('change', renderUreaTable);
+const _urPlateFilter = document.getElementById('ur_plate_filter');
+if(_urPlateFilter) _urPlateFilter.addEventListener('change', renderUreaTable);
 document.getElementById('ureaTableBody').addEventListener('click', async (e) => {
   const id = e.target.getAttribute('data-del-urea');
   if(id){
+    await ureaRefresh();
     STATE.ureaLogs = STATE.ureaLogs.filter(u => String(u.id) !== id);
     await saveState('urea_logs', STATE.ureaLogs, true);
     renderAll();

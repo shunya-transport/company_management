@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>順亞運通 尿素使用登記</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy-950:#071525; --navy-900:#0d1b2c; --navy-850:#102238; --navy-800:#152a43; --navy-700:#203e61;
+    --gold-700:#9d6d2f; --gold-600:#b9843f; --gold-500:#c99a56; --gold-400:#d8b374; --gold-300:#ead3a4;
+    --ivory-50:#fffdf9; --ivory-100:#fbf8f3; --ivory-200:#f2ede5;
+    --accent:#9d6d2f; --accent-dark:#7d5624; --accent-bg:#f6ead6;
+    --navy:#0d1b2c; --navy-2:#152a43;
+    --red:#B3261E; --red-bg:#FBEAE8;
+    --amber:#9C6B00; --amber-bg:#FDF1DC;
+    --green:#3F7D44; --green-bg:#EAF3E7;
+    --gray:#6B5A48; --gray-bg:#F1E9DD;
+    --radius:14px; --radius-sm:11px;
+    --shadow-sm:0 1px 2px rgba(13,27,44,.07);
+    --shadow-md:0 12px 32px rgba(20,32,51,.09), 0 1px 2px rgba(13,27,44,.05);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:
+      radial-gradient(circle at 88% 8%, rgba(216,179,116,.14), transparent 20%),
+      radial-gradient(circle at 10% 75%, rgba(32,62,97,.07), transparent 24%),
+      linear-gradient(145deg, #fff 0%, #f8f5f1 54%, #eef1f5 100%);
+    color:var(--text); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{
+    max-width:1600px;margin:0 auto;min-height:100vh;display:grid;
+    grid-template-columns:190px minmax(0,1fr);
+    background:rgba(255,255,255,.32);box-shadow:0 0 80px rgba(9,24,41,.08);
+  }
+  .sidebar{
+    position:sticky;top:0;z-index:50;height:100vh;padding:26px 12px 20px;display:flex;flex-direction:column;gap:18px;
+    background:linear-gradient(180deg, rgba(255,255,255,.97), rgba(249,248,246,.96)), radial-gradient(circle at 20% 10%, rgba(216,179,116,.18), transparent 42%);
+    border-right:1px solid rgba(13,27,44,.08);overflow-y:auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 10px;}
+  .brand-mark{
+    font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;line-height:1;color:transparent;
+    background:linear-gradient(140deg,#8d5b21 3%,#f5e4bc 36%,#b2782f 67%,#f0d59d 100%);
+    -webkit-background-clip:text;background-clip:text;
+  }
+  .brand-copy{color:var(--gold-700);font-family:Montserrat,sans-serif;font-size:9px;font-weight:600;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 0 60px;}
+  header.banner{
+    background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 55%,var(--accent-dark) 100%);
+    color:#fff;padding:30px 28px 34px;position:relative;overflow:hidden;
+  }
+  header.banner::after{
+    content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.10),transparent 70%);
+  }
+  .hero-kicker{margin:0 0 8px;color:var(--gold-300);font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;position:relative;}
+  header.banner h1{font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;margin:0 0 8px;letter-spacing:.5px;position:relative;}
+  header.banner .sub{color:rgba(255,255,255,.72);font-size:13px;position:relative;max-width:640px;line-height:1.7;}
+  .content{padding:20px 26px 40px;position:relative;}
+  .content-pad{padding:0 24px;}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
+  .sub{color:var(--text-2);font-size:13px;}
+  nav{display:flex;flex-direction:column;gap:6px;}
+  nav button{
+    appearance:none;border:1px solid transparent;background:none;text-align:left;padding:10px 12px;font-size:12.5px;font-weight:600;
+    color:#3f4650;cursor:pointer;border-radius:13px;transition:background .2s,color .15s,transform .15s;
+  }
+  nav button:hover{background:rgba(255,255,255,.9);border-color:rgba(13,27,44,.08);transform:translateX(2px);}
+  nav button.active{
+    color:var(--gold-700);
+    background:linear-gradient(100deg, rgba(246,240,230,.98), rgba(236,205,155,.76));
+    border-color:rgba(201,154,86,.28);box-shadow:0 9px 22px rgba(157,109,47,.13);
+  }
+  .sidebar-motto{
+    margin-top:auto;padding:14px 12px;border:1px solid rgba(201,154,86,.48);border-radius:16px;color:#725426;text-align:center;
+    background:linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,244,223,.88));box-shadow:0 12px 30px rgba(201,154,86,.13);
+  }
+  .sidebar-motto strong{display:block;font-size:12px;letter-spacing:.04em;}
+  .sidebar-motto span{display:block;margin-top:6px;color:#a57632;font-family:Montserrat,sans-serif;font-size:8px;letter-spacing:.045em;text-transform:uppercase;}
+  .panel{display:none;} .panel.active{display:block;animation:fadein .18s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px;
+    box-shadow:var(--shadow-sm);
+  }
+  .stat-card .n{font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.5px;}
+  .stat-card .l{font-size:12px;color:var(--text-2);margin-top:6px;font-weight:500;}
+  .stat-card.red .n{color:var(--red);} .stat-card.amber .n{color:var(--amber);} .stat-card.green .n{color:var(--green);}
+  .card{
+    position:relative;background:linear-gradient(160deg, rgba(255,255,255,.98), rgba(252,252,252,.94));
+    border:1px solid rgba(255,255,255,.82);border-radius:20px;padding:22px 24px;
+    margin-bottom:16px;box-shadow:var(--shadow-md);overflow:hidden;
+  }
+  .card::after{
+    content:"";position:absolute;top:-60px;right:-70px;width:190px;height:190px;border:1px solid rgba(201,154,86,.30);
+    border-radius:50%;opacity:.10;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, rgba(13,27,44,.98) 0 10%, transparent 10.5% 18%, rgba(201,154,86,.88) 18.5% 28%, transparent 28.5%);
+  }
+  .card h2{font-size:15px;font-weight:700;margin:0 0 14px;color:var(--navy-900);position:relative;letter-spacing:.02em;}
+  .card h2 .count-badge{
+    display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--accent);
+    background:var(--accent-bg);padding:2px 8px;border-radius:99px;vertical-align:middle;
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;color:#263240;font-weight:600;padding:12px 14px;border-bottom:1px solid rgba(13,27,44,.08);
+    white-space:nowrap;font-size:11.5px;letter-spacing:.3px;background:linear-gradient(90deg,#fbfaf8,#f2ece4);
+  }
+  td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
+  tbody tr:hover td{background:#fffaf0;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .pill.red{background:var(--red-bg);color:var(--red);}
+  .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.green{background:var(--green-bg);color:var(--green);}
+  .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input{
+    font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
+    background:rgba(255,255,255,.88);color:var(--text);transition:border-color .15s,box-shadow .15s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  select:focus,input:focus{outline:none;border-color:var(--gold-500);background:#fff;box-shadow:0 0 0 4px rgba(201,154,86,.15);}
+  button.btn{
+    appearance:none;border:none;color:#fff;padding:10px 20px;border-radius:13px;
+    font-size:13px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .2s,filter .15s;
+    background:linear-gradient(105deg,var(--navy-900) 0%,var(--navy-800) 56%,var(--gold-400) 100%);
+    box-shadow:0 10px 23px rgba(13,27,44,.18);
+  }
+  button.btn:hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 15px 29px rgba(13,27,44,.23);}
+  button.btn:active{transform:translateY(0);}
+  button.btn.ghost{background:none;color:var(--text-2);border:1px solid var(--border-strong);box-shadow:none;}
+  button.btn.ghost:hover{background:var(--gray-bg);color:var(--text);transform:none;filter:none;}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
+  .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
+  .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
+  .table-scroll table{margin:0;}
+  .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
+  /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
+  /* 公里數統計表／平均公里數（季）：欄位多，改用緊湊版面且不換行 */
+  table.km-table{font-size:12px;}
+  table.km-table th{padding:8px 8px;font-size:11.5px;white-space:nowrap;}
+  table.km-table td{padding:7px 8px;white-space:nowrap;vertical-align:middle;}
+  table.km-table td.km-num,table.km-table th.km-num{text-align:right;font-variant-numeric:tabular-nums;}
+  table.km-table td.km-total{font-weight:700;}
+  table.km-table tbody tr:hover{background:rgba(13,27,44,.03);}
+  table.mh-table{table-layout:fixed;min-width:940px;font-size:14px;}
+  table.mh-table th{font-size:12.5px;padding:12px 10px;}
+  table.mh-table td{padding:11px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  table.mh-table td.mh-desc,table.mh-table td.mh-parts{white-space:normal;overflow:visible;font-size:11.5px;line-height:1.5;word-break:break-word;color:#5b6672;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .lessee-bar{display:flex;align-items:center;gap:10px;padding:7px 0;}
+  .lessee-bar .name{width:70px;font-size:13px;flex-shrink:0;font-weight:500;}
+  .lessee-bar .track{flex:1;height:8px;background:var(--gray-bg);border-radius:99px;overflow:hidden;}
+  .lessee-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:99px;}
+  .lessee-bar .count{width:90px;text-align:right;font-size:12px;color:var(--text-2);flex-shrink:0;}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .del-btn:hover{background:var(--red-bg);}
+  .move-btn{background:none;border:none;color:var(--amber);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .move-btn:hover{background:var(--amber-bg);}
+  .name-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;font-weight:600;}
+  .name-link:hover{text-decoration:underline;}
+  .modal-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(43,33,26,.55);z-index:100;
+    align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;backdrop-filter:blur(2px);
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal-box{background:#fff;border-radius:16px;max-width:640px;width:100%;padding:26px;position:relative;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .modal-box h3{margin:0 0 16px;font-size:18px;font-weight:700;}
+  .modal-close{position:absolute;top:18px;right:18px;background:var(--gray-bg);border:none;font-size:15px;color:var(--text-2);cursor:pointer;width:28px;height:28px;border-radius:50%;}
+  .modal-close:hover{background:var(--border-strong);}
+  .detail-grid{display:grid;grid-template-columns:120px 1fr;gap:9px 12px;font-size:13px;margin-bottom:16px;}
+  .detail-grid dt{color:var(--text-2);font-weight:500;}
+  .detail-grid dd{margin:0;}
+  .detail-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .detail-section h4{font-size:12.5px;margin:0 0 10px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+  .badge-team{display:inline-block;padding:2px 9px;background:var(--gray-bg);border-radius:99px;font-size:12px;color:var(--text-2);}
+  .tire-body{max-width:260px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:20px 16px;position:relative;}
+  .tire-row{display:flex;justify-content:space-between;margin-bottom:14px;gap:16px;}
+  .tire-slot{
+    flex:1;background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:8px 6px;
+    text-align:center;font-size:11.5px;cursor:default;
+  }
+  .tire-slot.green{border-color:var(--green);background:var(--green-bg);}
+  .tire-slot.amber{border-color:var(--amber);background:var(--amber-bg);}
+  .tire-slot.red{border-color:var(--red);background:var(--red-bg);}
+  .tire-slot.gray{border-color:var(--border-strong);background:#fafafa;color:var(--text-3);}
+  .tire-slot .pos-label{font-weight:700;font-size:11px;color:var(--text-2);margin-bottom:3px;}
+  .tire-slot .tire-info{font-size:11px;line-height:1.5;}
+  @media (max-width:860px){
+    .app-shell{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;top:auto;}
+    nav{flex-direction:row;flex-wrap:wrap;}
+    nav button{flex:0 0 auto;}
+  }
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;padding:40px;}
+    .no-print{display:none !important;}
+  }
+</style>
+
+<style>
+  /* ===== 板車預約頁面補充樣式 ===== */
+  .stat-row{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+  table td.num, table th.num{text-align:right;font-family:Montserrat,'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .btn.tiny{padding:5px 11px;font-size:11.5px;border-radius:9px;}
+  .btn.ghost.tiny:hover{transform:none;}
+  .btn.primary{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;box-shadow:0 10px 22px rgba(125,86,36,.28);}
+  label.inline{flex-direction:row;align-items:center;gap:6px;display:inline-flex;font-size:12px;color:var(--text-2);font-weight:600;}
+  label.inline input,label.inline select{padding:7px 9px;}
+  .req{color:#B3261E;margin-left:2px;}
+  /* 統計卡片下面那行小字（哪幾台空著、哪幾台在用） */
+  .stat-card .s{font-size:11.5px;color:var(--text-3);margin-top:3px;line-height:1.5;}
+  .form-grid input,.form-grid select,.toolbar input,.toolbar select{
+    padding:9px 10px;border:1px solid var(--border-strong);border-radius:9px;font-size:13px;
+    font-family:inherit;background:#fff;color:var(--text);box-sizing:border-box;
+  }
+  .form-grid input:focus,.form-grid select:focus{outline:2px solid rgba(157,109,47,.35);outline-offset:1px;}
+  .card{overflow:clip;}
+  button.btn.ghost.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
+  /* 時間表的格子要能換行，不然一天多筆會被擠掉 */
+  #tb_weekTable td{white-space:normal;vertical-align:top;min-width:118px;}
+  #tb_weekTable th{text-align:center;}
+  #tb_weekTable td.today{background:rgba(157,109,47,.09);}
+  #tb_weekTable th.today{background:rgba(157,109,47,.16);border-radius:8px 8px 0 0;}
+  .slot{display:block;border-left:4px solid #999;background:#fff;border-radius:7px;padding:5px 7px;margin-bottom:5px;
+        font-size:11.5px;line-height:1.5;box-shadow:0 1px 3px rgba(13,27,44,.08);}
+  .slot b{display:block;font-family:Montserrat,sans-serif;font-size:11.5px;letter-spacing:.02em;}
+  .slot .who{font-weight:600;color:var(--text);}
+  .slot .meta{color:var(--text-3);}
+  .slot.cancelled{opacity:.45;text-decoration:line-through;}
+  .res-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  @media print{
+    .sidebar,.banner,.toolbar,.no-print{display:none !important;}
+    .app-shell{grid-template-columns:1fr;box-shadow:none;background:#fff;}
+    .card{break-inside:avoid;box-shadow:none;}
+  }
+</style>
+
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">順亞</div>
+      <div class="brand-copy">Shun Ya<br>Transportation</div>
+    </div>
+    <nav>
+      <button data-tab="log" class="active">尿素登記</button>
+      <button data-tab="list">使用清單</button>
+      <button data-tab="stat">用量統計</button>
+    </nav>
+    <div class="sidebar-motto">
+      <strong>安全 準時 用心</strong>
+      <span>Since Establishment</span>
+    </div>
+  </div>
+  <div class="main">
+    <header class="banner">
+      <p class="hero-kicker">Shun Ya Transportation</p>
+      <h1>車用尿素 使用登記</h1>
+      <div class="sub">免登入，加完就登記 ・ 使用量記到小數點第三位 ・ 登記完運輸行政系統的「車用尿素登錄」就看得到</div>
+    </header>
+    <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
+    <div class="content">
+
+<!-- ============ 尿素登記 ============ -->
+<div id="log" class="panel active">
+
+  <div class="stat-row" id="urStats"></div>
+
+  <div class="card">
+    <h3>我要登記</h3>
+    <div class="muted" style="margin:-6px 0 12px;font-size:12.5px;">
+      加多少就填多少，<strong>小數點後面可以填到三位</strong>（例：12.345 公升）。
+      車場會依車號自己帶出來，不對的話可以改。
+    </div>
+
+    <div class="form-grid">
+      <label>日期<span class="req">*</span>
+        <input type="date" id="ur_date">
+      </label>
+      <label>誰填充<span class="req">*</span>
+        <input type="text" id="ur_by" list="ur_byList" placeholder="打自己的姓名" autocomplete="off">
+        <datalist id="ur_byList"></datalist>
+      </label>
+      <label>車號<span class="req">*</span>
+        <select id="ur_plate"></select>
+      </label>
+      <label>使用量（公升）<span class="req">*</span>
+        <input type="number" id="ur_qty" step="0.001" min="0.001" placeholder="例：12.345" inputmode="decimal">
+      </label>
+      <label>車場
+        <select id="ur_region"></select>
+      </label>
+      <label>金額（選填）
+        <input type="number" id="ur_cost" step="1" min="0" placeholder="有單據再填">
+      </label>
+      <label>備註（選填）
+        <input type="text" id="ur_notes" placeholder="例：加到滿、桶裝">
+      </label>
+    </div>
+
+    <div id="ur_hint" class="muted" style="font-size:12.5px;margin:10px 0 12px;min-height:19px;"></div>
+
+    <div class="toolbar" style="margin-bottom:0;">
+      <button class="btn primary" id="ur_save">登記</button>
+      <button class="btn ghost tiny" id="ur_clear">清空</button>
+      <span id="ur_msg" style="font-size:13px;font-weight:600;"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h3 style="margin:0;flex:1;">這台車最近的紀錄</h3>
+      <span class="muted" id="ur_recent_note" style="font-size:12px;"></span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>日期</th><th>填充人</th><th class="num">使用量(L)</th><th class="num">距上次(天)</th><th>備註</th></tr></thead>
+        <tbody id="ur_recent"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 使用清單 ============ -->
+<div id="list" class="panel">
+  <div class="card">
+    <div class="toolbar">
+      <label class="inline">起<input type="date" id="ls_from"></label>
+      <label class="inline">迄<input type="date" id="ls_to"></label>
+      <label class="inline">車號
+        <select id="ls_plate"><option value="">全部</option></select>
+      </label>
+      <label class="inline">車場
+        <select id="ls_region"><option value="">全部</option></select>
+      </label>
+      <label class="inline">填充人<input type="text" id="ls_who" placeholder="姓名關鍵字" style="width:130px;"></label>
+      <button class="btn ghost tiny" id="ls_reload">重新載入</button>
+      <button class="btn ghost tiny" id="ls_csv">匯出 CSV</button>
+      <button class="btn ghost tiny" id="ls_print">列印</button>
+    </div>
+    <div id="ls_sum" class="muted" style="font-size:12.5px;margin-bottom:10px;"></div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr>
+          <th>日期</th><th>車號</th><th>車場</th><th>填充人</th>
+          <th class="num">使用量(L)</th><th class="num">金額</th><th>備註</th><th class="no-print">操作</th>
+        </tr></thead>
+        <tbody id="ls_body"></tbody>
+      </table>
+    </div>
+    <div id="ls_msg" style="font-size:13px;font-weight:600;margin-top:8px;"></div>
+    <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.7;">
+      填錯了可以按「刪除」，但<strong>只有當天登記的那幾筆能刪</strong>。
+      更早以前的資料要修改，請到運輸行政系統的「車用尿素登錄清單」處理。
+    </div>
+  </div>
+</div>
+
+<!-- ============ 用量統計 ============ -->
+<div id="stat" class="panel">
+  <div class="card">
+    <div class="toolbar">
+      <label class="inline">年度
+        <select id="st_year"></select>
+      </label>
+      <label class="inline">車場
+        <select id="st_region"><option value="">全部</option></select>
+      </label>
+      <button class="btn ghost tiny" id="st_csv">匯出 CSV</button>
+      <button class="btn ghost tiny" id="st_print">列印</button>
+    </div>
+
+    <h3>依月份</h3>
+    <div class="muted" style="font-size:12.5px;margin-bottom:8px;">較上月變化超過 ±20% 會標色，方便看出異常。</div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>月份</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">總金額</th><th>較上月</th></tr></thead>
+        <tbody id="st_byMonth"></tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:22px;">依車號</h3>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>車號</th><th>車場</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">平均每次(L)</th><th>最後一次</th></tr></thead>
+        <tbody id="st_byPlate"></tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:22px;">依填充人</h3>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>填充人</th><th class="num">登記次數</th><th class="num">總用量(L)</th></tr></thead>
+        <tbody id="st_byWho"></tbody>
+      </table>
+    </div>
+    <div id="st_msg" style="font-size:13px;font-weight:600;margin-top:8px;"></div>
+  </div>
+</div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+// ===== 這一頁不需要帳號密碼 =====
+// 使用者 115/08/05 指示：司機開網頁就要能用，不要再擋登入。
+// 所以這裡不做 Supabase Auth，只帶 publishable（anon）金鑰。
+//
+// 【安全提醒，改這個檔案的人請先看完】
+//   1. 這裡只能放 publishable(anon) key。Supabase 後台那把「最高權限金鑰」
+//      （設定頁面上寫 service role 的那一把）永遠只放 GitHub Secrets，
+//      絕對不可以出現在任何 HTML／JS 裡面——寫進來等於把整個資料庫交出去。
+//   2. 沒有登入 = 只要知道網址的人都能開、都能寫。所以這一頁
+//      【刻意不去讀 employees 等含個資的表】，畫面上也不顯示身分證字號、住址、薪資這類欄位。
+//      要新增功能時請維持這個原則。
+//   3. 想再收緊的話，可以在 Supabase 把 anon 角色的權限限縮到這一頁真正用得到的幾張表
+//      （見 supabase_public_pages_grant_1150805.sql）。
+async function authFetch(url, options){
+  options = options || {};
+  const h = Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  }, options.headers || {});
+  return fetch(url, Object.assign({}, options, { headers: h }));
+}
+// ===================== 車用尿素 使用登記 =====================
+// 資料表：urea_logs。就是運輸行政系統「車用尿素登錄」用的同一張表，
+// 這一頁登記完，行政系統與車隊系統的尿素清單／月統計馬上就看得到，不用再抄一次。
+//
+// 【欄位】supabase_urea_1150805.sql 幫這張表補了 vehicle_id／plate_number／filled_by，
+//   並把 quantity 放大成 NUMERIC(12,3)，所以使用量可以記到小數點第三位。
+//   沒跑那支 SQL 的話，這一頁存檔會失敗，畫面會顯示紅色警告。
+//
+// 【這一頁沒有登入】任何知道網址的人都打得開，所以：
+//   ・刻意不去讀 employees（在職人員姓名電話不可以攤在公開網頁上），
+//     「誰填充」改成自己打字，下拉建議由這張表以前登記過的人自己長出來。
+//   ・車輛只讀 車號／車場／類別／狀態，不讀車主、引擎號碼那些。
+//   ・刪除只開放「今天登記的那幾筆」，避免有人把整年的資料掃掉。
+
+const STATE = { logs: [], vehicles: [] };
+const YARDS = ['台中', '新竹', '台南'];
+
+const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt  = v => num(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+// 使用量一律三位小數，跟資料庫的 NUMERIC(12,3) 對齊
+const fmt3 = v => num(v).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+function todayISO(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function toROC(iso){ if(!iso) return ''; const p = String(iso).slice(0,10).split('-'); if(p.length<3) return iso; return (parseInt(p[0],10)-1911) + '/' + p[1] + '/' + p[2]; }
+function toROCMonth(m){ if(!m) return ''; const p = String(m).split('-'); if(p.length<2) return m; return (parseInt(p[0],10)-1911) + '/' + p[1]; }
+function daysBetween(a, b){
+  const x = new Date(String(a).slice(0,10) + 'T00:00:00'), y = new Date(String(b).slice(0,10) + 'T00:00:00');
+  const d = Math.round((y - x) / 86400000);
+  return isFinite(d) ? d : null;
+}
+const $ = id => document.getElementById(id);
+
+// ---------- Supabase REST ----------
+const REST = SUPABASE_URL + '/rest/v1/';
+async function sbSelect(table, qs){
+  const r = await authFetch(REST + table + '?' + (qs || 'select=*'), { method:'GET' });
+  if(!r.ok) throw new Error(table + ' 讀取失敗：' + r.status + ' ' + (await r.text()));
+  return r.json();
+}
+async function sbInsert(table, row){
+  const r = await authFetch(REST + table, { method:'POST', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
+  if(!r.ok) throw new Error(await r.text());
+  const d = await r.json(); return Array.isArray(d) ? d[0] : d;
+}
+async function sbDelete(table, pk, id){
+  const r = await authFetch(REST + table + '?' + pk + '=eq.' + encodeURIComponent(id), { method:'DELETE' });
+  if(!r.ok) throw new Error(await r.text());
+  return true;
+}
+
+// 把資料庫的英文錯誤翻成看得懂的話
+function tidyErr(msg){
+  const s = String(msg || '');
+  if(s.indexOf('urea_logs_quantity_positive') >= 0) return '使用量要大於 0，請重新確認。';
+  if(s.indexOf('filled_by') >= 0 || s.indexOf('plate_number') >= 0 || s.indexOf('vehicle_id') >= 0){
+    if(s.indexOf('does not exist') >= 0 || s.indexOf('PGRST204') >= 0)
+      return '雲端的尿素資料表還沒有「車號／填充人」欄位，請先執行 supabase_urea_1150805.sql。';
+  }
+  if(s.indexOf('urea_logs') >= 0 && s.indexOf('does not exist') >= 0)
+    return '雲端還沒有尿素資料表，請先執行 supabase_urea_1150805.sql。';
+  if(s.indexOf('permission denied') >= 0 || s.indexOf('42501') >= 0)
+    return '權限不足，寫不進去。請確認 supabase_public_pages_grant_1150805.sql 有跑過。';
+  if(s.indexOf('numeric field overflow') >= 0) return '使用量或金額的位數太多了，請確認有沒有多打。';
+  return s;
+}
+
+// ---------- 取用 ----------
+function vehByPlate(p){ return STATE.vehicles.find(v => v.plate_number === p) || null; }
+function regionOfPlate(p){
+  const v = vehByPlate(p);
+  const b = v ? String(v.base_location || '') : '';
+  return YARDS.indexOf(b) >= 0 ? b : '';
+}
+// 以前登記過的人：姓名去重。資料來源就是這張尿素表自己，不會去讀人事資料。
+function knownFillers(){
+  const seen = [];
+  STATE.logs.slice()
+    .sort((a,b) => String(b.log_date||'').localeCompare(String(a.log_date||'')))
+    .forEach(u => {
+      const n = String(u.filled_by || '').trim();
+      if(n && seen.indexOf(n) < 0) seen.push(n);
+    });
+  return seen;
+}
+function allRegions(){
+  const s = YARDS.slice();
+  STATE.logs.forEach(u => { const r = String(u.region||'').trim(); if(r && s.indexOf(r) < 0) s.push(r); });
+  return s;
+}
+// 清單上出現過、但車籍已經不在的車號也要能篩，不然舊資料會找不到
+function allPlates(){
+  const s = STATE.vehicles.map(v => v.plate_number).filter(Boolean);
+  STATE.logs.forEach(u => { const p = String(u.plate_number||'').trim(); if(p && s.indexOf(p) < 0) s.push(p); });
+  return s.sort();
+}
+
+// ---------- 載入 ----------
+async function loadAll(){
+  STATE.logs = await sbSelect('urea_logs', 'select=*&order=log_date.desc,log_id.desc&limit=5000');
+  try{
+    STATE.vehicles = await sbSelect('vehicles',
+      'select=vehicle_id,plate_number,base_location&status=eq.%E5%9C%A8%E5%BD%B9&vehicle_category=eq.%E8%BB%8A%E8%BC%9B&order=plate_number.asc&limit=2000');
+  }catch(e){ STATE.vehicles = []; }
+}
+
+// ---------- 下拉 ----------
+function fillPickers(){
+  const keepPlate = $('ur_plate').value;
+  $('ur_plate').innerHTML = '<option value="">請選車號</option>'
+    + STATE.vehicles.map(v => '<option value="' + esc(v.plate_number) + '">' + esc(v.plate_number)
+        + (v.base_location ? '（' + esc(v.base_location) + '）' : '') + '</option>').join('');
+  if(keepPlate) $('ur_plate').value = keepPlate;
+
+  const keepReg = $('ur_region').value;
+  $('ur_region').innerHTML = allRegions().map(r => '<option value="' + esc(r) + '">' + esc(r) + '</option>').join('');
+  if(keepReg) $('ur_region').value = keepReg;
+
+  $('ur_byList').innerHTML = knownFillers().map(n => '<option value="' + esc(n) + '">').join('');
+
+  const kp = $('ls_plate').value;
+  $('ls_plate').innerHTML = '<option value="">全部</option>'
+    + allPlates().map(p => '<option value="' + esc(p) + '">' + esc(p) + '</option>').join('');
+  $('ls_plate').value = kp;
+
+  const kr = $('ls_region').value;
+  $('ls_region').innerHTML = '<option value="">全部</option>'
+    + allRegions().map(r => '<option value="' + esc(r) + '">' + esc(r) + '</option>').join('');
+  $('ls_region').value = kr;
+
+  const ksr = $('st_region').value;
+  $('st_region').innerHTML = '<option value="">全部</option>'
+    + allRegions().map(r => '<option value="' + esc(r) + '">' + esc(r) + '</option>').join('');
+  $('st_region').value = ksr;
+
+  const ky = $('st_year').value;
+  const years = [];
+  STATE.logs.forEach(u => { const y = String(u.log_date||'').slice(0,4); if(y && years.indexOf(y) < 0) years.push(y); });
+  const thisYear = todayISO().slice(0,4);
+  if(years.indexOf(thisYear) < 0) years.push(thisYear);
+  years.sort().reverse();
+  $('st_year').innerHTML = '<option value="">全部年度</option>'
+    + years.map(y => '<option value="' + y + '">民國 ' + (parseInt(y,10)-1911) + ' 年（' + y + '）</option>').join('');
+  $('st_year').value = ky || thisYear;
+}
+
+// ---------- 統計卡 ----------
+function renderStats(){
+  const t = todayISO(), month = t.slice(0,7);
+  const todayRows = STATE.logs.filter(u => String(u.log_date||'').slice(0,10) === t);
+  const monthRows = STATE.logs.filter(u => String(u.log_date||'').slice(0,7) === month);
+  const monthQty  = monthRows.reduce((s,u) => s + num(u.quantity), 0);
+  const monthCost = monthRows.reduce((s,u) => s + num(u.cost), 0);
+  const plates    = {};
+  monthRows.forEach(u => { const p = u.plate_number || '（未填車號）'; plates[p] = (plates[p]||0) + num(u.quantity); });
+  const top = Object.keys(plates).sort((a,b) => plates[b] - plates[a])[0];
+
+  $('urStats').innerHTML = [
+    ['今天登記', todayRows.length + ' 筆', todayRows.length ? fmt3(todayRows.reduce((s,u)=>s+num(u.quantity),0)) + ' 公升' : '還沒有人登記'],
+    ['本月用量', fmt3(monthQty) + ' L', toROCMonth(month) + '　共 ' + monthRows.length + ' 筆'],
+    ['本月金額', monthCost ? '$' + fmt(monthCost) : '—', monthCost ? '有填金額的才算得到' : '這個月還沒填過金額'],
+    ['本月用最多', top || '—', top ? fmt3(plates[top]) + ' 公升' : '本月尚無資料']
+  ].map(c => '<div class="stat-card"><div class="k">' + esc(c[0]) + '</div><div class="v">' + esc(c[1])
+      + '</div><div class="s">' + esc(c[2]) + '</div></div>').join('');
+}
+
+// ---------- 這台車最近的紀錄 ----------
+function renderRecent(){
+  const plate = $('ur_plate').value;
+  const note = $('ur_recent_note');
+  if(!plate){
+    note.textContent = '選了車號就會列出這台車以前加了幾次';
+    $('ur_recent').innerHTML = '<tr><td colspan="5" class="empty">請先選車號</td></tr>';
+    return;
+  }
+  const rows = STATE.logs.filter(u => u.plate_number === plate)
+    .sort((a,b) => String(b.log_date||'').localeCompare(String(a.log_date||''))).slice(0, 8);
+  note.textContent = plate + '　最近 ' + rows.length + ' 筆';
+  $('ur_recent').innerHTML = rows.map((u, i) => {
+    const prev = rows[i+1];
+    const gap = prev ? daysBetween(prev.log_date, u.log_date) : null;
+    return '<tr><td>' + esc(toROC(u.log_date)) + '</td><td>' + esc(u.filled_by || '') + '</td>'
+      + '<td class="num">' + fmt3(u.quantity) + '</td>'
+      + '<td class="num">' + (gap == null ? '—' : gap) + '</td>'
+      + '<td class="muted">' + esc(u.notes || '') + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty">這台車還沒有登記過</td></tr>';
+}
+
+function refreshHint(){
+  const q = $('ur_qty').value.trim();
+  const plate = $('ur_plate').value;
+  const parts = [];
+  if(plate) parts.push(plate);
+  if(q !== ''){
+    const n = parseFloat(q);
+    if(isNaN(n)) parts.push('使用量看不懂，請只填數字');
+    else if(n <= 0) parts.push('使用量要大於 0');
+    else {
+      parts.push('使用量 ' + fmt3(n) + ' 公升');
+      // 小數位數超過三位會被資料庫四捨五入，先講清楚
+      const dec = (q.split('.')[1] || '').length;
+      if(dec > 3) parts.push('（小數只留三位，會存成 ' + fmt3(n) + '）');
+    }
+  }
+  $('ur_hint').textContent = parts.join('　');
+}
+
+// ---------- 登記 ----------
+async function saveLog(){
+  const msg = $('ur_msg'); msg.style.color = '#B3261E';
+  const date  = $('ur_date').value;
+  const by    = ($('ur_by').value || '').trim();
+  const plate = $('ur_plate').value;
+  const qtyRaw= $('ur_qty').value.trim();
+  const qty   = parseFloat(qtyRaw);
+
+  if(!date){ msg.textContent = '請選日期'; return; }
+  if(!by){ msg.textContent = '請填「誰填充」'; return; }
+  if(!plate){ msg.textContent = '請選車號'; return; }
+  if(qtyRaw === '' || isNaN(qty)){ msg.textContent = '請填使用量'; return; }
+  if(qty <= 0){ msg.textContent = '使用量要大於 0'; return; }
+
+  const v = vehByPlate(plate);
+  const row = {
+    log_date: date,
+    region: $('ur_region').value || regionOfPlate(plate) || allRegions()[0],
+    vehicle_id: v ? v.vehicle_id : null,
+    plate_number: plate,
+    filled_by: by,
+    quantity: Math.round(qty * 1000) / 1000,   // 只留三位小數
+    cost: $('ur_cost').value.trim() === '' ? null : num($('ur_cost').value),
+    notes: ($('ur_notes').value || '').trim() || null
+  };
+
+  msg.style.color = 'var(--text-3)'; msg.textContent = '送出中…';
+  try{
+    const saved = await sbInsert('urea_logs', row);
+    STATE.logs.unshift(saved || row);
+    msg.style.color = '#2f6f4e';
+    msg.textContent = '已登記：' + plate + '　' + toROC(date) + '　' + fmt3(row.quantity) + ' 公升（' + by + '）';
+    // 留著日期、填充人、車號，同一個人連加好幾台時比較快
+    ['ur_qty','ur_cost','ur_notes'].forEach(id => $(id).value = '');
+    refreshHint();
+    renderAll();
+  }catch(e){
+    msg.style.color = '#B3261E';
+    msg.textContent = '失敗：' + tidyErr(e.message);
+  }
+}
+
+// ---------- 清單 ----------
+function listRows(){
+  const from = $('ls_from').value, to = $('ls_to').value;
+  const plate = $('ls_plate').value, region = $('ls_region').value;
+  const who = ($('ls_who').value || '').trim();
+  return STATE.logs.filter(u => {
+    const d = String(u.log_date || '').slice(0,10);
+    if(from && d < from) return false;
+    if(to   && d > to)   return false;
+    if(plate  && u.plate_number !== plate) return false;
+    if(region && u.region !== region) return false;
+    if(who && String(u.filled_by || '').indexOf(who) < 0) return false;
+    return true;
+  }).sort((a,b) => String(b.log_date||'').localeCompare(String(a.log_date||'')) || num(b.log_id) - num(a.log_id));
+}
+
+function renderList(){
+  const rows = listRows();
+  const qty  = rows.reduce((s,u) => s + num(u.quantity), 0);
+  const cost = rows.reduce((s,u) => s + num(u.cost), 0);
+  $('ls_sum').textContent = '共 ' + rows.length + ' 筆，用量合計 ' + fmt3(qty) + ' 公升'
+    + (cost ? '，金額合計 $' + fmt(cost) : '') + '。';
+  const t = todayISO();
+  $('ls_body').innerHTML = rows.map(u => {
+    const canDel = String(u.log_date||'').slice(0,10) === t;
+    return '<tr>'
+      + '<td>' + esc(toROC(u.log_date)) + '</td>'
+      + '<td>' + esc(u.plate_number || '') + '</td>'
+      + '<td>' + esc(u.region || '') + '</td>'
+      + '<td>' + esc(u.filled_by || '') + '</td>'
+      + '<td class="num">' + fmt3(u.quantity) + '</td>'
+      + '<td class="num">' + (u.cost ? '$' + fmt(u.cost) : '') + '</td>'
+      + '<td class="muted">' + esc(u.notes || '') + '</td>'
+      + '<td class="no-print">' + (canDel
+          ? '<button class="btn ghost tiny ls-del" data-id="' + esc(u.log_id) + '">刪除</button>'
+          : '<span class="muted" style="font-size:11.5px;">—</span>') + '</td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="8" class="empty">這個範圍沒有資料</td></tr>';
+}
+
+async function delLog(id){
+  const u = STATE.logs.find(x => String(x.log_id) === String(id));
+  if(!u) return;
+  if(String(u.log_date||'').slice(0,10) !== todayISO()){
+    $('ls_msg').style.color = '#B3261E';
+    $('ls_msg').textContent = '只能刪今天登記的紀錄。';
+    return;
+  }
+  if(!confirm('確定要刪掉這筆嗎？\n' + (u.plate_number||'') + '　' + toROC(u.log_date) + '　' + fmt3(u.quantity) + ' 公升')) return;
+  const msg = $('ls_msg'); msg.style.color = 'var(--text-3)'; msg.textContent = '刪除中…';
+  try{
+    await sbDelete('urea_logs', 'log_id', id);
+    STATE.logs = STATE.logs.filter(x => String(x.log_id) !== String(id));
+    msg.style.color = '#2f6f4e'; msg.textContent = '已刪除。';
+    renderAll();
+  }catch(e){
+    msg.style.color = '#B3261E';
+    msg.textContent = '刪除失敗：' + tidyErr(e.message)
+      + '（免登入的頁面沒有刪除權限時會這樣，請到運輸行政系統刪）';
+  }
+}
+
+// ---------- 統計 ----------
+function statRows(){
+  const y = $('st_year').value, region = $('st_region').value;
+  return STATE.logs.filter(u => {
+    if(y && String(u.log_date||'').slice(0,4) !== y) return false;
+    if(region && u.region !== region) return false;
+    return true;
+  });
+}
+
+function changePill(cur, prev){
+  if(prev == null || !prev) return '<span class="muted">—</span>';
+  const p = (cur - prev) / prev * 100;
+  const big = Math.abs(p) > 20;
+  const color = big ? (p > 0 ? '#B3261E' : '#2f6f4e') : 'var(--text-3)';
+  return '<span style="color:' + color + ';font-weight:' + (big ? '700' : '500') + ';">'
+    + (p > 0 ? '+' : '') + p.toFixed(1) + '%</span>';
+}
+
+function renderStat(){
+  const rows = statRows();
+
+  const byMonth = {};
+  rows.forEach(u => {
+    const m = String(u.log_date||'').slice(0,7); if(!m) return;
+    byMonth[m] = byMonth[m] || { n:0, qty:0, cost:0 };
+    byMonth[m].n++; byMonth[m].qty += num(u.quantity); byMonth[m].cost += num(u.cost);
+  });
+  const months = Object.keys(byMonth).sort().reverse();
+  $('st_byMonth').innerHTML = months.map((m, i) => {
+    const c = byMonth[m], prev = months[i+1] ? byMonth[months[i+1]] : null;
+    return '<tr><td>' + esc(toROCMonth(m)) + '</td><td class="num">' + c.n + '</td>'
+      + '<td class="num">' + fmt3(c.qty) + '</td>'
+      + '<td class="num">' + (c.cost ? '$' + fmt(c.cost) : '') + '</td>'
+      + '<td>' + changePill(c.qty, prev ? prev.qty : null) + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty">沒有資料</td></tr>';
+
+  const byPlate = {};
+  rows.forEach(u => {
+    const p = u.plate_number || '（未填車號）';
+    byPlate[p] = byPlate[p] || { n:0, qty:0, last:'', region:'' };
+    byPlate[p].n++; byPlate[p].qty += num(u.quantity);
+    const d = String(u.log_date||'').slice(0,10);
+    if(d > byPlate[p].last){ byPlate[p].last = d; byPlate[p].region = u.region || ''; }
+  });
+  $('st_byPlate').innerHTML = Object.keys(byPlate).sort((a,b) => byPlate[b].qty - byPlate[a].qty).map(p => {
+    const c = byPlate[p];
+    return '<tr><td>' + esc(p) + '</td><td>' + esc(c.region) + '</td><td class="num">' + c.n + '</td>'
+      + '<td class="num">' + fmt3(c.qty) + '</td>'
+      + '<td class="num">' + fmt3(c.qty / c.n) + '</td>'
+      + '<td>' + esc(toROC(c.last)) + '</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">沒有資料</td></tr>';
+
+  const byWho = {};
+  rows.forEach(u => {
+    const w = String(u.filled_by || '').trim() || '（未填）';
+    byWho[w] = byWho[w] || { n:0, qty:0 };
+    byWho[w].n++; byWho[w].qty += num(u.quantity);
+  });
+  $('st_byWho').innerHTML = Object.keys(byWho).sort((a,b) => byWho[b].qty - byWho[a].qty).map(w =>
+    '<tr><td>' + esc(w) + '</td><td class="num">' + byWho[w].n + '</td>'
+    + '<td class="num">' + fmt3(byWho[w].qty) + '</td></tr>'
+  ).join('') || '<tr><td colspan="3" class="empty">沒有資料</td></tr>';
+}
+
+// ---------- 匯出 ----------
+function csvLines(head, rows){
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  return '﻿' + [head].concat(rows).map(r => r.map(q).join(',')).join('\r\n');
+}
+function download(name, text){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type:'text/csv;charset=utf-8;' }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+var PRINT_CSS = '@page{size:A4 landscape;margin:12mm 10mm;}'
+  + 'body{font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;color:#1d1a15;margin:0;padding:4px 2px;font-size:12px;line-height:1.5;}'
+  + 'h2,h3{font-size:17px;margin:0 0 10px;}'
+  + 'table{width:100%;border-collapse:collapse;margin-bottom:12px;}'
+  + 'th,td{border:1px solid #d8d2c6;padding:5px 6px;text-align:left;vertical-align:top;}'
+  + 'thead th{background:#f3efe7;white-space:nowrap;}'
+  + 'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}'
+  + '.muted{color:#6b6357;}tr{break-inside:avoid;}.no-print{display:none !important;}';
+function printBlock(title, html, msgEl){
+  var w = null;
+  try{ w = window.open('', '_blank'); }catch(e){ w = null; }
+  if(w && w.document){
+    try{
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>'
+        + esc(title) + '<\/title><style>' + PRINT_CSS + '<\/style><\/head><body>' + html
+        + '<script>window.onload=function(){try{window.focus();window.print();}catch(e){}};<\/script><\/body><\/html>');
+      w.document.close();
+      if(msgEl) msgEl.textContent = '';
+      return true;
+    }catch(e){ try{ w.close(); }catch(e2){} }
+  }
+  try{ window.print(); }catch(e){}
+  if(msgEl) msgEl.textContent = '新視窗被擋住了，已改用本頁列印。';
+  return false;
+}
+
+// ---------- 綁事件 ----------
+function wire(){
+  document.querySelectorAll('.sidebar nav button').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.sidebar nav button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const p = $(b.dataset.tab); if(p) p.classList.add('active');
+    };
+  });
+
+  $('ur_plate').onchange = () => {
+    const r = regionOfPlate($('ur_plate').value);
+    if(r) $('ur_region').value = r;
+    refreshHint();
+    renderRecent();
+  };
+  $('ur_qty').oninput = refreshHint;
+  $('ur_save').onclick = saveLog;
+  $('ur_clear').onclick = () => {
+    ['ur_by','ur_qty','ur_cost','ur_notes'].forEach(id => $(id).value = '');
+    $('ur_plate').value = ''; $('ur_date').value = todayISO();
+    $('ur_msg').textContent = '';
+    refreshHint(); renderRecent();
+  };
+
+  ['ls_from','ls_to','ls_plate','ls_region'].forEach(id => $(id).onchange = renderList);
+  $('ls_who').oninput = renderList;
+  $('ls_reload').onclick = async () => {
+    const msg = $('ls_msg'); msg.style.color = 'var(--text-3)'; msg.textContent = '重新載入中…';
+    try{
+      STATE.logs = await sbSelect('urea_logs', 'select=*&order=log_date.desc,log_id.desc&limit=5000');
+      msg.textContent = ''; renderAll();
+    }catch(e){ msg.style.color = '#B3261E'; msg.textContent = '載入失敗：' + tidyErr(e.message); }
+  };
+  $('ls_body').onclick = ev => {
+    const b = ev.target.closest('.ls-del'); if(!b) return;
+    delLog(b.dataset.id);
+  };
+  $('ls_csv').onclick = () => {
+    const rows = listRows().map(u => [toROC(u.log_date), u.plate_number || '', u.region || '', u.filled_by || '',
+      num(u.quantity).toFixed(3), u.cost == null ? '' : num(u.cost), u.notes || '']);
+    download('尿素使用登記_' + todayISO().replace(/-/g, '') + '.csv',
+      csvLines(['日期','車號','車場','填充人','使用量(公升)','金額','備註'], rows));
+  };
+  $('ls_print').onclick = () => printBlock('尿素使用登記',
+    '<h3>車用尿素使用登記</h3><p class="muted">' + esc($('ls_sum').textContent) + '</p><table><thead><tr>'
+    + '<th>日期</th><th>車號</th><th>車場</th><th>填充人</th><th class="num">使用量(L)</th><th class="num">金額</th><th>備註</th>'
+    + '</tr></thead><tbody>' + $('ls_body').innerHTML + '</tbody></table>', $('ls_msg'));
+
+  ['st_year','st_region'].forEach(id => $(id).onchange = renderStat);
+  $('st_csv').onclick = () => {
+    const rows = [];
+    document.querySelectorAll('#st_byPlate tr').forEach(tr => {
+      const c = Array.from(tr.children).map(x => x.textContent.trim());
+      if(c.length === 6) rows.push(c);
+    });
+    download('尿素用量統計_' + todayISO().replace(/-/g, '') + '.csv',
+      csvLines(['車號','車場','登記次數','總用量(公升)','平均每次(公升)','最後一次'], rows));
+  };
+  $('st_print').onclick = () => printBlock('尿素用量統計',
+    '<h3>車用尿素用量統計</h3>'
+    + '<h4>依月份</h4><table><thead><tr><th>月份</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">總金額</th><th>較上月</th></tr></thead><tbody>'
+    + $('st_byMonth').innerHTML + '</tbody></table>'
+    + '<h4>依車號</h4><table><thead><tr><th>車號</th><th>車場</th><th class="num">登記次數</th><th class="num">總用量(L)</th><th class="num">平均每次(L)</th><th>最後一次</th></tr></thead><tbody>'
+    + $('st_byPlate').innerHTML + '</tbody></table>', $('st_msg'));
+}
+
+function renderAll(){
+  fillPickers();
+  renderStats();
+  renderRecent();
+  renderList();
+  renderStat();
+}
+
+// ---------- 啟動 ----------
+async function init(){
+  try{
+    await loadAll();
+  }catch(e){
+    const w = $('storageWarning');
+    w.style.display = 'block';
+    w.textContent = '資料載入失敗：' + tidyErr(e.message) + '（請確認已在 Supabase 執行 supabase_urea_1150805.sql）';
+    return;
+  }
+  $('ur_date').value  = todayISO();
+  $('ls_from').value  = todayISO().slice(0,8) + '01';
+  $('ls_to').value    = todayISO();
+  wire();
+  refreshHint();
+  renderAll();
+}
+init();
+</script>
+</body>
+</html>

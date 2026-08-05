@@ -248,18 +248,6 @@
 
 </head>
 <body>
-<body>
-<div id="loginOverlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0d1b2c,#152a43);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
-  <div style="background:#fff;padding:34px 30px;border-radius:16px;width:340px;box-shadow:0 24px 70px rgba(0,0,0,.45);">
-    <div style="font-size:20px;font-weight:700;color:#142033;margin-bottom:4px;">順亞運通 管理系統</div>
-    <div style="font-size:12.5px;color:#8b929b;margin-bottom:20px;">請登入以存取資料</div>
-    <input id="login_email" type="email" placeholder="帳號 (Email)" autocomplete="username" style="width:100%;padding:11px;margin-bottom:11px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
-    <input id="login_pw" type="password" placeholder="密碼" autocomplete="current-password" style="width:100%;padding:11px;margin-bottom:16px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
-    <button id="login_btn" style="width:100%;padding:12px;background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;">登入</button>
-    <div id="login_msg" style="margin-top:13px;font-size:12.5px;color:#B3261E;min-height:17px;text-align:center;"></div>
-  </div>
-</div>
-
 <div class="app-shell">
   <div class="sidebar">
     <div class="brand">
@@ -281,7 +269,7 @@
     <header class="banner">
       <p class="hero-kicker">Shun Ya Transportation</p>
       <h1>電動板車 預約登記</h1>
-      <div class="sub">電動板車 01–04 ・ 同一時段只能一個人用 ・ 預約後行政與車隊的總覽都看得到</div>
+      <div class="sub">電動板車 01–04 ・ 同一時段只能一個人用 ・ 免登入，開網頁就能約 ・ 預約後行政與車隊的總覽都看得到</div>
     </header>
     <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
     <div class="content">
@@ -311,13 +299,11 @@
         <input type="time" id="tb_end" step="900" value="12:00">
       </label>
       <label>預約人（司機）<span class="req">*</span>
-        <select id="tb_driver"></select>
-      </label>
-      <label id="tb_nameWrap" style="display:none;">姓名（手打）
-        <input type="text" id="tb_name" placeholder="不在名單上就打在這裡">
+        <input type="text" id="tb_driver" list="tb_driverList" placeholder="打自己的姓名" autocomplete="off">
+        <datalist id="tb_driverList"></datalist>
       </label>
       <label>聯絡電話
-        <input type="text" id="tb_phone" placeholder="選了司機會自動帶">
+        <input type="text" id="tb_phone" placeholder="以前留過就會自動帶">
       </label>
       <label>搭配車輛（選填）
         <input type="text" id="tb_tractor" list="tb_plateList" placeholder="有配合哪一台車再填">
@@ -480,73 +466,27 @@
 const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
 
-// ===== 登入驗證(Supabase Auth)=====
-let AUTH_TOKEN=null, REFRESH_TOKEN=null;
-function ensureLogin(){
-  return new Promise((resolve)=>{
-    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='flex';
-    async function doLogin(){
-      const email=(document.getElementById('login_email').value||'').trim();
-      const pw=document.getElementById('login_pw').value||'';
-      const msg=document.getElementById('login_msg');
-      if(!email||!pw){ msg.textContent='請輸入帳號與密碼'; return; }
-      msg.textContent='登入中…';
-      try{
-        const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
-        const d=await r.json();
-        if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
-        AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
-        setInterval(refreshToken, 30*60*1000);
-        document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshToken(); });
-        if(ov) ov.style.display='none';
-        resolve();
-      }catch(e){ msg.textContent='連線錯誤:'+e.message; }
-    }
-    const btn=document.getElementById('login_btn'); if(btn) btn.onclick=doLogin;
-    const pwEl=document.getElementById('login_pw'); if(pwEl) pwEl.onkeydown=(e)=>{ if(e.key==='Enter') doLogin(); };
-  });
-}
-async function refreshToken(){
-  if(!REFRESH_TOKEN) return false;
-  try{
-    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
-    const d=await r.json();
-    if(r.ok && d && d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token||REFRESH_TOKEN; return true; }
-  }catch(e){}
-  return false;
-}
-// ===== 連線階段逾時自動處理:先試著續期,續期失敗才跳出登入框 =====
-let _reauthPromise=null;
-function _reauth(){
-  if(!_reauthPromise){
-    _reauthPromise=(async ()=>{
-      if(await refreshToken()) return true;
-      AUTH_TOKEN=null;
-      const msg=document.getElementById('login_msg');
-      if(msg) msg.textContent='連線階段已逾時,請重新登入(您未存檔的內容仍保留在畫面上)';
-      await ensureLogin();
-      return true;
-    })().finally(()=>{ _reauthPromise=null; });
-  }
-  return _reauthPromise;
-}
-// 統一帶上「目前最新」的 token;遇到 401/403 先續期再重試一次
-async function authFetch(url, options={}){
-  const build=()=>{
-    const h=Object.assign({}, options.headers||{});
-    delete h.apikey; delete h.Authorization;
-    return Object.assign({}, options, {headers: Object.assign({
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
-      'Content-Type': 'application/json'
-    }, h)});
-  };
-  let res = await fetch(url, build());
-  if(res.status===401 || res.status===403){
-    await _reauth();
-    res = await fetch(url, build());
-  }
-  return res;
+// ===== 這一頁不需要帳號密碼 =====
+// 使用者 115/08/05 指示：司機開網頁就要能用，不要再擋登入。
+// 所以這裡不做 Supabase Auth，只帶 publishable（anon）金鑰。
+//
+// 【安全提醒，改這個檔案的人請先看完】
+//   1. 這裡只能放 publishable(anon) key。Supabase 後台那把「最高權限金鑰」
+//      （設定頁面上寫 service role 的那一把）永遠只放 GitHub Secrets，
+//      絕對不可以出現在任何 HTML／JS 裡面——寫進來等於把整個資料庫交出去。
+//   2. 沒有登入 = 只要知道網址的人都能開、都能寫。所以這一頁
+//      【刻意不去讀 employees 等含個資的表】，畫面上也不顯示身分證字號、住址、薪資這類欄位。
+//      要新增功能時請維持這個原則。
+//   3. 想再收緊的話，可以在 Supabase 把 anon 角色的權限限縮到這一頁真正用得到的幾張表
+//      （見 supabase_public_pages_grant_1150805.sql）。
+async function authFetch(url, options){
+  options = options || {};
+  const h = Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  }, options.headers || {});
+  return fetch(url, Object.assign({}, options, { headers: h }));
 }
 
 // ===================== 電動板車 預約登記 =====================
@@ -560,8 +500,7 @@ async function authFetch(url, options={}){
 // 【取消是改狀態不是刪資料】cancelBooking() 只改 status／cancel_reason／cancelled_at。
 // 紀錄要留著，才查得到誰在什麼時候把什麼取消掉。板車本身也一樣，不要的請停用不要刪。
 
-const STATE = { resources: [], bookings: [], employees: [], plates: [] };
-let LOGIN_EMAIL = '';
+const STATE = { resources: [], bookings: [], plates: [] };
 let WEEK_START  = null;   // 目前顯示這一週的星期一（ISO 字串）
 
 const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
@@ -637,16 +576,29 @@ async function loadAll(){
   STATE.resources = await sbSelect('booking_resources', 'select=*&order=sort_no.asc,resource_id.asc');
   STATE.bookings  = await sbSelect('trailer_bookings',
     'select=*&order=booking_date.desc,start_time.desc&limit=5000');
-  // 司機名單與車號拿不到也不影響預約，改成自己打字
-  try{
-    STATE.employees = await sbSelect('employees',
-      'select=employee_id,name,phone,region,fleet_team&status=eq.%E5%9C%A8%E8%81%B7&employee_type=eq.%E7%9B%B4%E6%8E%A5&order=name.asc&limit=2000');
-  }catch(e){ STATE.employees = []; }
+  // 這一頁沒有登入，任何人開得起來，所以【刻意不去抓 employees】——
+  // 在職人員的姓名與電話不可以攤在公開網頁上。預約人改成自己打字，
+  // 下拉建議由「以前有人預約過的姓名」自己長出來（見 knownDrivers()）。
   try{
     const v = await sbSelect('vehicles',
       'select=plate_number&status=eq.%E5%9C%A8%E5%BD%B9&vehicle_category=eq.%E8%BB%8A%E8%BC%9B&order=plate_number.asc&limit=2000');
     STATE.plates = v.map(x => x.plate_number).filter(Boolean);
   }catch(e){ STATE.plates = []; }
+}
+
+// 以前約過的人：姓名去重，順便記住最後一次留的電話，打字時可以自動帶回來。
+// 資料來源就是這張預約表自己，不會去讀人事資料。
+function knownDrivers(){
+  const seen = new Map();
+  STATE.bookings.slice()
+    .sort((a,b) => String(b.booking_date||'').localeCompare(String(a.booking_date||'')))
+    .forEach(b => {
+      const n = String(b.driver_name || '').trim();
+      if(!n) return;
+      if(!seen.has(n)) seen.set(n, String(b.driver_phone || '').trim());
+      else if(!seen.get(n) && b.driver_phone) seen.set(n, String(b.driver_phone).trim());
+    });
+  return seen;
 }
 
 // ---------- 下拉 ----------
@@ -662,12 +614,8 @@ function fillPickers(){
     '<option value="' + r.resource_id + '">' + esc(r.resource_name) + '</option>').join('');
   ['ls_res','hs_res'].forEach(id => { const k = $(id).value; $(id).innerHTML = all; $(id).value = k; });
 
-  const dk = $('tb_driver').value;
-  $('tb_driver').innerHTML = '<option value="">請選擇</option>'
-    + STATE.employees.map(e => '<option value="' + e.employee_id + '">' + esc(e.name)
-        + (e.region ? '（' + esc(e.region) + '）' : '') + '</option>').join('')
-    + '<option value="__other__">其他（自己打姓名）</option>';
-  if(dk) $('tb_driver').value = dk;
+  $('tb_driverList').innerHTML = [...knownDrivers().keys()]
+    .map(n => '<option value="' + esc(n) + '">').join('');
 
   $('tb_plateList').innerHTML = STATE.plates.map(p => '<option value="' + esc(p) + '">').join('');
 }
@@ -837,10 +785,7 @@ function refreshHint(){
     : '結束時間要比開始時間晚（做到隔天請勾「用到隔天」）';
 }
 function driverInfo(){
-  const v = $('tb_driver').value;
-  if(v === '__other__') return { name: ($('tb_name').value || '').trim(), id: null };
-  const e = STATE.employees.find(x => String(x.employee_id) === v);
-  return e ? { name: e.name, id: e.employee_id } : { name: '', id: null };
+  return { name: ($('tb_driver').value || '').trim(), id: null };
 }
 function showConflicts(list){
   const box = $('tb_conflict');
@@ -859,7 +804,7 @@ async function saveBooking(){
   if(!resId){ msg.textContent = '請先選一台板車'; return; }
   if(!d){ msg.textContent = '請選使用日期'; return; }
   if(!s || !e){ msg.textContent = '請填開始與結束時間'; return; }
-  if(!dv.name){ msg.textContent = '請選預約人（不在名單上就選「其他」自己打）'; return; }
+  if(!dv.name){ msg.textContent = '請填預約人姓名'; return; }
   const ed = formEnd();
   if(dkey(ed, e) <= dkey(d, s)){ msg.textContent = '結束時間要比開始時間晚。做到隔天請勾「用到隔天（跨夜）」。'; return; }
 
@@ -875,7 +820,7 @@ async function saveBooking(){
     purpose: ($('tb_purpose').value || '').trim() || null,
     destination: ($('tb_dest').value || '').trim() || null,
     notes: ($('tb_notes').value || '').trim() || null,
-    status: '已預約', created_by: LOGIN_EMAIL || null
+    status: '已預約', created_by: dv.name || null
   };
   msg.style.color = 'var(--text-3)'; msg.textContent = '送出中…';
   try{
@@ -997,11 +942,10 @@ function wire(){
       const p = $(b.dataset.tab); if(p) p.classList.add('active');
     };
   });
-  $('tb_driver').onchange = () => {
-    const v = $('tb_driver').value;
-    $('tb_nameWrap').style.display = (v === '__other__') ? '' : 'none';
-    const e = STATE.employees.find(x => String(x.employee_id) === v);
-    if(e && e.phone) $('tb_phone').value = e.phone;
+  $('tb_driver').oninput = () => {
+    // 打過的名字自動把上次留的電話帶回來；已經填了就不覆蓋
+    const ph = knownDrivers().get(($('tb_driver').value || '').trim());
+    if(ph && !$('tb_phone').value.trim()) $('tb_phone').value = ph;
   };
   ['tb_date','tb_start','tb_end'].forEach(id => { $(id).oninput = () => { refreshHint(); showConflicts([]); }; });
   $('tb_overnight').onchange = () => { refreshHint(); showConflicts([]); };
@@ -1012,8 +956,7 @@ function wire(){
   };
   $('tb_save').onclick  = saveBooking;
   $('tb_clear').onclick = () => {
-    ['tb_phone','tb_tractor','tb_purpose','tb_dest','tb_notes','tb_name'].forEach(id => $(id).value = '');
-    $('tb_driver').value = ''; $('tb_nameWrap').style.display = 'none';
+    ['tb_phone','tb_tractor','tb_purpose','tb_dest','tb_notes','tb_driver'].forEach(id => $(id).value = '');
     $('tb_overnight').checked = false; $('tb_msg').textContent = ''; showConflicts([]); refreshHint();
   };
   $('tb_wkPrev').onclick  = () => { WEEK_START = addDays(WEEK_START, -7); renderStats(); renderWeek(); };
@@ -1071,8 +1014,6 @@ function renderAll(){
 
 // ---------- 啟動 ----------
 async function init(){
-  await ensureLogin();
-  const em = $('login_email'); LOGIN_EMAIL = em ? (em.value || '').trim() : '';
   try{
     await loadAll();
   }catch(e){
