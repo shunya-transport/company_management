@@ -291,6 +291,13 @@
     <div class="table-scroll">
       <table><thead><tr><th>零用金帳本</th><th>公司</th><th class="num">目前餘額</th><th class="num">定額</th><th>定額差額</th><th class="num">本月支出</th><th class="num">本月收入</th><th class="num">本月筆數</th><th class="num">待補單據</th><th>最後一筆</th><th>更新時間</th></tr></thead><tbody id="ovPettyBody"></tbody></table>
     </div>
+    <div id="ovPettyWeighWrap" style="display:none;margin-top:14px;">
+      <h2 style="font-size:15px;">本月磅費（各司機）</h2>
+      <div class="muted" style="margin-bottom:8px;">司機自己先墊的過磅費，照領款人分開算，方便直接匯款給司機。「還沒匯款」是零用金記帳網頁的磅費結清那一頁還沒按過「產生匯款清單」的部分；按過之後這裡就會轉成已匯款。系統裡沒有存司機的銀行帳號，帳號請照人事那邊的資料填。</div>
+      <div class="table-scroll">
+        <table><thead><tr><th>零用金帳本</th><th>司機</th><th class="num">筆數</th><th class="num">磅費合計</th><th class="num">其中還沒匯款</th><th>期間</th></tr></thead><tbody id="ovPettyWeighBody"></tbody></table>
+      </div>
+    </div>
     <div id="ovPettySubjWrap" style="display:none;margin-top:14px;">
       <h2 style="font-size:15px;">本月零用金支出科目</h2>
       <div class="muted" style="margin-bottom:8px;">只算本月、只算支出，不含撥補進來的錢。科目名稱一樣才會併成同一列。</div>
@@ -753,7 +760,7 @@ async function loadAll(){
   const _pbIds = (STATE.pettyBooks || []).map(b => b.book_id).filter(v => v != null);
   if(_pbIds.length){
     try{
-      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
+      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status,payee,weigh_fee,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
     }catch(e){ STATE.pettyEntries = []; }
   }
 }
@@ -933,6 +940,8 @@ function renderPettyCard(books, mS, mE){
      <td>${esc(String(b.balance_updated_at||'').slice(0,16).replace('T',' '))}</td></tr>`;
   }).join('');
 
+  renderPettyWeigh(books, mS, mE);
+
   // 本月支出科目交叉表
   const wrap = document.getElementById('ovPettySubjWrap');
   const head = document.getElementById('ovPettySubjHead');
@@ -972,6 +981,51 @@ function renderPettyCard(books, mS, mE){
     '<tr style="border-top:2px solid var(--line);"><td><strong>合計</strong></td>' +
     books.map(b => '<td class="num"><strong>' + money(tot[b.book_id] || 0) + '</strong></td>').join('') +
     '<td class="num"><strong>' + money(grand) + '</strong></td><td class="num">100.0%</td></tr>';
+}
+
+// 本月磅費（各司機）。只看 weigh_fee 有填的列，已作廢不算。
+// 磅費是司機先自己付現金給磅場，之後公司再匯錢還他，所以要按人結算而不是按科目。
+function renderPettyWeigh(books, mS, mE){
+  const wrap = document.getElementById('ovPettyWeighWrap');
+  const body = document.getElementById('ovPettyWeighBody');
+  if(!wrap || !body) return;
+  const bookName = {};
+  books.forEach(b => { bookName[b.book_id] = b.book_name; });
+  const rows = (STATE.pettyEntries || []).filter(e =>
+    bookName[e.book_id] !== undefined &&
+    e.status !== '已作廢' &&
+    num(e.weigh_fee) > 0 &&
+    String(e.entry_date) >= mS && String(e.entry_date) <= mE);
+  if(!rows.length){ wrap.style.display = 'none'; body.innerHTML = ''; return; }
+  const g = {};
+  rows.forEach(e => {
+    const who = String(e.payee || '').trim() || '（未填司機）';
+    const k = e.book_id + '|' + who;
+    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, open: 0, first: '', last: '' };
+    const o = g[k];
+    const d = String(e.entry_date).slice(0,10);
+    o.n += 1;
+    o.amt += num(e.weigh_fee);
+    if(!e.settle_batch) o.open += num(e.weigh_fee);
+    if(!o.first || d < o.first) o.first = d;
+    if(!o.last  || d > o.last)  o.last  = d;
+  });
+  const list = Object.keys(g).map(k => g[k]).sort((a,b) => b.amt - a.amt);
+  const tn = list.reduce((s,o) => s + o.n, 0);
+  const ta = list.reduce((s,o) => s + o.amt, 0);
+  const to = list.reduce((s,o) => s + o.open, 0);
+  wrap.style.display = '';
+  body.innerHTML = list.map(o =>
+    '<tr><td>' + esc(o.book) + '</td>' +
+    '<td><strong>' + esc(o.who) + '</strong></td>' +
+    '<td class="num">' + o.n + '</td>' +
+    '<td class="num"><strong>' + money(o.amt) + '</strong></td>' +
+    '<td class="num">' + (o.open ? '<span class="pill amber">' + money(o.open) + '</span>' : '<span class="pill green">都匯了</span>') + '</td>' +
+    '<td>' + esc(o.first === o.last ? o.first : o.first + '～' + o.last) + '</td></tr>').join('') +
+    '<tr style="border-top:2px solid var(--line);"><td colspan="2"><strong>合計</strong></td>' +
+    '<td class="num"><strong>' + tn + '</strong></td>' +
+    '<td class="num"><strong>' + money(ta) + '</strong></td>' +
+    '<td class="num"><strong>' + (to ? money(to) : '0') + '</strong></td><td></td></tr>';
 }
 
 // ---------- 稅額併列 ----------
