@@ -594,6 +594,26 @@
         </table>
       </div>
     </div>
+    <div class="card">
+      <h2>電動板車設定<span class="count-badge" id="ebk_count"></span></h2>
+      <div class="empty" style="text-align:left;line-height:1.9;">
+        這裡設定的是司機那一頁「電動板車預約登記」可以選的板車。
+        電動板車是<strong>獨立設備、不掛在上面的車籍清單裡</strong>，所以用編號 01～04 認它們，
+        「財產編號」是設備編號不是車牌。多買一台按「新增一台」；不用了請把「啟用」的勾拿掉再按儲存，
+        <strong>不要刪除</strong>——舊的預約紀錄會對不回來，資料庫也會擋下來。
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="ebk_add">新增一台</button>
+        <button class="btn ghost" id="ebk_reload">重新讀取</button>
+        <span class="muted" id="ebk_msg"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th style="width:60px;">順序</th><th>名稱</th><th>財產編號</th><th>放置車場</th><th style="width:70px;">顏色</th><th style="width:60px;">啟用</th><th>備註</th><th style="width:150px;"></th></tr></thead>
+          <tbody id="ebkTableBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="leases" class="panel">
@@ -2815,7 +2835,7 @@ async function loadTrailerBookings(){
   if(BOOKING_STATE === 'loading') return;
   BOOKING_STATE = 'loading';
   try{
-    BOOKING_RES = (await supaFetch('booking_resources?select=resource_id,resource_name,color,is_active&order=sort_no.asc')) || [];
+    BOOKING_RES = (await supaFetch('booking_resources?select=*&order=sort_no.asc,resource_id.asc')) || [];
     BOOKING_CACHE = (await supaFetch('trailer_bookings?select=booking_id,resource_id,booking_date,start_time,end_date,end_time,'
       + 'driver_name,driver_phone,tractor_plate,purpose,destination,status'
       + '&status=neq.' + encodeURIComponent('已取消')
@@ -2828,6 +2848,7 @@ async function loadTrailerBookings(){
     BOOKING_ERR = m; BOOKING_CACHE = [];
   }
   renderBookingCard();
+  renderEbkTable();
 }
 function renderBookingCard(){
   const box = document.getElementById('overviewBookings');
@@ -2871,6 +2892,104 @@ function renderBookingCard(){
           + '<td>'+(using?'<span class="pill red">使用中</span>':'<span class="pill green">'+esc(b.status)+'</span>')+'</td></tr>';
       }).join('')
     + '</tbody></table></div>';
+}
+
+// ===== 電動板車設定（115/08/05 從司機用的預約頁搬過來）=====
+// 使用者指示：「電動板車預約裡的板車設定幫我放在運輸行政系統的車輛管理就好了」。
+// 直接讀寫 booking_resources，【不要走 saveState】——saveState 會把陣列裡沒有的 id 刪掉，
+// 而 booking_resources 對 trailer_bookings 是 ON DELETE RESTRICT，板車一律停用不刪除。
+async function ebkWrite(method, path, body){
+  return await supaFetch(path, {
+    method: method,
+    headers: { 'Prefer': 'return=representation' },
+    body: JSON.stringify(body)
+  });
+}
+function ebkMsg(text, ok){
+  const m = document.getElementById('ebk_msg');
+  if(!m) return;
+  m.style.color = ok ? '#2f6f4e' : '#B3261E';
+  m.textContent = text || '';
+}
+function ebkEnsure(){
+  if(BOOKING_STATE === 'idle') loadTrailerBookings();
+  else renderEbkTable();
+}
+function renderEbkTable(){
+  const body = document.getElementById('ebkTableBody');
+  const badge = document.getElementById('ebk_count');
+  if(!body) return;
+  if(BOOKING_STATE === 'loading'){ body.innerHTML = '<tr><td colspan="8" class="empty">載入中…</td></tr>'; return; }
+  if(BOOKING_STATE === 'missing'){
+    if(badge) badge.textContent = '';
+    body.innerHTML = '<tr><td colspan="8" class="empty">雲端還沒有板車資料表，請先在 Supabase 執行 supabase_trailer_booking_1150804.sql。</td></tr>';
+    return;
+  }
+  if(BOOKING_STATE === 'error'){
+    if(badge) badge.textContent = '';
+    body.innerHTML = '<tr><td colspan="8" class="empty">讀取失敗：'+esc(BOOKING_ERR)+'</td></tr>';
+    return;
+  }
+  const rows = (BOOKING_RES || []).slice().sort(function(a,b){
+    return (a.sort_no||0) - (b.sort_no||0) || a.resource_id - b.resource_id; });
+  const used = {};
+  (BOOKING_CACHE || []).forEach(function(b){ used[b.resource_id] = (used[b.resource_id]||0) + 1; });
+  if(badge) badge.textContent = rows.length + ' 台（啟用 ' + rows.filter(function(r){ return r.is_active; }).length + ' 台）';
+  if(!rows.length){ body.innerHTML = '<tr><td colspan="8" class="empty">還沒有板車，請按「新增一台」。</td></tr>'; return; }
+  body.innerHTML = rows.map(function(r){
+    const inp = function(f, v, w){
+      return '<input data-ebk="'+f+'" data-id="'+r.resource_id+'" value="'+esc(v==null?'':v)
+        + '" style="width:'+w+'px;padding:6px 8px;font-size:13px;">';
+    };
+    return '<tr>'
+      + '<td>'+inp('sort_no', r.sort_no, 46)+'</td>'
+      + '<td>'+inp('resource_name', r.resource_name, 130)+'</td>'
+      + '<td>'+inp('plate_number', r.plate_number, 110)+'</td>'
+      + '<td>'+inp('base_location', r.base_location, 80)+'</td>'
+      + '<td><input type="color" data-ebk="color" data-id="'+r.resource_id+'" value="'+esc(r.color||'#8b929b')
+        + '" style="width:46px;height:30px;padding:0;"></td>'
+      + '<td style="text-align:center;"><input type="checkbox" data-ebk="is_active" data-id="'+r.resource_id+'"'
+        + (r.is_active ? ' checked' : '') + ' style="width:auto;"></td>'
+      + '<td>'+inp('notes', r.notes, 190)+'</td>'
+      + '<td><button class="btn ghost ebk-save" data-id="'+r.resource_id+'" style="padding:5px 12px;font-size:12px;">儲存</button>'
+        + ' <span class="muted" style="font-size:12px;">未來 '+(used[r.resource_id]||0)+' 筆預約</span></td>'
+      + '</tr>';
+  }).join('');
+}
+async function ebkSave(id){
+  const patch = {};
+  // 一定要限定 [data-ebk]，不然同一列的儲存按鈕（只有 data-id）也會被選到，
+  // 會多送一個叫 undefined 的欄位進 Supabase，整筆更新都被退回來。
+  document.querySelectorAll('#ebkTableBody [data-ebk][data-id="'+id+'"]').forEach(function(el){
+    const f = el.dataset.ebk;
+    if(f === 'is_active') patch[f] = el.checked;
+    else if(f === 'sort_no') patch[f] = parseInt(el.value, 10) || 0;
+    else patch[f] = (el.value || '').trim() || null;
+  });
+  if(!patch.resource_name){ ebkMsg('名稱不可以空白。'); return; }
+  ebkMsg('儲存中…', true);
+  try{
+    const saved = await ebkWrite('PATCH', 'booking_resources?resource_id=eq.'+encodeURIComponent(id), patch);
+    const r = (BOOKING_RES||[]).find(function(x){ return x.resource_id === id; });
+    if(r) Object.assign(r, (saved && saved[0]) || patch);
+    ebkMsg('已儲存。司機那一頁重新整理就會看到。', true);
+    renderEbkTable();
+    renderBookingCard();
+  }catch(err){ ebkMsg('儲存失敗：' + err.message); }
+}
+async function ebkAdd(){
+  const name = prompt('新板車的名稱（例如「電動板車05」）：', '');
+  if(!name || !name.trim()) return;
+  ebkMsg('新增中…', true);
+  try{
+    const saved = await ebkWrite('POST', 'booking_resources', {
+      resource_name: name.trim(), color: '#5b6672', is_active: true,
+      sort_no: (BOOKING_RES||[]).reduce(function(m, r){ return Math.max(m, r.sort_no||0); }, 0) + 1
+    });
+    if(saved && saved[0]) BOOKING_RES.push(saved[0]);
+    ebkMsg('已新增，請補財產編號與放置車場之後按儲存。', true);
+    renderEbkTable();
+  }catch(err){ ebkMsg('新增失敗：' + err.message); }
 }
 
 function renderOverview(){
@@ -6972,7 +7091,18 @@ document.querySelectorAll('nav button').forEach(btn => {
     document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById(btn.dataset.tab).classList.add('active');
+    // 車輛管理最下面有電動板車設定，資料是另外抓的，切過去時確保已經載入
+    if(btn.dataset.tab === 'fleet') ebkEnsure();
   });
+});
+
+document.getElementById('ebk_add').addEventListener('click', ebkAdd);
+document.getElementById('ebk_reload').addEventListener('click', function(){
+  BOOKING_STATE = 'idle'; ebkMsg('重新讀取中…', true); ebkEnsure();
+});
+document.getElementById('ebkTableBody').addEventListener('click', function(ev){
+  const b = ev.target.closest('.ebk-save'); if(!b) return;
+  ebkSave(parseInt(b.dataset.id, 10));
 });
 
 document.getElementById('lease_filter').addEventListener('change', renderLeaseTable);

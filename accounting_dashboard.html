@@ -233,6 +233,10 @@
     .app-shell{grid-template-columns:1fr;box-shadow:none;background:#fff;}
     .card{break-inside:avoid;box-shadow:none;}
   }
+  /* 發票號碼重複提醒（115/08/05 新增） */
+  .dup-warn{background:#fff4e5;border:1px solid #e0a458;border-left:4px solid #c07a20;
+    border-radius:10px;padding:10px 12px;margin:6px 0 12px;font-size:13px;line-height:1.75;color:#5b3d10;}
+  .dup-warn .muted{color:#7a5a28;}
 </style>
 
 </head>
@@ -372,6 +376,7 @@
         <input id="ne_notes" placeholder="">
       </label>
     </div>
+    <div id="ne_invoice_warn" class="dup-warn" style="display:none;"></div>
     <div id="ne_preview" class="muted" style="margin-bottom:12px;"></div>
     <div class="toolbar">
       <button class="btn" id="ne_add_pending">先掛帳（錢還沒進出）</button>
@@ -417,6 +422,14 @@
 <!-- ============ 歷史資料 ============ -->
 <div id="history" class="panel">
   <div class="stat-row" id="hsStatRow"></div>
+  <!-- 發票號碼重複清單：沒有重複的時候整張卡片不顯示 -->
+  <div class="card" id="invDupCard" style="display:none;border-left:4px solid #c07a20;">
+    <h2>發票號碼重複<span class="count-badge" id="invDupCount">0</span></h2>
+    <div class="muted" style="margin-bottom:10px;">同一個發票號碼出現在兩張以上的傳票。拆科目記帳是正常的；如果是重複輸入，請把多的那一筆作廢或改號碼。（已作廢的帳與同傳票的稅列不算）</div>
+    <div class="table-scroll" style="max-height:260px;">
+      <table><thead><tr><th style="width:140px;">發票號碼</th><th style="width:90px;">出現次數</th><th>記在哪幾天</th></tr></thead><tbody id="invDupBody"></tbody></table>
+    </div>
+  </div>
   <div class="card">
     <h2>歷史資料（已收付）<span class="count-badge" id="hsCount">0</span></h2>
     <div class="toolbar">
@@ -524,6 +537,7 @@
       <label>付款方式<select id="sm_pay"><option value="">未指定</option><option value="匯款">匯款</option><option value="現金">現金</option><option value="支票">支票</option><option value="自動扣繳">自動扣繳</option><option value="信用卡">信用卡</option></select></label>
       <label>發票／收據號碼<input id="sm_invoice"></label>
     </div>
+    <div id="sm_invoice_warn" class="dup-warn" style="display:none;"></div>
     <div class="toolbar">
       <button class="btn" id="sm_confirm">確認結案</button>
       <button class="btn ghost" id="sm_cancel">取消</button>
@@ -553,6 +567,7 @@
       <label>車號<input id="em_plate"></label>
       <label>備註<input id="em_notes"></label>
     </div>
+    <div id="em_invoice_warn" class="dup-warn" style="display:none;"></div>
     <div class="toolbar">
       <button class="btn" id="em_save">儲存</button>
       <button class="btn ghost" id="em_cancel">取消</button>
@@ -1050,6 +1065,115 @@ function amtCells(e){
        + '<td class="num"' + hint + '>' + (t ? money(t) : '<span class="muted">－</span>') + '</td>'
        + '<td class="num"><strong>' + money(b + t) + '</strong></td>';
 }
+
+// ---------- 統一發票號碼重複防呆（115/08/05 新增） ----------
+// 使用者指示：「如果有重覆輸入統一發票號碼，會出現提醒說在哪一天有同一筆發票」。
+// 【比對前先正規化】去掉空白與符號、英文轉大寫，所以 ab-1234 5678 跟 AB12345678 算同一張。
+// 【刻意不擋死，只提醒＋再確認一次】同一張發票拆成好幾個科目記帳是正常做法
+//   （像那幾張拆科目的傳票），硬擋會讓使用者記不了帳。
+// 【一定要排除這三種，不然天天誤報】
+//   1. 同一張傳票的 5% 稅列——它本來就跟主列共用發票號碼（isMergedTax）。
+//   2. 同一張傳票的其他列——同傳票就是同一筆帳。
+//   3. 已作廢的帳——記錯作廢後重打是正常流程。
+function invKey(v){ return String(v == null ? '' : v).replace(/[^0-9A-Za-z]/g, '').toUpperCase(); }
+function invROC(iso){
+  if(!iso) return '';
+  const p = String(iso).slice(0, 10).split('-');
+  if(p.length < 3) return String(iso);
+  return (parseInt(p[0], 10) - 1911) + '/' + p[1] + '/' + p[2];
+}
+function invDay(e){ return String(e.settle_date || e.entry_date || '').slice(0, 10); }
+function invDayLabel(e){
+  const d = invDay(e);
+  if(!d) return '（沒有日期）';
+  return d + '（民國 ' + invROC(d) + '）' + (e.settle_date ? ' 收付' : ' 發生');
+}
+function invDupFind(inv, selfId, selfVoucher){
+  const k = invKey(inv);
+  // 太短的收據號碼（像手寫的 001）誤判率太高，不比對。統一發票是兩碼英文＋八碼數字。
+  if(k.length < 6) return [];
+  return (STATE.entries || []).filter(function(e){
+    if(invKey(e.invoice_no) !== k) return false;
+    if(selfId != null && String(e.entry_id) === String(selfId)) return false;
+    if(selfVoucher && e.voucher_no === selfVoucher) return false;
+    if(e.status === '已作廢') return false;
+    if(isMergedTax(e)) return false;
+    return true;
+  }).sort(function(a, b){ return String(invDay(b)).localeCompare(String(invDay(a))); });
+}
+function invDupHTML(list, inv){
+  return '<strong>⚠ 這張發票號碼已經記過了：' + esc(String(inv).trim()) + '</strong>'
+    + '<div style="margin-top:6px;">'
+    + list.slice(0, 6).map(function(e){
+        return '・<strong>' + esc(invDayLabel(e)) + '</strong>　' + esc(e.voucher_no || '')
+          + '　' + esc(e.direction || '') + ' ' + money(grossAmt(e)) + ' 元'
+          + (e.counterparty ? '　' + esc(e.counterparty) : '')
+          + (e.description ? '　' + esc(e.description) : '')
+          + '　<span class="muted">' + esc(e.status || '') + '</span>';
+      }).join('<br>')
+    + (list.length > 6 ? '<br><span class="muted">…另外還有 ' + (list.length - 6) + ' 筆</span>' : '')
+    + '</div>'
+    + '<div class="muted" style="margin-top:6px;">同一張發票拆成好幾個科目記是正常的，確定要再記一筆就直接存檔，'
+    + '系統會再問一次；如果是重複輸入，請改號碼或去修改原本那一筆。</div>';
+}
+function invDupBox(boxId, inv, selfId, selfVoucher){
+  const box = document.getElementById(boxId);
+  if(!box) return [];
+  const list = invDupFind(inv, selfId, selfVoucher);
+  if(!list.length){ box.style.display = 'none'; box.innerHTML = ''; return []; }
+  box.style.display = 'block';
+  box.innerHTML = invDupHTML(list, inv);
+  return list;
+}
+// 存檔前的最後一道：真的有重複就跳出確認，使用者按取消就不存。
+function invDupConfirm(inv, selfId, selfVoucher){
+  const list = invDupFind(inv, selfId, selfVoucher);
+  if(!list.length) return true;
+  const lines = list.slice(0, 6).map(function(e){
+    return '・' + invDayLabel(e) + '　' + (e.voucher_no || '') + '　'
+      + (e.direction || '') + ' ' + money(grossAmt(e)) + ' 元'
+      + (e.counterparty ? '　' + e.counterparty : '')
+      + (e.description ? '　' + e.description : '');
+  }).join('\n');
+  return confirm('發票號碼 ' + String(inv).trim() + ' 已經記過了：\n\n' + lines
+    + (list.length > 6 ? '\n…另外還有 ' + (list.length - 6) + ' 筆' : '')
+    + '\n\n同一張發票拆成好幾個科目記是正常的。\n確定還要再記一筆嗎？');
+}
+// 歷史資料分頁上方：把資料裡目前重複的發票號碼整理出來，沒有重複就不顯示。
+function renderInvDupCard(){
+  const card = document.getElementById('invDupCard');
+  const body = document.getElementById('invDupBody');
+  const badge = document.getElementById('invDupCount');
+  if(!card || !body) return;
+  const g = {};
+  (STATE.entries || []).forEach(function(e){
+    if(e.status === '已作廢' || isMergedTax(e)) return;
+    const k = invKey(e.invoice_no);
+    if(k.length < 6) return;
+    (g[k] = g[k] || []).push(e);
+  });
+  const dups = Object.keys(g).map(function(k){
+    // 同一張傳票的好幾列不算重複，要有兩張以上不同的傳票才算
+    const vouchers = {};
+    g[k].forEach(function(e){ vouchers[e.voucher_no || ('#' + e.entry_id)] = true; });
+    return { key: k, rows: g[k], vouchers: Object.keys(vouchers).length };
+  }).filter(function(x){ return x.vouchers > 1; })
+    .sort(function(a, b){ return String(invDay(b.rows[0])).localeCompare(String(invDay(a.rows[0]))); });
+  if(!dups.length){ card.style.display = 'none'; body.innerHTML = ''; if(badge) badge.textContent = '0'; return; }
+  card.style.display = '';
+  if(badge) badge.textContent = dups.length;
+  body.innerHTML = dups.map(function(d){
+    return '<tr><td><strong>' + esc(d.rows[0].invoice_no || d.key) + '</strong></td>'
+      + '<td>' + d.vouchers + ' 張傳票</td>'
+      + '<td>' + d.rows.map(function(e){
+          return esc(invDay(e) + '（' + invROC(invDay(e)) + '）') + '　' + esc(e.voucher_no || '')
+            + '　' + money(grossAmt(e)) + ' 元'
+            + (e.counterparty ? '　' + esc(e.counterparty) : '')
+            + (e.description ? '　' + esc(e.description) : '');
+        }).join('<br>') + '</td></tr>';
+  }).join('');
+}
+
 // 主列 ＋ 它底下的稅列（作廢、結案、刪除都要一起動）
 function withTax(id){
   const e = STATE.entries.find(x => String(x.entry_id) === String(id));
@@ -1132,6 +1256,7 @@ function neReadForm(){
 function neClear(){
   ['ne_amount','ne_party','ne_desc','ne_invoice','ne_plate','ne_notes','ne_due'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('ne_date').value = todayISO();
+  invDupBox('ne_invoice_warn', '', null, null);
   neTaxAuto();
   neUpdatePreview();
 }
@@ -1144,6 +1269,8 @@ async function neAdd(settled){
     return;
   }
   if(settled && !row.account_id){ toast('ne_msg','直接入帳一定要選收付帳戶，因為它會影響帳戶餘額'); return; }
+  // 發票號碼重複時再問一次；使用者按取消就不存（拆科目記帳是正常的，所以不硬擋）
+  if(row.invoice_no && !invDupConfirm(row.invoice_no, null, row.voucher_no)){ toast('ne_msg','已取消，沒有存檔'); return; }
   row.status = settled ? '已收付' : '掛帳中';
   row.settle_date = settled ? (row.due_date || row.entry_date) : null;
   if(settled) row.settled_by = CURRENT_USER || null;
@@ -1526,6 +1653,7 @@ function openSettle(id){
   fillAccountSelect(document.getElementById('sm_account'), '請選擇', e.account_id || '');
   document.getElementById('sm_pay').value = e.pay_method || '';
   document.getElementById('sm_invoice').value = e.invoice_no || '';
+  invDupBox('sm_invoice_warn', e.invoice_no || '', e.entry_id, e.voucher_no);
   document.getElementById('sm_msg').textContent = '';
   document.getElementById('settleModal').classList.add('show');
 }
@@ -1535,6 +1663,8 @@ async function confirmSettle(){
   const d = document.getElementById('sm_date').value;
   if(!accId){ toast('sm_msg','請選收付帳戶'); return; }
   if(!d){ toast('sm_msg','請填實際收付日'); return; }
+  const _inv = document.getElementById('sm_invoice').value.trim();
+  if(_inv && !invDupConfirm(_inv, e.entry_id, e.voucher_no)){ toast('sm_msg','已取消，沒有存檔'); return; }
   const acc = accById(accId);
   const patch = {
     status:'已收付', settle_date:d, account_id:acc.account_id, account_name:acc.name,
@@ -1567,6 +1697,7 @@ function openEdit(id){
   document.getElementById('em_due').value = e.due_date || '';
   document.getElementById('em_settle').value = e.settle_date || '';
   document.getElementById('em_invoice').value = e.invoice_no || '';
+  invDupBox('em_invoice_warn', e.invoice_no || '', e.entry_id, e.voucher_no);
   document.getElementById('em_plate').value = e.vehicle_plate || '';
   document.getElementById('em_notes').value = e.notes || '';
   document.getElementById('em_msg').textContent = '';
@@ -1582,6 +1713,8 @@ async function saveEdit(){
   const settle = document.getElementById('em_settle').value || null;
   if(e.status === '已收付' && !settle){ toast('em_msg','已收付的帳一定要有實際收付日'); return; }
   if(e.status === '已收付' && !acc){ toast('em_msg','已收付的帳一定要有收付帳戶'); return; }
+  const _inv = document.getElementById('em_invoice').value.trim();
+  if(_inv && !invDupConfirm(_inv, e.entry_id, e.voucher_no)){ toast('em_msg','已取消，沒有存檔'); return; }
   try{
     const saved = await sbUpdate('acc_entries', 'entry_id', e.entry_id, {
       subject_code: s ? s.code : null, subject_name: s ? s.name : null,
@@ -1679,6 +1812,7 @@ function renderAll(){
   renderPending();
   renderHistory();
   renderSetup();
+  renderInvDupCard();
   renderPartyList();
   if(document.getElementById('report').classList.contains('active')) renderReport();
 }
@@ -1704,6 +1838,18 @@ function bindEvents(){
   document.getElementById('ne_tax').addEventListener('input', neUpdatePreview);
   ['ne_amount','ne_party','ne_date','ne_account','ne_direction'].forEach(id =>
     document.getElementById(id).addEventListener('input', neUpdatePreview));
+  // 發票號碼一邊打一邊比對（115/08/05）
+  document.getElementById('ne_invoice').addEventListener('input', function(){
+    invDupBox('ne_invoice_warn', this.value, null, nextVoucher(document.getElementById('ne_date').value || todayISO()));
+  });
+  document.getElementById('sm_invoice').addEventListener('input', function(){
+    const e = STATE.entries.find(x => String(x.entry_id) === String(SETTLE_ID)) || {};
+    invDupBox('sm_invoice_warn', this.value, e.entry_id, e.voucher_no);
+  });
+  document.getElementById('em_invoice').addEventListener('input', function(){
+    const e = STATE.entries.find(x => String(x.entry_id) === String(EDIT_ID)) || {};
+    invDupBox('em_invoice_warn', this.value, e.entry_id, e.voucher_no);
+  });
   document.getElementById('ne_add_pending').addEventListener('click', () => neAdd(false));
   document.getElementById('ne_add_settled').addEventListener('click', () => neAdd(true));
   document.getElementById('ne_clear').addEventListener('click', neClear);

@@ -384,7 +384,6 @@
       <button data-tab="book" class="active">預約登記</button>
       <button data-tab="list">預約清單</button>
       <button data-tab="hist">歷史紀錄</button>
-      <button data-tab="setup">板車設定</button>
     </nav>
     <div class="sidebar-motto">
       <strong>安全 準時 用心</strong>
@@ -560,29 +559,7 @@
   </div>
 </div>
 
-<!-- ============ 板車設定 ============ -->
-<div id="setup" class="panel">
-  <div class="card" style="background:#fbf4e6;border-left:4px solid #c08a2e;font-size:13px;line-height:1.8;">
-電動板車是<strong>獨立的設備</strong>，不掛在車籍資料裡，所以這裡只用編號 01～04 認它們。
-    要改叫法、補財產編號或註明平常放哪個車場，都在下面這張表改。多買一台就按「新增一台」，
-    不用了請把它<strong>停用</strong>（<strong>不要刪除</strong>，刪掉舊預約就對不回來了，系統也會擋）。
-  </div>
-  <div class="card">
-    <div class="toolbar">
-      <h3 style="margin:0;flex:1;">可以被預約的板車</h3>
-      <button class="btn ghost tiny" id="st_add">新增一台</button>
-    </div>
-    <div style="overflow-x:auto;">
-      <table class="km-table">
-        <thead><tr>
-          <th>順序</th><th>名稱</th><th>編號</th><th>放置車場</th><th>顏色</th><th>啟用</th><th>備註</th><th class="no-print">操作</th>
-        </tr></thead>
-        <tbody id="st_body"></tbody>
-      </table>
-    </div>
-    <div id="st_msg" style="font-size:13px;font-weight:600;margin-top:8px;"></div>
-  </div>
-</div>
+<!-- 板車設定已經搬到「運輸行政管理資料庫」的車輛管理分頁（115/08/05）。司機這一頁只留預約、清單、歷史，不再改板車本身。 -->
 
     </div>
   </div>
@@ -874,28 +851,6 @@ function renderHist(){
   $('hs_byDriver').innerHTML = group(b => b.driver_name || '（未填）', b => b.driver_name || '（未填）');
 }
 
-// ---------- 板車設定 ----------
-function renderSetup(){
-  const rows = STATE.resources.slice().sort((a, b) => (a.sort_no||0) - (b.sort_no||0) || a.resource_id - b.resource_id);
-  const used = {};
-  STATE.bookings.forEach(b => { used[b.resource_id] = (used[b.resource_id] || 0) + 1; });
-  $('st_body').innerHTML = rows.length ? rows.map(r => {
-    const i = (f, v, w) => '<input data-f="' + f + '" data-id="' + r.resource_id + '" value="' + esc(v == null ? '' : v)
-      + '" style="width:' + w + 'px;padding:6px 8px;border:1px solid var(--border-strong);border-radius:8px;font-size:12px;">';
-    return '<tr><td>' + i('sort_no', r.sort_no, 44) + '</td>'
-      + '<td>' + i('resource_name', r.resource_name, 130) + '</td>'
-      + '<td>' + i('plate_number', r.plate_number, 100) + '</td>'
-      + '<td>' + i('base_location', r.base_location, 80) + '</td>'
-      + '<td><input type="color" data-f="color" data-id="' + r.resource_id + '" value="' + esc(r.color || '#8b929b')
-      + '" style="width:44px;height:30px;padding:0;border:1px solid var(--border-strong);border-radius:8px;"></td>'
-      + '<td style="text-align:center;"><input type="checkbox" data-f="is_active" data-id="' + r.resource_id + '"'
-      + (r.is_active ? ' checked' : '') + '></td>'
-      + '<td>' + i('notes', r.notes, 190) + '</td>'
-      + '<td class="no-print"><button class="btn ghost tiny st-save" data-id="' + r.resource_id + '">儲存</button>'
-      + ' <span class="muted">' + (used[r.resource_id] || 0) + ' 筆預約</span></td></tr>';
-  }).join('') : '<tr><td colspan="8" class="empty">還沒有板車，請按「新增一台」。</td></tr>';
-}
-
 // ---------- 送出預約 ----------
 function formEnd(){
   const d = $('tb_date').value;
@@ -985,40 +940,6 @@ async function actOn(id, act){
     msg.style.color = '#2f6f4e'; msg.textContent = '已更新。';
     renderAll();
   }catch(err){ msg.textContent = '更新失敗：' + tidyErr(err.message); }
-}
-
-// ---------- 設定儲存 ----------
-async function saveResource(id){
-  const msg = $('st_msg'); msg.style.color = '#B3261E';
-  const patch = {};
-  // 一定要限定 [data-f]，不然同一列的「儲存」按鈕（只有 data-id）也會被選到，
-  // 就會多送一個叫 undefined 的欄位進 Supabase，整筆更新都會被退回來。
-  document.querySelectorAll('#st_body [data-f][data-id="' + id + '"]').forEach(el => {
-    const f = el.dataset.f;
-    if(f === 'is_active') patch[f] = el.checked;
-    else if(f === 'sort_no') patch[f] = parseInt(el.value, 10) || 0;
-    else patch[f] = (el.value || '').trim() || null;
-  });
-  if(!patch.resource_name){ msg.textContent = '名稱不可以空白。'; return; }
-  try{
-    const saved = await sbUpdate('booking_resources', 'resource_id', id, patch);
-    const r = STATE.resources.find(x => x.resource_id === id); if(r) Object.assign(r, saved || patch);
-    msg.style.color = '#2f6f4e'; msg.textContent = '已儲存。';
-    renderAll();
-  }catch(err){ msg.textContent = '儲存失敗：' + tidyErr(err.message); }
-}
-async function addResource(){
-  const name = prompt('新板車的名稱（例如「電動板車05」）：', '');
-  if(!name || !name.trim()) return;
-  const msg = $('st_msg'); msg.style.color = '#B3261E';
-  try{
-    const saved = await sbInsert('booking_resources', {
-      resource_name: name.trim(), color: '#5b6672',
-      sort_no: STATE.resources.reduce((m, r) => Math.max(m, r.sort_no || 0), 0) + 1, is_active: true });
-    if(saved) STATE.resources.push(saved);
-    msg.style.color = '#2f6f4e'; msg.textContent = '已新增，請補編號與放置車場後按儲存。';
-    renderAll();
-  }catch(err){ msg.textContent = '新增失敗：' + tidyErr(err.message); }
 }
 
 // ---------- 匯出／列印 ----------
@@ -1122,11 +1043,6 @@ function wire(){
     + '<th>板車</th><th>日期</th><th>時間</th><th class="num">時數</th><th>預約人</th><th>搭配車輛</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>'
     + '</tr></thead><tbody>' + $('hs_body').innerHTML + '</tbody></table>', null);
 
-  $('st_add').onclick = addResource;
-  $('st_body').onclick = ev => {
-    const b = ev.target.closest('.st-save'); if(!b) return;
-    saveResource(parseInt(b.dataset.id, 10));
-  };
 }
 
 function renderAll(){
@@ -1135,7 +1051,6 @@ function renderAll(){
   renderWeek();
   renderList();
   renderHist();
-  renderSetup();
 }
 
 // ---------- 啟動 ----------
