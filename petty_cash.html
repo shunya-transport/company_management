@@ -302,7 +302,7 @@
         <div><div style="font-size:12px;opacity:.7;">本月支出</div><div id="pcMonthOut" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
         <div><div style="font-size:12px;opacity:.7;">本月收入</div><div id="pcMonthIn" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
         <div><div style="font-size:12px;opacity:.7;">本月筆數</div><div id="pcMonthCnt" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
-        <div><div style="font-size:12px;opacity:.7;">本月磅費</div><div id="pcMonthWeigh" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+        <div id="pcMonthWeighWrap"><div style="font-size:12px;opacity:.7;">本月磅費</div><div id="pcMonthWeigh" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
       </div>
     </div>
   </div>
@@ -580,12 +580,12 @@
       <label>收支<select id="em_dir"><option>支出</option><option>收入</option></select></label>
       <label>科目<select id="em_subject"></select></label>
       <label>金額<input type="number" id="em_amount" step="1"></label>
-      <label>磅費（司機代墊）<input type="number" id="em_weigh" step="1" placeholder="不是磅費就留空"></label>
+      <label id="em_weigh_wrap">磅費（司機代墊）<input type="number" id="em_weigh" step="1" placeholder="不是磅費就留空"></label>
       <label>領款人<input type="text" id="em_payee"></label>
-      <label>磅場<input type="text" id="em_station" list="wqStationList" placeholder="立豐"></label>
-      <label>過磅日<input type="date" id="em_wdate"></label>
-      <label>櫃號<input type="text" id="em_cno" placeholder="HMIU7878617" style="text-transform:uppercase;"></label>
-      <label>磅費怎麼給的<select id="em_settle">
+      <label id="em_station_wrap">磅場<input type="text" id="em_station" list="wqStationList" placeholder="立豐"></label>
+      <label id="em_wdate_wrap">過磅日<input type="date" id="em_wdate"></label>
+      <label id="em_cno_wrap">櫃號<input type="text" id="em_cno" placeholder="HMIU7878617" style="text-transform:uppercase;"></label>
+      <label id="em_settle_wrap">磅費怎麼給的<select id="em_settle">
         <option value="">還沒匯款（等主管匯給司機）</option>
         <option value="cash">當場用零用金付掉，不用匯款</option>
         <option value="old">115/07 以前的舊帳，早就匯過了</option>
@@ -682,6 +682,12 @@ async function authFetch(url, options={}){
 //   petty_cash_tainan.html BOOK_LOCK = '台南零用金' → 只看得到台南那一本，其他帳本連載入都不會載入
 // 兩邊寫進去的是同一張 petty_entries 表，所以台南記的帳，順亞這邊立刻看得到。
 var BOOK_LOCK = null; // BUILD:BOOK_LOCK
+// 這一本帳要不要「獨立記磅費」。台南版是 false —— 使用者 115/08/05：
+//「台南零用金的磅費可以拿掉，他們磅費是用零用金支出，不用獨立記磅費」。
+// false 的時候 init() 會呼叫 dropWeighUI() 把磅費分頁、記一筆的磅費格、
+// 編輯視窗的磅費欄位、餘額卡的「本月磅費」全部從 DOM 拿掉。
+// ★ 資料庫欄位一格都不動，台南那幾筆舊的 weigh_fee 還在，只是這一頁不顯示也不寫它。
+var WEIGH_TAB = true; // BUILD:WEIGH_TAB
 
 const STATE = { books: [], subjects: [], entries: [], accounts: [], drivers: [] };
 let CUR_BOOK = null;      // 目前帳本物件
@@ -922,6 +928,7 @@ function weighDriver(e){
   return { name:'（未填司機）', guessed:false };
 }
 function weighTag(e){
+  if(!WEIGH_TAB) return '';   // 台南版：這一頁不獨立記磅費，舊資料也不要掛標籤
   if(!isWeighEntry(e)) return '';
   const w = weighAmt(e);
   const partial = w < num(e.amount) - 0.001;
@@ -1625,12 +1632,17 @@ function wire(){
       const patch = {
         entry_date: $('em_date').value, direction: $('em_dir').value, subject_name: $('em_subject').value,
         amount: amt, payee: $('em_payee').value || null, status: $('em_status').value,
-        memo: $('em_memo').value || null, purpose: $('em_purpose').value || null,
-        weigh_fee: emwf > 0 ? emwf : null,
-        weigh_station: ($('em_station') && $('em_station').value.trim()) || null,
-        weigh_date: ($('em_wdate') && $('em_wdate').value) || null,
-        container_no: ($('em_cno') && wqContainers($('em_cno').value).join('、')) || null
+        memo: $('em_memo').value || null, purpose: $('em_purpose').value || null
       };
+      // ★ 磅費那幾欄只有在畫面上真的有那個欄位的時候才寫。
+      //   台南版（WEIGH_TAB = false）欄位被 dropWeighUI() 拿掉了，這裡就整段跳過，
+      //   不然使用者去改一筆台南的舊磅費，一按存檔就會把資料庫裡的 weigh_fee 洗成 null。
+      if($('em_weigh')){
+        patch.weigh_fee     = emwf > 0 ? emwf : null;
+        patch.weigh_station = ($('em_station') && $('em_station').value.trim()) || null;
+        patch.weigh_date    = ($('em_wdate') && $('em_wdate').value) || null;
+        patch.container_no  = ($('em_cno') && wqContainers($('em_cno').value).join('、')) || null;
+      }
       // 已經匯過款的（有真批號）不從這裡動，避免不小心把批次拆掉
       if($('em_settle') && !$('em_settle').disabled){
         const v = $('em_settle').value;
@@ -1966,6 +1978,20 @@ function wire(){
   };
 }
 
+// 這一本帳不獨立記磅費（台南）：把磅費相關的東西整個從 DOM 拿掉，不是只有 display:none。
+// 拿掉比隱藏好，因為全檔的磅費程式都是寫成「$('xxx') 不在就不做」，
+// 元素一消失，記磅費、算磅費、存磅費就自動全部停手，不會有半殘的狀態。
+function dropWeighUI(){
+  // 側邊選單的「磅費」按鈕與整個分頁
+  const nav = document.querySelector('.sidebar nav button[data-tab="weigh"]'); if(nav) nav.remove();
+  const tab = $('weigh'); if(tab) tab.remove();
+  // 記一筆的「磅費（司機代墊）」那一格、餘額卡的「本月磅費」、編輯視窗的五個磅費欄位
+  ['pc_weigh_wrap','pcMonthWeighWrap','em_weigh_wrap','em_station_wrap','em_wdate_wrap',
+   'em_cno_wrap','em_settle_wrap'].forEach(id => { const el = $(id); if(el) el.remove(); });
+  // 摘要範例別再舉磅費當例子
+  const memo = $('pc_memo'); if(memo) memo.placeholder = '例：加油、KLJ-3207 驗車';
+}
+
 // 鎖定單一帳本的版本：把帳本切換、跨帳本比較、新增帳本這些藏起來
 function lockUI(){
   const card = $('bookPickCard'); if(card) card.style.display = 'none';
@@ -1995,6 +2021,7 @@ async function init(){
     return;
   }
   if(BOOK_LOCK) lockUI();
+  if(!WEIGH_TAB) dropWeighUI();   // 台南：磅費用零用金付掉，不獨立記
   $('pc_date').value = todayISO();
   $('rf_date').value = todayISO();
   $('mo_month').value = thisMonth();
