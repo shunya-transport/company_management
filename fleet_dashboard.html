@@ -1464,6 +1464,59 @@
     </div>
 
     <div class="card">
+      <h2>三車場尿素存量</h2>
+      <div class="muted" style="margin-bottom:10px;line-height:1.7;">
+        現有存量 ＝ 期初 ＋ 期初日（含當天）以後的進貨 － 期初日以後的使用。<br>
+        期初還沒填的車場會標橘色，那一列的「目前存量」只是「進貨－使用」，還不能當真，請先在下面把三個車場的期初各填一次。<br>
+        實際去量桶子之後如果帳跟實際對不起來，<b>不要去改歷史紀錄</b>，直接把期初改成盤點那天的日期與實測公升數，帳就會從那一天重新起算。
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車場</th><th>期初日</th><th>期初(公升)</th><th>進貨(公升)</th><th>使用(公升)</th><th>目前存量(公升)</th><th>最近進貨</th><th>最近使用</th><th>近30天用量</th></tr></thead>
+          <tbody id="ureaStockBody"></tbody>
+        </table>
+      </div>
+      <h3 style="margin:16px 0 8px;font-size:15px;">設定期初／登錄盤點</h3>
+      <div class="form-grid">
+        <label>車場<select id="uo_region"></select></label>
+        <label>期初日／盤點日<input id="uo_date" type="date"></label>
+        <label>當天實際存量(公升)<input id="uo_qty" type="number" step="0.001" placeholder="現場量出來的公升數"></label>
+        <label>備註<input id="uo_notes" placeholder="選填，例：115/08/05 實地盤點"></label>
+      </div>
+      <button class="btn" id="uo_save">儲存期初／盤點</button>
+      <div class="muted" id="uo_msg" style="margin-top:8px;font-size:12px;line-height:1.7;"></div>
+    </div>
+
+    <div class="card">
+      <h2>尿素進貨登記<span class="count-badge" id="si_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;line-height:1.7;">
+        每叫一次尿素登一筆，數量直接填<b>公升</b>（散裝／噸桶，不分桶不分包）。登進來的量會自動加進上面的存量。<br>
+        金額、發票、單價沒有就留白，不要估。這張表只有登入這個系統才登得了，司機的免登入頁面只看得到存量數字，看不到廠商與金額。
+      </div>
+      <div class="form-grid">
+        <label>車場<select id="si_region"></select></label>
+        <label>進貨日<input id="si_date" type="date"></label>
+        <label>進貨量(公升)<input id="si_qty" type="number" step="0.001" placeholder="可填到小數第三位"></label>
+        <label>廠商<input id="si_vendor" placeholder="選填"></label>
+        <label>發票號碼<input id="si_inv" placeholder="選填"></label>
+        <label>單價<input id="si_price" type="number" step="0.001" placeholder="選填"></label>
+        <label>金額<input id="si_amt" type="number" placeholder="選填"></label>
+        <label>收貨人<input id="si_by" placeholder="選填"></label>
+        <label>備註<input id="si_notes" placeholder="選填"></label>
+      </div>
+      <button class="btn" id="si_add">新增進貨</button>
+      <div class="toolbar" style="margin-top:14px;">
+        <select id="si_region_filter"><option value="all">全部車場</option></select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車場</th><th>進貨日</th><th>進貨量(公升)</th><th>廠商</th><th>發票號碼</th><th>單價</th><th>金額</th><th>收貨人</th><th>備註</th><th></th></tr></thead>
+          <tbody id="ureaStockInBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>新增車用尿素登錄</h2>
       <div class="form-grid">
         <label>車場
@@ -2256,7 +2309,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
   adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
   equipmentTypes: [], employeeEquipment: [], tireRecords: [], medicalExamRecords: [], pensionElections: [],
-  stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
+  stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
   workHourDaily: [], workHourMonthly: [] };
 
@@ -2370,6 +2423,8 @@ const TABLE_MAP = {
   trailer_leases: {table:'trailer_leases', pk:'lease_id'},
   training_log: {table:'training_log', pk:'log_id'},
   urea_logs: {table:'urea_logs', pk:'log_id'},
+  urea_stock_in: {table:'urea_stock_in', pk:'stock_id'},
+  urea_stock_opening: {table:'urea_stock_opening', pk:'opening_id'},
   vehicle_documents: {table:'vehicle_documents', pk:'doc_id'},
   vehicle_equipment: {table:'vehicle_equipment', pk:'record_id'},
   vehicle_insurance: {table:'vehicle_insurance', pk:'insurance_id'},
@@ -2603,6 +2658,8 @@ const REQUIRED_FIELDS = {
   'trailer_leases': ['vehicle_id','lessee_id'],
   'training_types': ['type_name'],
   'urea_logs': ['region','log_date','quantity'],
+  'urea_stock_in': ['region','stock_date','quantity'],
+  'urea_stock_opening': ['region','opening_date','opening_qty'],
   'user_accounts': ['username','password_hash'],
   'vehicle_documents': ['vehicle_id','doc_type'],
   'vehicle_equipment': ['vehicle_id','type_id'],
@@ -2782,6 +2839,8 @@ async function loadState(){
   STATE.instruments = await safeGet('instruments', SEED.instruments || [], true);
   STATE.calibrationRecords = await safeGet('calibration_records', SEED.calibration_records || [], true);
   STATE.ureaLogs = await safeGet('urea_logs', [], true);
+  STATE.ureaStockIn = await safeGet('urea_stock_in', [], true);
+  STATE.ureaOpening = await safeGet('urea_stock_opening', [], true);
   STATE.companyPhones = await safeGet('company_phones', SEED.company_phones || [], true);
   STATE.officeExtensions = await safeGet('office_extensions', SEED.office_extensions || [], true);
   STATE.officeLocations = await safeGet('office_locations', SEED.office_locations || [], true);
@@ -3363,6 +3422,7 @@ function countVehicleLinks(vid){
     ['輪軸保養', STATE.axleRecords],
     ['排放紀錄', STATE.emissionRecords],
     ['尿素登錄', STATE.ureaLogs],
+    ['尿素進貨', STATE.ureaStockIn],
     ['板架租賃', STATE.leases],
     ['過路費', STATE.adminTolls]
   ];
@@ -6096,6 +6156,107 @@ function renderTlStats(){
   }
 }
 
+// ===== 三車場尿素庫存管控（115/08/05）=====
+// 使用者：「三個車場都會叫尿素，那我是不是可以管控他現在的量」
+//   現有存量 ＝ 期初 ＋ 期初日(含當天)以後的進貨 － 期初日以後的使用。
+// ★ 這裡的算法必須跟 Supabase 的 v_urea_stock_balance 檢視（SQL #39）完全一致，
+//   因為免登入的 urea_log.html 讀的是那個檢視，兩邊算出來的數字要一樣，改要一起改。
+// ★ 進貨與期初這兩張表【只有登入的這個系統改得動】，anon 對它們沒有任何權限，
+//   免登入頁面只拿得到檢視裡的彙總數字，看不到廠商與金額。
+const UREA_YARDS = ['台中', '新竹', '台南'];
+
+function ureaStockRegions(){
+  const list = UREA_YARDS.slice();
+  const add = r => { const t = String(r == null ? '' : r).trim(); if(t && list.indexOf(t) < 0) list.push(t); };
+  STATE.ureaLogs.forEach(u => add(u.region));
+  STATE.ureaStockIn.forEach(r => add(r.region));
+  STATE.ureaOpening.forEach(r => add(r.region));
+  return list;
+}
+function ureaDay(v){ return String(v == null ? '' : v).slice(0, 10); }
+function ureaOpeningOf(region){
+  return STATE.ureaOpening.find(o => String(o.region == null ? '' : o.region).trim() === region) || null;
+}
+
+function ureaBalanceRows(){
+  const d30 = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+  const sum = arr => arr.reduce((a, x) => a + (Number(x) || 0), 0);
+  return ureaStockRegions().map(region => {
+    const o = ureaOpeningOf(region);
+    const from = (o && o.opening_date) ? ureaDay(o.opening_date) : '1900-01-01';
+    const from30 = from > d30 ? from : d30;
+    const ins  = STATE.ureaStockIn.filter(r => String(r.region == null ? '' : r.region).trim() === region && ureaDay(r.stock_date) >= from);
+    const uses = STATE.ureaLogs.filter(u => String(u.region == null ? '' : u.region).trim() === region && ureaDay(u.log_date) >= from);
+    const openQty = o ? (Number(o.opening_qty) || 0) : 0;
+    const inQty   = sum(ins.map(r => r.quantity));
+    const useQty  = sum(uses.map(u => u.quantity));
+    return {
+      region: region,
+      missing: !o,
+      openingDate: o ? ureaDay(o.opening_date) : '',
+      openQty: openQty, inQty: inQty, useQty: useQty,
+      balance: openQty + inQty - useQty,
+      use30: sum(uses.filter(u => ureaDay(u.log_date) >= from30).map(u => u.quantity)),
+      lastIn:  ins.map(r => ureaDay(r.stock_date)).sort().pop() || '',
+      lastUse: uses.map(u => ureaDay(u.log_date)).sort().pop() || ''
+    };
+  });
+}
+
+function renderUreaStockSelects(){
+  const regions = ureaStockRegions();
+  [['uo_region', ''], ['si_region', ''], ['si_region_filter', 'all']].forEach(pair => {
+    const el = document.getElementById(pair[0]);
+    if(!el) return;
+    const keep = el.value;
+    const head = pair[1] === 'all' ? `<option value="all">全部車場</option>` : '';
+    el.innerHTML = head + regions.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    if(keep && (keep === 'all' || regions.indexOf(keep) >= 0)) el.value = keep;
+  });
+}
+
+function renderUreaStockTable(){
+  renderUreaStockSelects();
+  const body = document.getElementById('ureaStockBody');
+  if(!body) return;
+  body.innerHTML = ureaBalanceRows().map(r => `
+    <tr${r.missing ? ' style="background:#FFF4E5;"' : ''}>
+      <td>${esc(r.region)}</td>
+      <td>${r.missing ? '<span style="color:#B26A00;">尚未設定</span>' : esc(r.openingDate)}</td>
+      <td>${r.missing ? '<span style="color:#B26A00;">—</span>' : ureaQty(r.openQty)}</td>
+      <td>${ureaQty(r.inQty)}</td>
+      <td>${ureaQty(r.useQty)}</td>
+      <td><b>${ureaQty(r.balance)}</b>${r.missing ? '<br><span style="color:#B26A00;font-size:11.5px;">期初未設定，這個數字還不能當真</span>' : ''}</td>
+      <td>${esc(r.lastIn)}</td>
+      <td>${esc(r.lastUse)}</td>
+      <td>${ureaQty(r.use30)}</td>
+    </tr>`).join('') || `<tr><td colspan="9" class="empty">尚無資料</td></tr>`;
+}
+
+function renderUreaStockInTable(){
+  const body = document.getElementById('ureaStockInBody');
+  if(!body) return;
+  const f = document.getElementById('si_region_filter');
+  const filter = f ? f.value : 'all';
+  let rows = STATE.ureaStockIn.slice().sort((a, b) => ureaDay(b.stock_date).localeCompare(ureaDay(a.stock_date)));
+  if(filter !== 'all') rows = rows.filter(r => String(r.region == null ? '' : r.region).trim() === filter);
+  const cnt = document.getElementById('si_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.region)}</td>
+      <td>${esc(ureaDay(r.stock_date))}</td>
+      <td>${ureaQty(r.quantity)}</td>
+      <td>${esc(r.vendor_name || '')}</td>
+      <td>${esc(r.invoice_no || '')}</td>
+      <td>${(r.unit_price === null || r.unit_price === undefined || r.unit_price === '') ? '' : '$' + r.unit_price}</td>
+      <td>${(r.amount === null || r.amount === undefined || r.amount === '') ? '' : '$' + r.amount}</td>
+      <td>${esc(r.received_by || '')}</td>
+      <td class="muted">${esc(r.notes || '')}</td>
+      <td><button class="del-btn" data-del-ureain="${r.id}">刪除</button></td>
+    </tr>`).join('') || `<tr><td colspan="10" class="empty">尚無進貨紀錄</td></tr>`;
+}
+
 // 使用量一律顯示三位小數，跟資料庫的 NUMERIC(12,3) 對齊
 function ureaQty(v){
   if(v === null || v === undefined || v === '') return '';
@@ -7075,6 +7236,8 @@ function renderAll(){
   renderWorkHourAll();
   renderUreaTable();
   renderUreaStats();
+  renderUreaStockTable();
+  renderUreaStockInTable();
   renderAdminStaticTables();
   renderMaintDueTable();
   renderInsuranceLedger();
@@ -7729,6 +7892,78 @@ document.getElementById('ureaTableBody').addEventListener('click', async (e) => 
   }
 });
 document.getElementById('ur_stats_region').addEventListener('change', renderUreaStats);
+
+// ===== 三車場尿素庫存：期初／盤點與進貨登記 =====
+// 跟尿素使用登錄同一個道理：動手改之前先把雲端最新的抓回來，
+// 免得把別人剛登的那幾筆洗掉（saveState 會刪掉陣列裡不存在的 id）。
+async function ureaStockRefresh(){
+  STATE.ureaStockIn = await safeGet('urea_stock_in', STATE.ureaStockIn, true);
+  STATE.ureaOpening = await safeGet('urea_stock_opening', STATE.ureaOpening, true);
+}
+
+document.getElementById('uo_save').addEventListener('click', async () => {
+  const region = document.getElementById('uo_region').value;
+  const date   = document.getElementById('uo_date').value;
+  const qtyRaw = document.getElementById('uo_qty').value;
+  const qty    = parseFloat(qtyRaw);
+  const msg    = document.getElementById('uo_msg');
+  if(!region){ alert('請選擇車場'); return; }
+  if(!date){ alert('請填期初日／盤點日'); return; }
+  if(qtyRaw === '' || isNaN(qty)){ alert('請填當天實際存量（公升）'); return; }
+  if(qty < 0){ alert('存量不可以是負數'); return; }
+  await ureaStockRefresh();
+  const notes = document.getElementById('uo_notes').value.trim();
+  const exist = STATE.ureaOpening.find(o => String(o.region == null ? '' : o.region).trim() === region);
+  if(exist){
+    exist.opening_date = date;
+    exist.opening_qty  = Math.round(qty * 1000) / 1000;
+    exist.notes = notes || null;
+  }else{
+    STATE.ureaOpening.push({
+      id: nextId(STATE.ureaOpening), region: region,
+      opening_date: date, opening_qty: Math.round(qty * 1000) / 1000, notes: notes || null
+    });
+  }
+  await saveState('urea_stock_opening', STATE.ureaOpening, true);
+  if(msg) msg.textContent = region + ' 的期初已存成 ' + date + '、' + (Math.round(qty * 1000) / 1000) + ' 公升，存量會從這一天（含當天）重新起算。';
+  ['uo_qty', 'uo_notes'].forEach(id => document.getElementById(id).value = '');
+  renderAll();
+});
+
+document.getElementById('si_add').addEventListener('click', async () => {
+  const region = document.getElementById('si_region').value;
+  const date   = document.getElementById('si_date').value;
+  const qtyRaw = document.getElementById('si_qty').value;
+  const qty    = parseFloat(qtyRaw);
+  if(!region){ alert('請選擇車場'); return; }
+  if(!date || qtyRaw === '' || isNaN(qty)){ alert('請填進貨日與進貨量'); return; }
+  if(qty <= 0){ alert('進貨量要大於 0'); return; }
+  await ureaStockRefresh();
+  const numOrNull = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  const txtOrNull = id => { const v = document.getElementById(id).value.trim(); return v === '' ? null : v; };
+  STATE.ureaStockIn.push({
+    id: nextId(STATE.ureaStockIn), region: region, stock_date: date,
+    quantity: Math.round(qty * 1000) / 1000,
+    vendor_name: txtOrNull('si_vendor'), invoice_no: txtOrNull('si_inv'),
+    unit_price: numOrNull('si_price'), amount: numOrNull('si_amt'),
+    received_by: txtOrNull('si_by'), notes: txtOrNull('si_notes')
+  });
+  await saveState('urea_stock_in', STATE.ureaStockIn, true);
+  ['si_date', 'si_qty', 'si_inv', 'si_price', 'si_amt', 'si_notes'].forEach(id => document.getElementById(id).value = '');
+  renderAll();
+});
+
+document.getElementById('si_region_filter').addEventListener('change', renderUreaStockInTable);
+document.getElementById('ureaStockInBody').addEventListener('click', async (e) => {
+  const id = e.target.getAttribute('data-del-ureain');
+  if(id){
+    if(!confirm('確定要刪除這一筆進貨？刪掉之後，這個車場的存量會少掉這些公升。')) return;
+    await ureaStockRefresh();
+    STATE.ureaStockIn = STATE.ureaStockIn.filter(r => String(r.id) !== id);
+    await saveState('urea_stock_in', STATE.ureaStockIn, true);
+    renderAll();
+  }
+});
 document.getElementById('tl_add').addEventListener('click', async () => {
   const plate = document.getElementById('tl_plate').value;
   const date = document.getElementById('tl_date').value;

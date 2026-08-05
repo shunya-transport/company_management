@@ -408,7 +408,7 @@
     <h3>我要登記</h3>
     <div class="muted" style="margin:-6px 0 12px;font-size:12.5px;">
       加多少就填多少，<strong>小數點後面可以填到三位</strong>（例：12.345 公升）。
-      車場會依車號自己帶出來，不對的話可以改。<br>
+      車場會依車號自己帶出來，<strong>調度車不會自己帶，一定要自己選</strong>——這關係到那個車場的桶子還剩多少，選錯數字就不準。<br>
       <strong>只有本公司在職人員、本公司在役的車可以登記</strong>，姓名要跟人事系統一致。
     </div>
 
@@ -426,7 +426,7 @@
       <label>使用量（公升）<span class="req">*</span>
         <input type="number" id="ur_qty" step="0.001" min="0.001" placeholder="例：12.345" inputmode="decimal">
       </label>
-      <label>車場
+      <label>車場<span class="req">*</span>
         <select id="ur_region"></select>
       </label>
     </div>
@@ -457,6 +457,23 @@
       <table class="km-table">
         <thead><tr><th>日期</th><th>填充人</th><th class="num">使用量(L)</th><th class="num">距上次(天)</th></tr></thead>
         <tbody id="ur_recent"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="ur_stock_card" style="display:none;">
+    <div class="toolbar">
+      <h3 style="margin:0;flex:1;">三個車場目前存量</h3>
+      <span class="muted" id="ur_stock_note" style="font-size:12px;"></span>
+    </div>
+    <div class="muted" style="margin:-2px 0 10px;font-size:12.5px;line-height:1.7;">
+      這是各車場桶子裡大概還剩多少公升（期初＋進貨－大家登記的使用量）。
+      <strong>只能看，不能改</strong>；叫貨與盤點請運輸行政人員在系統裡登。
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>車場</th><th class="num">目前存量(L)</th><th class="num">近30天用量(L)</th><th>最近進貨</th></tr></thead>
+        <tbody id="ur_stock_body"></tbody>
       </table>
     </div>
   </div>
@@ -583,7 +600,7 @@ async function authFetch(url, options){
 //   ・車輛只讀 車號／車場／類別／狀態，不讀車主、引擎號碼那些。
 //   ・刪除只開放「今天登記的那幾筆」，避免有人把整年的資料掃掉。
 
-const STATE = { logs: [], vehicles: [] };
+const STATE = { logs: [], vehicles: [], stock: [], stockErr: '' };
 const YARDS = ['台中', '新竹', '台南'];
 
 const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
@@ -716,6 +733,46 @@ async function loadAll(){
     STATE.vehicles = [];
     STATE.vehErr = tidyErr(e && e.message ? e.message : String(e));
   }
+  await loadStock();
+}
+
+
+// ---------- 三車場尿素存量（唯讀）----------
+// 使用者 115/08/05：「三個車場都會叫尿素，那我是不是可以管控他現在的量」
+// 這一頁【只讀】Supabase 的 v_urea_stock_balance 檢視（SQL #39）。
+// 進貨表 urea_stock_in 與期初表 urea_stock_opening 對 anon 完全沒有權限，
+// 所以這一頁看得到「還剩多少」，但看不到廠商、發票、金額，也改不了任何一個數字。
+// 讀不到就整張卡片藏起來——存量只是參考，不可以因為它掛掉就害司機登記不了。
+async function loadStock(){
+  try{
+    const rows = await sbSelect('v_urea_stock_balance', 'select=*');
+    STATE.stock = Array.isArray(rows) ? rows : [];
+    STATE.stockErr = '';
+  }catch(e){
+    STATE.stock = [];
+    STATE.stockErr = tidyErr(e && e.message ? e.message : String(e));
+  }
+}
+
+function renderStock(){
+  const card = $('ur_stock_card'); if(!card) return;
+  const rows = (STATE.stock || []).filter(r => YARDS.indexOf(String(r.region || '')) >= 0);
+  if(!rows.length){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  const ord = r => { const i = YARDS.indexOf(String(r.region || '')); return i < 0 ? 99 : i; };
+  const anyMissing = rows.some(r => r.opening_missing);
+  $('ur_stock_note').textContent = anyMissing ? '有車場還沒設期初，數字僅供參考' : '';
+  $('ur_stock_body').innerHTML = rows.sort((a, b) => ord(a) - ord(b)).map(r => {
+    const miss = !!r.opening_missing;
+    return '<tr>'
+      + '<td>' + esc(r.region || '') + '</td>'
+      + '<td class="num">' + (miss
+          ? '<span style="color:#c07a20;">尚未設期初</span>'
+          : '<strong>' + fmt3(r.balance_qty) + '</strong>') + '</td>'
+      + '<td class="num">' + fmt3(r.used_30d) + '</td>'
+      + '<td>' + (r.last_in_date ? esc(toROC(String(r.last_in_date).slice(0,10))) : '') + '</td>'
+      + '</tr>';
+  }).join('');
 }
 
 // 車號下拉是空的時候，把原因寫在畫面上（而且要讓人還是能手打車號）
@@ -744,8 +801,12 @@ function fillPickers(){
   if(keepPlate) $('ur_plate').value = keepPlate;
   renderVehMsg();
 
+  // 車場不預選：全隊 151 台裡有 110 台的車籍是「調度」，帶不出車場，
+  // 如果預設停在第一個選項（台中），司機一忘記改，用量就會全部算到台中頭上，
+  // 三個車場的存量就管不了了。所以寧可逼他選一次。
   const keepReg = $('ur_region').value;
-  $('ur_region').innerHTML = allRegions().map(r => '<option value="' + esc(r) + '">' + esc(r) + '</option>').join('');
+  $('ur_region').innerHTML = '<option value="">請選車場</option>'
+    + allRegions().map(r => '<option value="' + esc(r) + '">' + esc(r) + '</option>').join('');
   if(keepReg) $('ur_region').value = keepReg;
 
   $('ur_byList').innerHTML = knownFillers().map(n => '<option value="' + esc(n) + '">').join('');
@@ -903,6 +964,14 @@ async function saveLog(){
   if(!plate){ msg.textContent = '請選車號'; return; }
   if(qtyRaw === '' || isNaN(qty)){ msg.textContent = '請填使用量'; return; }
   if(qty <= 0){ msg.textContent = '使用量要大於 0'; return; }
+  // 車場一定要選：這一筆是從哪個車場的桶子加出去的，
+  // 決定了那個車場的存量要扣多少，猜錯不如不要猜。
+  if(!$('ur_region').value){
+    alert('請選車場。\n\n這一桶尿素是從哪一個車場加出去的，'
+      + '關係到那個車場還剩多少，一定要選對。');
+    msg.textContent = '請選車場';
+    return;
+  }
 
   // ---- 防呆一：不是我們家的車，不給登記 ----
   // （下拉本來就只放在役可加尿素的車，這裡再擋一次，
@@ -932,7 +1001,7 @@ async function saveLog(){
   const v = vehByPlate(plate);
   const row = {
     log_date: date,
-    region: $('ur_region').value || regionOfPlate(plate) || allRegions()[0],
+    region: $('ur_region').value,   // 上面已經擋過空白，這裡不再自動猜
     vehicle_id: v ? v.vehicle_id : null,
     plate_number: plate,
     filled_by: by,
@@ -951,6 +1020,8 @@ async function saveLog(){
     ['ur_qty'].forEach(id => $(id).value = '');
     refreshHint();
     renderAll();
+    // 剛扣掉的量要馬上反映在存量表上
+    loadStock().then(renderStock);
   }catch(e){
     msg.style.color = '#B3261E';
     msg.textContent = '失敗：' + tidyErr(e.message);
@@ -1140,7 +1211,7 @@ function wire(){
   $('ur_save').onclick = saveLog;
   $('ur_clear').onclick = () => {
     ['ur_by','ur_qty'].forEach(id => $(id).value = '');
-    $('ur_plate').value = ''; $('ur_date').value = todayISO();
+    $('ur_plate').value = ''; $('ur_region').value = ''; $('ur_date').value = todayISO();
     $('ur_msg').textContent = '';
     $('ur_bymsg').style.display = 'none'; $('ur_bymsg').textContent = '';
     refreshHint(); renderRecent();
@@ -1152,6 +1223,7 @@ function wire(){
     const msg = $('ls_msg'); msg.style.color = 'var(--text-3)'; msg.textContent = '重新載入中…';
     try{
       STATE.logs = await sbSelect('urea_logs', 'select=*&order=log_date.desc,log_id.desc&limit=5000');
+      await loadStock();
       msg.textContent = ''; renderAll();
     }catch(e){ msg.style.color = '#B3261E'; msg.textContent = '載入失敗：' + tidyErr(e.message); }
   };
@@ -1190,6 +1262,7 @@ function wire(){
 
 function renderAll(){
   fillPickers();
+  renderStock();
   renderStats();
   renderRecent();
   renderList();
