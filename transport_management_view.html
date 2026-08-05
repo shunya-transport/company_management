@@ -1734,14 +1734,15 @@
       <div class="toolbar no-print">
         <input id="wh_in_search" placeholder="搜尋司機姓名">
         <select id="wh_in_period"><option value="all">全部月份</option></select>
+        <button class="btn ghost no-print" id="wh_export_daily">匯出工時</button>
       </div>
       <div class="table-scroll" style="max-height:420px;">
         <table>
-          <thead><tr><th>日期</th><th>司機</th><th>區別</th><th>狀態</th><th>上班</th><th>下班</th><th style="text-align:right;">刷卡時數</th><th style="text-align:right;">休息</th><th style="text-align:right;">工時</th><th style="text-align:right;">連續累計</th></tr></thead>
+          <thead><tr><th>日期</th><th>司機</th><th>區別</th><th>狀態</th><th>出勤類別</th><th>上班</th><th>下班</th><th style="text-align:right;">刷卡時數</th><th style="text-align:right;">休息</th><th style="text-align:right;">工時</th><th style="text-align:right;">加班</th><th style="text-align:right;">連續累計</th><th style="text-align:right;">趟次</th><th style="text-align:right;">里程</th><th>車號</th><th>車隊分類</th></tr></thead>
           <tbody id="whInputBody"></tbody>
         </table>
       </div>
-      <div class="muted" style="margin-top:8px;">為避免畫面過重，這裡最多顯示最新 300 筆，可用搜尋或月份縮小範圍。</div>
+      <div class="muted" style="margin-top:8px;">為避免畫面過重，這裡最多顯示最新 300 筆，可用搜尋或月份縮小範圍。<b>「匯出工時」匯出的是目前搜尋／月份條件下的<u>全部</u>筆數，不受 300 筆限制</b>，欄位比畫面更完整（含員工編號、隔日下班註記）。</div>
     </div>
 
     <div class="card">
@@ -9542,13 +9543,19 @@ function renderWhInputTable(){
       <td style="white-space:nowrap;font-weight:600;">${esc(r.driver_name||'')}${whIsLeft(r.driver_name)?' <span class="pill gray">離職</span>':''}</td>
       <td>${esc(whRegionOf(r)) || '<span class="muted">—</span>'}</td>
       <td><span class="pill ${r.day_status==='休'?'gray':'green'}">${esc(r.day_status||'')}</span></td>
+      <td style="white-space:nowrap;">${r.attend_type?esc(r.attend_type):'<span class="muted">—</span>'}</td>
       <td>${esc(r.clock_in||'')}</td>
       <td>${esc(r.clock_out||'')}${r.overnight?' <span class="muted">(隔日)</span>':''}</td>
       <td style="text-align:right;">${r.card_hours==null?'—':whRound(r.card_hours,2)}</td>
       <td style="text-align:right;">${r.rest_hours==null?'—':whRound(r.rest_hours,2)}</td>
       <td style="text-align:right;font-weight:600;">${r.work_hours==null?'—':whRound(r.work_hours,2)}</td>
+      <td style="text-align:right;">${r.overtime_hours==null?'—':whRound(r.overtime_hours,2)}</td>
       <td style="text-align:right;">${r.cum_hours==null?'—':whRound(r.cum_hours,1)}</td>
-    </tr>`).join('') || `<tr><td colspan="10" class="empty">這個條件下沒有每日工時紀錄</td></tr>`;
+      <td style="text-align:right;">${r.trip_count==null?'—':whRound(r.trip_count,1)}</td>
+      <td style="text-align:right;">${r.total_km==null?'—':Number(r.total_km).toLocaleString()}</td>
+      <td style="white-space:nowrap;">${esc(r.plate||'')}</td>
+      <td style="white-space:nowrap;">${esc(r.fleet_group||'')}</td>
+    </tr>`).join('') || `<tr><td colspan="16" class="empty">這個條件下沒有每日工時紀錄</td></tr>`;
 }
 
 // ----- 月度輸入 -----
@@ -9615,6 +9622,45 @@ function renderWorkHourAll(){
 
 function whRerender(){ renderWhDrivers(); renderWhViolations(); }
 
+// ----- 匯出工時（每日明細，不受畫面 300 筆限制） -----
+// 115/08/05 使用者要求：「幫我做可以匯出工時的按鈕」。
+// 匯出的是「每日工時明細」目前篩選條件下的全部資料，欄位比畫面更完整。
+const WH_EXPORT_HEAD = ['日期','民國年','月','日','區別','司機','員工編號','狀態','出勤類別','出勤代碼',
+  '上班','下班','隔日下班','刷卡時數','休息時數','工作時數','加班時數','連續累計工時',
+  '本日趟次','總里程(km)','車號','車隊分類'];
+function whExportRows(){
+  return whInputRows().map(r => [
+    r.work_date || '', r.year_roc == null ? '' : r.year_roc,
+    r.month == null ? '' : r.month, r.day == null ? '' : r.day,
+    whRegionOf(r) || '', r.driver_name || '',
+    r.employee_id == null ? '' : r.employee_id,
+    r.day_status || '', r.attend_type || '', r.attend_code || '',
+    r.clock_in || '', r.clock_out || '', r.overnight ? '是' : '',
+    r.card_hours == null ? '' : whRound(r.card_hours, 2),
+    r.rest_hours == null ? '' : whRound(r.rest_hours, 2),
+    r.work_hours == null ? '' : whRound(r.work_hours, 2),
+    r.overtime_hours == null ? '' : whRound(r.overtime_hours, 2),
+    r.cum_hours == null ? '' : whRound(r.cum_hours, 2),
+    r.trip_count == null ? '' : whRound(r.trip_count, 2),
+    r.total_km == null ? '' : whRound(r.total_km, 2),
+    r.plate || '', r.fleet_group || ''
+  ]);
+}
+function whExportDaily(){
+  const rows = whExportRows();
+  if(!rows.length){ alert('目前的搜尋／月份條件下沒有工時資料可以匯出。'); return; }
+  const sel = document.getElementById('wh_in_period');
+  const p = sel ? sel.value : 'all';
+  const q = document.getElementById('wh_in_search');
+  const parts = ['每日工時明細'];
+  if(p && p !== 'all'){
+    const t = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : p;
+    parts.push(String(t).replace(/\s/g, ''));
+  }
+  if(q && q.value.trim()) parts.push(q.value.trim());
+  whDownloadCsv(parts.join('_'), WH_EXPORT_HEAD, rows);
+}
+
 function whDownloadCsv(name, header, rows){
   const lines = [header].concat(rows).map(r => r.map(x => `"${String(x==null?'':x).replace(/"/g,'""')}"`).join(','));
   const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
@@ -9639,6 +9685,7 @@ if(document.getElementById('wh_period')){
 
   document.getElementById('wh_in_search').addEventListener('input', renderWhInputTable);
   document.getElementById('wh_in_period').addEventListener('change', renderWhInputTable);
+  document.getElementById('wh_export_daily').addEventListener('click', whExportDaily);
 
   document.getElementById('wh_m_add').addEventListener('click', whAddMonthly);
   document.getElementById('wh_m_clear').addEventListener('click', () => {
