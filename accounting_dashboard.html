@@ -291,13 +291,6 @@
     <div class="table-scroll">
       <table><thead><tr><th>零用金帳本</th><th>公司</th><th class="num">目前餘額</th><th class="num">定額</th><th>定額差額</th><th class="num">本月支出</th><th class="num">本月收入</th><th class="num">本月筆數</th><th class="num">待補單據</th><th>最後一筆</th><th>更新時間</th></tr></thead><tbody id="ovPettyBody"></tbody></table>
     </div>
-    <div id="ovPettyWeighWrap" style="display:none;margin-top:14px;">
-      <h2 style="font-size:15px;">本月磅費（各司機）</h2>
-      <div class="muted" style="margin-bottom:8px;">過磅費分兩種給法：司機自己先墊、公司之後匯錢還他（目前只有台中的張誌元是這樣），以及當場就用零用金的現金付掉、不用再匯（其他司機）。「要匯給司機（還沒匯）」才是主管要匯出去的錢，就是零用金記帳網頁「磅費結清」那一頁還沒按過「產生匯款清單」的部分；按過之後會轉到「已匯款」。系統裡沒有存司機的銀行帳號，帳號請照人事那邊的資料填。</div>
-      <div class="table-scroll">
-        <table><thead><tr><th>零用金帳本</th><th>司機</th><th class="num">筆數</th><th class="num">磅費合計</th><th class="num">要匯給司機（還沒匯）</th><th class="num">當場零用金付掉</th><th class="num">已匯款</th><th>期間</th></tr></thead><tbody id="ovPettyWeighBody"></tbody></table>
-      </div>
-    </div>
     <div id="ovPettySubjWrap" style="display:none;margin-top:14px;">
       <h2 style="font-size:15px;">本月零用金支出科目</h2>
       <div class="muted" style="margin-bottom:8px;">只算本月、只算支出，不含撥補進來的錢。科目名稱一樣才會併成同一列。</div>
@@ -305,6 +298,16 @@
         <table><thead id="ovPettySubjHead"></thead><tbody id="ovPettySubjBody"></tbody></table>
       </div>
     </div>
+  </div>
+  <!-- 磅費待付：使用者 115/08/05「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」。
+       所以這張卡【不是本月】，是把所有還沒匯給司機的磅費全部加起來——欠人家的錢不會因為跨月就不用付了。 -->
+  <div class="card" id="ovWeighCard" style="display:none;">
+    <h2>磅費待付<span class="count-badge" id="ovWeighCount">0</span></h2>
+    <div class="muted" style="margin-bottom:10px;">這是司機自己先掏現金付磅場、公司還沒匯錢還他的部分，<strong>不分月份全部列出來</strong>，就是主管這次要匯出去的錢。當場直接用零用金現金付掉的（台南全部、台中大部分司機）不會出現在這裡，因為錢已經付了。要看每一筆是哪一天、哪個磅場、哪個櫃號，或是要下載匯款清單、按結清，請開零用金記帳網頁的「磅費」分頁。系統裡沒有存司機的銀行帳號，匯款時請照人事那邊的資料填。</div>
+    <div class="table-scroll">
+      <table><thead><tr><th>零用金帳本</th><th>司機</th><th class="num">筆數</th><th>最早一筆</th><th>最晚一筆</th><th class="num">要匯給司機</th></tr></thead><tbody id="ovWeighBody"></tbody></table>
+    </div>
+    <div class="muted" style="margin-top:8px;" id="ovWeighFoot"></div>
   </div>
   <div class="card">
     <h2>各帳戶餘額</h2>
@@ -863,12 +866,16 @@ function renderOverview(){
   });
   const books = (STATE.pettyBooks || []).filter(b => b.is_active !== false);
   const pettyTotal = books.reduce((s,b) => s + num(b.current_balance), 0);
+  const pw = pettyWeighOwed(books);
   document.getElementById('ovStatRow').innerHTML =
     `<div class="stat-card"><div class="n">${money(total)}</div><div class="l">所有帳戶目前餘額（不含零用金）</div></div>
      <div class="stat-card green"><div class="n">${money(pt.inc)}</div><div class="l">掛帳中應收（還沒收到的錢）</div></div>
      <div class="stat-card red"><div class="n">${money(pt.exp)}</div><div class="l">掛帳中應付（還沒付出的錢）</div></div>
      <div class="stat-card ${mi-me>=0?'green':'red'}"><div class="n">${moneySigned(mi-me)}</div><div class="l">本月收支淨額（收 ${money(mi)}／支 ${money(me)}）</div></div>` +
-    (books.length ? `<div class="stat-card ${pettyTotal<0?'red':''}"><div class="n">${moneySigned(pettyTotal)}</div><div class="l">零用金餘額（${books.map(b=>esc(b.book_name)).join('、')}）</div></div>` : '');
+    (books.length ? `<div class="stat-card ${pettyTotal<0?'red':''}"><div class="n">${moneySigned(pettyTotal)}</div><div class="l">零用金餘額（${books.map(b=>esc(b.book_name)).join('、')}）</div></div>` : '') +
+    // 磅費待付：跟零用金餘額並排的獨立一格，主管一眼就看得到這次要匯多少給司機。
+    // 【刻意不限本月】——上個月沒匯的還是要匯。
+    (pw.any ? `<div class="stat-card ${pw.total>0?'amber':'green'}"><div class="n">${money(pw.total)}</div><div class="l">磅費待付${pw.total>0?'　要匯給 '+esc(pwNames(pw.names)):'　都付清了'}</div></div>` : '');
 
   document.getElementById('ovPettyCard').style.display = books.length ? '' : 'none';
   renderPettyCard(books, mS, mE);
@@ -988,59 +995,77 @@ function renderPettyCard(books, mS, mE){
 const PW_CASH_TAG = '零用金付訖';
 function PW_CASH_OK(e){ return !!(e && e.settle_batch && String(e.settle_batch).trim()); }
 
-// 本月磅費（各司機）。只看 weigh_fee 有填的列，已作廢不算。
-// 磅費是司機先自己付現金給磅場，之後公司再匯錢還他，所以要按人結算而不是按科目。
-function renderPettyWeigh(books, mS, mE){
-  const wrap = document.getElementById('ovPettyWeighWrap');
-  const body = document.getElementById('ovPettyWeighBody');
-  if(!wrap || !body) return;
+// 還沒匯給司機的磅費（不分月份）。
+// 使用者 115/08/05：「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」。
+// ★ 這裡【刻意不篩月份】。上個月忘了匯的錢這個月還是要匯，
+//   如果照本月篩，八月的欠款到了九月就會從畫面上消失，主管會漏匯。
+// 只看 weigh_fee 有填、沒作廢、settle_batch 還是空的那些列。
+function pettyWeighOwed(books){
   const bookName = {};
-  books.forEach(b => { bookName[b.book_id] = b.book_name; });
-  const rows = (STATE.pettyEntries || []).filter(e =>
-    bookName[e.book_id] !== undefined &&
-    e.status !== '已作廢' &&
-    num(e.weigh_fee) > 0 &&
-    String(e.entry_date) >= mS && String(e.entry_date) <= mE);
-  if(!rows.length){ wrap.style.display = 'none'; body.innerHTML = ''; return; }
+  (books || []).forEach(b => { bookName[b.book_id] = b.book_name; });
+  const all = (STATE.pettyEntries || []).filter(e =>
+    bookName[e.book_id] !== undefined && e.status !== '已作廢' && num(e.weigh_fee) > 0);
   const g = {};
-  rows.forEach(e => {
+  all.forEach(e => {
+    if(PW_CASH_OK(e)) return;   // 有 settle_batch＝已經付掉或匯掉了，不是待付
     const who = String(e.payee || '').trim() || '（未填司機）';
     const k = e.book_id + '|' + who;
-    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, open: 0, cash: 0, done: 0, first: '', last: '' };
-    const o = g[k];
-    const d = String(e.entry_date).slice(0,10);
-    o.n += 1;
-    o.amt += num(e.weigh_fee);
-    // settle_batch 是 '零用金付訖' 代表當場用零用金現金付掉了，不用匯款；
-    // 空的代表還欠司機這筆錢；其他值是真的匯款批號（例 1150805-1）。
-    if(!PW_CASH_OK(e)) o.open += num(e.weigh_fee);
-    else if(String(e.settle_batch).trim() === PW_CASH_TAG) o.cash += num(e.weigh_fee);
-    else o.done += num(e.weigh_fee);
+    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, first: '', last: '' };
+    const o = g[k], d = String(e.entry_date).slice(0,10);
+    o.n += 1; o.amt += num(e.weigh_fee);
     if(!o.first || d < o.first) o.first = d;
     if(!o.last  || d > o.last)  o.last  = d;
   });
   const list = Object.keys(g).map(k => g[k]).sort((a,b) => b.amt - a.amt);
-  const tn = list.reduce((s,o) => s + o.n, 0);
-  const ta = list.reduce((s,o) => s + o.amt, 0);
-  const to = list.reduce((s,o) => s + o.open, 0);
-  const tc = list.reduce((s,o) => s + o.cash, 0);
-  const td = list.reduce((s,o) => s + o.done, 0);
-  wrap.style.display = '';
-  body.innerHTML = list.map(o =>
-    '<tr><td>' + esc(o.book) + '</td>' +
-    '<td><strong>' + esc(o.who) + '</strong></td>' +
-    '<td class="num">' + o.n + '</td>' +
-    '<td class="num"><strong>' + money(o.amt) + '</strong></td>' +
-    '<td class="num">' + (o.open ? '<span class="pill amber">' + money(o.open) + '</span>' : '<span class="pill green">不用匯</span>') + '</td>' +
-    '<td class="num">' + (o.cash ? money(o.cash) : '－') + '</td>' +
-    '<td class="num">' + (o.done ? money(o.done) : '－') + '</td>' +
-    '<td>' + esc(o.first === o.last ? o.first : o.first + '～' + o.last) + '</td></tr>').join('') +
-    '<tr style="border-top:2px solid var(--line);"><td colspan="2"><strong>合計</strong></td>' +
-    '<td class="num"><strong>' + tn + '</strong></td>' +
-    '<td class="num"><strong>' + money(ta) + '</strong></td>' +
-    '<td class="num"><strong>' + (to ? money(to) : '0') + '</strong></td>' +
-    '<td class="num"><strong>' + (tc ? money(tc) : '0') + '</strong></td>' +
-    '<td class="num"><strong>' + (td ? money(td) : '0') + '</strong></td><td></td></tr>';
+  return {
+    any:   all.length > 0,                 // 這幾本帳到底有沒有磅費這回事
+    list:  list,
+    n:     list.reduce((s,o) => s + o.n, 0),
+    total: list.reduce((s,o) => s + o.amt, 0),
+    names: list.map(o => o.who),
+    allRows: all
+  };
+}
+
+// 統計卡那一行的人名：最多列兩位，再多就寫「等 N 人」，免得一行擠爆。
+function pwNames(names){
+  const u = names.filter((v,i) => names.indexOf(v) === i);
+  return u.length <= 2 ? u.join('、') : u.slice(0,2).join('、') + ' 等 ' + u.length + ' 人';
+}
+
+// 「磅費待付」卡：一位司機一行，就是主管要匯出去的錢。
+function renderPettyWeigh(books, mS, mE){
+  const card = document.getElementById('ovWeighCard');
+  const body = document.getElementById('ovWeighBody');
+  const foot = document.getElementById('ovWeighFoot');
+  const cnt  = document.getElementById('ovWeighCount');
+  if(!card || !body) return;
+  const pw = pettyWeighOwed(books);
+  if(!pw.any){ card.style.display = 'none'; body.innerHTML = ''; return; }
+  card.style.display = '';
+  if(cnt) cnt.textContent = pw.n;
+  body.innerHTML = pw.list.length
+    ? pw.list.map(o =>
+        '<tr><td>' + esc(o.book) + '</td>' +
+        '<td><strong>' + esc(o.who) + '</strong></td>' +
+        '<td class="num">' + o.n + '</td>' +
+        '<td>' + esc(invROC(o.first)) + '</td>' +
+        '<td>' + esc(invROC(o.last)) + '</td>' +
+        '<td class="num"><strong>' + money(o.amt) + '</strong></td></tr>').join('') +
+      '<tr style="border-top:2px solid var(--line);"><td colspan="2"><strong>要匯出去的合計</strong></td>' +
+      '<td class="num"><strong>' + pw.n + '</strong></td><td></td><td></td>' +
+      '<td class="num"><strong>' + money(pw.total) + '</strong></td></tr>'
+    : '<tr><td colspan="6" class="empty">磅費都付清了，這次不用匯錢給司機</td></tr>';
+  // 底下一行小字：本月的磅費總共花了多少、其中多少是當場現金付掉的（只是給個概念，不是要匯的錢）
+  if(foot){
+    const mon = pw.allRows.filter(e => String(e.entry_date) >= mS && String(e.entry_date) <= mE);
+    const mAmt  = mon.reduce((s,e) => s + num(e.weigh_fee), 0);
+    const mCash = mon.filter(e => String(e.settle_batch || '').trim() === PW_CASH_TAG)
+                     .reduce((s,e) => s + num(e.weigh_fee), 0);
+    foot.textContent = mon.length
+      ? '本月磅費一共 ' + mon.length + ' 筆 ' + money(mAmt) + '，其中當場用零用金現金付掉的有 ' + money(mCash) + '（那些不用匯）。'
+      : '本月還沒有磅費。';
+  }
 }
 
 // ---------- 稅額併列 ----------
