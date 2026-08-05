@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>順亞運通 油壓板車預約登記</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy-950:#071525; --navy-900:#0d1b2c; --navy-850:#102238; --navy-800:#152a43; --navy-700:#203e61;
+    --gold-700:#9d6d2f; --gold-600:#b9843f; --gold-500:#c99a56; --gold-400:#d8b374; --gold-300:#ead3a4;
+    --ivory-50:#fffdf9; --ivory-100:#fbf8f3; --ivory-200:#f2ede5;
+    --accent:#9d6d2f; --accent-dark:#7d5624; --accent-bg:#f6ead6;
+    --navy:#0d1b2c; --navy-2:#152a43;
+    --red:#B3261E; --red-bg:#FBEAE8;
+    --amber:#9C6B00; --amber-bg:#FDF1DC;
+    --green:#3F7D44; --green-bg:#EAF3E7;
+    --gray:#6B5A48; --gray-bg:#F1E9DD;
+    --radius:14px; --radius-sm:11px;
+    --shadow-sm:0 1px 2px rgba(13,27,44,.07);
+    --shadow-md:0 12px 32px rgba(20,32,51,.09), 0 1px 2px rgba(13,27,44,.05);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:
+      radial-gradient(circle at 88% 8%, rgba(216,179,116,.14), transparent 20%),
+      radial-gradient(circle at 10% 75%, rgba(32,62,97,.07), transparent 24%),
+      linear-gradient(145deg, #fff 0%, #f8f5f1 54%, #eef1f5 100%);
+    color:var(--text); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{
+    max-width:1600px;margin:0 auto;min-height:100vh;display:grid;
+    grid-template-columns:190px minmax(0,1fr);
+    background:rgba(255,255,255,.32);box-shadow:0 0 80px rgba(9,24,41,.08);
+  }
+  .sidebar{
+    position:sticky;top:0;z-index:50;height:100vh;padding:26px 12px 20px;display:flex;flex-direction:column;gap:18px;
+    background:linear-gradient(180deg, rgba(255,255,255,.97), rgba(249,248,246,.96)), radial-gradient(circle at 20% 10%, rgba(216,179,116,.18), transparent 42%);
+    border-right:1px solid rgba(13,27,44,.08);overflow-y:auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 10px;}
+  .brand-mark{
+    font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;line-height:1;color:transparent;
+    background:linear-gradient(140deg,#8d5b21 3%,#f5e4bc 36%,#b2782f 67%,#f0d59d 100%);
+    -webkit-background-clip:text;background-clip:text;
+  }
+  .brand-copy{color:var(--gold-700);font-family:Montserrat,sans-serif;font-size:9px;font-weight:600;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 0 60px;}
+  header.banner{
+    background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 55%,var(--accent-dark) 100%);
+    color:#fff;padding:30px 28px 34px;position:relative;overflow:hidden;
+  }
+  header.banner::after{
+    content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.10),transparent 70%);
+  }
+  .hero-kicker{margin:0 0 8px;color:var(--gold-300);font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;position:relative;}
+  header.banner h1{font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;margin:0 0 8px;letter-spacing:.5px;position:relative;}
+  header.banner .sub{color:rgba(255,255,255,.72);font-size:13px;position:relative;max-width:640px;line-height:1.7;}
+  .content{padding:20px 26px 40px;position:relative;}
+  .content-pad{padding:0 24px;}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
+  .sub{color:var(--text-2);font-size:13px;}
+  nav{display:flex;flex-direction:column;gap:6px;}
+  nav button{
+    appearance:none;border:1px solid transparent;background:none;text-align:left;padding:10px 12px;font-size:12.5px;font-weight:600;
+    color:#3f4650;cursor:pointer;border-radius:13px;transition:background .2s,color .15s,transform .15s;
+  }
+  nav button:hover{background:rgba(255,255,255,.9);border-color:rgba(13,27,44,.08);transform:translateX(2px);}
+  nav button.active{
+    color:var(--gold-700);
+    background:linear-gradient(100deg, rgba(246,240,230,.98), rgba(236,205,155,.76));
+    border-color:rgba(201,154,86,.28);box-shadow:0 9px 22px rgba(157,109,47,.13);
+  }
+  .sidebar-motto{
+    margin-top:auto;padding:14px 12px;border:1px solid rgba(201,154,86,.48);border-radius:16px;color:#725426;text-align:center;
+    background:linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,244,223,.88));box-shadow:0 12px 30px rgba(201,154,86,.13);
+  }
+  .sidebar-motto strong{display:block;font-size:12px;letter-spacing:.04em;}
+  .sidebar-motto span{display:block;margin-top:6px;color:#a57632;font-family:Montserrat,sans-serif;font-size:8px;letter-spacing:.045em;text-transform:uppercase;}
+  .panel{display:none;} .panel.active{display:block;animation:fadein .18s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px;
+    box-shadow:var(--shadow-sm);
+  }
+  .stat-card .n{font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.5px;}
+  .stat-card .l{font-size:12px;color:var(--text-2);margin-top:6px;font-weight:500;}
+  .stat-card.red .n{color:var(--red);} .stat-card.amber .n{color:var(--amber);} .stat-card.green .n{color:var(--green);}
+  .card{
+    position:relative;background:linear-gradient(160deg, rgba(255,255,255,.98), rgba(252,252,252,.94));
+    border:1px solid rgba(255,255,255,.82);border-radius:20px;padding:22px 24px;
+    margin-bottom:16px;box-shadow:var(--shadow-md);overflow:hidden;
+  }
+  .card::after{
+    content:"";position:absolute;top:-60px;right:-70px;width:190px;height:190px;border:1px solid rgba(201,154,86,.30);
+    border-radius:50%;opacity:.10;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, rgba(13,27,44,.98) 0 10%, transparent 10.5% 18%, rgba(201,154,86,.88) 18.5% 28%, transparent 28.5%);
+  }
+  .card h2{font-size:15px;font-weight:700;margin:0 0 14px;color:var(--navy-900);position:relative;letter-spacing:.02em;}
+  .card h2 .count-badge{
+    display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--accent);
+    background:var(--accent-bg);padding:2px 8px;border-radius:99px;vertical-align:middle;
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;color:#263240;font-weight:600;padding:12px 14px;border-bottom:1px solid rgba(13,27,44,.08);
+    white-space:nowrap;font-size:11.5px;letter-spacing:.3px;background:linear-gradient(90deg,#fbfaf8,#f2ece4);
+  }
+  td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
+  tbody tr:hover td{background:#fffaf0;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .pill.red{background:var(--red-bg);color:var(--red);}
+  .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.green{background:var(--green-bg);color:var(--green);}
+  .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input{
+    font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
+    background:rgba(255,255,255,.88);color:var(--text);transition:border-color .15s,box-shadow .15s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  select:focus,input:focus{outline:none;border-color:var(--gold-500);background:#fff;box-shadow:0 0 0 4px rgba(201,154,86,.15);}
+  button.btn{
+    appearance:none;border:none;color:#fff;padding:10px 20px;border-radius:13px;
+    font-size:13px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .2s,filter .15s;
+    background:linear-gradient(105deg,var(--navy-900) 0%,var(--navy-800) 56%,var(--gold-400) 100%);
+    box-shadow:0 10px 23px rgba(13,27,44,.18);
+  }
+  button.btn:hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 15px 29px rgba(13,27,44,.23);}
+  button.btn:active{transform:translateY(0);}
+  button.btn.ghost{background:none;color:var(--text-2);border:1px solid var(--border-strong);box-shadow:none;}
+  button.btn.ghost:hover{background:var(--gray-bg);color:var(--text);transform:none;filter:none;}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
+  .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
+  .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
+  .table-scroll table{margin:0;}
+  .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
+  /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
+  /* 公里數統計表／平均公里數（季）：欄位多，改用緊湊版面且不換行 */
+  table.km-table{font-size:12px;}
+  table.km-table th{padding:8px 8px;font-size:11.5px;white-space:nowrap;}
+  table.km-table td{padding:7px 8px;white-space:nowrap;vertical-align:middle;}
+  table.km-table td.km-num,table.km-table th.km-num{text-align:right;font-variant-numeric:tabular-nums;}
+  table.km-table td.km-total{font-weight:700;}
+  table.km-table tbody tr:hover{background:rgba(13,27,44,.03);}
+  table.mh-table{table-layout:fixed;min-width:940px;font-size:14px;}
+  table.mh-table th{font-size:12.5px;padding:12px 10px;}
+  table.mh-table td{padding:11px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  table.mh-table td.mh-desc,table.mh-table td.mh-parts{white-space:normal;overflow:visible;font-size:11.5px;line-height:1.5;word-break:break-word;color:#5b6672;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .lessee-bar{display:flex;align-items:center;gap:10px;padding:7px 0;}
+  .lessee-bar .name{width:70px;font-size:13px;flex-shrink:0;font-weight:500;}
+  .lessee-bar .track{flex:1;height:8px;background:var(--gray-bg);border-radius:99px;overflow:hidden;}
+  .lessee-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:99px;}
+  .lessee-bar .count{width:90px;text-align:right;font-size:12px;color:var(--text-2);flex-shrink:0;}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .del-btn:hover{background:var(--red-bg);}
+  .move-btn{background:none;border:none;color:var(--amber);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .move-btn:hover{background:var(--amber-bg);}
+  .name-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;font-weight:600;}
+  .name-link:hover{text-decoration:underline;}
+  .modal-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(43,33,26,.55);z-index:100;
+    align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;backdrop-filter:blur(2px);
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal-box{background:#fff;border-radius:16px;max-width:640px;width:100%;padding:26px;position:relative;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .modal-box h3{margin:0 0 16px;font-size:18px;font-weight:700;}
+  .modal-close{position:absolute;top:18px;right:18px;background:var(--gray-bg);border:none;font-size:15px;color:var(--text-2);cursor:pointer;width:28px;height:28px;border-radius:50%;}
+  .modal-close:hover{background:var(--border-strong);}
+  .detail-grid{display:grid;grid-template-columns:120px 1fr;gap:9px 12px;font-size:13px;margin-bottom:16px;}
+  .detail-grid dt{color:var(--text-2);font-weight:500;}
+  .detail-grid dd{margin:0;}
+  .detail-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .detail-section h4{font-size:12.5px;margin:0 0 10px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+  .badge-team{display:inline-block;padding:2px 9px;background:var(--gray-bg);border-radius:99px;font-size:12px;color:var(--text-2);}
+  .tire-body{max-width:260px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:20px 16px;position:relative;}
+  .tire-row{display:flex;justify-content:space-between;margin-bottom:14px;gap:16px;}
+  .tire-slot{
+    flex:1;background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:8px 6px;
+    text-align:center;font-size:11.5px;cursor:default;
+  }
+  .tire-slot.green{border-color:var(--green);background:var(--green-bg);}
+  .tire-slot.amber{border-color:var(--amber);background:var(--amber-bg);}
+  .tire-slot.red{border-color:var(--red);background:var(--red-bg);}
+  .tire-slot.gray{border-color:var(--border-strong);background:#fafafa;color:var(--text-3);}
+  .tire-slot .pos-label{font-weight:700;font-size:11px;color:var(--text-2);margin-bottom:3px;}
+  .tire-slot .tire-info{font-size:11px;line-height:1.5;}
+  @media (max-width:860px){
+    .app-shell{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;top:auto;}
+    nav{flex-direction:row;flex-wrap:wrap;}
+    nav button{flex:0 0 auto;}
+  }
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;padding:40px;}
+    .no-print{display:none !important;}
+  }
+</style>
+
+<style>
+  /* ===== 板車預約頁面補充樣式 ===== */
+  .stat-row{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+  table td.num, table th.num{text-align:right;font-family:Montserrat,'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .btn.tiny{padding:5px 11px;font-size:11.5px;border-radius:9px;}
+  .btn.ghost.tiny:hover{transform:none;}
+  .btn.primary{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;box-shadow:0 10px 22px rgba(125,86,36,.28);}
+  label.inline{flex-direction:row;align-items:center;gap:6px;display:inline-flex;font-size:12px;color:var(--text-2);font-weight:600;}
+  label.inline input,label.inline select{padding:7px 9px;}
+  .req{color:#B3261E;margin-left:2px;}
+  /* 統計卡片下面那行小字（哪幾台空著、哪幾台在用） */
+  .stat-card .s{font-size:11.5px;color:var(--text-3);margin-top:3px;line-height:1.5;}
+  .form-grid input,.form-grid select,.toolbar input,.toolbar select{
+    padding:9px 10px;border:1px solid var(--border-strong);border-radius:9px;font-size:13px;
+    font-family:inherit;background:#fff;color:var(--text);box-sizing:border-box;
+  }
+  .form-grid input:focus,.form-grid select:focus{outline:2px solid rgba(157,109,47,.35);outline-offset:1px;}
+  .card{overflow:clip;}
+  button.btn.ghost.active{background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border-color:transparent;}
+  /* 時間表的格子要能換行，不然一天多筆會被擠掉 */
+  #tb_weekTable td{white-space:normal;vertical-align:top;min-width:118px;}
+  #tb_weekTable th{text-align:center;}
+  #tb_weekTable td.today{background:rgba(157,109,47,.09);}
+  #tb_weekTable th.today{background:rgba(157,109,47,.16);border-radius:8px 8px 0 0;}
+  .slot{display:block;border-left:4px solid #999;background:#fff;border-radius:7px;padding:5px 7px;margin-bottom:5px;
+        font-size:11.5px;line-height:1.5;box-shadow:0 1px 3px rgba(13,27,44,.08);}
+  .slot b{display:block;font-family:Montserrat,sans-serif;font-size:11.5px;letter-spacing:.02em;}
+  .slot .who{font-weight:600;color:var(--text);}
+  .slot .meta{color:var(--text-3);}
+  .slot.cancelled{opacity:.45;text-decoration:line-through;}
+  .res-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  @media print{
+    .sidebar,.banner,.toolbar,.no-print{display:none !important;}
+    .app-shell{grid-template-columns:1fr;box-shadow:none;background:#fff;}
+    .card{break-inside:avoid;box-shadow:none;}
+  }
+</style>
+
+</head>
+<body>
+<body>
+<div id="loginOverlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0d1b2c,#152a43);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="background:#fff;padding:34px 30px;border-radius:16px;width:340px;box-shadow:0 24px 70px rgba(0,0,0,.45);">
+    <div style="font-size:20px;font-weight:700;color:#142033;margin-bottom:4px;">順亞運通 管理系統</div>
+    <div style="font-size:12.5px;color:#8b929b;margin-bottom:20px;">請登入以存取資料</div>
+    <input id="login_email" type="email" placeholder="帳號 (Email)" autocomplete="username" style="width:100%;padding:11px;margin-bottom:11px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <input id="login_pw" type="password" placeholder="密碼" autocomplete="current-password" style="width:100%;padding:11px;margin-bottom:16px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <button id="login_btn" style="width:100%;padding:12px;background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;">登入</button>
+    <div id="login_msg" style="margin-top:13px;font-size:12.5px;color:#B3261E;min-height:17px;text-align:center;"></div>
+  </div>
+</div>
+
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">順亞</div>
+      <div class="brand-copy">Shun Ya<br>Transportation</div>
+    </div>
+    <nav>
+      <button data-tab="book" class="active">預約登記</button>
+      <button data-tab="list">預約清單</button>
+      <button data-tab="hist">歷史紀錄</button>
+      <button data-tab="setup">板車設定</button>
+    </nav>
+    <div class="sidebar-motto">
+      <strong>安全 準時 用心</strong>
+      <span>Since Establishment</span>
+    </div>
+  </div>
+  <div class="main">
+    <header class="banner">
+      <p class="hero-kicker">Shun Ya Transportation</p>
+      <h1>油壓板車 預約登記</h1>
+      <div class="sub">四台板車 ・ 同一時段只能一個人用 ・ 預約後行政與車隊的總覽都看得到</div>
+    </header>
+    <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
+    <div class="content">
+
+<!-- ============ 預約登記 ============ -->
+<div id="book" class="panel active">
+
+  <div class="stat-row" id="tbStats"></div>
+
+  <div class="card">
+    <h3>我要預約</h3>
+    <div class="muted" style="margin:-6px 0 12px;font-size:12.5px;">
+      同一台板車同一個時段不會讓兩個人約到，送出前系統會先幫你檢查。
+    </div>
+
+    <div class="form-grid">
+      <label>板車<span class="req">*</span>
+        <select id="tb_res"></select>
+      </label>
+      <label>使用日期<span class="req">*</span>
+        <input type="date" id="tb_date">
+      </label>
+      <label>開始時間<span class="req">*</span>
+        <input type="time" id="tb_start" step="900" value="08:00">
+      </label>
+      <label>結束時間<span class="req">*</span>
+        <input type="time" id="tb_end" step="900" value="12:00">
+      </label>
+      <label>預約人（司機）<span class="req">*</span>
+        <select id="tb_driver"></select>
+      </label>
+      <label id="tb_nameWrap" style="display:none;">姓名（手打）
+        <input type="text" id="tb_name" placeholder="不在名單上就打在這裡">
+      </label>
+      <label>聯絡電話
+        <input type="text" id="tb_phone" placeholder="選了司機會自動帶">
+      </label>
+      <label>車頭車號
+        <input type="text" id="tb_tractor" list="tb_plateList" placeholder="用哪一台車頭拖">
+        <datalist id="tb_plateList"></datalist>
+      </label>
+      <label>用途
+        <input type="text" id="tb_purpose" placeholder="例如 送機台、載怪手">
+      </label>
+      <label>目的地
+        <input type="text" id="tb_dest" placeholder="去哪裡">
+      </label>
+      <label style="grid-column:1/-1;">備註
+        <input type="text" id="tb_notes" placeholder="要交代的事情">
+      </label>
+    </div>
+
+    <div class="toolbar" style="margin-bottom:8px;">
+      <label class="inline"><input type="checkbox" id="tb_overnight"> 用到隔天（跨夜）</label>
+      <span id="tb_hint" class="muted" style="font-size:12.5px;"></span>
+    </div>
+
+    <div class="toolbar" id="tb_quick" style="margin-bottom:10px;">
+      <span class="muted" style="font-size:12px;">常用時段</span>
+      <button class="btn ghost tiny" data-s="08:00" data-e="12:00">上午 08–12</button>
+      <button class="btn ghost tiny" data-s="13:00" data-e="17:00">下午 13–17</button>
+      <button class="btn ghost tiny" data-s="08:00" data-e="17:00">整天 08–17</button>
+      <button class="btn ghost tiny" data-s="18:00" data-e="22:00">晚上 18–22</button>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn primary" id="tb_save">送出預約</button>
+      <button class="btn ghost" id="tb_clear">清空</button>
+      <span id="tb_msg" style="font-size:13px;font-weight:600;"></span>
+    </div>
+    <div id="tb_conflict" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:#FBEAE9;color:#B3261E;font-size:13px;line-height:1.7;"></div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar" style="margin-bottom:10px;">
+      <h3 style="margin:0;flex:1;">板車使用時間表</h3>
+      <button class="btn ghost tiny" id="tb_wkPrev">← 上一週</button>
+      <button class="btn ghost tiny" id="tb_wkToday">本週</button>
+      <button class="btn ghost tiny" id="tb_wkNext">下一週 →</button>
+      <button class="btn ghost tiny" id="tb_wkPrint">列印本週</button>
+    </div>
+    <div id="tb_wkRange" class="muted" style="font-size:12.5px;margin-bottom:10px;"></div>
+    <div style="overflow-x:auto;">
+      <table class="km-table" id="tb_weekTable">
+        <thead><tr id="tb_weekHead"></tr></thead>
+        <tbody id="tb_weekBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ 預約清單 ============ -->
+<div id="list" class="panel">
+  <div class="card">
+    <div class="toolbar">
+      <h3 style="margin:0;flex:1;">今天以後的預約</h3>
+      <label class="inline">板車
+        <select id="ls_res"><option value="">全部</option></select>
+      </label>
+      <label class="inline">狀態
+        <select id="ls_status">
+          <option value="">進行中的（不含取消／完成）</option>
+          <option value="全部">全部</option>
+          <option value="已預約">已預約</option>
+          <option value="使用中">使用中</option>
+          <option value="已完成">已完成</option>
+          <option value="已取消">已取消</option>
+        </select>
+      </label>
+      <button class="btn ghost tiny" id="ls_reload">重新整理</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr>
+          <th>板車</th><th>日期</th><th>時間</th><th>預約人</th><th>電話</th>
+          <th>車頭</th><th>用途／目的地</th><th>狀態</th><th class="no-print">操作</th>
+        </tr></thead>
+        <tbody id="ls_body"></tbody>
+      </table>
+    </div>
+    <div id="ls_msg" style="font-size:13px;font-weight:600;margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- ============ 歷史紀錄 ============ -->
+<div id="hist" class="panel">
+  <div class="card">
+    <div class="toolbar">
+      <label class="inline">起<input type="date" id="hs_from"></label>
+      <label class="inline">迄<input type="date" id="hs_to"></label>
+      <label class="inline">板車
+        <select id="hs_res"><option value="">全部</option></select>
+      </label>
+      <label class="inline">預約人<input type="text" id="hs_who" placeholder="姓名關鍵字" style="width:130px;"></label>
+      <button class="btn ghost tiny" id="hs_go">查詢</button>
+      <button class="btn ghost tiny" id="hs_csv">匯出 CSV</button>
+      <button class="btn ghost tiny" id="hs_print">列印</button>
+    </div>
+    <div id="hs_sum" class="muted" style="font-size:12.5px;margin-bottom:10px;"></div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr>
+          <th>板車</th><th>日期</th><th>時間</th><th>時數</th><th>預約人</th>
+          <th>車頭</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>
+        </tr></thead>
+        <tbody id="hs_body"></tbody>
+      </table>
+    </div>
+    <h3 style="margin-top:22px;">依板車統計</h3>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>板車</th><th class="num">預約筆數</th><th class="num">使用時數</th><th class="num">取消筆數</th></tr></thead>
+        <tbody id="hs_byRes"></tbody>
+      </table>
+    </div>
+    <h3 style="margin-top:22px;">依預約人統計</h3>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr><th>預約人</th><th class="num">預約筆數</th><th class="num">使用時數</th><th class="num">取消筆數</th></tr></thead>
+        <tbody id="hs_byDriver"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 板車設定 ============ -->
+<div id="setup" class="panel">
+  <div class="card" style="background:#fbf4e6;border-left:4px solid #c08a2e;font-size:13px;line-height:1.8;">
+    這四台是照資料庫裡「板架、而且不是貨櫃架、還在役」這個條件抓出來的，資料庫沒有任何欄位寫著「油壓」，
+    所以<strong>是推出來的，不是查到的</strong>。如果實際上不是這四台，直接在下面改名稱／車號，或把不對的那台
+    <strong>停用</strong>（不要刪除，刪掉舊預約就對不回來了）。
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <h3 style="margin:0;flex:1;">可以被預約的板車</h3>
+      <button class="btn ghost tiny" id="st_add">新增一台</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="km-table">
+        <thead><tr>
+          <th>順序</th><th>名稱</th><th>車號</th><th>車場</th><th>顏色</th><th>啟用</th><th>備註</th><th class="no-print">操作</th>
+        </tr></thead>
+        <tbody id="st_body"></tbody>
+      </table>
+    </div>
+    <div id="st_msg" style="font-size:13px;font-weight:600;margin-top:8px;"></div>
+  </div>
+</div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+// ===== 登入驗證(Supabase Auth)=====
+let AUTH_TOKEN=null, REFRESH_TOKEN=null;
+function ensureLogin(){
+  return new Promise((resolve)=>{
+    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='flex';
+    async function doLogin(){
+      const email=(document.getElementById('login_email').value||'').trim();
+      const pw=document.getElementById('login_pw').value||'';
+      const msg=document.getElementById('login_msg');
+      if(!email||!pw){ msg.textContent='請輸入帳號與密碼'; return; }
+      msg.textContent='登入中…';
+      try{
+        const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+        const d=await r.json();
+        if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
+        AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
+        setInterval(refreshToken, 30*60*1000);
+        document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshToken(); });
+        if(ov) ov.style.display='none';
+        resolve();
+      }catch(e){ msg.textContent='連線錯誤:'+e.message; }
+    }
+    const btn=document.getElementById('login_btn'); if(btn) btn.onclick=doLogin;
+    const pwEl=document.getElementById('login_pw'); if(pwEl) pwEl.onkeydown=(e)=>{ if(e.key==='Enter') doLogin(); };
+  });
+}
+async function refreshToken(){
+  if(!REFRESH_TOKEN) return false;
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
+    const d=await r.json();
+    if(r.ok && d && d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token||REFRESH_TOKEN; return true; }
+  }catch(e){}
+  return false;
+}
+// ===== 連線階段逾時自動處理:先試著續期,續期失敗才跳出登入框 =====
+let _reauthPromise=null;
+function _reauth(){
+  if(!_reauthPromise){
+    _reauthPromise=(async ()=>{
+      if(await refreshToken()) return true;
+      AUTH_TOKEN=null;
+      const msg=document.getElementById('login_msg');
+      if(msg) msg.textContent='連線階段已逾時,請重新登入(您未存檔的內容仍保留在畫面上)';
+      await ensureLogin();
+      return true;
+    })().finally(()=>{ _reauthPromise=null; });
+  }
+  return _reauthPromise;
+}
+// 統一帶上「目前最新」的 token;遇到 401/403 先續期再重試一次
+async function authFetch(url, options={}){
+  const build=()=>{
+    const h=Object.assign({}, options.headers||{});
+    delete h.apikey; delete h.Authorization;
+    return Object.assign({}, options, {headers: Object.assign({
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    }, h)});
+  };
+  let res = await fetch(url, build());
+  if(res.status===401 || res.status===403){
+    await _reauth();
+    res = await fetch(url, build());
+  }
+  return res;
+}
+
+// ===================== 油壓板車 預約登記 =====================
+// 資料表：booking_resources（可以被預約的板車）、trailer_bookings（預約紀錄）
+// 兩張表由 supabase_trailer_booking_1150804.sql 建立。沒跑那支 SQL，這一頁會顯示紅色警告。
+//
+// 【擋重複預約】前端會先比對已載入的預約，資料庫那邊還有一道排他約束（trailer_bookings_no_overlap）。
+// 兩個司機同時按送出時，前端可能都覺得沒衝突，但資料庫只會讓一筆進去，另一筆會拿到 23P01。
+// 所以底下 tidyErr() 一定要把 23P01 翻成看得懂的中文，不要讓司機看到英文錯誤碼。
+//
+// 【取消是改狀態不是刪資料】cancelBooking() 只改 status／cancel_reason／cancelled_at。
+// 紀錄要留著，才查得到誰在什麼時候把什麼取消掉。板車本身也一樣，不要的請停用不要刪。
+
+const STATE = { resources: [], bookings: [], employees: [], plates: [] };
+let LOGIN_EMAIL = '';
+let WEEK_START  = null;   // 目前顯示這一週的星期一（ISO 字串）
+
+const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = v => num(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const fmt1 = v => num(v).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+function todayISO(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function nowHM(){ const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+function toROC(iso){ if(!iso) return ''; const p = String(iso).slice(0,10).split('-'); if(p.length<3) return iso; return (parseInt(p[0],10)-1911) + '/' + p[1] + '/' + p[2]; }
+function addDays(iso, n){ const d = new Date(String(iso).slice(0,10) + 'T00:00:00'); d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function mondayOf(iso){ const d = new Date(String(iso).slice(0,10) + 'T00:00:00'); const w = (d.getDay() + 6) % 7; return addDays(iso, -w); }
+const WD = ['一','二','三','四','五','六','日'];
+function wdOf(iso){ const d = new Date(String(iso).slice(0,10) + 'T00:00:00'); return WD[(d.getDay() + 6) % 7]; }
+const hm = t => String(t == null ? '' : t).slice(0,5);
+const dkey = (d, t) => String(d == null ? '' : d).slice(0,10) + ' ' + hm(t);
+const $ = id => document.getElementById(id);
+
+// ---------- Supabase REST ----------
+const REST = SUPABASE_URL + '/rest/v1/';
+async function sbSelect(table, qs){
+  const r = await authFetch(REST + table + '?' + (qs || 'select=*'), { method:'GET' });
+  if(!r.ok) throw new Error(table + ' 讀取失敗：' + r.status + ' ' + (await r.text()));
+  return r.json();
+}
+async function sbInsert(table, row){
+  const r = await authFetch(REST + table, { method:'POST', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
+  if(!r.ok) throw new Error(await r.text());
+  const d = await r.json(); return Array.isArray(d) ? d[0] : d;
+}
+async function sbUpdate(table, pk, id, patch){
+  const r = await authFetch(REST + table + '?' + pk + '=eq.' + encodeURIComponent(id), { method:'PATCH', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(patch) });
+  if(!r.ok) throw new Error(await r.text());
+  const d = await r.json(); return Array.isArray(d) ? d[0] : d;
+}
+
+// 把資料庫的英文錯誤翻成司機看得懂的話
+function tidyErr(msg){
+  const s = String(msg || '');
+  if(s.indexOf('trailer_bookings_no_overlap') >= 0 || s.indexOf('23P01') >= 0 || s.indexOf('exclusion constraint') >= 0)
+    return '這台板車在這個時段剛剛被別人約走了，請換時段或換一台。';
+  if(s.indexOf('range lower bound') >= 0 || s.indexOf('chk_booking_period') >= 0)
+    return '結束時間要比開始時間晚。如果是做到隔天，請勾「用到隔天（跨夜）」。';
+  if(s.indexOf('chk_booking_enddate') >= 0) return '結束日期不可以早於使用日期。';
+  if(s.indexOf('chk_booking_status') >= 0)  return '狀態只能是 已預約／使用中／已完成／已取消。';
+  if(s.indexOf('trailer_bookings') >= 0 && s.indexOf('does not exist') >= 0)
+    return '雲端還沒有預約資料表，請先執行 supabase_trailer_booking_1150804.sql。';
+  return s;
+}
+
+// ---------- 取用 ----------
+const resById  = id => STATE.resources.find(r => r.resource_id === id) || null;
+const resName  = id => { const r = resById(id); return r ? r.resource_name : ('板車 #' + id); };
+const resColor = id => { const r = resById(id); return (r && r.color) || '#8b929b'; };
+function activeRes(){ return STATE.resources.filter(r => r.is_active).sort((a,b) => (a.sort_no||0) - (b.sort_no||0)); }
+function liveBookings(){ return STATE.bookings.filter(b => b.status !== '已取消'); }
+function hoursOf(b){
+  const s = new Date(dkey(b.booking_date, b.start_time).replace(' ', 'T') + ':00');
+  const e = new Date(dkey(b.end_date || b.booking_date, b.end_time).replace(' ', 'T') + ':00');
+  const h = (e - s) / 3600000;
+  return (isFinite(h) && h > 0) ? h : 0;
+}
+function overlap(a1, a2, b1, b2){ return a1 < b2 && b1 < a2; }
+function findConflicts(resId, s, e, ignoreId){
+  return liveBookings().filter(b => b.resource_id === resId && b.booking_id !== ignoreId
+    && overlap(s, e, dkey(b.booking_date, b.start_time), dkey(b.end_date || b.booking_date, b.end_time)));
+}
+
+// ---------- 載入 ----------
+async function loadAll(){
+  STATE.resources = await sbSelect('booking_resources', 'select=*&order=sort_no.asc,resource_id.asc');
+  STATE.bookings  = await sbSelect('trailer_bookings',
+    'select=*&order=booking_date.desc,start_time.desc&limit=5000');
+  // 司機名單與車頭車號拿不到也不影響預約，改成自己打字
+  try{
+    STATE.employees = await sbSelect('employees',
+      'select=employee_id,name,phone,region,fleet_team&status=eq.%E5%9C%A8%E8%81%B7&employee_type=eq.%E7%9B%B4%E6%8E%A5&order=name.asc&limit=2000');
+  }catch(e){ STATE.employees = []; }
+  try{
+    const v = await sbSelect('vehicles',
+      'select=plate_number&status=eq.%E5%9C%A8%E5%BD%B9&vehicle_category=eq.%E8%BB%8A%E8%BC%9B&order=plate_number.asc&limit=2000');
+    STATE.plates = v.map(x => x.plate_number).filter(Boolean);
+  }catch(e){ STATE.plates = []; }
+}
+
+// ---------- 下拉 ----------
+function fillPickers(){
+  const list = activeRes();
+  const opts = list.map(r => '<option value="' + r.resource_id + '">' + esc(r.resource_name)
+    + (r.base_location ? '（' + esc(r.base_location) + '）' : '') + '</option>').join('');
+  const keep = $('tb_res').value;
+  $('tb_res').innerHTML = opts || '<option value="">（還沒有可預約的板車，請到「板車設定」新增）</option>';
+  if(keep && list.some(r => String(r.resource_id) === keep)) $('tb_res').value = keep;
+
+  const all = '<option value="">全部</option>' + STATE.resources.map(r =>
+    '<option value="' + r.resource_id + '">' + esc(r.resource_name) + '</option>').join('');
+  ['ls_res','hs_res'].forEach(id => { const k = $(id).value; $(id).innerHTML = all; $(id).value = k; });
+
+  const dk = $('tb_driver').value;
+  $('tb_driver').innerHTML = '<option value="">請選擇</option>'
+    + STATE.employees.map(e => '<option value="' + e.employee_id + '">' + esc(e.name)
+        + (e.region ? '（' + esc(e.region) + '）' : '') + '</option>').join('')
+    + '<option value="__other__">其他（自己打姓名）</option>';
+  if(dk) $('tb_driver').value = dk;
+
+  $('tb_plateList').innerHTML = STATE.plates.map(p => '<option value="' + esc(p) + '">').join('');
+}
+
+// ---------- 統計 ----------
+function renderStats(){
+  const t = todayISO(), now = dkey(t, nowHM());
+  const todayB = liveBookings().filter(b => String(b.booking_date).slice(0,10) <= t && String(b.end_date || b.booking_date).slice(0,10) >= t);
+  const using  = liveBookings().filter(b => dkey(b.booking_date, b.start_time) <= now && now < dkey(b.end_date || b.booking_date, b.end_time));
+  const wkS = WEEK_START, wkE = addDays(WEEK_START, 7);
+  const wk = liveBookings().filter(b => String(b.booking_date).slice(0,10) >= wkS && String(b.booking_date).slice(0,10) < wkE);
+  const free = activeRes().filter(r => !using.some(b => b.resource_id === r.resource_id));
+  const card = (n, l, sub) => '<div class="stat-card"><div class="n">' + n + '</div><div class="l">' + l + '</div>'
+    + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
+  $('tbStats').innerHTML =
+      card(activeRes().length, '可預約板車', '停用的不算')
+    + card(using.length, '現在使用中', using.length ? esc(using.map(b => resName(b.resource_id).replace('板車 ', '')).join('、')) : '目前都空著')
+    + card(free.length, '現在空著的', free.length ? esc(free.map(r => r.resource_name.replace('板車 ', '')).join('、')) : '四台都在用')
+    + card(todayB.length, '今天的預約', '本週共 ' + wk.length + ' 筆');
+}
+
+// ---------- 本週時間表 ----------
+function renderWeek(){
+  const days = []; for(let i = 0; i < 7; i++) days.push(addDays(WEEK_START, i));
+  const t = todayISO();
+  $('tb_wkRange').textContent = '顯示 ' + toROC(days[0]) + '（' + wdOf(days[0]) + '） 到 ' + toROC(days[6]) + '（' + wdOf(days[6]) + '）'
+    + '　跨夜的預約會排在開始那一天，後面標「→隔日」。';
+  $('tb_weekHead').innerHTML = '<th style="min-width:120px;">板車</th>' + days.map(d =>
+    '<th' + (d === t ? ' class="today"' : '') + '>' + toROC(d).slice(4) + '<br><span style="font-weight:500;color:var(--text-3);">星期'
+    + wdOf(d) + (d === t ? '（今天）' : '') + '</span></th>').join('');
+
+  const list = activeRes();
+  if(!list.length){ $('tb_weekBody').innerHTML = '<tr><td colspan="8" class="empty">還沒有可預約的板車。</td></tr>'; return; }
+
+  $('tb_weekBody').innerHTML = list.map(r => {
+    const cells = days.map(d => {
+      const bs = STATE.bookings.filter(b => String(b.booking_date).slice(0,10) === d && b.resource_id === r.resource_id)
+        .sort((a, b) => hm(a.start_time).localeCompare(hm(b.start_time)));
+      const html = bs.map(b => {
+        const cross = String(b.end_date || b.booking_date).slice(0,10) !== String(b.booking_date).slice(0,10);
+        return '<span class="slot' + (b.status === '已取消' ? ' cancelled' : '') + '" style="border-left-color:' + esc(resColor(r.resource_id)) + ';">'
+          + '<b>' + hm(b.start_time) + '–' + hm(b.end_time) + (cross ? '<span class="meta"> →隔日</span>' : '') + '</b>'
+          + '<span class="who">' + esc(b.driver_name || '') + '</span>'
+          + (b.purpose || b.destination ? '<span class="meta">' + esc([b.purpose, b.destination].filter(Boolean).join(' → ')) + '</span>' : '')
+          + (b.status !== '已預約' ? '<span class="meta">' + esc(b.status) + '</span>' : '')
+          + '</span>';
+      }).join('');
+      return '<td' + (d === t ? ' class="today"' : '') + '>' + (html || '<span class="muted">—</span>') + '</td>';
+    }).join('');
+    return '<tr><td><span class="res-dot" style="background:' + esc(r.color || '#8b929b') + ';"></span><strong>'
+      + esc(r.resource_name) + '</strong>' + (r.base_location ? '<br><span class="muted">' + esc(r.base_location) + '</span>' : '') + '</td>' + cells + '</tr>';
+  }).join('');
+}
+
+// ---------- 預約清單 ----------
+function renderList(){
+  const t = todayISO();
+  const rf = $('ls_res').value, sf = $('ls_status').value;
+  let rows = STATE.bookings.filter(b => String(b.end_date || b.booking_date).slice(0,10) >= t);
+  if(rf) rows = rows.filter(b => String(b.resource_id) === rf);
+  if(sf === '') rows = rows.filter(b => b.status === '已預約' || b.status === '使用中');
+  else if(sf !== '全部') rows = rows.filter(b => b.status === sf);
+  rows.sort((a, b) => dkey(a.booking_date, a.start_time).localeCompare(dkey(b.booking_date, b.start_time)));
+
+  const pill = s => s === '已取消' ? 'gray' : (s === '使用中' ? 'amber' : (s === '已完成' ? 'green' : 'green'));
+  $('ls_body').innerHTML = rows.length ? rows.map(b => {
+    const cross = String(b.end_date || b.booking_date).slice(0,10) !== String(b.booking_date).slice(0,10);
+    const act = [];
+    if(b.status === '已預約'){ act.push(btn(b.booking_id, 'use', '開始使用')); act.push(btn(b.booking_id, 'cancel', '取消')); }
+    else if(b.status === '使用中'){ act.push(btn(b.booking_id, 'done', '完成')); act.push(btn(b.booking_id, 'cancel', '取消')); }
+    else if(b.status !== '已取消'){ act.push(btn(b.booking_id, 'reopen', '改回已預約')); }
+    return '<tr><td><span class="res-dot" style="background:' + esc(resColor(b.resource_id)) + ';"></span>' + esc(resName(b.resource_id)) + '</td>'
+      + '<td>' + toROC(b.booking_date) + '（' + wdOf(b.booking_date) + '）</td>'
+      + '<td>' + hm(b.start_time) + '–' + hm(b.end_time) + (cross ? ' <span class="muted">（' + toROC(b.end_date) + '）</span>' : '') + '</td>'
+      + '<td>' + esc(b.driver_name || '') + '</td><td>' + esc(b.driver_phone || '') + '</td>'
+      + '<td>' + esc(b.tractor_plate || '') + '</td>'
+      + '<td>' + esc([b.purpose, b.destination].filter(Boolean).join(' → ') || '') + '</td>'
+      + '<td><span class="pill ' + pill(b.status) + '">' + esc(b.status) + '</span>'
+      + (b.cancel_reason ? '<br><span class="muted">' + esc(b.cancel_reason) + '</span>' : '') + '</td>'
+      + '<td class="no-print">' + act.join(' ') + '</td></tr>';
+  }).join('') : '<tr><td colspan="9" class="empty">沒有符合的預約。</td></tr>';
+}
+function btn(id, act, label){
+  return '<button class="btn ghost tiny ls-act" data-id="' + id + '" data-act="' + act + '">' + label + '</button>';
+}
+
+// ---------- 歷史紀錄 ----------
+function histRows(){
+  const f = $('hs_from').value, t = $('hs_to').value, r = $('hs_res').value;
+  const w = ($('hs_who').value || '').trim();
+  return STATE.bookings.filter(b => {
+    const d = String(b.booking_date).slice(0,10);
+    if(f && d < f) return false;
+    if(t && d > t) return false;
+    if(r && String(b.resource_id) !== r) return false;
+    if(w && String(b.driver_name || '').indexOf(w) < 0) return false;
+    return true;
+  }).sort((a, b) => dkey(b.booking_date, b.start_time).localeCompare(dkey(a.booking_date, a.start_time)));
+}
+function renderHist(){
+  const rows = histRows();
+  const live = rows.filter(b => b.status !== '已取消');
+  const hrs = live.reduce((s, b) => s + hoursOf(b), 0);
+  $('hs_sum').textContent = '共 ' + rows.length + ' 筆（有效 ' + live.length + ' 筆、取消 ' + (rows.length - live.length)
+    + ' 筆），使用時數合計 ' + fmt1(hrs) + ' 小時。';
+  $('hs_body').innerHTML = rows.length ? rows.map(b => {
+    const cross = String(b.end_date || b.booking_date).slice(0,10) !== String(b.booking_date).slice(0,10);
+    return '<tr><td>' + esc(resName(b.resource_id)) + '</td>'
+      + '<td>' + toROC(b.booking_date) + '（' + wdOf(b.booking_date) + '）</td>'
+      + '<td>' + hm(b.start_time) + '–' + hm(b.end_time) + (cross ? ' <span class="muted">隔日</span>' : '') + '</td>'
+      + '<td class="num">' + fmt1(hoursOf(b)) + '</td>'
+      + '<td>' + esc(b.driver_name || '') + '</td><td>' + esc(b.tractor_plate || '') + '</td>'
+      + '<td>' + esc(b.purpose || '') + '</td><td>' + esc(b.destination || '') + '</td>'
+      + '<td>' + esc(b.status) + (b.cancel_reason ? '（' + esc(b.cancel_reason) + '）' : '') + '</td>'
+      + '<td>' + esc(b.notes || '') + '</td></tr>';
+  }).join('') : '<tr><td colspan="10" class="empty">這段期間沒有預約紀錄。</td></tr>';
+
+  const group = (keyFn, nameFn) => {
+    const m = {};
+    rows.forEach(b => {
+      const k = keyFn(b); if(!m[k]) m[k] = { n:0, h:0, c:0, name: nameFn(b) };
+      if(b.status === '已取消') m[k].c++; else { m[k].n++; m[k].h += hoursOf(b); }
+    });
+    const arr = Object.keys(m).map(k => m[k]).sort((a, b) => b.h - a.h || b.n - a.n);
+    return arr.length ? arr.map(x => '<tr><td>' + esc(x.name) + '</td><td class="num">' + x.n
+      + '</td><td class="num">' + fmt1(x.h) + '</td><td class="num">' + x.c + '</td></tr>').join('')
+      : '<tr><td colspan="4" class="empty">沒有資料。</td></tr>';
+  };
+  $('hs_byRes').innerHTML    = group(b => b.resource_id, b => resName(b.resource_id));
+  $('hs_byDriver').innerHTML = group(b => b.driver_name || '（未填）', b => b.driver_name || '（未填）');
+}
+
+// ---------- 板車設定 ----------
+function renderSetup(){
+  const rows = STATE.resources.slice().sort((a, b) => (a.sort_no||0) - (b.sort_no||0) || a.resource_id - b.resource_id);
+  const used = {};
+  STATE.bookings.forEach(b => { used[b.resource_id] = (used[b.resource_id] || 0) + 1; });
+  $('st_body').innerHTML = rows.length ? rows.map(r => {
+    const i = (f, v, w) => '<input data-f="' + f + '" data-id="' + r.resource_id + '" value="' + esc(v == null ? '' : v)
+      + '" style="width:' + w + 'px;padding:6px 8px;border:1px solid var(--border-strong);border-radius:8px;font-size:12px;">';
+    return '<tr><td>' + i('sort_no', r.sort_no, 44) + '</td>'
+      + '<td>' + i('resource_name', r.resource_name, 130) + '</td>'
+      + '<td>' + i('plate_number', r.plate_number, 100) + '</td>'
+      + '<td>' + i('base_location', r.base_location, 80) + '</td>'
+      + '<td><input type="color" data-f="color" data-id="' + r.resource_id + '" value="' + esc(r.color || '#8b929b')
+      + '" style="width:44px;height:30px;padding:0;border:1px solid var(--border-strong);border-radius:8px;"></td>'
+      + '<td style="text-align:center;"><input type="checkbox" data-f="is_active" data-id="' + r.resource_id + '"'
+      + (r.is_active ? ' checked' : '') + '></td>'
+      + '<td>' + i('notes', r.notes, 190) + '</td>'
+      + '<td class="no-print"><button class="btn ghost tiny st-save" data-id="' + r.resource_id + '">儲存</button>'
+      + ' <span class="muted">' + (used[r.resource_id] || 0) + ' 筆預約</span></td></tr>';
+  }).join('') : '<tr><td colspan="8" class="empty">還沒有板車，請按「新增一台」。</td></tr>';
+}
+
+// ---------- 送出預約 ----------
+function formEnd(){
+  const d = $('tb_date').value;
+  return $('tb_overnight').checked ? addDays(d, 1) : d;
+}
+function refreshHint(){
+  const d = $('tb_date').value, s = $('tb_start').value, e = $('tb_end').value;
+  if(!d || !s || !e){ $('tb_hint').textContent = ''; return; }
+  const ed = formEnd();
+  const h = (new Date(ed + 'T' + e + ':00') - new Date(d + 'T' + s + ':00')) / 3600000;
+  $('tb_hint').textContent = h > 0
+    ? toROC(d) + ' ' + s + ' 用到 ' + (ed === d ? '' : toROC(ed) + ' ') + e + '，共 ' + fmt1(h) + ' 小時'
+    : '結束時間要比開始時間晚（做到隔天請勾「用到隔天」）';
+}
+function driverInfo(){
+  const v = $('tb_driver').value;
+  if(v === '__other__') return { name: ($('tb_name').value || '').trim(), id: null };
+  const e = STATE.employees.find(x => String(x.employee_id) === v);
+  return e ? { name: e.name, id: e.employee_id } : { name: '', id: null };
+}
+function showConflicts(list){
+  const box = $('tb_conflict');
+  if(!list.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<strong>這個時段已經有人約了：</strong><br>' + list.map(b =>
+    '・' + esc(resName(b.resource_id)) + '　' + toROC(b.booking_date) + ' ' + hm(b.start_time) + '–' + hm(b.end_time)
+    + '　' + esc(b.driver_name || '') + (b.purpose ? '（' + esc(b.purpose) + '）' : '')).join('<br>')
+    + '<br>請改時段，或換一台板車。';
+}
+async function saveBooking(){
+  const msg = $('tb_msg'); msg.style.color = '#B3261E';
+  const resId = parseInt($('tb_res').value, 10);
+  const d = $('tb_date').value, s = $('tb_start').value, e = $('tb_end').value;
+  const dv = driverInfo();
+  if(!resId){ msg.textContent = '請先選一台板車'; return; }
+  if(!d){ msg.textContent = '請選使用日期'; return; }
+  if(!s || !e){ msg.textContent = '請填開始與結束時間'; return; }
+  if(!dv.name){ msg.textContent = '請選預約人（不在名單上就選「其他」自己打）'; return; }
+  const ed = formEnd();
+  if(dkey(ed, e) <= dkey(d, s)){ msg.textContent = '結束時間要比開始時間晚。做到隔天請勾「用到隔天（跨夜）」。'; return; }
+
+  const conf = findConflicts(resId, dkey(d, s), dkey(ed, e), null);
+  if(conf.length){ showConflicts(conf); msg.textContent = '時段衝突，沒有送出'; return; }
+  showConflicts([]);
+
+  const row = {
+    resource_id: resId, booking_date: d, start_time: s, end_date: ed, end_time: e,
+    driver_name: dv.name, employee_id: dv.id,
+    driver_phone: ($('tb_phone').value || '').trim() || null,
+    tractor_plate: ($('tb_tractor').value || '').trim() || null,
+    purpose: ($('tb_purpose').value || '').trim() || null,
+    destination: ($('tb_dest').value || '').trim() || null,
+    notes: ($('tb_notes').value || '').trim() || null,
+    status: '已預約', created_by: LOGIN_EMAIL || null
+  };
+  msg.style.color = 'var(--text-3)'; msg.textContent = '送出中…';
+  try{
+    const saved = await sbInsert('trailer_bookings', row);
+    STATE.bookings.push(saved || row);
+    WEEK_START = mondayOf(d);
+    ['tb_purpose','tb_dest','tb_notes'].forEach(id => $(id).value = '');
+    msg.style.color = '#2f6f4e';
+    msg.textContent = '預約成功：' + resName(resId) + '　' + toROC(d) + ' ' + s + '–' + e + '　' + dv.name;
+    renderAll();
+  }catch(err){
+    msg.style.color = '#B3261E'; msg.textContent = '失敗：' + tidyErr(err.message);
+    // 資料庫擋下來代表別人搶先了，重新載入讓畫面對得上
+    try{ STATE.bookings = await sbSelect('trailer_bookings', 'select=*&order=booking_date.desc,start_time.desc&limit=5000'); renderAll(); }catch(e2){}
+  }
+}
+
+// ---------- 狀態變更 ----------
+async function actOn(id, act){
+  const b = STATE.bookings.find(x => x.booking_id === id); if(!b) return;
+  const msg = $('ls_msg'); msg.style.color = '#B3261E';
+  let patch = null;
+  if(act === 'use')    patch = { status:'使用中' };
+  if(act === 'done')   patch = { status:'已完成' };
+  if(act === 'reopen') patch = { status:'已預約', cancel_reason:null, cancelled_at:null };
+  if(act === 'cancel'){
+    const why = prompt('要取消「' + resName(b.resource_id) + '　' + toROC(b.booking_date) + ' ' + hm(b.start_time) + '–' + hm(b.end_time)
+      + '　' + (b.driver_name || '') + '」。\n請寫一下原因（紀錄會留著，不會被刪掉）：', '');
+    if(why === null) return;
+    patch = { status:'已取消', cancel_reason: (why || '').trim() || '未填原因', cancelled_at: new Date().toISOString() };
+  }
+  if(!patch) return;
+  try{
+    const saved = await sbUpdate('trailer_bookings', 'booking_id', id, patch);
+    Object.assign(b, saved || patch);
+    msg.style.color = '#2f6f4e'; msg.textContent = '已更新。';
+    renderAll();
+  }catch(err){ msg.textContent = '更新失敗：' + tidyErr(err.message); }
+}
+
+// ---------- 設定儲存 ----------
+async function saveResource(id){
+  const msg = $('st_msg'); msg.style.color = '#B3261E';
+  const patch = {};
+  // 一定要限定 [data-f]，不然同一列的「儲存」按鈕（只有 data-id）也會被選到，
+  // 就會多送一個叫 undefined 的欄位進 Supabase，整筆更新都會被退回來。
+  document.querySelectorAll('#st_body [data-f][data-id="' + id + '"]').forEach(el => {
+    const f = el.dataset.f;
+    if(f === 'is_active') patch[f] = el.checked;
+    else if(f === 'sort_no') patch[f] = parseInt(el.value, 10) || 0;
+    else patch[f] = (el.value || '').trim() || null;
+  });
+  if(!patch.resource_name){ msg.textContent = '名稱不可以空白。'; return; }
+  try{
+    const saved = await sbUpdate('booking_resources', 'resource_id', id, patch);
+    const r = STATE.resources.find(x => x.resource_id === id); if(r) Object.assign(r, saved || patch);
+    msg.style.color = '#2f6f4e'; msg.textContent = '已儲存。';
+    renderAll();
+  }catch(err){ msg.textContent = '儲存失敗：' + tidyErr(err.message); }
+}
+async function addResource(){
+  const name = prompt('新板車的名稱（例如「板車 F8-85」）：', '');
+  if(!name || !name.trim()) return;
+  const msg = $('st_msg'); msg.style.color = '#B3261E';
+  try{
+    const saved = await sbInsert('booking_resources', {
+      resource_name: name.trim(), color: '#5b6672',
+      sort_no: STATE.resources.reduce((m, r) => Math.max(m, r.sort_no || 0), 0) + 1, is_active: true });
+    if(saved) STATE.resources.push(saved);
+    msg.style.color = '#2f6f4e'; msg.textContent = '已新增，請補車號與車場後按儲存。';
+    renderAll();
+  }catch(err){ msg.textContent = '新增失敗：' + tidyErr(err.message); }
+}
+
+// ---------- 匯出／列印 ----------
+function csvLines(head, rows){
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  return '﻿' + [head.map(q).join(',')].concat(rows.map(r => r.map(q).join(','))).join('\r\n');
+}
+function download(name, text){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type:'text/csv;charset=utf-8;' }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+var PRINT_CSS = '@page{size:A4 landscape;margin:12mm 10mm;}'
+  + 'body{font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;color:#1d1a15;margin:0;padding:4px 2px;font-size:12px;line-height:1.5;}'
+  + 'h2,h3{font-size:17px;margin:0 0 10px;}'
+  + 'table{width:100%;border-collapse:collapse;margin-bottom:12px;}'
+  + 'th,td{border:1px solid #d8d2c6;padding:5px 6px;text-align:left;vertical-align:top;}'
+  + 'thead th{background:#f3efe7;white-space:nowrap;}'
+  + 'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}'
+  + '.muted{color:#6b6357;}tr{break-inside:avoid;}.no-print{display:none !important;}';
+function printBlock(title, html, msgEl){
+  var w = null;
+  try{ w = window.open('', '_blank'); }catch(e){ w = null; }
+  if(w && w.document){
+    try{
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>'
+        + esc(title) + '<\/title><style>' + PRINT_CSS + '<\/style><\/head><body>' + html
+        + '<script>window.onload=function(){try{window.focus();window.print();}catch(e){}};<\/script><\/body><\/html>');
+      w.document.close();
+      if(msgEl) msgEl.textContent = '';
+      return true;
+    }catch(e){ try{ w.close(); }catch(e2){} }
+  }
+  try{ window.print(); }catch(e){}
+  if(msgEl) msgEl.textContent = '新視窗被擋住了，已改用本頁列印。如果還是沒反應，請用瀏覽器分頁直接開 GitHub Pages 網址。';
+  return false;
+}
+
+// ---------- 綁事件 ----------
+function wire(){
+  document.querySelectorAll('.sidebar nav button').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.sidebar nav button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const p = $(b.dataset.tab); if(p) p.classList.add('active');
+    };
+  });
+  $('tb_driver').onchange = () => {
+    const v = $('tb_driver').value;
+    $('tb_nameWrap').style.display = (v === '__other__') ? '' : 'none';
+    const e = STATE.employees.find(x => String(x.employee_id) === v);
+    if(e && e.phone) $('tb_phone').value = e.phone;
+  };
+  ['tb_date','tb_start','tb_end'].forEach(id => { $(id).oninput = () => { refreshHint(); showConflicts([]); }; });
+  $('tb_overnight').onchange = () => { refreshHint(); showConflicts([]); };
+  $('tb_quick').onclick = ev => {
+    const b = ev.target.closest('button[data-s]'); if(!b) return;
+    $('tb_start').value = b.dataset.s; $('tb_end').value = b.dataset.e;
+    $('tb_overnight').checked = false; refreshHint(); showConflicts([]);
+  };
+  $('tb_save').onclick  = saveBooking;
+  $('tb_clear').onclick = () => {
+    ['tb_phone','tb_tractor','tb_purpose','tb_dest','tb_notes','tb_name'].forEach(id => $(id).value = '');
+    $('tb_driver').value = ''; $('tb_nameWrap').style.display = 'none';
+    $('tb_overnight').checked = false; $('tb_msg').textContent = ''; showConflicts([]); refreshHint();
+  };
+  $('tb_wkPrev').onclick  = () => { WEEK_START = addDays(WEEK_START, -7); renderStats(); renderWeek(); };
+  $('tb_wkNext').onclick  = () => { WEEK_START = addDays(WEEK_START,  7); renderStats(); renderWeek(); };
+  $('tb_wkToday').onclick = () => { WEEK_START = mondayOf(todayISO()); renderStats(); renderWeek(); };
+  $('tb_wkPrint').onclick = () => {
+    printBlock('油壓板車使用時間表 ' + toROC(WEEK_START),
+      '<h3>油壓板車使用時間表　' + esc(toROC(WEEK_START)) + ' 起這一週</h3><table>'
+      + '<thead>' + $('tb_weekHead').outerHTML + '</thead><tbody>' + $('tb_weekBody').innerHTML + '</tbody></table>', null);
+  };
+
+  $('ls_res').onchange = renderList;
+  $('ls_status').onchange = renderList;
+  $('ls_reload').onclick = async () => {
+    const msg = $('ls_msg'); msg.style.color = 'var(--text-3)'; msg.textContent = '重新載入中…';
+    try{ STATE.bookings = await sbSelect('trailer_bookings', 'select=*&order=booking_date.desc,start_time.desc&limit=5000');
+      msg.textContent = ''; renderAll(); }
+    catch(e){ msg.style.color = '#B3261E'; msg.textContent = '載入失敗：' + tidyErr(e.message); }
+  };
+  $('ls_body').onclick = ev => {
+    const b = ev.target.closest('.ls-act'); if(!b) return;
+    actOn(parseInt(b.dataset.id, 10), b.dataset.act);
+  };
+
+  $('hs_go').onclick = renderHist;
+  ['hs_res','hs_from','hs_to'].forEach(id => $(id).onchange = renderHist);
+  $('hs_who').oninput = renderHist;
+  $('hs_csv').onclick = () => {
+    const rows = histRows().map(b => [resName(b.resource_id), toROC(b.booking_date), hm(b.start_time), toROC(b.end_date), hm(b.end_time),
+      fmt1(hoursOf(b)), b.driver_name || '', b.driver_phone || '', b.tractor_plate || '', b.purpose || '', b.destination || '',
+      b.status, b.cancel_reason || '', b.notes || '']);
+    download('板車預約紀錄_' + todayISO().replace(/-/g, '') + '.csv',
+      csvLines(['板車','使用日期','開始','結束日期','結束','時數','預約人','電話','車頭','用途','目的地','狀態','取消原因','備註'], rows));
+  };
+  $('hs_print').onclick = () => printBlock('板車預約紀錄',
+    '<h3>油壓板車預約紀錄</h3><p class="muted">' + esc($('hs_sum').textContent) + '</p><table><thead><tr>'
+    + '<th>板車</th><th>日期</th><th>時間</th><th class="num">時數</th><th>預約人</th><th>車頭</th><th>用途</th><th>目的地</th><th>狀態</th><th>備註</th>'
+    + '</tr></thead><tbody>' + $('hs_body').innerHTML + '</tbody></table>', null);
+
+  $('st_add').onclick = addResource;
+  $('st_body').onclick = ev => {
+    const b = ev.target.closest('.st-save'); if(!b) return;
+    saveResource(parseInt(b.dataset.id, 10));
+  };
+}
+
+function renderAll(){
+  fillPickers();
+  renderStats();
+  renderWeek();
+  renderList();
+  renderHist();
+  renderSetup();
+}
+
+// ---------- 啟動 ----------
+async function init(){
+  await ensureLogin();
+  const em = $('login_email'); LOGIN_EMAIL = em ? (em.value || '').trim() : '';
+  try{
+    await loadAll();
+  }catch(e){
+    const w = $('storageWarning');
+    w.style.display = 'block';
+    w.textContent = '資料載入失敗：' + tidyErr(e.message) + '（請確認已在 Supabase 執行 supabase_trailer_booking_1150804.sql）';
+    return;
+  }
+  WEEK_START = mondayOf(todayISO());
+  $('tb_date').value = todayISO();
+  $('hs_from').value = todayISO().slice(0,8) + '01';
+  $('hs_to').value   = todayISO();
+  wire();
+  refreshHint();
+  renderAll();
+}
+init();
+</script>
+</body>
+</html>
