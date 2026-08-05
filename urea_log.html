@@ -2,7 +2,12 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b2c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
 <title>順亞運通 尿素使用登記</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
@@ -246,6 +251,127 @@
   }
 </style>
 
+
+<style>
+  /* ===== 手機版（115/08/05 新增）=====
+     司機多半用手機開這一頁，所以 640px 以下整個換一套版面。
+     改這一段之前請注意：輸入框字級一定要 16px 以上，
+     低於 16px 時 iOS Safari 一點輸入框就會把整頁放大，司機要一直雙指縮回來。 */
+  @media (max-width:640px){
+    body{font-size:15px;}
+
+    /* 分頁列固定在最上面 */
+    .app-shell{background:none;box-shadow:none;}
+    .sidebar{
+      position:sticky;top:0;z-index:60;height:auto;padding:9px 12px 9px;gap:9px;
+      box-shadow:0 4px 16px rgba(13,27,44,.10);border-bottom:1px solid rgba(13,27,44,.09);
+    }
+    .brand{padding:0;gap:8px;}
+    .brand-mark{font-size:19px;}
+    .brand-copy{font-size:7.5px;line-height:1.3;}
+    .sidebar-motto{display:none;}
+    nav{
+      flex-direction:row;flex-wrap:nowrap;gap:6px;overflow-x:auto;
+      -webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:1px;
+    }
+    nav::-webkit-scrollbar{display:none;}
+    nav button{
+      flex:1 0 auto;text-align:center;padding:11px 15px;font-size:14px;
+      border-radius:12px;min-height:44px;white-space:nowrap;
+    }
+
+    /* 標題列縮小，把畫面留給表單 */
+    header.banner{padding:16px 14px 18px;}
+    header.banner h1{font-size:20px;margin-bottom:6px;letter-spacing:0;}
+    header.banner .sub{font-size:12.5px;line-height:1.65;}
+    .hero-kicker{font-size:9.5px;margin-bottom:5px;letter-spacing:.09em;}
+    .content{padding:13px 11px 40px;}
+    .card{padding:15px 13px;border-radius:16px;margin-bottom:12px;}
+    .card::after{display:none;}
+    .card h2,.card h3{font-size:15px;}
+
+    /* 統計卡兩欄 */
+    .stat-row{grid-template-columns:repeat(2,1fr) !important;gap:9px;margin-bottom:14px;}
+    .stat-card{padding:13px 12px;border-radius:13px;}
+    .stat-card .n{font-size:22px;}
+    .stat-card .l{font-size:11.5px;margin-top:4px;}
+    .stat-card .s{font-size:11px;}
+
+    /* 表單一欄一格，輸入框放大 */
+    .form-grid{grid-template-columns:1fr !important;gap:11px;margin-bottom:12px;}
+    .form-grid label{font-size:13px;gap:6px;font-weight:600;color:var(--text-2);}
+    .form-grid label[style*="grid-column"]{grid-column:1/-1 !important;}
+    input,select,textarea,
+    .form-grid input,.form-grid select,
+    .toolbar input,.toolbar select,
+    label.inline input,label.inline select{
+      font-size:16px !important;   /* 低於 16px iOS 會自動放大整頁，不要改小 */
+      padding:12px 12px;min-height:46px;border-radius:12px;width:100%;
+    }
+    input[type=checkbox]{width:22px;height:22px;min-height:0;padding:0;}
+
+    /* 按鈕加大成手指按得到的尺寸 */
+    button.btn{padding:13px 18px;font-size:15px;min-height:48px;border-radius:13px;width:100%;}
+    .btn.tiny{padding:10px 12px;font-size:13.5px;min-height:44px;}
+
+    /* 工具列改兩欄；標題與訊息整條寬，主要按鈕整條寬 */
+    .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;margin-bottom:12px;}
+    .toolbar > h2,.toolbar > h3,.toolbar > span,.toolbar > div{grid-column:1/-1;}
+    .toolbar > button.btn.primary,
+    .toolbar > button.btn:not(.tiny):not(.ghost){grid-column:1/-1;}
+    label.inline{display:flex;flex-direction:column;align-items:stretch;gap:5px;width:auto;font-size:12px;}
+    label.inline:has(input[type=checkbox]){flex-direction:row;align-items:center;gap:9px;font-size:14px;min-height:44px;}
+    label.inline:has(input[type=checkbox]) input{width:22px;}
+    #ls_who,#hs_who{width:100% !important;}
+
+    /* 表格改成一列一張卡：每一格前面標出欄位名稱 */
+    table.km-table{font-size:14px;}
+    table.km-table thead{display:none;}
+    table.km-table,table.km-table tbody,table.km-table tr,table.km-table td{
+      display:block;width:100%;min-width:0 !important;
+    }
+    table.km-table tr{
+      border:1px solid rgba(13,27,44,.10);border-radius:13px;margin-bottom:10px;
+      background:#fff;box-shadow:0 1px 3px rgba(13,27,44,.06);overflow:hidden;
+    }
+    table.km-table tbody tr:hover td{background:none;}
+    table.km-table td{
+      border:none;border-bottom:1px solid rgba(13,27,44,.06);
+      padding:9px 13px !important;white-space:normal !important;text-align:left !important;
+      display:flex;justify-content:space-between;align-items:baseline;gap:14px;line-height:1.55;
+    }
+    table.km-table td:last-child{border-bottom:none;}
+    table.km-table td::before{
+      content:attr(data-label);flex:0 0 auto;color:var(--text-3);
+      font-size:12px;font-weight:600;letter-spacing:.02em;
+    }
+    table.km-table td[data-label=""]::before,
+    table.km-table td:not([data-label])::before{content:none;}
+    table.km-table td > *{text-align:right;}
+    table.km-table td:empty{display:none;}
+    table.km-table tr td:first-child{
+      background:linear-gradient(90deg,#fbfaf8,#f4efe7);font-weight:700;font-size:15px;
+    }
+    table.km-table td[colspan]{display:block;text-align:center !important;background:none;font-weight:400;}
+    table.km-table td[colspan]::before{content:none;}
+    .del-btn,.move-btn{font-size:14px;padding:7px 12px;min-height:38px;}
+
+    /* 板車使用時間表：一台板車一張卡，每天一行 */
+    #tb_weekTable td{display:block;min-width:0 !important;}
+    #tb_weekTable td::before{display:block;margin-bottom:5px;}
+    #tb_weekTable td > *{text-align:left;}
+    #tb_weekTable td:has(> span.muted:only-child){display:none;}
+    .slot{font-size:13px;padding:7px 9px;}
+    .slot b{font-size:12.5px;}
+
+    /* 捲動容器在手機上不需要橫捲了 */
+    .card > div[style*="overflow-x"]{overflow-x:visible !important;}
+  }
+  @media (max-width:350px){
+    .stat-row{grid-template-columns:1fr !important;}
+    .toolbar{grid-template-columns:1fr;}
+  }
+</style>
 </head>
 <body>
 <div class="app-shell">
@@ -947,6 +1073,52 @@ async function init(){
   renderAll();
 }
 init();
+</script>
+<script>
+// ===== 手機版：把表格欄位名稱貼到每一格上（115/08/05 新增）=====
+// 手機寬度時表格會改成「一列一張卡」，每一格前面要顯示它原本是哪一欄，
+// 所以這裡把 thead 的欄位名稱抄到 td 的 data-label，CSS 再用 ::before 印出來。
+// 用 MutationObserver 監看，資料重新畫過就自動重貼，不必去動任何 render 函式。
+(function(){
+  function labelBody(tbody){
+    var table = tbody.closest('table');
+    if(!table) return;
+    var ths = Array.prototype.map.call(table.querySelectorAll('thead th'), function(t){
+      return (t.textContent || '').trim();
+    });
+    if(!ths.length) return;
+    Array.prototype.forEach.call(tbody.rows, function(tr){
+      Array.prototype.forEach.call(tr.cells, function(td, i){
+        if(td.hasAttribute('colspan')){ td.removeAttribute('data-label'); return; }
+        if(ths[i]) td.setAttribute('data-label', ths[i]);
+        else td.removeAttribute('data-label');
+      });
+    });
+  }
+  function labelTable(table){
+    Array.prototype.forEach.call(table.tBodies, labelBody);
+  }
+  function boot(){
+    var tables = document.querySelectorAll('table.km-table');
+    if(!tables.length || typeof MutationObserver === 'undefined') return;
+    // 只改屬性不會觸發 childList，所以不會打到自己造成無限迴圈
+    var obs = new MutationObserver(function(muts){
+      var hit = [];
+      muts.forEach(function(m){
+        var el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+        var t = el && el.closest ? el.closest('table.km-table') : null;
+        if(t && hit.indexOf(t) === -1) hit.push(t);
+      });
+      hit.forEach(labelTable);
+    });
+    Array.prototype.forEach.call(tables, function(t){
+      labelTable(t);
+      obs.observe(t, { childList:true, subtree:true });
+    });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
 </script>
 </body>
 </html>
