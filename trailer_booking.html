@@ -407,7 +407,8 @@
   <div class="card">
     <h3>我要預約</h3>
     <div class="muted" style="margin:-6px 0 12px;font-size:12.5px;">
-      同一台板車同一個時段不會讓兩個人約到，送出前系統會先幫你檢查。
+      同一台板車同一個時段不會讓兩個人約到，送出前系統會先幫你檢查。<br>
+      <strong>同一個人在同一台板車上，最多只能連續預約 2 天</strong>，超過會擋下來不給送出。
     </div>
 
     <div class="form-grid">
@@ -463,6 +464,7 @@
       <button class="btn ghost" id="tb_clear">清空</button>
       <span id="tb_msg" style="font-size:13px;font-weight:600;"></span>
     </div>
+    <div id="tb_consec" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:#FFF4E0;color:#8A5300;font-size:13px;line-height:1.7;"></div>
     <div id="tb_conflict" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:#FBEAE9;color:#B3261E;font-size:13px;line-height:1.7;"></div>
   </div>
 
@@ -648,6 +650,8 @@ function tidyErr(msg){
   if(s.indexOf('range lower bound') >= 0 || s.indexOf('chk_booking_period') >= 0)
     return '結束時間要比開始時間晚。如果是做到隔天，請勾「用到隔天（跨夜）」。';
   if(s.indexOf('chk_booking_enddate') >= 0) return '結束日期不可以早於使用日期。';
+  if(s.indexOf('booking_max_consec_days') >= 0)
+    return '同一個人在同一台板車上最多只能連續預約 ' + MAX_CONSEC_DAYS + ' 天，這一筆會超過，沒有送出。';
   if(s.indexOf('chk_booking_status') >= 0)  return '狀態只能是 已預約／使用中／已完成／已取消。';
   if(s.indexOf('trailer_bookings') >= 0 && s.indexOf('does not exist') >= 0)
     return '雲端還沒有預約資料表，請先執行 supabase_trailer_booking_1150804.sql。';
@@ -672,6 +676,44 @@ function overlap(a1, a2, b1, b2){ return a1 < b2 && b1 < a2; }
 function findConflicts(resId, s, e, ignoreId){
   return liveBookings().filter(b => b.resource_id === resId && b.booking_id !== ignoreId
     && overlap(s, e, dkey(b.booking_date, b.start_time), dkey(b.end_date || b.booking_date, b.end_time)));
+}
+
+// ---------- 最多連續預約 2 天 ----------
+// 規則對象是「同一個人 ＋ 同一台板車」：
+//   ・同一個人換另一台板車 → 不受限制
+//   ・別人接著用同一台板車 → 不受限制
+// 只擋「同一個人把同一台板車的日期連起來超過 2 天」。
+// 跨夜（用到隔天）那一筆本身就佔 2 天，所以跨夜的預約前後都不能再接。
+// 前端擋一道，資料庫還有一道 trigger（見 supabase_booking_max_consec_1150805.sql），
+// 兩個人同時送出時前端可能都覺得沒超過，資料庫會把後到的那筆退回來。
+const MAX_CONSEC_DAYS = 2;
+const normName = n => String(n == null ? '' : n).replace(/\s+/g, '');
+function dayList(a, b){
+  const out = []; let c = String(a).slice(0,10); const e = String(b || a).slice(0,10);
+  for(let i = 0; i < 60 && c <= e; i++){ out.push(c); c = addDays(c, 1); }
+  return out;
+}
+// 回傳「把這次的新預約算進去之後」，包含這次日期的那一段連續天數
+function consecRun(resId, name, d, ed, ignoreId){
+  const key = normName(name);
+  if(!key || !resId || !d) return { days: 0, from: d, to: d, rows: [] };
+  const map = new Map();                       // 日期 → 這位預約人當天既有的預約
+  liveBookings().filter(b => b.resource_id === resId && b.booking_id !== ignoreId
+      && normName(b.driver_name) === key)
+    .forEach(b => dayList(b.booking_date, b.end_date).forEach(x => {
+      if(!map.has(x)) map.set(x, []);
+      map.get(x).push(b);
+    }));
+  const mine = dayList(d, ed);
+  const has  = x => map.has(x) || mine.indexOf(x) >= 0;
+  let lo = mine[0], hi = mine[mine.length - 1];
+  for(let i = 0; i < 90; i++){ const p = addDays(lo, -1); if(!has(p)) break; lo = p; }
+  for(let i = 0; i < 90; i++){ const q = addDays(hi,  1); if(!has(q)) break; hi = q; }
+  const span = dayList(lo, hi), seen = {}, rows = [];
+  span.forEach(x => (map.get(x) || []).forEach(b => {
+    if(!seen[b.booking_id]){ seen[b.booking_id] = 1; rows.push(b); }
+  }));
+  return { days: span.length, from: lo, to: hi, rows: rows };
 }
 
 // ---------- 載入 ----------
@@ -868,6 +910,29 @@ function refreshHint(){
 function driverInfo(){
   return { name: ($('tb_driver').value || '').trim(), id: null };
 }
+function showConsec(run, name, resId, hard){
+  const box = $('tb_consec');
+  if(!run || run.days <= MAX_CONSEC_DAYS){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<strong>' + (hard ? '超過連續 ' : '注意：會超過連續 ') + MAX_CONSEC_DAYS + ' 天上限，'
+    + (hard ? '沒有送出。' : '這樣送出會被擋下來。') + '</strong><br>'
+    + esc(name) + ' 在 ' + esc(resName(resId)) + ' 上會變成 '
+    + toROC(run.from) + ' ～ ' + toROC(run.to) + ' 連續 <strong>' + run.days + '</strong> 天。<br>'
+    + (run.rows.length
+        ? '已經有的預約：<br>' + run.rows.map(b => '・' + toROC(b.booking_date)
+            + (String(b.end_date || b.booking_date).slice(0,10) !== String(b.booking_date).slice(0,10)
+                ? '～' + toROC(b.end_date) : '')
+            + ' ' + hm(b.start_time) + '–' + hm(b.end_time)
+            + (b.purpose ? '（' + esc(b.purpose) + '）' : '')).join('<br>') + '<br>'
+        : '')
+    + '請改日期，或換一台板車。';
+}
+function checkConsecLive(){
+  const resId = parseInt($('tb_res').value, 10);
+  const d = $('tb_date').value, name = ($('tb_driver').value || '').trim();
+  if(!resId || !d || !name){ showConsec(null); return; }
+  showConsec(consecRun(resId, name, d, formEnd(), null), name, resId, false);
+}
 function showConflicts(list){
   const box = $('tb_conflict');
   if(!list.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
@@ -892,6 +957,19 @@ async function saveBooking(){
   const conf = findConflicts(resId, dkey(d, s), dkey(ed, e), null);
   if(conf.length){ showConflicts(conf); msg.textContent = '時段衝突，沒有送出'; return; }
   showConflicts([]);
+
+  // 最多連續預約 2 天
+  const run = consecRun(resId, dv.name, d, ed, null);
+  if(run.days > MAX_CONSEC_DAYS){
+    showConsec(run, dv.name, resId, true);
+    alert('同一個人在同一台板車上，最多只能連續預約 ' + MAX_CONSEC_DAYS + ' 天。\n\n'
+      + dv.name + ' 在 ' + resName(resId) + ' 上會變成\n'
+      + toROC(run.from) + ' ～ ' + toROC(run.to) + '，連續 ' + run.days + ' 天，超過上限。\n\n'
+      + '這一筆沒有幫你送出，請改日期或換一台板車。');
+    msg.textContent = '超過連續 ' + MAX_CONSEC_DAYS + ' 天上限，沒有送出';
+    return;
+  }
+  showConsec(null);
 
   const row = {
     resource_id: resId, booking_date: d, start_time: s, end_date: ed, end_time: e,
@@ -993,9 +1071,11 @@ function wire(){
     // 打過的名字自動把上次留的電話帶回來；已經填了就不覆蓋
     const ph = knownDrivers().get(($('tb_driver').value || '').trim());
     if(ph && !$('tb_phone').value.trim()) $('tb_phone').value = ph;
+    checkConsecLive();
   };
-  ['tb_date','tb_start','tb_end'].forEach(id => { $(id).oninput = () => { refreshHint(); showConflicts([]); }; });
-  $('tb_overnight').onchange = () => { refreshHint(); showConflicts([]); };
+  ['tb_date','tb_start','tb_end'].forEach(id => { $(id).oninput = () => { refreshHint(); showConflicts([]); checkConsecLive(); }; });
+  $('tb_overnight').onchange = () => { refreshHint(); showConflicts([]); checkConsecLive(); };
+  $('tb_res').onchange = () => { showConflicts([]); checkConsecLive(); };
   $('tb_quick').onclick = ev => {
     const b = ev.target.closest('button[data-s]'); if(!b) return;
     $('tb_start').value = b.dataset.s; $('tb_end').value = b.dataset.e;
@@ -1004,7 +1084,7 @@ function wire(){
   $('tb_save').onclick  = saveBooking;
   $('tb_clear').onclick = () => {
     ['tb_phone','tb_tractor','tb_purpose','tb_dest','tb_notes','tb_driver'].forEach(id => $(id).value = '');
-    $('tb_overnight').checked = false; $('tb_msg').textContent = ''; showConflicts([]); refreshHint();
+    $('tb_overnight').checked = false; $('tb_msg').textContent = ''; showConflicts([]); showConsec(null); refreshHint();
   };
   $('tb_wkPrev').onclick  = () => { WEEK_START = addDays(WEEK_START, -7); renderStats(); renderWeek(); };
   $('tb_wkNext').onclick  = () => { WEEK_START = addDays(WEEK_START,  7); renderStats(); renderWeek(); };
