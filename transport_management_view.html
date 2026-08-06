@@ -1965,6 +1965,7 @@
           <select id="in_status">
             <option value="使用中">使用中</option>
             <option value="備用">備用</option>
+            <option value="停用">停用</option>
             <option value="報廢">報廢</option>
           </select>
         </label>
@@ -2017,6 +2018,16 @@
         <table>
           <thead><tr><th>校驗日期</th><th>儀器</th><th>校驗廠商</th><th>結果</th><th>驗收人員</th><th>下次應校日</th><th></th></tr></thead>
           <tbody id="calibrationBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>儀器停用清冊<span class="count-badge" id="in_off_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">停用的儀器不會從資料庫刪除，校驗歷史也留著。修好了按「復用」就回到上面的儀器清單。</div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>財產編號</th><th>類型</th><th>廠牌型號</th><th>停用日</th><th>停用原因</th><th>停用前領用人</th><th>狀態</th><th></th></tr></thead>
+          <tbody id="instrumentsOffBody"></tbody>
         </table>
       </div>
     </div>
@@ -3886,26 +3897,54 @@ function renderInstrumentSelects(){
   const instrumentTypes = STATE.equipmentTypes.filter(t => t.category === '儀器設備');
   document.getElementById('in_type').innerHTML = instrumentTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   document.getElementById('in_holder').innerHTML = '<option value="">未指定</option>' + instrumentHolderCandidates().map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.fleet_team)}）</option>`).join('');
-  document.getElementById('cal_instrument').innerHTML = STATE.instruments.map(i => `<option value="${i.instrument_id}">${esc(i.asset_no)}</option>`).join('');
+  document.getElementById('cal_instrument').innerHTML = (STATE.instruments || []).filter(i => !isInstrumentOff(i)).map(i => `<option value="${i.instrument_id}">${esc(i.asset_no)}</option>`).join('');
 }
 
 function instrumentCalStatus(inst){
-  if(inst.status==='報廢') return 'gray';
+  if(isInstrumentOff(inst)) return 'gray';
   if(!inst.next_calibration_due) return 'gray';
   return statusOf(inst.next_calibration_due, 60);
 }
 
 let editingInstrumentHolderId = null;
+// ===== 儀器停用／復用 =====
+// 故障、損壞、送修不堪用的儀器不要刪掉：按「停用」搬到下面的停用清冊，
+// 儀器本身與校驗歷史都留著；修好了在清冊按「復用」就搬回上面的儀器清單。
+// 舊資料裡狀態已經是「報廢」的，一樣歸在清冊，不必再手動搬一次。
+const INSTRUMENT_OFF_STATUS = ['停用', '報廢'];
+function isInstrumentOff(i){ return !!i && INSTRUMENT_OFF_STATUS.indexOf(i.status) >= 0; }
+function renderInstrumentsOffTable(){
+  const body = document.getElementById('instrumentsOffBody');
+  if(!body) return;
+  const rows = (STATE.instruments || []).filter(isInstrumentOff)
+    .sort((a, b) => String(b.disabled_date || '').localeCompare(String(a.disabled_date || '')));
+  const cnt = document.getElementById('in_off_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 台`;
+  body.innerHTML = rows.map(i => {
+    const type = STATE.equipmentTypes.find(t => t.id === i.type_id);
+    const holder = STATE.employees.find(e => e.id === i.current_holder_id);
+    return `<tr>
+      <td>${esc(i.asset_no)}</td>
+      <td>${esc(type ? type.name : '')}</td>
+      <td>${esc(i.brand_model || '')}</td>
+      <td>${esc(i.disabled_date || '—')}</td>
+      <td>${esc(i.disabled_reason || '')}</td>
+      <td>${esc(holder ? holder.name : '')}</td>
+      <td><span class="pill gray">${esc(i.status || '停用')}</span></td>
+      <td><button class="name-link" data-on-instrument="${i.instrument_id}">復用</button> <button class="del-btn" data-del-instrument="${i.instrument_id}">刪除</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" class="empty">目前沒有停用的儀器</td></tr>`;
+}
 function renderInstrumentsTable(){
   const q = document.getElementById('in_search').value.trim();
-  let rows = STATE.instruments;
+  let rows = (STATE.instruments || []).filter(i => !isInstrumentOff(i));
   if(q) rows = rows.filter(i => (i.asset_no||'').includes(q) || (i.serial_no||'').includes(q));
   document.getElementById('in_count').textContent = `共 ${rows.length} 台`;
   document.getElementById('instrumentsBody').innerHTML = rows.map(i => {
     const type = STATE.equipmentTypes.find(t => t.id === i.type_id);
     const holder = STATE.employees.find(e => e.id === i.current_holder_id);
     const s = instrumentCalStatus(i);
-    const dueLabel = i.status==='報廢' ? '—' : (i.next_calibration_due ? `${esc(i.next_calibration_due)} <span class="pill ${s}">${statusLabel(i.next_calibration_due,60)}</span>` : '<span class="pill gray">尚無紀錄</span>');
+    const dueLabel = isInstrumentOff(i) ? '—' : (i.next_calibration_due ? `${esc(i.next_calibration_due)} <span class="pill ${s}">${statusLabel(i.next_calibration_due,60)}</span>` : '<span class="pill gray">尚無紀錄</span>');
     const isEditing = String(editingInstrumentHolderId) === String(i.instrument_id);
     const holderCell = isEditing
       ? `<select id="inst_holder_select_${i.instrument_id}">
@@ -3924,9 +3963,10 @@ function renderInstrumentsTable(){
       <td>${holderCell}<br>${holderAction}</td>
       <td>${esc(i.status)}</td>
       <td>${dueLabel}</td>
-      <td><button class="del-btn" data-del-instrument="${i.instrument_id}">刪除</button></td>
+      <td><button class="name-link" data-off-instrument="${i.instrument_id}">停用</button> <button class="del-btn" data-del-instrument="${i.instrument_id}">刪除</button></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" class="empty">尚無儀器資料</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="empty">目前沒有在用的儀器</td></tr>`;
+  renderInstrumentsOffTable();
 }
 
 function renderCalibrationTable(){
@@ -4776,7 +4816,7 @@ function equipInUseCount(empId){
 // 這裡只把「使用中且有領用人」的機台帶進個人物品一起顯示，不另外存一份，
 // 兩邊數字才對得起來（跟公務機同一個作法）。
 function equipInstrumentsOf(empId){
-  return (STATE.instruments || []).filter(i => i.current_holder_id === empId && i.status !== '報廢');
+  return (STATE.instruments || []).filter(i => i.current_holder_id === empId && !isInstrumentOff(i));
 }
 function equipInstrumentTypeName(i){
   const t = STATE.equipmentTypes.find(x => x.id === i.type_id);
@@ -8291,7 +8331,21 @@ document.getElementById('instrumentsBody').addEventListener('click', async (e) =
   const saveHolderId = e.target.getAttribute('data-save-holder');
   const cancelHolderId = e.target.getAttribute('data-cancel-holder');
 
-  if(delId){
+  const offId = e.target.getAttribute('data-off-instrument');
+
+  if(offId){
+    const inst = STATE.instruments.find(i => String(i.instrument_id) === offId);
+    if(!inst) return;
+    // 用 prompt 當確認：按取消就不動，按確定順便把原因記下來
+    const why = prompt('要停用「' + (inst.asset_no || '') + '」嗎？\n\n原因可以改，也可以留白。停用後會移到最下面的「儀器停用清冊」，\n資料與校驗歷史都會留著，修好了按「復用」就搬回來。', inst.disabled_reason || '故障損壞');
+    if(why === null) return;
+    inst.status = '停用';
+    inst.disabled_date = todayISO();
+    inst.disabled_reason = String(why).trim();
+    await saveState('instruments', STATE.instruments, true);
+    renderInstrumentSelects();
+    renderAll();
+  }else if(delId){
     if(!confirm('確定要刪除這台儀器嗎？相關的校驗歷史也會一併刪除。')) return;
     STATE.instruments = STATE.instruments.filter(i => String(i.instrument_id) !== delId);
     STATE.calibrationRecords = STATE.calibrationRecords.filter(r => String(r.instrument_id) !== delId);
@@ -8315,6 +8369,30 @@ document.getElementById('instrumentsBody').addEventListener('click', async (e) =
       await saveState('instruments', STATE.instruments, true);
     }
     editingInstrumentHolderId = null;
+    renderAll();
+  }
+});
+
+document.getElementById('instrumentsOffBody').addEventListener('click', async (e) => {
+  const onId  = e.target.getAttribute('data-on-instrument');
+  const delId = e.target.getAttribute('data-del-instrument');
+  if(onId){
+    const inst = STATE.instruments.find(i => String(i.instrument_id) === onId);
+    if(!inst) return;
+    if(!confirm('要把「' + (inst.asset_no || '') + '」復用嗎？\n\n會回到上面的儀器清單，狀態改成「使用中」，停用日與停用原因會清掉。')) return;
+    inst.status = '使用中';
+    inst.disabled_date = null;
+    inst.disabled_reason = null;
+    await saveState('instruments', STATE.instruments, true);
+    renderInstrumentSelects();
+    renderAll();
+  }else if(delId){
+    if(!confirm('確定要刪除這台儀器嗎？相關的校驗歷史也會一併刪除，這個動作無法復原。\n\n只是壞掉不用了的話，留在停用清冊就好，不需要刪除。')) return;
+    STATE.instruments = STATE.instruments.filter(i => String(i.instrument_id) !== delId);
+    STATE.calibrationRecords = STATE.calibrationRecords.filter(r => String(r.instrument_id) !== delId);
+    await saveState('instruments', STATE.instruments, true);
+    await saveState('calibration_records', STATE.calibrationRecords, true);
+    renderInstrumentSelects();
     renderAll();
   }
 });
