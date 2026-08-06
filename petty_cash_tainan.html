@@ -319,14 +319,6 @@
       <label>日期<input type="date" id="pc_date"></label>
       <label>科目<select id="pc_subject"></select></label>
       <label>金額<input type="number" id="pc_amount" min="0" step="1" placeholder="0"></label>
-      <label id="pc_weigh_wrap">代墊金額（司機先墊的）<input type="number" id="pc_weigh" min="0" step="1" placeholder="不是代墊就留空"></label>
-      <label id="pc_advtype_wrap">代墊類別<select id="pc_advtype">
-        <option value="">— 不是代墊 —</option>
-        <option value="磅費">磅費</option>
-        <option value="驗車">驗車</option>
-        <option value="驗板">驗板</option>
-        <option value="其他">其他</option>
-      </select></label>
       <label>領款人<input type="text" id="pc_payee" list="payeeList" placeholder="例：李奕樺"></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="pc_memo" placeholder="例：聯華磅費、KLJ-3207 驗車"></label>
       <label>單據狀態<select id="pc_status"><option>已入帳</option><option>待補單據</option></select></label>
@@ -610,15 +602,7 @@
         <option value="其他">其他</option>
       </select></label>
       <label>領款人<input type="text" id="em_payee"></label>
-      <label id="em_station_wrap">磅場／檢驗廠／對象<input type="text" id="em_station" list="wqStationList" placeholder="立豐"></label>
       <label id="em_wdate_wrap">費用發生日<input type="date" id="em_wdate"></label>
-      <label id="em_cno_wrap">櫃號<input type="text" id="em_cno" placeholder="HMIU7878617" style="text-transform:uppercase;"></label>
-      <label id="em_plate_wrap">車號（驗車／驗板）<input type="text" id="em_plate" list="wqPlateList" placeholder="KLJ-3207" style="text-transform:uppercase;"></label>
-      <label id="em_settle_wrap">這筆錢怎麼給的<select id="em_settle">
-        <option value="">還沒匯款（等主管匯給司機）</option>
-        <option value="cash">當場用零用金付掉，不用匯款</option>
-        <option value="old">115/07 以前的舊帳，早就匯過了</option>
-      </select><span class="muted" id="em_settle_note"></span></label>
       <label>狀態<select id="em_status"><option>已入帳</option><option>待補單據</option><option>已作廢</option></select></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="em_memo"></label>
       <label style="grid-column:span 2;">用途／備註<input type="text" id="em_purpose"></label>
@@ -1770,10 +1754,14 @@ function wire(){
         book_id: CUR_BOOK.book_id, entry_date: $('pc_date').value, direction: curDir(),
         subject_name: $('pc_subject').value, memo: $('pc_memo').value || null, amount: amt,
         payee: $('pc_payee').value || null, purpose: $('pc_purpose').value || null,
-        status: $('pc_status').value,
-        weigh_fee: wf > 0 ? wf : null,
-        advance_type: wf > 0 ? (($('pc_advtype') && $('pc_advtype').value) || advTypeFromSubject($('pc_subject').value)) : null
+        status: $('pc_status').value
       };
+      // 記一筆已經不收代墊了（代墊一律走「代墊費用」那一頁登錄），
+      // 欄位不在畫面上就不要塞這兩個 key，讓資料庫用它自己的預設值。
+      if($('pc_weigh')){
+        row.weigh_fee    = wf > 0 ? wf : null;
+        row.advance_type = wf > 0 ? (($('pc_advtype') && $('pc_advtype').value) || advTypeFromSubject($('pc_subject').value)) : null;
+      }
       const saved = await sbInsert('petty_entries', row);
       STATE.entries.push(saved);
       $('pc_amount').value = ''; $('pc_memo').value = ''; $('pc_purpose').value = '';
@@ -1811,10 +1799,13 @@ function wire(){
         patch.advance_type  = emwf > 0
           ? ((($('em_advtype') && $('em_advtype').value) || advTypeFromSubject($('em_subject').value)))
           : null;
-        patch.vehicle_plate = ($('em_plate') && $('em_plate').value.trim().toUpperCase()) || null;
-        patch.weigh_station = ($('em_station') && $('em_station').value.trim()) || null;
-        patch.weigh_date    = ($('em_wdate') && $('em_wdate').value) || null;
-        patch.container_no  = ($('em_cno') && wqContainers($('em_cno').value).join('、')) || null;
+        // ★ 每一格都要「畫面上真的有這個欄位」才寫進 patch。欄位被拿掉還照寫的話，
+        //   算出來一定是 null，等於使用者每按一次修改就把資料庫裡原本的
+        //   車號／磅場／櫃號／費用發生日洗掉一次。不放這個 key，PATCH 就不會動到那一欄。
+        if($('em_plate'))   patch.vehicle_plate = $('em_plate').value.trim().toUpperCase() || null;
+        if($('em_station')) patch.weigh_station = $('em_station').value.trim() || null;
+        if($('em_wdate'))   patch.weigh_date    = $('em_wdate').value || null;
+        if($('em_cno'))     patch.container_no  = wqContainers($('em_cno').value).join('、') || null;
       }
       // 已經匯過款的（有真批號）不從這裡動，避免不小心把批次拆掉
       if($('em_settle') && !$('em_settle').disabled){
@@ -2185,9 +2176,10 @@ function dropWeighUI(){
   // 側邊選單的「磅費」按鈕與整個分頁
   const nav = document.querySelector('.sidebar nav button[data-tab="weigh"]'); if(nav) nav.remove();
   const tab = $('weigh'); if(tab) tab.remove();
-  // 記一筆的代墊那兩格、餘額卡的「本月代墊」、編輯視窗的代墊欄位
-  ['pc_weigh_wrap','pc_advtype_wrap','pcMonthWeighWrap','em_weigh_wrap','em_advtype_wrap',
-   'em_station_wrap','em_wdate_wrap','em_cno_wrap','em_plate_wrap','em_settle_wrap']
+  // 餘額卡的「本月代墊」、編輯視窗剩下的代墊欄位。
+  // （記一筆的代墊兩格、編輯視窗的 磅場／櫃號／車號／這筆錢怎麼給的
+  //   已經直接從 HTML 拿掉了，兩本帳都沒有，不用再列在這裡。）
+  ['pcMonthWeighWrap','em_weigh_wrap','em_advtype_wrap','em_wdate_wrap']
     .forEach(id => { const el = $(id); if(el) el.remove(); });
   // 摘要範例別再舉磅費當例子
   const memo = $('pc_memo'); if(memo) memo.placeholder = '例：加油、辦公室清潔';
