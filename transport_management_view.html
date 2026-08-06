@@ -294,6 +294,10 @@
       <div id="overviewBookings"><div class="empty">載入中…</div></div>
     </div>
     <div class="card">
+      <h2>近期複訓上課<span class="count-badge" id="ov_rt_count"></span></h2>
+      <div id="ovRetrain"></div>
+    </div>
+    <div class="card">
       <h2>人員證照到期提醒（90天內，含未記錄效期者）</h2>
       <div id="trainingAlerts"></div>
     </div>
@@ -863,7 +867,7 @@
     </div>
 
     <div class="card">
-      <h2>覆訓報名</h2>
+      <h2>複訓報名</h2>
       <div class="form-grid">
         <label>人員
           <select id="rt_emp"></select>
@@ -880,7 +884,7 @@
       <button class="btn" id="rt_add">存入報名資料</button>
     </div>
     <div class="card">
-      <h2>已報名的覆訓<span class="count-badge" id="rt_count"></span></h2>
+      <h2>已報名的複訓<span class="count-badge" id="rt_count"></span></h2>
       <div class="table-scroll">
         <table>
           <thead><tr><th>上課日期</th><th>天數</th><th>人員</th><th>訓練項目</th><th>上課地點</th><th>辦理協會</th><th>這張證到期日</th><th></th></tr></thead>
@@ -904,7 +908,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>覆訓報名</th><th>狀態</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>複訓報名</th><th>狀態</th><th></th></tr></thead>
           <tbody id="externalStatusBody"></tbody>
         </table>
       </div>
@@ -3308,11 +3312,11 @@ function pushRenewNote(cur){
   parts.push('到期 ' + (cur.no_expiry ? '長期有效' : (cur.expiry_date || '未填')));
   if(cur.class_start_date){
     const cd = cur.class_start_date + ((cur.class_end_date && cur.class_end_date !== cur.class_start_date) ? ('～' + cur.class_end_date) : '');
-    parts.push('覆訓 ' + cd + (cur.class_location ? '／' + cur.class_location : '') + (cur.class_org ? '／' + cur.class_org : ''));
+    parts.push('複訓 ' + cd + (cur.class_location ? '／' + cur.class_location : '') + (cur.class_org ? '／' + cur.class_org : ''));
   }
   const line = '【' + todayISO() + ' 換證】舊：' + parts.join('／');
   cur.notes = cur.notes ? (String(cur.notes).trim() + '\n' + line) : line;
-  // 新證進來了，這一梯的報名就結束：欄位清空，下次要覆訓再重新報名
+  // 新證進來了，這一梯的報名就結束：欄位清空，下次要複訓再重新報名
   cur.class_start_date = null;
   cur.class_end_date = null;
   cur.class_location = null;
@@ -7427,7 +7431,7 @@ function renderInternalYearStatus(){
     </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
-// ===== 覆訓報名 =====
+// ===== 複訓報名 =====
 // 報名跟發證是兩件事：報名當下只知道哪幾天上課、在哪裡上、哪個協會辦的，
 // 證書字號跟新的到期日要等課上完才會有。所以這四欄（class_start_date／
 // class_end_date／class_location／class_org）獨立存，等到「新增受訓紀錄」
@@ -7453,7 +7457,7 @@ function rtPill(t){
   if(dd === 0) return '<span class="pill amber">今天上課</span>';
   return '<span class="pill green">還有 ' + dd + ' 天</span>';
 }
-// 外訓證照時效總表裡的「覆訓報名」欄：一眼看出快到期的人排課了沒有
+// 外訓證照時效總表裡的「複訓報名」欄：一眼看出快到期的人排課了沒有
 function retrainCell(t){
   if(!isRetrainBooked(t)) return '<span class="muted">—</span>';
   const bits = [rtDateText(t) + '（' + rtDays(t) + ' 天）'];
@@ -7490,6 +7494,27 @@ function renderRtHint(){
   el.textContent = txt;
   el.style.color = isRetrainBooked(cur) ? '#c0392b' : 'var(--text-2)';
 }
+// 總覽的『近期複訓上課』：跟外訓那一頁的報名清單是同一份資料，
+// 差別只在這裡純粹給人看——誰、哪幾天、上什麼課、在哪裡上、哪個協會辦的。
+function renderOverviewRetrain(){
+  const box = document.getElementById('ovRetrain');
+  if(!box) return;
+  const rows = (STATE.trainings || []).filter(isRetrainBooked)
+    .sort((a, b) => String(a.class_start_date || '').localeCompare(String(b.class_start_date || '')));
+  const cnt = document.getElementById('ov_rt_count');
+  if(cnt) cnt.textContent = rows.length ? `共 ${rows.length} 筆` : '';
+  box.innerHTML = rows.length
+    ? `<div class="table-scroll" style="max-height:320px;"><table><thead><tr><th>上課日期</th><th>天數</th><th>人員</th><th>訓練項目</th><th>上課地點</th><th>辦理協會</th></tr></thead><tbody>` +
+      rows.map(t => `<tr>
+        <td>${esc(rtDateText(t))} ${rtPill(t)}</td>
+        <td>${rtDays(t)}</td>
+        <td>${esc(t.employee_name || '')}</td>
+        <td>${esc(t.type_name || '')}</td>
+        <td>${esc(t.class_location || '')}</td>
+        <td>${esc(t.class_org || '')}</td>
+      </tr>`).join('') + `</tbody></table></div>`
+    : `<div class="empty">目前沒有人報名複訓上課</div>`;
+}
 function renderRetrainTable(){
   const body = document.getElementById('rtBody');
   if(!body) return;
@@ -7507,7 +7532,7 @@ function renderRetrainTable(){
       <td>${esc(t.class_org || '')}</td>
       <td>${t.no_expiry ? '長期有效' : esc(t.expiry_date || '—')}</td>
       <td><button class="del-btn" data-rt-cancel="${t.id}">取消報名</button></td>
-    </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有人報名覆訓。</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有人報名複訓。</td></tr>`;
 }
 let editingExternalId = null;
 function renderExternalStatusTable(){
@@ -7546,8 +7571,9 @@ function renderExternalStatusTable(){
     </tr>`;
   }).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
   // 三個儀表板的 renderAll() 內容不一樣，但都會呼叫這一支，
-  // 所以覆訓清單掛在這裡重畫，三邊才會一致。
+  // 所以複訓清單掛在這裡重畫，三邊才會一致。
   renderRetrainTable();
+  renderOverviewRetrain();
 }
 
 document.getElementById('externalStatusBody').addEventListener('click', async (e) => {
@@ -9280,7 +9306,7 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   renderTfHint();
 });
 
-// ===== 覆訓報名的三個動作：換人／換項目時更新提示、存入報名、取消報名 =====
+// ===== 複訓報名的三個動作：換人／換項目時更新提示、存入報名、取消報名 =====
 ['rt_emp', 'rt_type'].forEach(_id => {
   const _el = document.getElementById(_id);
   if(_el) _el.addEventListener('change', renderRtHint);
@@ -9301,7 +9327,7 @@ document.getElementById('tf_add').addEventListener('click', async () => {
     if(!start){ alert('請填「上課第一天」'); return; }
     if(end && end < start){ alert('「上課最後一天」不能早於第一天'); return; }
     if(end === start) end = '';
-    // 一般覆訓最多兩天，超過一個月八成是日期打錯，先問一聲
+    // 一般複訓最多兩天，超過一個月八成是日期打錯，先問一聲
     if(end){
       const span = Math.round((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000) + 1;
       if(span > 30 && !confirm('這樣算起來要上 ' + span + ' 天課，日期沒打錯嗎？')) return;
@@ -9339,7 +9365,7 @@ document.getElementById('tf_add').addEventListener('click', async () => {
     if(!id) return;
     const rec = (STATE.trainings || []).find(t => String(t.id) === id);
     if(!rec) return;
-    if(!confirm('要取消 ' + (rec.employee_name || '') + ' 的「' + (rec.type_name || '') + '」覆訓報名嗎？\n\n' +
+    if(!confirm('要取消 ' + (rec.employee_name || '') + ' 的「' + (rec.type_name || '') + '」複訓報名嗎？\n\n' +
                 '只會清掉上課日期、地點、辦理協會，證照本身的資料不動。')) return;
     rec.class_start_date = null;
     rec.class_end_date = null;
