@@ -630,6 +630,36 @@ async function sbInsert(table, row){
   if(!r.ok) throw new Error(await r.text());
   const d = await r.json(); return Array.isArray(d) ? d[0] : d;
 }
+// 送出新資料。萬一雲端的序號（sequence）落後——有登入的儀表板存檔時是前端
+// 自己算「最大號+1」明碼寫進來，這條路徑不會推進序號——PostgreSQL 就會回
+// 23505 duplicate key。這種時候不能讓司機在現場對著一串英文發呆，
+// 所以自己去問一下目前最大號、補一個號再送，最多試 3 次。
+// 根治的做法是在 Supabase 跑 supabase_fix_pk_sequences.sql（會把序號歸位並裝防呆）。
+async function sbInsertSafe(table, pk, row){
+  try{
+    return await sbInsert(table, row);
+  }catch(e){
+    if(String(e && e.message || '').indexOf('23505') < 0) throw e;
+  }
+  let last = null;
+  for(let i = 0; i < 3; i++){
+    let next = 1;
+    try{
+      const top = await sbSelect(table, 'select=' + pk + '&order=' + pk + '.desc&limit=1');
+      if(top && top.length) next = num(top[0][pk]) + 1;
+    }catch(_){ /* 讀不到就從 1 開始往上試 */ }
+    const r2 = Object.assign({}, row);
+    r2[pk] = next + i;
+    try{
+      return await sbInsert(table, r2);
+    }catch(e2){
+      last = e2;
+      if(String(e2 && e2.message || '').indexOf('23505') < 0) throw e2;
+    }
+  }
+  throw last || new Error('23505');
+}
+
 // 呼叫資料庫函式（RPC）。尿素登記的防呆用它去問「這個名字是不是我們家的人」，
 // 【只會拿到 true / false】，不會、也不可以拿到人事名冊。
 async function sbRpc(fn, args){
@@ -647,6 +677,9 @@ async function sbDelete(table, pk, id){
 // 把資料庫的英文錯誤翻成看得懂的話
 function tidyErr(msg){
   const s = String(msg || '');
+  if(s.indexOf('23505') >= 0 || s.indexOf('duplicate key') >= 0)
+    return '雲端的編號序號跟現有資料對不起來（重複主鍵），這一筆沒有存進去。'
+         + '請運輸行政人員到 Supabase 執行 supabase_fix_pk_sequences.sql 一次就會好。';
   if(s.indexOf('urea_logs_quantity_positive') >= 0) return '使用量要大於 0，請重新確認。';
   // 防呆（SQL #38 supabase_urea_identity_guard_1150805.sql）擋下來的四種情形
   if(s.indexOf('urea_person_not_found') >= 0)
@@ -1012,7 +1045,7 @@ async function saveLog(){
 
   msg.style.color = 'var(--text-3)'; msg.textContent = '送出中…';
   try{
-    const saved = await sbInsert('urea_logs', row);
+    const saved = await sbInsertSafe('urea_logs', 'log_id', row);
     STATE.logs.unshift(saved || row);
     msg.style.color = '#2f6f4e';
     msg.textContent = '已登記：' + plate + '　' + toROC(date) + '　' + fmt3(row.quantity) + ' 公升（' + by + '）';
