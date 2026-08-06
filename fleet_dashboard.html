@@ -525,6 +525,55 @@
     </div>
 
     <div class="card">
+      <h2>車輛證件效期<span class="count-badge" id="vd_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">驗車、行照、行車記錄器、自主管理標章、汽車強制卡、保稅車檢驗都在這裡登錄與查詢。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
+      <div class="form-grid">
+        <label>車號
+          <select id="vd_plate"></select>
+        </label>
+        <label>證件類別
+          <select id="vd_type">
+            <option value="驗車">驗車</option>
+            <option value="行照">行照</option>
+            <option value="行車記錄器">行車記錄器</option>
+            <option value="自主管理標章">自主管理標章</option>
+            <option value="汽車強制卡">汽車強制卡</option>
+            <option value="保稅車檢驗">保稅車檢驗</option>
+          </select>
+        </label>
+        <label>證號/編號（選填）<input id="vd_number" placeholder="選填"></label>
+        <label>發證/檢驗日期（選填）<input id="vd_issue" type="date"></label>
+        <label>到期日<input id="vd_expiry" type="date"></label>
+      </div>
+      <button class="btn" id="vd_add">存入證件效期</button>
+      <div class="toolbar" style="margin-top:14px;">
+        <input id="vd_search" placeholder="搜尋車號">
+        <select id="vd_type_filter">
+          <option value="all">全部類別</option>
+          <option value="驗車">驗車</option>
+          <option value="行照">行照</option>
+          <option value="行車記錄器">行車記錄器</option>
+          <option value="自主管理標章">自主管理標章</option>
+          <option value="汽車強制卡">汽車強制卡</option>
+          <option value="保稅車檢驗">保稅車檢驗</option>
+        </select>
+        <select id="vd_status_filter">
+          <option value="all">全部狀態</option>
+          <option value="red">已逾期</option>
+          <option value="amber">30天內到期</option>
+          <option value="green">正常</option>
+          <option value="gray">未設定到期日</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>類別</th><th>證號/編號</th><th>發證/檢驗日</th><th>到期日</th><th>含寬限<span class="muted">（驗車＋1個月）</span></th><th>狀態</th><th></th></tr></thead>
+          <tbody id="vdTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>車輛/板架歷史（賣出／報廢／繳銷）<span class="count-badge" id="fleet_retired_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">車輛狀態改成「報廢」或「繳銷」時會自動歸還車上物品，並移到這裡（資料庫永遠保留）。預設顯示近一年；<b>沒有填日期的車輛一律顯示</b>，不會被一年的期限藏起來。要看更早以前的，勾右邊的「顯示全部」。</div>
       <div class="toolbar">
@@ -4258,6 +4307,68 @@ function renderViTable(){
   }).join('') || `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+// ===== 車輛證件效期 =====
+// 驗車、行照、行車記錄器、自主管理標章這四種以前「只看得到、不能輸入」：
+// 車輛明細與到期總表都讀得到 vehicle_documents，可是整個系統只有滅火器、濾毒罐
+// 有獨立的輸入視窗，其餘證件沒有任何地方可以新增或改到期日。這一區把入口補上。
+// 滅火器／濾毒罐刻意不放進來，同一台車可能掛好幾支，仍走車輛清單那兩顆按鈕。
+const VD_TYPES = ['驗車','行照','行車記錄器','自主管理標章','汽車強制卡','保稅車檢驗'];
+
+function vdSelectableVehicles(){
+  return STATE.vehicles.filter(v => !isRetiredVehicle(v))
+    .slice().sort((a,b) => String(a.plate||'').localeCompare(String(b.plate||'')));
+}
+
+function renderVdPlateSelect(){
+  const sel = document.getElementById('vd_plate');
+  if(!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = vdSelectableVehicles().map(v =>
+    `<option value="${v.id}">${esc(v.plate)}${v.vehicle_category==='板架'?'（板架）':''}</option>`).join('');
+  if(keep){
+    const still = Array.prototype.some.call(sel.options, o => o.value === keep);
+    if(still) sel.value = keep;
+  }
+}
+
+function renderVdTable(){
+  renderVdPlateSelect();
+  const body = document.getElementById('vdTableBody');
+  if(!body) return;
+  const qEl = document.getElementById('vd_search');
+  const tEl = document.getElementById('vd_type_filter');
+  const sEl = document.getElementById('vd_status_filter');
+  const q  = ((qEl && qEl.value) || '').trim();
+  const tf = (tEl && tEl.value) || 'all';
+  const sf = (sEl && sEl.value) || 'all';
+  let rows = STATE.vehicleDocuments
+    .filter(d => VD_TYPES.indexOf(d.doc_type) >= 0)
+    .map(d => {
+      const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
+      // 驗車有一個月寬限，跟系統其他地方一致，狀態要用寬限後的日期算
+      const grace = (d.doc_type === '驗車' && d.expiry_date) ? addOneMonth(d.expiry_date) : d.expiry_date;
+      return { d: d, v: v, grace: grace, code: grace ? statusOf(grace, 30) : 'gray' };
+    })
+    .filter(r => r.v && !isRetiredVehicle(r.v));
+  if(q)  rows = rows.filter(r => (r.v.plate||'').includes(q));
+  if(tf !== 'all') rows = rows.filter(r => r.d.doc_type === tf);
+  if(sf !== 'all') rows = rows.filter(r => r.code === sf);
+  rows.sort((a,b) => String(a.grace||'9999-99-99').localeCompare(String(b.grace||'9999-99-99')));
+  const cnt = document.getElementById('vd_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.v.plate)}${r.v.vehicle_category==='板架'?' <span class="pill gray">板架</span>':''}</td>
+      <td>${esc(r.d.doc_type)}</td>
+      <td>${esc(r.d.doc_number||'—')}</td>
+      <td>${esc(r.d.issue_date||'—')}</td>
+      <td>${esc(r.d.expiry_date||'—')}</td>
+      <td class="muted">${r.d.doc_type==='驗車' && r.grace ? esc(r.grace) : ''}</td>
+      <td>${r.grace ? `<span class="pill ${r.code}">${statusLabel(r.grace,30)}</span>` : '<span class="pill gray">未設定</span>'}</td>
+      <td><button class="del-btn" data-del-vd="${r.d.id}">刪除</button></td>
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
+}
+
 function renderFleetTable(){
   const statusFilter = document.getElementById('fleet_status_filter').value;
   const fleetQ = document.getElementById('fleet_search').value.trim();
@@ -7315,6 +7426,7 @@ function renderAll(){
   renderCalibrationTable();
   renderCompanyInsuredCount();
   renderFleetTable();
+  renderVdTable();
   renderViTable();
   renderMaintenanceTables();
   renderTireLayout();
@@ -7604,6 +7716,55 @@ document.getElementById('trailer_search').addEventListener('input', renderFleetT
   if(_rs) _rs.addEventListener('input', renderFleetTable);
   const _ps = document.getElementById('fleet_pending_search');
   if(_ps) _ps.addEventListener('input', renderFleetTable);
+}
+// ===== 車輛證件效期：新增/覆蓋、刪除、篩選 =====
+{
+  ['vd_search','vd_type_filter','vd_status_filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(id === 'vd_search' ? 'input' : 'change', renderVdTable);
+  });
+
+  const _vdAdd = document.getElementById('vd_add');
+  if(_vdAdd) _vdAdd.addEventListener('click', async () => {
+    const vid    = parseInt(document.getElementById('vd_plate').value);
+    const type   = document.getElementById('vd_type').value;
+    const expiry = document.getElementById('vd_expiry').value;
+    if(!vid){ alert('請選車號'); return; }
+    if(!expiry){ alert('請填到期日'); return; }
+    const number = document.getElementById('vd_number').value.trim();
+    const issue  = document.getElementById('vd_issue').value || null;
+    const v = STATE.vehicles.find(x => x.id === vid);
+    // 同一台車同一種證件只留一筆：換新證是覆蓋，不是再疊一筆。
+    // 疊第二筆的話到期提醒會同時吃到舊的那個日期，會一直跳已逾期。
+    const exist = STATE.vehicleDocuments
+      .filter(x => x.vehicle_id === vid && x.doc_type === type)
+      .sort((a,b) => String(b.expiry_date||'').localeCompare(String(a.expiry_date||'')));
+    if(exist.length){
+      const old = exist[0].expiry_date || '未設定';
+      if(!confirm(`${v?v.plate:''} 的「${type}」已經有一筆到期日 ${old}，\n要用新的 ${expiry} 覆蓋掉嗎？`)) return;
+      exist[0].doc_number  = number;
+      exist[0].issue_date  = issue;
+      exist[0].expiry_date = expiry;
+    }else{
+      STATE.vehicleDocuments.push({
+        id: nextId(STATE.vehicleDocuments), vehicle_id: vid, doc_type: type,
+        doc_number: number, issue_date: issue, expiry_date: expiry, file_path: null
+      });
+    }
+    await saveState('vehicle_documents', STATE.vehicleDocuments, true);
+    ['vd_number','vd_issue','vd_expiry'].forEach(id => document.getElementById(id).value = '');
+    renderAll();
+  });
+
+  const _vdBody = document.getElementById('vdTableBody');
+  if(_vdBody) _vdBody.addEventListener('click', async (e) => {
+    const id = e.target.getAttribute('data-del-vd');
+    if(!id) return;
+    if(!confirm('確定要刪除這筆證件效期嗎？')) return;
+    STATE.vehicleDocuments = STATE.vehicleDocuments.filter(x => String(x.id) !== id);
+    await saveState('vehicle_documents', STATE.vehicleDocuments, true);
+    renderAll();
+  });
 }
 document.getElementById('vi_plate').addEventListener('change', updateViAutoFields);
 document.getElementById('vi_insurer').addEventListener('change', (e) => {
