@@ -9861,6 +9861,16 @@ async function handleFleetTableClick(e){
 }
 document.getElementById('fleetTableBody').addEventListener('click', handleFleetTableClick);
 document.getElementById('trailerTableBody').addEventListener('click', handleFleetTableClick);
+// 「車輛/板架歷史」與「待賣出車輛」兩張表裡的「查看」按鈕，用的是同一個
+// data-view-vehicle，但這兩個 tbody 之前漏了掛事件，所以按下去完全沒反應。
+// 補上之後，按「查看」會開出跟主清單一樣的車輛明細（車身/引擎號碼、購買日期、
+// 目前里程、加油卡號、法定文件到期、保養週期、最近加油與維修紀錄）。
+{
+  const _rtb = document.getElementById('retiredTableBody');
+  if(_rtb) _rtb.addEventListener('click', handleFleetTableClick);
+  const _ptb = document.getElementById('pendingSaleTableBody');
+  if(_ptb) _ptb.addEventListener('click', handleFleetTableClick);
+}
 document.getElementById('vehicleModalClose').addEventListener('click', closeVehicleModal);
 document.getElementById('vehicleModal').addEventListener('click', (e) => {
   if(e.target.id === 'vehicleModal') closeVehicleModal();
