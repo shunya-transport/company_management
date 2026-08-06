@@ -506,6 +506,60 @@
     </div>
 
     <div class="card">
+      <h2>車用配備移轉（A車 → B車）</h2>
+      <div class="muted" style="margin-bottom:10px;">
+        配備從一台車搬到另一台車時請用這裡登記，<b>不要在 A 車刪掉、再到 B 車新增</b> —— 那樣半年後就查不出東西是從哪一台搬過來的。<br>
+        選好來源車與目標車，下面會列出來源車現在有的配備，勾要搬的、填數量，按「執行移轉」。系統會自動把來源車的數量扣掉、目標車的數量加上去（目標車沒有那一項就自動新增一列），並留一筆移轉紀錄。<br>
+        來源車扣完變 0 的品項預設<b>留著那一列、數量記 0</b>，代表「這台車現在沒有這項」，跟盤點表的記法一致。B 車再搬到 C 車就再做一次，紀錄會是兩筆，整條路徑查得出來。
+      </div>
+      <div class="form-grid">
+        <label>來源車（從哪一台搬出）
+          <select id="et_from"></select>
+        </label>
+        <label>目標車（搬到哪一台）
+          <select id="et_to"></select>
+        </label>
+        <label>移轉日期<input id="et_date" type="date"></label>
+        <label>經手人<input id="et_handler" placeholder="選填"></label>
+        <label>來源車數量歸零後
+          <select id="et_zero">
+            <option value="keep">留著數量 0 的紀錄（建議）</option>
+            <option value="return">標記為已歸還</option>
+          </select>
+        </label>
+        <label>備註<input id="et_notes" placeholder="選填，例：換車、維修拆下、盤點調整"></label>
+      </div>
+      <div class="table-scroll" style="max-height:340px;margin-top:4px;">
+        <table>
+          <thead><tr><th style="width:46px;"><input type="checkbox" id="et_ckall"></th><th>品項</th><th>細節</th><th>來源車現有</th><th>目標車現有</th><th style="width:110px;">移轉數量</th></tr></thead>
+          <tbody id="etPickBody"></tbody>
+        </table>
+      </div>
+      <div id="et_msg" class="muted" style="margin-top:8px;"></div>
+      <button class="btn" id="et_run" style="margin-top:6px;">執行移轉</button>
+    </div>
+
+    <div class="card">
+      <h2>配備移轉紀錄<span class="count-badge" id="et_count"></span></h2>
+      <div class="toolbar">
+        <input id="et_search" placeholder="搜尋車號/品項/經手人/備註">
+        <select id="et_range">
+          <option value="all">全部期間</option>
+          <option value="90">近 90 天</option>
+          <option value="365">近一年</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>移轉日期</th><th>品項</th><th>細節</th><th>數量</th><th>從</th><th>到</th><th>經手人</th><th>備註</th><th></th></tr></thead>
+          <tbody id="etLogBody"></tbody>
+        </table>
+      </div>
+      <button class="btn ghost no-print" id="et_export" style="margin-top:10px;">匯出 CSV</button>
+      <div class="muted" style="margin-top:8px;">「撤銷」會把數量原路搬回去、並刪掉這一筆紀錄，只在剛按錯的時候用。已經隔了一段時間、後面又搬過的，請改用新增一筆反向移轉。</div>
+    </div>
+
+    <div class="card">
       <h2>板架清單<span class="count-badge" id="fleet_trailer_count"></span></h2>
       <div class="toolbar">
         <input id="trailer_search" placeholder="搜尋車號/公司別/發車地">
@@ -2054,6 +2108,7 @@
         <tbody id="vequipModalBody"></tbody>
       </table>
     </div>
+    <div id="vequipModalMoves" style="margin-bottom:16px;"></div>
     <h4 style="font-size:12.5px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:0 0 10px;">新增領用</h4>
     <div class="form-grid">
       <label>物品類型
@@ -2374,7 +2429,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
   adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
   equipmentTypes: [], employeeEquipment: [], tireRecords: [], medicalExamRecords: [], pensionElections: [],
-  stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
+  stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], equipTransfers: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
   workHourDaily: [], workHourMonthly: [] };
 
@@ -2492,6 +2547,7 @@ const TABLE_MAP = {
   urea_stock_opening: {table:'urea_stock_opening', pk:'opening_id'},
   vehicle_documents: {table:'vehicle_documents', pk:'doc_id'},
   vehicle_equipment: {table:'vehicle_equipment', pk:'record_id'},
+  vehicle_equipment_transfers: {table:'vehicle_equipment_transfers', pk:'transfer_id'},
   vehicle_insurance: {table:'vehicle_insurance', pk:'insurance_id'},
   vehicle_mileage_logs: {table:'vehicle_mileage_logs', pk:'log_id'},
 };
@@ -2728,6 +2784,7 @@ const REQUIRED_FIELDS = {
   'user_accounts': ['username','password_hash'],
   'vehicle_documents': ['vehicle_id','doc_type'],
   'vehicle_equipment': ['vehicle_id','type_id'],
+  'vehicle_equipment_transfers': ['transfer_date','type_id','quantity'],
   'vehicle_insurance': ['vehicle_id','insurance_type'],
   'vehicle_mileage_logs': ['vehicle_id','log_date','mileage'],
   'vehicles': ['plate_number'],
@@ -2912,6 +2969,7 @@ async function loadState(){
   STATE.workHourDaily = await safeGet('work_hour_daily', SEED.work_hour_daily || [], true);
   STATE.workHourMonthly = await safeGet('work_hour_monthly', SEED.work_hour_monthly || [], true);
   STATE.vehicleEquipment = await safeGet('vehicle_equipment', [], true);
+  STATE.equipTransfers = await safeGet('vehicle_equipment_transfers', [], true);
   STATE.medicalKitItems = await safeGet('medical_kit_items', SEED.medical_kit_items || [], true);
   STATE.annualLeaveTiers = SEED.annual_leave_tiers || [];
   STATE.leaveRecords = await safeGet('leave_records', SEED.leave_records || [], true);
@@ -3511,6 +3569,9 @@ function countVehicleLinks(vid){
     const n = arr.filter(x => x && x.vehicle_id === vid).length;
     if(n > 0) out.push(g[0] + ' ' + n + ' 筆');
   });
+  // 配備移轉是用 from/to 兩個欄位關聯，不吃上面那個迴圈
+  const nMove = (STATE.equipTransfers || []).filter(x => x && (x.from_vehicle_id === vid || x.to_vehicle_id === vid)).length;
+  if(nMove > 0) out.push('配備移轉 ' + nMove + ' 筆');
   return out;
 }
 
@@ -4691,6 +4752,241 @@ function renderVequipModalBody(){
     </tr>`;
   }).join('') || `<tr><td colspan="6" class="empty">尚無領用紀錄</td></tr>`;
 }
+// ===== 車用配備移轉（A車 → B車 → C車）=====
+// vehicle_equipment 是「現況表」（這台車現在有什麼、幾個），
+// equipTransfers 是「異動表」（什麼時候、從哪台、搬到哪台、誰搬的）。
+// 兩張表一定要一起更新，所以搬動全部走 etRun()／etUndo()，不要各改各的。
+function etTypeName(typeId){
+  const t = STATE.equipmentTypes.find(x => x.id === typeId);
+  return t ? t.name : '';
+}
+function etQty(x){ const n = (x && x.quantity == null) ? 1 : Number(x && x.quantity); return isNaN(n) ? 0 : n; }
+function etKey(x){ return String(x.type_id) + '|' + String(x.item_detail || '').trim(); }
+function etRowsOf(vid){
+  return STATE.vehicleEquipment.filter(x => x.vehicle_id === vid && x.status === '使用中');
+}
+function etPlateOf(vid){
+  const v = STATE.vehicles.find(x => x.id === vid);
+  return v ? (v.plate || '') : '';
+}
+function etVehicleOptions(){
+  return STATE.vehicles
+    .filter(v => !isRetiredVehicle(v))
+    .slice()
+    .sort((a,b) => String(a.plate||'').localeCompare(String(b.plate||'')));
+}
+function renderEtSelects(){
+  const opts = etVehicleOptions();
+  ['et_from','et_to'].forEach(id => {
+    const el = document.getElementById(id); if(!el) return;
+    const keep = el.value;
+    el.innerHTML = '<option value="">請選擇</option>' + opts.map(v =>
+      '<option value="' + v.id + '">' + esc(v.plate || '') +
+      (v.base_location ? '（' + esc(v.base_location) + '）' : '') + '</option>').join('');
+    if(keep) el.value = keep;
+  });
+  const d = document.getElementById('et_date');
+  if(d && !d.value) d.value = todayISO();
+}
+function renderEtPick(){
+  const body = document.getElementById('etPickBody'); if(!body) return;
+  const fromId = parseInt(document.getElementById('et_from').value, 10);
+  const toId = parseInt(document.getElementById('et_to').value, 10);
+  if(!fromId){
+    body.innerHTML = '<tr><td colspan="6" class="empty">請先選來源車</td></tr>';
+    return;
+  }
+  const toMap = {};
+  if(toId) etRowsOf(toId).forEach(x => { const k = etKey(x); toMap[k] = (toMap[k] || 0) + etQty(x); });
+  const rows = etRowsOf(fromId).slice()
+    .sort((a,b) => etTypeName(a.type_id).localeCompare(etTypeName(b.type_id)));
+  body.innerHTML = rows.map(x => {
+    const have = etQty(x);
+    const none = have <= 0;
+    const k = etKey(x);
+    const dstTxt = !toId ? '—' : (toMap[k] == null ? '<span class="muted">沒有這項，會新增</span>' : String(toMap[k]));
+    return '<tr' + (none ? ' style="opacity:.45;"' : '') + '>' +
+      '<td><input type="checkbox" class="et-ck" data-et="' + x.id + '"' + (none ? ' disabled' : '') + '></td>' +
+      '<td>' + esc(etTypeName(x.type_id)) + '</td>' +
+      '<td class="muted">' + esc(x.item_detail || '') + '</td>' +
+      '<td>' + have + '</td>' +
+      '<td>' + dstTxt + '</td>' +
+      '<td><input type="number" class="et-qty" data-et="' + x.id + '" min="1" max="' + Math.max(have, 1) +
+          '" value="' + (none ? 0 : 1) + '" style="width:80px;"' + (none ? ' disabled' : '') + '></td>' +
+      '</tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">這台車目前沒有登記任何配備</td></tr>';
+}
+function etMsg(text, bad){
+  const el = document.getElementById('et_msg'); if(!el) return;
+  el.textContent = text || '';
+  el.style.color = bad ? 'var(--red)' : 'var(--text-2)';
+}
+async function etRun(){
+  const fromId = parseInt(document.getElementById('et_from').value, 10);
+  const toId = parseInt(document.getElementById('et_to').value, 10);
+  const date = document.getElementById('et_date').value || todayISO();
+  const handler = document.getElementById('et_handler').value.trim();
+  const notes = document.getElementById('et_notes').value.trim();
+  const zeroMode = document.getElementById('et_zero').value;
+  if(!fromId || !toId){ etMsg('請先選來源車與目標車。', true); return; }
+  if(fromId === toId){ etMsg('來源車與目標車不能是同一台。', true); return; }
+
+  const picks = [];
+  document.querySelectorAll('#etPickBody .et-ck:checked').forEach(ck => {
+    const rid = parseInt(ck.dataset.et, 10);
+    const src = STATE.vehicleEquipment.find(x => x.id === rid);
+    if(!src) return;
+    const qi = document.querySelector('#etPickBody .et-qty[data-et="' + rid + '"]');
+    picks.push({ src: src, n: parseInt(qi ? qi.value : '1', 10) || 0 });
+  });
+  if(!picks.length){ etMsg('請至少勾選一個要移轉的品項。', true); return; }
+  const bad = picks.find(p => p.n <= 0 || p.n > etQty(p.src));
+  if(bad){
+    etMsg('「' + etTypeName(bad.src.type_id) + '」的移轉數量不對，來源車目前只有 ' + etQty(bad.src) + ' 個。', true);
+    return;
+  }
+
+  const fromPlate = etPlateOf(fromId), toPlate = etPlateOf(toId);
+  const listTxt = picks.map(p => etTypeName(p.src.type_id) + ' ' + p.n).join('、');
+  if(!confirm('確定要把這些配備從「' + fromPlate + '」移到「' + toPlate + '」嗎？\n\n' + listTxt + '\n移轉日期：' + date)) return;
+
+  picks.forEach(p => {
+    // 來源車扣掉
+    p.src.quantity = etQty(p.src) - p.n;
+    if(p.src.quantity <= 0){
+      p.src.quantity = 0;
+      if(zeroMode === 'return'){ p.src.status = '已歸還'; p.src.return_date = date; }
+    }
+    // 目標車加上去；同品項同細節才算同一列，沒有就新增
+    const k = etKey(p.src);
+    const dst = etRowsOf(toId).find(x => etKey(x) === k);
+    if(dst){
+      dst.quantity = etQty(dst) + p.n;
+    }else{
+      STATE.vehicleEquipment.push({
+        id: nextId(STATE.vehicleEquipment), vehicle_id: toId, type_id: p.src.type_id,
+        item_detail: p.src.item_detail || '', quantity: p.n, issue_date: date,
+        return_date: null, status: '使用中',
+        notes: ('由 ' + fromPlate + ' 移入（' + date + '）').slice(0, 200)
+      });
+    }
+    STATE.equipTransfers.push({
+      id: nextId(STATE.equipTransfers), transfer_date: date,
+      type_id: p.src.type_id, type_name: etTypeName(p.src.type_id),
+      item_detail: p.src.item_detail || '', quantity: p.n,
+      from_vehicle_id: fromId, from_plate: fromPlate,
+      to_vehicle_id: toId, to_plate: toPlate,
+      handler: handler || null, notes: notes || null
+    });
+  });
+
+  try{
+    // 先存移轉紀錄再存現況：萬一中間斷線，寧可留下一筆「有紀錄但數量沒動」的痕跡，
+    // 也不要變成「數量被改了卻查不到是誰搬的」。
+    await saveState('vehicle_equipment_transfers', STATE.equipTransfers, true);
+    await saveState('vehicle_equipment', STATE.vehicleEquipment, true);
+  }catch(e){
+    etMsg('存檔沒有成功。請重新整理頁面，確認這筆移轉有沒有進去，再決定要不要重做（直接再按一次可能會重複扣兩次）。', true);
+    return;
+  }
+  etMsg('已完成：' + picks.length + ' 個品項從「' + fromPlate + '」移到「' + toPlate + '」（' + date + '）。', false);
+  const nEl = document.getElementById('et_notes'); if(nEl) nEl.value = '';
+  const ck = document.getElementById('et_ckall'); if(ck) ck.checked = false;
+  renderAll();
+  renderEtPick();
+}
+async function etUndo(tid){
+  const t = STATE.equipTransfers.find(x => x.id === tid);
+  if(!t) return;
+  const name = t.type_name || etTypeName(t.type_id);
+  if(!confirm('要撤銷這一筆移轉嗎？\n\n「' + name + '」' + t.quantity + ' 個會從「' + (t.to_plate||'') +
+              '」搬回「' + (t.from_plate||'') + '」，這筆紀錄也會刪掉。')) return;
+  const k = String(t.type_id) + '|' + String(t.item_detail || '').trim();
+  const dst = STATE.vehicleEquipment.find(x => x.vehicle_id === t.to_vehicle_id && x.status === '使用中' && etKey(x) === k);
+  if(!dst || etQty(dst) < t.quantity){
+    alert('目標車上的數量不夠退回（可能後來又被搬走或手動改過），這筆沒有撤銷。\n請改用「新增一筆反向移轉」來處理。');
+    return;
+  }
+  dst.quantity = etQty(dst) - t.quantity;
+  const src = STATE.vehicleEquipment.find(x => x.vehicle_id === t.from_vehicle_id && etKey(x) === k);
+  if(src){
+    src.quantity = etQty(src) + t.quantity;
+    if(src.status !== '使用中'){ src.status = '使用中'; src.return_date = null; }
+  }else{
+    STATE.vehicleEquipment.push({
+      id: nextId(STATE.vehicleEquipment), vehicle_id: t.from_vehicle_id, type_id: t.type_id,
+      item_detail: t.item_detail || '', quantity: t.quantity, issue_date: t.transfer_date,
+      return_date: null, status: '使用中', notes: '撤銷移轉退回'
+    });
+  }
+  STATE.equipTransfers = STATE.equipTransfers.filter(x => x.id !== tid);
+  try{
+    await saveState('vehicle_equipment', STATE.vehicleEquipment, true);
+    await saveState('vehicle_equipment_transfers', STATE.equipTransfers, true);
+  }catch(e){
+    alert('存檔沒有成功。請重新整理頁面，確認這筆有沒有撤銷掉，再決定要不要重做。');
+    return;
+  }
+  renderAll();
+  renderEtPick();
+}
+function etLogRows(){
+  const q = (document.getElementById('et_search') ? document.getElementById('et_search').value : '').trim();
+  const range = document.getElementById('et_range') ? document.getElementById('et_range').value : 'all';
+  let cut = null;
+  if(range !== 'all'){
+    const d = new Date(todayISO());
+    d.setDate(d.getDate() - parseInt(range, 10));
+    cut = d.toISOString().slice(0, 10);
+  }
+  return STATE.equipTransfers.filter(t => {
+    if(cut && String(t.transfer_date || '') < cut) return false;
+    if(!q) return true;
+    const hay = [t.from_plate, t.to_plate, t.type_name || etTypeName(t.type_id),
+                 t.item_detail, t.handler, t.notes].map(x => String(x || '')).join(' ');
+    return hay.includes(q);
+  }).slice().sort((a,b) => String(b.transfer_date||'').localeCompare(String(a.transfer_date||'')) || (b.id - a.id));
+}
+function renderEtLog(){
+  const body = document.getElementById('etLogBody'); if(!body) return;
+  const rows = etLogRows();
+  const cnt = document.getElementById('et_count');
+  if(cnt) cnt.textContent = '共 ' + rows.length + ' 筆';
+  body.innerHTML = rows.map(t =>
+    '<tr>' +
+    '<td>' + esc(t.transfer_date || '') + '</td>' +
+    '<td>' + esc(t.type_name || etTypeName(t.type_id)) + '</td>' +
+    '<td class="muted">' + esc(t.item_detail || '') + '</td>' +
+    '<td>' + (t.quantity == null ? 1 : t.quantity) + '</td>' +
+    '<td>' + esc(t.from_plate || '（已刪除）') + '</td>' +
+    '<td>' + esc(t.to_plate || '（已刪除）') + '</td>' +
+    '<td>' + esc(t.handler || '') + '</td>' +
+    '<td class="muted">' + esc(t.notes || '') + '</td>' +
+    '<td><button class="del-btn" data-et-undo="' + t.id + '">撤銷</button></td>' +
+    '</tr>'
+  ).join('') || '<tr><td colspan="9" class="empty">目前沒有移轉紀錄</td></tr>';
+}
+function renderVequipMoves(){
+  const box = document.getElementById('vequipModalMoves'); if(!box) return;
+  const vid = currentVequipVehicleId;
+  const rows = STATE.equipTransfers
+    .filter(t => t.from_vehicle_id === vid || t.to_vehicle_id === vid)
+    .slice()
+    .sort((a,b) => String(b.transfer_date||'').localeCompare(String(a.transfer_date||'')))
+    .slice(0, 10);
+  if(!rows.length){ box.innerHTML = ''; return; }
+  box.innerHTML =
+    '<h4 style="font-size:12.5px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:0 0 8px;">最近的配備移轉</h4>' +
+    '<div class="muted" style="line-height:1.9;">' + rows.map(t => {
+      const out = t.from_vehicle_id === vid;
+      const other = out ? (t.to_plate || '（已刪除）') : (t.from_plate || '（已刪除）');
+      return esc(t.transfer_date || '') + '　' +
+             (out ? '<span style="color:var(--red);">移出</span>' : '<span style="color:var(--green,#2a7);">移入</span>') +
+             '　' + esc(t.type_name || etTypeName(t.type_id)) + ' × ' + (t.quantity == null ? 1 : t.quantity) +
+             '　' + (out ? '→ ' : '← ') + esc(other) +
+             (t.handler ? '　（' + esc(t.handler) + '）' : '');
+    }).join('<br>') + '</div>';
+}
 function openVequipModal(vehicleId){
   const v = STATE.vehicles.find(x => x.id === vehicleId);
   if(!v) return;
@@ -4698,6 +4994,7 @@ function openVequipModal(vehicleId){
   document.getElementById('vequipModalTitle').textContent = `車用物品管理 — ${v.plate}`;
   document.getElementById('veq_type').innerHTML = STATE.equipmentTypes.map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
   renderVequipModalBody();
+  renderVequipMoves();
   document.getElementById('vequipModal').classList.add('show');
 }
 function closeVequipModal(){ document.getElementById('vequipModal').classList.remove('show'); }
@@ -7426,6 +7723,8 @@ function renderAll(){
   renderCalibrationTable();
   renderCompanyInsuredCount();
   renderFleetTable();
+  renderEtSelects();
+  renderEtLog();
   renderVdTable();
   renderViTable();
   renderMaintenanceTables();
@@ -8813,6 +9112,28 @@ document.getElementById('licenseModalBody').addEventListener('click', async (e) 
     renderAll();
   }
 });
+
+// ----- 車用配備移轉 -----
+if(document.getElementById('et_run')){
+  document.getElementById('et_from').addEventListener('change', () => { etMsg(''); renderEtPick(); });
+  document.getElementById('et_to').addEventListener('change', () => { etMsg(''); renderEtPick(); });
+  document.getElementById('et_ckall').addEventListener('change', function(){
+    document.querySelectorAll('#etPickBody .et-ck:not([disabled])').forEach(c => { c.checked = this.checked; });
+  });
+  document.getElementById('et_run').addEventListener('click', etRun);
+  document.getElementById('et_search').addEventListener('input', renderEtLog);
+  document.getElementById('et_range').addEventListener('change', renderEtLog);
+  document.getElementById('etLogBody').addEventListener('click', function(ev){
+    const b = ev.target.closest('[data-et-undo]'); if(!b) return;
+    etUndo(parseInt(b.dataset.etUndo, 10));
+  });
+  document.getElementById('et_export').addEventListener('click', () =>
+    whDownloadCsv('車用配備移轉紀錄_' + todayISO().replace(/-/g,''),
+      ['移轉日期','品項','細節','數量','從','到','經手人','備註'],
+      etLogRows().map(t => [t.transfer_date || '', t.type_name || etTypeName(t.type_id),
+        t.item_detail || '', (t.quantity == null ? 1 : t.quantity),
+        t.from_plate || '', t.to_plate || '', t.handler || '', t.notes || ''])));
+}
 
 document.getElementById('vequipModalClose').addEventListener('click', closeVequipModal);
 document.getElementById('vequipModal').addEventListener('click', (e) => {
