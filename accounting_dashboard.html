@@ -323,11 +323,11 @@
   <div class="card">
     <h2>逾期未收付<span class="count-badge" id="ovOverdueCount">0</span></h2>
     <div class="muted" style="margin-bottom:10px;">掛帳時填了「預計收付日」而且已經過期的，會列在這裡。</div>
-    <div class="table-scroll" style="max-height:300px;"><table><thead><tr><th>預計收付日</th><th>逾期</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">金額</th></tr></thead><tbody id="ovOverdueBody"></tbody></table></div>
+    <div class="table-scroll" style="max-height:300px;"><table><thead><tr><th>預計收付日</th><th>逾期</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>發票號碼</th><th class="num">金額</th></tr></thead><tbody id="ovOverdueBody"></tbody></table></div>
   </div>
   <div class="card">
     <h2>本月已收付明細<span class="count-badge" id="ovMonthCount">0</span></h2>
-    <div class="table-scroll" style="max-height:340px;"><table><thead><tr><th>收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>帳戶</th><th>來源</th><th class="num">金額</th></tr></thead><tbody id="ovMonthBody"></tbody></table></div>
+    <div class="table-scroll" style="max-height:340px;"><table><thead><tr><th>收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>發票號碼</th><th>帳戶</th><th>來源</th><th class="num">金額</th></tr></thead><tbody id="ovMonthBody"></tbody></table></div>
   </div>
 </div>
 
@@ -398,7 +398,7 @@
   </div>
   <div class="card">
     <h2>剛剛記的<span class="count-badge" id="neRecentCount">0</span></h2>
-    <div class="table-scroll" style="max-height:320px;"><table><thead><tr><th>傳票編號</th><th>發生日</th><th>狀態</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th></th></tr></thead><tbody id="neRecentBody"></tbody></table></div>
+    <div class="table-scroll" style="max-height:320px;"><table><thead><tr><th>傳票編號</th><th>發生日</th><th>狀態</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>發票號碼</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th></th></tr></thead><tbody id="neRecentBody"></tbody></table></div>
   </div>
 </div>
 
@@ -408,7 +408,7 @@
   <div class="card">
     <h2>掛帳中<span class="count-badge" id="pdCount">0</span></h2>
     <div class="toolbar">
-      <input id="pd_search" placeholder="搜尋對象、摘要、科目、傳票編號" style="min-width:250px;">
+      <input id="pd_search" placeholder="搜尋對象、摘要、發票號碼、科目、傳票編號" style="min-width:250px;">
       <select id="pd_dir"><option value="">全部方向</option><option value="收入">只看收入（應收）</option><option value="支出">只看支出（應付）</option></select>
       <select id="pd_sort"><option value="due">依預計收付日</option><option value="date">依發生日</option><option value="amount">依金額</option></select>
       <button class="btn ghost" id="pd_export">匯出 CSV</button>
@@ -425,7 +425,7 @@
     </div>
     <div class="muted" id="pdRangeNote" style="margin-bottom:8px;"></div>
     <div class="table-scroll">
-      <table><thead><tr><th>傳票編號</th><th>發生日</th><th>預計收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>來源</th><th>操作</th></tr></thead><tbody id="pdBody"></tbody></table>
+      <table><thead><tr><th>傳票編號</th><th>發生日</th><th>預計收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>發票號碼</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>來源</th><th>操作</th></tr></thead><tbody id="pdBody"></tbody></table>
     </div>
   </div>
 </div>
@@ -462,7 +462,7 @@
   <div class="card">
     <h2>已作廢<span class="count-badge" id="voidCount">0</span></h2>
     <div class="muted" style="margin-bottom:10px;">記錯的帳不要直接刪掉，作廢會留下痕跡；確定不需要了再刪除。</div>
-    <div class="table-scroll" style="max-height:240px;"><table><thead><tr><th>發生日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>操作</th></tr></thead><tbody id="voidBody"></tbody></table></div>
+    <div class="table-scroll" style="max-height:240px;"><table><thead><tr><th>發生日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>發票號碼</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>操作</th></tr></thead><tbody id="voidBody"></tbody></table></div>
   </div>
 </div>
 
@@ -896,18 +896,18 @@ function renderOverview(){
   document.getElementById('ovOverdueBody').innerHTML = od.map(e =>
     `<tr><td>${esc(e.due_date)}</td><td><span class="pill red">逾期 ${daysBetween(e.due_date, t)} 天</span></td>
      <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
-     <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td class="num">${money(e.amount)}</td></tr>`
-  ).join('') || '<tr><td colspan="7" class="empty">沒有逾期的帳，很好</td></tr>';
+     <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.invoice_no)}</td><td class="num">${money(e.amount)}</td></tr>`
+  ).join('') || '<tr><td colspan="8" class="empty">沒有逾期的帳，很好</td></tr>';
 
   const mrows = STATE.entries.filter(e => e.status === '已收付' && e.settle_date >= mS && e.settle_date <= mE)
                              .sort((a,b) => a.settle_date < b.settle_date ? 1 : -1);
   document.getElementById('ovMonthCount').textContent = mrows.length;
   document.getElementById('ovMonthBody').innerHTML = mrows.map(e =>
     `<tr><td>${esc(e.settle_date)}</td><td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
-     <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.account_name)}</td>
+     <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.invoice_no)}</td><td>${esc(e.account_name)}</td>
      <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
      <td class="num">${money(e.amount)}</td></tr>`
-  ).join('') || '<tr><td colspan="8" class="empty">本月還沒有已收付的帳</td></tr>';
+  ).join('') || '<tr><td colspan="9" class="empty">本月還沒有已收付的帳</td></tr>';
 }
 // ---------- 總覽的零用金區塊 ----------
 // 這裡的數字全部是從 petty_entries 算出來的，只是拿來看，
@@ -1439,10 +1439,10 @@ function renderRecent(){
   document.getElementById('neRecentCount').textContent = rows.length;
   document.getElementById('neRecentBody').innerHTML = rows.map(e =>
     `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td><td>${statusPill(e.status)}</td><td>${dirPill(e.direction)}</td>
-     <td>${subjCell(e)}</td><td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
+     <td>${subjCell(e)}</td><td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.invoice_no)}</td>
      ${amtCells(e)}
      <td><button class="del-btn" data-void="${e.entry_id}">作廢</button></td></tr>`
-  ).join('') || '<tr><td colspan="11" class="empty">還沒有資料</td></tr>';
+  ).join('') || '<tr><td colspan="12" class="empty">還沒有資料</td></tr>';
 }
 function statusPill(s){
   if(s === '已收付') return '<span class="pill green">已收付</span>';
@@ -1474,7 +1474,7 @@ function pendingRows(){
   }
   if(PD_OVERDUE) rows = rows.filter(e => e.due_date && e.due_date < t);
   if(dir) rows = rows.filter(e => e.direction === dir);
-  if(kw) rows = rows.filter(e => [e.voucher_no,e.counterparty,e.description,e.subject_name,e.subject_code,e.notes]
+  if(kw) rows = rows.filter(e => [e.voucher_no,e.counterparty,e.description,e.invoice_no,e.subject_name,e.subject_code,e.notes]
     .map(v => String(v==null?'':v).toLowerCase()).join(' ').indexOf(kw) >= 0);
   rows.sort((a,b) => {
     if(sort === 'amount') return grossAmt(b) - grossAmt(a);
@@ -1520,14 +1520,14 @@ function renderPending(){
     return `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td>
       <td>${e.due_date ? (late ? `<span class="pill red">${esc(e.due_date)}</span>` : esc(e.due_date)) : '<span class="muted">未定</span>'}</td>
       <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
-      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>${amtCells(e)}
+      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.invoice_no)}</td>${amtCells(e)}
       <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
       <td style="white-space:nowrap;">
         <button class="btn" style="padding:5px 12px;font-size:12px;" data-settle="${e.entry_id}">${e.direction === '收入' ? '已收款' : '已匯款'}</button>
         <button class="move-btn" data-edit="${e.entry_id}">修改</button>
         <button class="del-btn" data-void="${e.entry_id}">作廢</button>
       </td></tr>`;
-  }).join('') || '<tr><td colspan="12" class="empty">沒有掛帳中的資料</td></tr>';
+  }).join('') || '<tr><td colspan="13" class="empty">沒有掛帳中的資料</td></tr>';
 }
 
 // ---------- 歷史資料 ----------
@@ -1582,9 +1582,9 @@ function renderHistory(){
   document.getElementById('voidCount').textContent = voids.length;
   document.getElementById('voidBody').innerHTML = voids.map(e =>
     `<tr><td>${esc(e.entry_date)}</td><td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
-     <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>${amtCells(e)}
+     <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.invoice_no)}</td>${amtCells(e)}
      <td><button class="move-btn" data-restore="${e.entry_id}">還原成掛帳</button><button class="del-btn" data-del="${e.entry_id}">刪除</button></td></tr>`
-  ).join('') || '<tr><td colspan="9" class="empty">沒有作廢的資料</td></tr>';
+  ).join('') || '<tr><td colspan="10" class="empty">沒有作廢的資料</td></tr>';
 }
 
 // ---------- 收支表 ----------
@@ -1995,8 +1995,8 @@ function bindEvents(){
     const rows = pendingRows();
     const _f = document.getElementById('pd_from').value, _t = document.getElementById('pd_to').value;
     csvDownload('掛帳中_' + ((_f || _t) ? (_f || '起') + '至' + (_t || '訖') + '_' : '') + todayISO() + '.csv',
-      ['傳票編號','發生日','預計收付日','方向','科目代號','科目','對象','摘要','稅前','稅額','合計','來源','備註'],
-      rows.map(e => [e.voucher_no, e.entry_date, e.due_date, e.direction, e.subject_code, e.subject_name, e.counterparty, e.description, num(e.amount), taxAmt(e), grossAmt(e), e.source, e.notes]));
+      ['傳票編號','發生日','預計收付日','方向','科目代號','科目','對象','摘要','發票號碼','車號','稅前','稅額','合計','來源','備註'],
+      rows.map(e => [e.voucher_no, e.entry_date, e.due_date, e.direction, e.subject_code, e.subject_name, e.counterparty, e.description, e.invoice_no, e.vehicle_plate, num(e.amount), taxAmt(e), grossAmt(e), e.source, e.notes]));
   });
 
   ['hs_from','hs_to','hs_account','hs_flow','hs_dir','hs_source','hs_search'].forEach(id =>

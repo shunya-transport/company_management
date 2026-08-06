@@ -960,12 +960,12 @@
         <label>更換零件名稱<input id="mr_parts" placeholder="選填，例：機油芯、來令片"></label>
       </div>
       <button class="btn" id="mr_add">新增維修保養記錄</button>
-      <div class="muted" style="margin-top:8px;">選「小保養」或「大保養」時，系統會自動更新這台車的保養週期紀錄（供下方到期估算使用），填寫的里程數也會一併記錄為最新里程。<br><b>維修先做、金額與發票之後才來時，費用與發票號碼可以留空先存檔</b>，之後在下方「待補維修費用」補登即可；補登不會動到日期與里程，保養週期紀錄也不會受影響。</div>
+      <div class="muted" style="margin-top:8px;">選「小保養」或「大保養」時，系統會自動更新這台車的保養週期紀錄（供下方到期估算使用），填寫的里程數也會一併記錄為最新里程。<br><b>維修先做、金額與發票之後才來時，費用與發票號碼可以留空先存檔</b>，之後在下方「待補維修費用」補登即可。<b>存檔以後要改內容，按該筆紀錄後面的「修改」，每一格都能改。</b></div>
     </div>
 
     <div class="card">
       <h2>待補維修費用<span class="count-badge" id="maint_pending_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">維修保養已經做了、但金額或發票號碼還沒補上來的紀錄都會列在這裡。按「補登」就地填廠商、金額、發票號碼，存檔後這筆會移出清單。<b>補登只會補這三格，不會動到日期與里程，保養週期紀錄與到期估算都不受影響。</b>若這次確實沒有費用（廠商沒收費、保固內、自行處理），金額填 0 即可。</div>
+      <div class="muted" style="margin-bottom:10px;">維修保養已經做了、但金額或發票號碼還沒補上來的紀錄都會列在這裡。按「補登」就地填廠商、金額、發票號碼；<b>要改車號、日期、里程、內容說明，請按「修改」。</b>若這次確實沒有費用（廠商沒收費、保固內、自行處理），金額填 0 即可。</div>
       <div class="toolbar">
         <input id="maint_pending_search" placeholder="搜尋車號 / 內容 / 申請人">
       </div>
@@ -997,8 +997,8 @@
         <table class="mh-table">
           <colgroup>
             <col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:8%">
-            <col style="width:8%"><col style="width:9%"><col style="width:17%"><col style="width:10%">
-            <col style="width:6%"><col style="width:10%"><col style="width:5%"><col style="width:4%">
+            <col style="width:8%"><col style="width:9%"><col style="width:13%"><col style="width:10%">
+            <col style="width:6%"><col style="width:10%"><col style="width:5%"><col style="width:8%">
           </colgroup>
           <thead><tr><th>車號</th><th>類型</th><th>日期</th><th>申請人</th><th>里程</th><th>廠商</th><th>內容</th><th>更換零件</th><th>費用</th><th>發票號碼</th><th>狀態</th><th></th></tr></thead>
           <tbody id="maintHistoryBody"></tbody>
@@ -2211,6 +2211,45 @@
     </div>
     <div class="muted" id="eq_stock_hint" style="margin-bottom:10px;"></div>
     <button class="btn" id="equipModalAdd">新增領用紀錄</button>
+  </div>
+</div>
+
+<div class="modal-backdrop no-print" id="maintEditModal">
+  <div class="modal-box">
+    <button class="modal-close" id="maintEditModalClose">✕</button>
+    <h3 id="maintEditModalTitle">修改維修保養記錄</h3>
+    <div class="muted" style="margin-bottom:10px;">這裡可以改當初新增時填的每一格。改完按「儲存修改」直接寫回雲端。</div>
+    <div class="form-grid">
+      <label>車號<input id="me_plate" list="plateList" autocomplete="off"></label>
+      <label>類型
+        <select id="me_type">
+          <option value="小保養">小保養</option>
+          <option value="大保養">大保養</option>
+          <option value="定期保養">定期保養（未分大小）</option>
+          <option value="臨時維修">臨時維修</option>
+          <option value="年度驗車">年度驗車</option>
+          <option value="其他">其他</option>
+        </select>
+      </label>
+      <label>日期<input id="me_date" type="date"></label>
+      <label>維修申請人<select id="me_applicant"></select></label>
+      <label>里程數(km)<input id="me_mileage" type="number" placeholder="可留空"></label>
+      <label>廠商<input id="me_vendor" list="vendorList" autocomplete="off" placeholder="可留空"></label>
+      <label>費用<input id="me_cost" type="number" min="0" step="1" placeholder="可留空"></label>
+      <label>發票號碼<input id="me_invoice" placeholder="可留空"></label>
+      <label>內容說明<input id="me_desc" placeholder="例：機油、來令片更換"></label>
+      <label>更換零件名稱<input id="me_parts" placeholder="選填"></label>
+      <label>狀態
+        <select id="me_status">
+          <option value="已完成">已完成</option>
+          <option value="待補資料">待補資料</option>
+        </select>
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn" id="maintEditModalSave">儲存修改</button>
+      <button class="del-btn" id="maintEditModalDelete">刪除這筆</button>
+    </div>
   </div>
 </div>
 
@@ -6758,7 +6797,7 @@ function maintInvoiceCell(r, scope, editing){
 function maintEditButtons(r, scope, editing){
   return editing
     ? `<button class="name-link" data-save-maint="${esc(r.id)}" data-maint-scope="${scope}">存檔</button> <button class="del-btn" data-cancel-maint="${esc(r.id)}">取消</button>`
-    : `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button>`;
+    : `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button> <button class="name-link" data-open-maint="${esc(r.id)}">修改</button>`;
 }
 // 維修申請人：這次維修／保養是誰提出來的。
 // 人離職以後名字還是要查得到，所以 id 與姓名兩個都存（跟打油的回報人同一套做法）。
@@ -6779,6 +6818,192 @@ function maintApplicantLabel(r){
   const emp = (STATE.employees||[]).find(e => e.id === (r && r.requested_by));
   return emp ? emp.name : '';
 }
+// ===== 維修保養記錄：整筆修改 =====
+// 「補登」只開放廠商／金額／發票號碼三格，是給單據晚到的情況用的。
+// 但打錯車號、日期、里程、內容的時候需要整筆改，所以另外做這個視窗。
+// 改完要跟著處理兩件連動的事，不然資料會對不起來：
+//   1. 小保養／大保養會寫進保養週期紀錄（下次到期就是從那裡算的）
+//   2. 有填里程的話，新增時會順手寫一筆里程登錄
+let maintEditId = null;
+
+function renderMaintEditApplicantOptions(cur){
+  const el = document.getElementById('me_applicant');
+  if(!el) return;
+  const list = maintApplicantCandidates();
+  let html = '<option value="">未填</option>' +
+    list.map(e => `<option value="${e.id}">${esc(e.name)}${e.region ? '（' + esc(e.region) + '）' : ''}</option>`).join('');
+  // 申請人已經離職的話，在職清單裡找不到他，要另外補一個選項回去，
+  // 不然一開修改視窗名字就自己不見了，按存檔會把人洗掉。
+  if(cur != null && cur !== '' && !list.some(e => String(e.id) === String(cur))){
+    const _e = (STATE.employees||[]).find(x => String(x.id) === String(cur));
+    html += `<option value="${esc(cur)}">${esc(_e ? _e.name : '編號 ' + cur)}（已離職）</option>`;
+  }
+  el.innerHTML = html;
+  el.value = (cur == null) ? '' : String(cur);
+}
+
+function openMaintEditModal(id){
+  const r = (STATE.maintRecords||[]).find(x => String(x.id) === String(id));
+  if(!r){ alert('找不到這筆維修保養記錄。'); return; }
+  maintEditId = r.id;
+  // 新增時小保養／大保養會存成「定期保養」，內容前面加上「小保養：」，
+  // 這裡反過來拆開，使用者看到的才會跟他當初選的一樣。
+  let t = r.maintenance_type || '其他';
+  let d = r.description || '';
+  if(t === '定期保養'){
+    if(d.indexOf('小保養：') === 0){ t = '小保養'; d = d.slice(4); }
+    else if(d.indexOf('大保養：') === 0){ t = '大保養'; d = d.slice(4); }
+  }
+  document.getElementById('me_plate').value   = r.plate || '';
+  document.getElementById('me_type').value    = t;
+  document.getElementById('me_date').value    = String(r.maintenance_date||'').slice(0,10);
+  document.getElementById('me_mileage').value = (r.mileage_at_service == null) ? '' : r.mileage_at_service;
+  document.getElementById('me_vendor').value  = r.vendor_name || '';
+  document.getElementById('me_cost').value    = (r.cost == null || r.cost === '') ? '' : r.cost;
+  document.getElementById('me_invoice').value = r.invoice_no || '';
+  document.getElementById('me_desc').value    = d;
+  document.getElementById('me_parts').value   = r.parts_replaced || '';
+  document.getElementById('me_status').value  = maintStatusOf(r);
+  renderMaintEditApplicantOptions(r.requested_by);
+  const _t = document.getElementById('maintEditModalTitle');
+  if(_t) _t.textContent = '修改維修保養記錄　' + (r.plate||'') + '　' + String(r.maintenance_date||'').slice(0,10);
+  document.getElementById('maintEditModal').classList.add('show');
+}
+
+function closeMaintEditModal(){
+  maintEditId = null;
+  const m = document.getElementById('maintEditModal');
+  if(m) m.classList.remove('show');
+}
+
+async function saveMaintEdit(){
+  const rec = (STATE.maintRecords||[]).find(x => String(x.id) === String(maintEditId));
+  if(!rec){ alert('找不到這筆記錄，可能已經被移除了。'); closeMaintEditModal(); return; }
+  const plate = document.getElementById('me_plate').value.trim();
+  const type  = document.getElementById('me_type').value;
+  const date  = document.getElementById('me_date').value;
+  if(!plate || !date){ alert('請填寫車號與日期'); return; }
+  const _mv = vehicleByPlate(plate);
+  if(!_mv){ alert('系統找不到車號「' + plate + '」。\n\n請點一下車號欄位,從下拉建議清單直接選取正確的車號,不要只打後四碼。'); return; }
+  const _mRaw   = String(document.getElementById('me_mileage').value).trim();
+  const mileage = _mRaw === '' ? null : parseInt(_mRaw);
+  const vendorName = document.getElementById('me_vendor').value.trim();
+  // 跟新增時一樣,廠商一定要換成 vendor_id 才存得進去
+  let vendorId = null;
+  if(vendorName){
+    const _vd = vendorByName(vendorName);
+    if(_vd){
+      vendorId = _vd.id;
+    }else if(confirm('廠商「' + vendorName + '」不在系統的廠商清單裡。\n\n按「確定」:自動建立這家廠商並記錄下來。\n按「取消」:回去重新輸入。')){
+      vendorId = await createVendor(vendorName);
+    }else{
+      return;
+    }
+  }
+  const _cRaw = String(document.getElementById('me_cost').value).trim();
+  const cost  = _cRaw === '' ? null : parseFloat(_cRaw);
+  const invoiceNo = document.getElementById('me_invoice').value.trim();
+  const descRaw   = document.getElementById('me_desc').value.trim();
+  const parts     = document.getElementById('me_parts').value.trim();
+  const _apEl  = document.getElementById('me_applicant');
+  const _apId  = _apEl && _apEl.value ? parseInt(_apEl.value) : null;
+  const _apEmp = _apId ? (STATE.employees||[]).find(e => e.id === _apId) : null;
+
+  const _oldPlate   = rec.plate;
+  const _oldVehicle = rec.vehicle_id;
+  const _oldDate    = String(rec.maintenance_date||'').slice(0,10);
+  const _oldMileage = rec.mileage_at_service;
+
+  rec.plate = _mv.plate;
+  rec.vehicle_id = _mv.id;
+  rec.maintenance_type = (type==='小保養'||type==='大保養') ? '定期保養' : type;
+  rec.maintenance_date = date;
+  rec.mileage_at_service = mileage;
+  // 使用者自己打進去的里程就不是推估值了
+  if(mileage != null && String(mileage) !== String(_oldMileage)) rec.mileage_estimated = false;
+  rec.vendor_id = vendorId;
+  rec.vendor_name = vendorName || '';
+  rec.cost = cost;
+  rec.invoice_no = invoiceNo || null;
+  rec.description = (type==='小保養'||type==='大保養') ? `${type}：${descRaw}` : descRaw;
+  rec.parts_replaced = parts || null;
+  if(_apId){
+    rec.requested_by = _apId;
+    if(_apEmp) rec.requested_by_name = _apEmp.name;
+  }else{
+    rec.requested_by = null;
+    rec.requested_by_name = null;
+  }
+  rec.status = document.getElementById('me_status').value || (cost == null ? MAINT_ST_PENDING : MAINT_ST_DONE);
+  await saveState('maint_records', STATE.maintRecords, true);
+
+  // 保養週期紀錄:只有在這筆是該車該類型最新的一筆時才跟著改,
+  // 不然回頭修一筆兩年前的舊保養,會把「最近一次保養」倒退回兩年前。
+  if(type==='小保養' || type==='大保養'){
+    const _newer = (STATE.maintRecords||[]).some(x =>
+      String(x.id) !== String(rec.id) && x.plate === rec.plate &&
+      String(x.description||'').indexOf(type + '：') === 0 &&
+      String(x.maintenance_date||'').slice(0,10) > date);
+    if(!_newer){
+      let sched = STATE.maintSchedules.find(s => s.plate===rec.plate && s.maintenance_type===type);
+      if(sched){
+        sched.last_service_date = date;
+        if(mileage != null) sched.last_service_mileage = mileage;
+        if(!sched.vehicle_id) sched.vehicle_id = plateToVehicleId(rec.plate);
+      }else{
+        STATE.maintSchedules.push({
+          id: nextId(STATE.maintSchedules), plate: rec.plate, vehicle_id: plateToVehicleId(rec.plate),
+          maintenance_type: type, last_service_date: date, last_service_mileage: mileage
+        });
+      }
+      await saveState('maintenance_schedules', STATE.maintSchedules, true);
+    }
+  }
+
+  // 里程登錄:新增時若有填里程會自動寫一筆,改的時候要找回同一筆一起改,
+  // 不然舊的錯誤里程會繼續留在里程統計裡。
+  const _autoLog = (STATE.mileageLogs||[]).find(x =>
+    String(x.notes||'') === '維修保養記錄自動帶入' &&
+    String(x.log_date||'').slice(0,10) === _oldDate &&
+    (String(x.vehicle_id) === String(_oldVehicle) || String(x.plate||'') === String(_oldPlate)));
+  let _logChanged = false;
+  if(mileage != null){
+    if(_autoLog){
+      _autoLog.plate = rec.plate; _autoLog.vehicle_id = rec.vehicle_id;
+      _autoLog.log_date = date; _autoLog.mileage = mileage;
+    }else{
+      STATE.mileageLogs.push({ id: nextId(STATE.mileageLogs), plate: rec.plate, vehicle_id: rec.vehicle_id,
+        log_date: date, mileage, notes: '維修保養記錄自動帶入' });
+    }
+    _logChanged = true;
+  }else if(_autoLog){
+    STATE.mileageLogs = STATE.mileageLogs.filter(x => String(x.id) !== String(_autoLog.id));
+    _logChanged = true;
+  }
+  if(_logChanged) await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
+
+  closeMaintEditModal();
+  editingMaintId = null;
+  renderAll();
+  alert('已更新並存回雲端\n\n車號:' + rec.plate + '\n日期:' + date + '\n類型:' + type +
+        (_apId ? '\n維修申請人:' + (rec.requested_by_name||'') : ''));
+}
+
+async function deleteMaintEdit(){
+  const rec = (STATE.maintRecords||[]).find(x => String(x.id) === String(maintEditId));
+  if(!rec){ closeMaintEditModal(); return; }
+  if(!confirm('確定要刪除這筆維修保養記錄嗎?\n\n車號:' + (rec.plate||'') +
+              '\n日期:' + String(rec.maintenance_date||'').slice(0,10) +
+              '\n內容:' + (rec.description||'(空白)') +
+              '\n\n刪除後無法復原。當初一併寫入的里程登錄與保養週期紀錄不會跟著刪除。')) return;
+  STATE.maintRecords = STATE.maintRecords.filter(x => String(x.id) !== String(rec.id));
+  await saveState('maint_records', STATE.maintRecords, true);
+  closeMaintEditModal();
+  editingMaintId = null;
+  renderAll();
+  alert('已刪除這筆維修保養記錄。');
+}
+
 function renderMaintPendingTable(){
   const body = document.getElementById('maintPendingBody');
   if(!body) return;
@@ -6809,6 +7034,8 @@ async function maintBodyClick(e){
   const editId = e.target.getAttribute('data-edit-maint');
   const cancelId = e.target.getAttribute('data-cancel-maint');
   const saveId = e.target.getAttribute('data-save-maint');
+  const openId = e.target.getAttribute('data-open-maint');
+  if(openId){ openMaintEditModal(openId); return; }
   if(editId){
     editingMaintId = editId;
     renderMaintHistoryTable(); renderMaintPendingTable();
@@ -10812,6 +11039,16 @@ document.getElementById('vehicleModalClose').addEventListener('click', closeVehi
 document.getElementById('vehicleModal').addEventListener('click', (e) => {
   if(e.target.id === 'vehicleModal') closeVehicleModal();
 });
+
+{
+  const _mem = document.getElementById('maintEditModal');
+  if(_mem){
+    document.getElementById('maintEditModalClose').addEventListener('click', closeMaintEditModal);
+    _mem.addEventListener('click', (e) => { if(e.target.id === 'maintEditModal') closeMaintEditModal(); });
+    document.getElementById('maintEditModalSave').addEventListener('click', saveMaintEdit);
+    document.getElementById('maintEditModalDelete').addEventListener('click', deleteMaintEdit);
+  }
+}
 
 document.getElementById('mr_add').addEventListener('click', async () => {
   const plate = document.getElementById('mr_plate').value.trim();
