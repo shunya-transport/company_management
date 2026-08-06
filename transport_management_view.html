@@ -212,7 +212,12 @@
 #maintenance .card:has(#mr_add),
 #maintenance .card:has(#tire_add),
 #maintenance .card:has(#axle_add),
-#trainings .card:has(#tf_add){
+#trainings .card:has(#tf_add),
+#trainings .card:has(#rt_add){
+  display: none !important;
+}
+/* 外訓證照時效總表那顆「修改」也要藏：這一頁只能看，不能改 */
+#trainings .name-link{
   display: none !important;
 }
 #fleet .del-btn,
@@ -858,6 +863,32 @@
     </div>
 
     <div class="card">
+      <h2>覆訓報名</h2>
+      <div class="form-grid">
+        <label>人員
+          <select id="rt_emp"></select>
+        </label>
+        <label>訓練項目
+          <select id="rt_type"></select>
+        </label>
+        <label>上課第一天<input id="rt_start" type="date"></label>
+        <label>上課最後一天<input id="rt_end" type="date" title="只有一天的課就留白"></label>
+        <label>上課地點<input id="rt_loc" placeholder="選填"></label>
+        <label>辦理協會<input id="rt_org" placeholder="選填"></label>
+      </div>
+      <div id="rt_hint" class="muted" style="font-size:13px;line-height:1.6;margin:-6px 0 12px;"></div>
+      <button class="btn" id="rt_add">存入報名資料</button>
+    </div>
+    <div class="card">
+      <h2>已報名的覆訓<span class="count-badge" id="rt_count"></span></h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>上課日期</th><th>天數</th><th>人員</th><th>訓練項目</th><th>上課地點</th><th>辦理協會</th><th>這張證到期日</th><th></th></tr></thead>
+          <tbody id="rtBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
       <h2>外訓證照時效總表<span class="count-badge" id="external_status_count"></span></h2>
       <div class="toolbar">
         <select id="external_status_filter">
@@ -873,7 +904,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>狀態</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>覆訓報名</th><th>狀態</th><th></th></tr></thead>
           <tbody id="externalStatusBody"></tbody>
         </table>
       </div>
@@ -3275,8 +3306,17 @@ function pushRenewNote(cur){
   if(oldNo) parts.push('證號 ' + oldNo);
   parts.push('發證 ' + (cur.issue_date || '未填'));
   parts.push('到期 ' + (cur.no_expiry ? '長期有效' : (cur.expiry_date || '未填')));
+  if(cur.class_start_date){
+    const cd = cur.class_start_date + ((cur.class_end_date && cur.class_end_date !== cur.class_start_date) ? ('～' + cur.class_end_date) : '');
+    parts.push('覆訓 ' + cd + (cur.class_location ? '／' + cur.class_location : '') + (cur.class_org ? '／' + cur.class_org : ''));
+  }
   const line = '【' + todayISO() + ' 換證】舊：' + parts.join('／');
   cur.notes = cur.notes ? (String(cur.notes).trim() + '\n' + line) : line;
+  // 新證進來了，這一梯的報名就結束：欄位清空，下次要覆訓再重新報名
+  cur.class_start_date = null;
+  cur.class_end_date = null;
+  cur.class_location = null;
+  cur.class_org = null;
 }
 // 依項目的有效年限推算下次覆驗日（發證日 + N 年 - 1 天）。只在使用者沒填到期日時才幫忙帶，不覆寫手動輸入。
 function suggestExpiryFrom(typeId, issueDate){
@@ -7387,6 +7427,88 @@ function renderInternalYearStatus(){
     </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+// ===== 覆訓報名 =====
+// 報名跟發證是兩件事：報名當下只知道哪幾天上課、在哪裡上、哪個協會辦的，
+// 證書字號跟新的到期日要等課上完才會有。所以這四欄（class_start_date／
+// class_end_date／class_location／class_org）獨立存，等到「新增受訓紀錄」
+// 把新證打進去（也就是換證）時，pushRenewNote() 會把它們寫進備註再清空。
+function rtDays(t){
+  const s = t.class_start_date, e = t.class_end_date;
+  if(!s) return 0;
+  if(!e || e === s) return 1;
+  const n = Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1;
+  return n > 0 ? n : 1;
+}
+function rtDateText(t){
+  const s = t.class_start_date;
+  if(!s) return '';
+  const e = t.class_end_date;
+  return (!e || e === s) ? s : (s + ' ～ ' + e);
+}
+function isRetrainBooked(t){ return !!(t && t.class_start_date); }
+function rtPill(t){
+  const dd = daysUntil(t.class_start_date);
+  if(dd === null) return '';
+  if(dd < 0)  return '<span class="pill gray">已上課</span>';
+  if(dd === 0) return '<span class="pill amber">今天上課</span>';
+  return '<span class="pill green">還有 ' + dd + ' 天</span>';
+}
+// 外訓證照時效總表裡的「覆訓報名」欄：一眼看出快到期的人排課了沒有
+function retrainCell(t){
+  if(!isRetrainBooked(t)) return '<span class="muted">—</span>';
+  const bits = [rtDateText(t) + '（' + rtDays(t) + ' 天）'];
+  if(t.class_location) bits.push(t.class_location);
+  if(t.class_org) bits.push(t.class_org);
+  const all = bits.join('／');
+  return '<span style="font-size:12px;" title="' + esc(all) + '">' + esc(all) + '</span>';
+}
+// 兩個下拉每次重畫都要跟著人員異動，但不能把使用者選到一半的值弄掉
+function rtFillSelects(){
+  const es = document.getElementById('rt_emp');
+  const ts = document.getElementById('rt_type');
+  if(!es || !ts) return;
+  const ev = es.value, tv = ts.value;
+  es.innerHTML = (STATE.employees || []).map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.employee_no)}）</option>`).join('');
+  if((STATE.employees || []).some(e => String(e.id) === ev)) es.value = ev;
+  ts.innerHTML = trainingTypeOptions(parseInt(tv));
+  if(tv && ts.querySelector('option[value="' + tv + '"]')) ts.value = tv;
+}
+function renderRtHint(){
+  const el = document.getElementById('rt_hint');
+  if(!el) return;
+  const es = document.getElementById('rt_emp'), ts = document.getElementById('rt_type');
+  if(!es || !ts){ el.innerHTML = ''; return; }
+  const cur = findExistingTraining(parseInt(es.value), parseInt(ts.value));
+  if(!cur){
+    el.innerHTML = '目前查無這張證照的紀錄。存入後會先開一筆只有報名資料的紀錄，等課上完再到上面「新增受訓紀錄」補證號與新到期日。';
+    el.style.color = 'var(--text-2)';
+    return;
+  }
+  const exp = cur.no_expiry ? '長期有效' : (cur.expiry_date || '未填');
+  let txt = '這張證現在記到 ' + exp + '。';
+  if(isRetrainBooked(cur)) txt += '　已報名 ' + rtDateText(cur) + '，存入會蓋掉這筆報名。';
+  el.textContent = txt;
+  el.style.color = isRetrainBooked(cur) ? '#c0392b' : 'var(--text-2)';
+}
+function renderRetrainTable(){
+  const body = document.getElementById('rtBody');
+  if(!body) return;
+  rtFillSelects();
+  const rows = (STATE.trainings || []).filter(isRetrainBooked)
+    .sort((a, b) => String(a.class_start_date || '').localeCompare(String(b.class_start_date || '')));
+  const cnt = document.getElementById('rt_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
+  body.innerHTML = rows.map(t => `<tr>
+      <td>${esc(rtDateText(t))} ${rtPill(t)}</td>
+      <td>${rtDays(t)}</td>
+      <td>${esc(t.employee_name || '')}</td>
+      <td>${esc(t.type_name || '')}</td>
+      <td>${esc(t.class_location || '')}</td>
+      <td>${esc(t.class_org || '')}</td>
+      <td>${t.no_expiry ? '長期有效' : esc(t.expiry_date || '—')}</td>
+      <td><button class="del-btn" data-rt-cancel="${t.id}">取消報名</button></td>
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有人報名覆訓。</td></tr>`;
+}
 let editingExternalId = null;
 function renderExternalStatusTable(){
   const filter = document.getElementById('external_status_filter').value;
@@ -7418,10 +7540,14 @@ function renderExternalStatusTable(){
       <td>${esc(t.cert_no||'')}</td>
       <td>${issueCell}</td>
       <td>${expiryCell}</td>
+      <td>${retrainCell(t)}</td>
       <td>${certStatusPill(t)}</td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
+  // 三個儀表板的 renderAll() 內容不一樣，但都會呼叫這一支，
+  // 所以覆訓清單掛在這裡重畫，三邊才會一致。
+  renderRetrainTable();
 }
 
 document.getElementById('externalStatusBody').addEventListener('click', async (e) => {
@@ -9153,6 +9279,77 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   renderAll();
   renderTfHint();
 });
+
+// ===== 覆訓報名的三個動作：換人／換項目時更新提示、存入報名、取消報名 =====
+['rt_emp', 'rt_type'].forEach(_id => {
+  const _el = document.getElementById(_id);
+  if(_el) _el.addEventListener('change', renderRtHint);
+});
+(function(){
+  const _btn = document.getElementById('rt_add');
+  if(!_btn) return;
+  _btn.addEventListener('click', async () => {
+    const empId = parseInt(document.getElementById('rt_emp').value);
+    const typeId = parseInt(document.getElementById('rt_type').value);
+    const emp = (STATE.employees || []).find(e => e.id === empId);
+    const type = (STATE.trainingTypes || []).find(t => t.id === typeId);
+    if(!emp || !type){ alert('請選擇人員與訓練項目'); return; }
+    const start = document.getElementById('rt_start').value;
+    let end = document.getElementById('rt_end').value;
+    const loc = document.getElementById('rt_loc').value.trim();
+    const org = document.getElementById('rt_org').value.trim();
+    if(!start){ alert('請填「上課第一天」'); return; }
+    if(end && end < start){ alert('「上課最後一天」不能早於第一天'); return; }
+    if(end === start) end = '';
+    // 一般覆訓最多兩天，超過一個月八成是日期打錯，先問一聲
+    if(end){
+      const span = Math.round((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000) + 1;
+      if(span > 30 && !confirm('這樣算起來要上 ' + span + ' 天課，日期沒打錯嗎？')) return;
+    }
+    let cur = findExistingTraining(empId, typeId);
+    if(!cur){
+      if(!confirm(emp.name + ' 目前沒有「' + type.name + '」的紀錄。\n\n' +
+                  '要先開一筆只有報名資料的紀錄嗎？（證號、發證日、到期日先留白，等課上完再補）')) return;
+      cur = {
+        id: nextId(STATE.trainings), employee_id: empId, employee_name: emp.name,
+        type_id: typeId, type_name: type.name,
+        cert_no: '', certificate_no: '',
+        issue_date: null, expiry_date: null,
+        no_expiry: 0, on_hold: 0, notes: null
+      };
+      STATE.trainings.push(cur);
+    }
+    cur.class_start_date = start;
+    cur.class_end_date = end || null;
+    cur.class_location = loc || null;
+    cur.class_org = org || null;
+    try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
+    ['rt_start', 'rt_end', 'rt_loc', 'rt_org'].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = '';
+    });
+    renderAll();
+    renderRtHint();
+  });
+})();
+(function(){
+  const _body = document.getElementById('rtBody');
+  if(!_body) return;
+  _body.addEventListener('click', async (ev) => {
+    const id = ev.target.getAttribute('data-rt-cancel');
+    if(!id) return;
+    const rec = (STATE.trainings || []).find(t => String(t.id) === id);
+    if(!rec) return;
+    if(!confirm('要取消 ' + (rec.employee_name || '') + ' 的「' + (rec.type_name || '') + '」覆訓報名嗎？\n\n' +
+                '只會清掉上課日期、地點、辦理協會，證照本身的資料不動。')) return;
+    rec.class_start_date = null;
+    rec.class_end_date = null;
+    rec.class_location = null;
+    rec.class_org = null;
+    try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
+    renderAll();
+  });
+})();
+
 
 document.getElementById('trainingTableBody').addEventListener('click', async (e) => {
   const id = e.target.getAttribute('data-del-training');
