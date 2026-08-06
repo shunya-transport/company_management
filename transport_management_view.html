@@ -120,6 +120,7 @@
   .pill.amber{background:var(--amber-bg);color:var(--amber);}
   .pill.green{background:var(--green-bg);color:var(--green);}
   .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .pill.hold{background:var(--gray-bg);color:var(--gray);border:1px dashed var(--gray);}
   .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
   select,input{
     font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
@@ -825,6 +826,9 @@
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);margin:2px 0 14px;">
         <input type="checkbox" id="tf_no_expiry" style="width:auto;"> 此證照無到期日（長期有效）
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);margin:2px 0 14px;">
+        <input type="checkbox" id="tf_on_hold" style="width:auto;"> 暫不外訓（效期先不計算，到期日照留著）
+      </label>
       <div id="tf_hint" class="muted" style="font-size:13px;line-height:1.6;margin:-6px 0 12px;"></div>
       <button class="btn" id="tf_add">新增受訓紀錄</button>
     </div>
@@ -834,6 +838,7 @@
         <input id="training_search" placeholder="搜尋人員/訓練項目">
         <select id="training_status_filter">
           <option value="all">全部狀態</option>
+          <option value="hold">暫不外訓</option>
           <option value="red">已逾期</option>
           <option value="soon30">30天內到期</option>
               <option value="soon60">60天內到期</option>
@@ -856,6 +861,7 @@
       <div class="toolbar">
         <select id="external_status_filter">
           <option value="all">全部狀態</option>
+          <option value="hold">暫不外訓</option>
           <option value="red">已逾期</option>
           <option value="soon30">30天內到期</option>
               <option value="soon60">60天內到期</option>
@@ -2215,6 +2221,9 @@
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);margin:2px 0 14px;">
       <input type="checkbox" id="lm_no_expiry" style="width:auto;"> 此證照無到期日（長期有效）
     </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);margin:2px 0 14px;">
+      <input type="checkbox" id="lm_on_hold" style="width:auto;"> 暫不外訓（效期先不計算，到期日照留著）
+    </label>
     <button class="btn" id="licenseModalAdd">新增證照</button>
   </div>
 </div>
@@ -3093,9 +3102,9 @@ function renderOverview(){
   document.getElementById('lesseeBars').innerHTML = rows || '<div class="empty">尚無出租中的板架</div>';
 
   const withExpiry = STATE.trainings
-    .filter(t => !t.no_expiry && t.expiry_date && daysUntil(t.expiry_date) <= 90)
+    .filter(t => !t.on_hold && !t.no_expiry && t.expiry_date && daysUntil(t.expiry_date) <= 90)
     .sort((a,b)=> (a.expiry_date||'').localeCompare(b.expiry_date||''));
-  const noExpiryData = STATE.trainings.filter(t => !t.no_expiry && !t.expiry_date);
+  const noExpiryData = STATE.trainings.filter(t => !t.on_hold && !t.no_expiry && !t.expiry_date);
   const alerts = [...withExpiry, ...noExpiryData];
   if(alerts.length===0){
     document.getElementById('trainingAlerts').innerHTML = '<div class="empty">目前沒有需要留意的證照</div>';
@@ -3451,6 +3460,9 @@ function renderSelfUseTrailers(){
 }
 
 function certStatusCode(t){
+  // 暫不外訓要排在最前面：這一筆的效期先不算，狀態自成一類，
+  // 這樣「已逾期／90天內到期」那些篩選就不會再把它撈出來。
+  if(t.on_hold) return 'hold';
   if(t.no_expiry) return 'gray';
   if(!t.expiry_date) return 'gray';
   return statusOf(t.expiry_date, 90);
@@ -3464,7 +3476,7 @@ function renderTrainingTable(){
   if(q) rows = rows.filter(t => (t.employee_name||'').includes(q) || (t.type_name||'').includes(q));
   if(statusFilter!=='all') rows = rows.filter(t => {
     if(statusFilter==='soon30' || statusFilter==='soon60'){
-      if(t.no_expiry || !t.expiry_date) return false;
+      if(t.on_hold || t.no_expiry || !t.expiry_date) return false;
       const dd = daysUntil(t.expiry_date);
       return dd>=0 && dd<=(statusFilter==='soon30'?30:60);
     }
@@ -4557,6 +4569,7 @@ async function saveChecklist(){
 
 let currentLicenseEmpId = null;
 function certStatusPill(t){
+  if(t.on_hold) return `<span class="pill hold">暫不外訓</span>`;
   if(t.no_expiry) return `<span class="pill gray">長期有效</span>`;
   if(!t.expiry_date) return `<span class="pill gray">未填日期</span>`;
   const s = statusOf(t.expiry_date, 90);
@@ -4569,7 +4582,7 @@ function renderLicenseModalBody(){
       <td>${esc(l.type_name)}</td>
       <td>${esc(l.cert_no||'')}</td>
       <td>${esc(l.issue_date||'—')}</td>
-      <td>${l.no_expiry ? '長期有效' : esc(l.expiry_date||'—')}</td>
+      <td>${l.no_expiry ? '長期有效' : esc(l.expiry_date||'—')}${l.on_hold ? ' <span class="muted">（暫不外訓）</span>' : ''}</td>
       <td><button class="del-btn" data-del-license="${l.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="5" class="empty">尚無證照紀錄</td></tr>`;
 }
@@ -4583,6 +4596,7 @@ function openLicenseModal(empId){
   document.getElementById('licenseModalTitle').textContent = `證照管理 — ${e.name}`;
   renderLicenseTypeSelect();
   document.getElementById('lm_no_expiry').checked = false;
+  if(document.getElementById('lm_on_hold')) document.getElementById('lm_on_hold').checked = false;
   document.getElementById('lm_expiry').disabled = false;
   renderLicenseModalBody();
   document.getElementById('licenseModal').classList.add('show');
@@ -7050,11 +7064,11 @@ function renderInternalYearStatus(){
 let editingExternalId = null;
 function renderExternalStatusTable(){
   const filter = document.getElementById('external_status_filter').value;
-  let rows = STATE.trainings.map(t => ({...t, s: t.no_expiry ? 'gray' : statusOf(t.expiry_date, 90)}))
+  let rows = STATE.trainings.map(t => ({...t, s: certStatusCode(t)}))
     .sort((a,b) => (a.expiry_date||'9999').localeCompare(b.expiry_date||'9999'));
   if(filter !== 'all') rows = rows.filter(r => {
     if(filter==='soon30' || filter==='soon60'){
-      if(r.no_expiry || !r.expiry_date) return false;
+      if(r.on_hold || r.no_expiry || !r.expiry_date) return false;
       const dd = daysUntil(r.expiry_date);
       return dd>=0 && dd<=(filter==='soon30'?30:60);
     }
@@ -7067,8 +7081,8 @@ function renderExternalStatusTable(){
       ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
       : esc(t.issue_date||'—');
     const expiryCell = editing
-      ? `<input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label>`
-      : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—'));
+      ? `<input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label>`
+      : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')) + (t.on_hold ? ' <span class="muted">（暫不外訓）</span>' : '');
     const actionCell = editing
       ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
       : `<button class="name-link" data-edit-ext="${t.id}">修改</button>`;
@@ -7094,8 +7108,11 @@ document.getElementById('externalStatusBody').addEventListener('click', async (e
     const rec = STATE.trainings.find(t => String(t.id) === saveId);
     if(rec){
       const noExp = document.getElementById('ext_noexp_'+saveId).checked;
+      const onHold = !!(document.getElementById('ext_hold_'+saveId) || {}).checked;
       rec.issue_date = document.getElementById('ext_issue_'+saveId).value || null;
       rec.no_expiry = noExp ? 1 : 0;
+      // 暫不外訓不會把到期日清掉，之後恢復外訓還看得到原本卡在哪一天
+      rec.on_hold = onHold ? 1 : 0;
       rec.expiry_date = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
       await saveState('employee_trainings', STATE.trainings, true);
     }
@@ -8766,9 +8783,11 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   const emp = STATE.employees.find(e=>e.id===empId);
   const type = STATE.trainingTypes.find(t=>t.id===typeId);
   const noExpiry = document.getElementById('tf_no_expiry').checked;
+  const onHold = !!(document.getElementById('tf_on_hold') || {}).checked;
   const expiry = document.getElementById('tf_exp').value;
   if(!emp || !type){ alert('請選擇人員與訓練項目'); return; }
-  if(!noExpiry && !expiry){ alert('請填寫到期日，或勾選「無到期日」'); return; }
+  // 暫不外訓的也可以先建一筆（到期日之後補），所以這裡放它過
+  if(!noExpiry && !onHold && !expiry){ alert('請填寫到期日，或勾選「無到期日」／「暫不外訓」'); return; }
   const cert = document.getElementById('tf_cert').value.trim();
   const issue = document.getElementById('tf_issue').value || null;
   // 同一人同一項目只留一筆：換證是覆蓋舊日期，不是再疊一筆（比照車輛證件 vd_add）
@@ -8782,8 +8801,9 @@ document.getElementById('tf_add').addEventListener('click', async () => {
     cur.type_id = typeId; cur.type_name = type.name;
     cur.cert_no = cert; cur.certificate_no = cert;
     cur.issue_date = issue;
-    cur.expiry_date = noExpiry ? null : expiry;
+    cur.expiry_date = noExpiry ? null : (expiry || cur.expiry_date);
     cur.no_expiry = noExpiry;
+    cur.on_hold = onHold;
   }else{
     STATE.trainings.push({
       id: nextId(STATE.trainings), employee_id:empId, employee_name:emp.name,
@@ -8791,8 +8811,9 @@ document.getElementById('tf_add').addEventListener('click', async () => {
       cert_no: cert,
       certificate_no: cert,
       issue_date: issue,
-      expiry_date: noExpiry ? null : expiry,
+      expiry_date: noExpiry ? null : (expiry || null),
       no_expiry: noExpiry,
+      on_hold: onHold,
       notes: null
     });
   }
@@ -8800,6 +8821,7 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
   ['tf_cert','tf_issue','tf_exp'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('tf_no_expiry').checked = false;
+  if(document.getElementById('tf_on_hold')) document.getElementById('tf_on_hold').checked = false;
   document.getElementById('tf_exp').disabled = false;
   renderAll();
   renderTfHint();
@@ -9000,6 +9022,7 @@ document.getElementById('licenseModalAdd').addEventListener('click', async () =>
   const type = STATE.trainingTypes.find(t => t.id === typeId);
   const emp = STATE.employees.find(x => x.id === currentLicenseEmpId);
   const noExpiry = document.getElementById('lm_no_expiry').checked;
+  const onHold = !!(document.getElementById('lm_on_hold') || {}).checked;
   if(!emp || !type){ alert('請選擇訓練項目'); return; }
   const cert = document.getElementById('lm_number').value.trim();
   const issue = document.getElementById('lm_issue').value || null;
@@ -9015,8 +9038,9 @@ document.getElementById('licenseModalAdd').addEventListener('click', async () =>
     cur.type_id = typeId; cur.type_name = type.name;
     cur.cert_no = cert; cur.certificate_no = cert;
     cur.issue_date = issue;
-    cur.expiry_date = expiry;
+    cur.expiry_date = expiry || cur.expiry_date;
     cur.no_expiry = noExpiry;
+    cur.on_hold = onHold;
   }else{
     STATE.trainings.push({
       id: nextId(STATE.trainings), employee_id: currentLicenseEmpId, employee_name: emp.name,
@@ -9026,12 +9050,14 @@ document.getElementById('licenseModalAdd').addEventListener('click', async () =>
       issue_date: issue,
       expiry_date: expiry,
       no_expiry: noExpiry,
+      on_hold: onHold,
       notes: null
     });
   }
   try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
   ['lm_number','lm_issue','lm_expiry'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('lm_no_expiry').checked = false;
+  if(document.getElementById('lm_on_hold')) document.getElementById('lm_on_hold').checked = false;
   document.getElementById('lm_expiry').disabled = false;
   renderLicenseModalBody();
   renderAll();
