@@ -299,13 +299,14 @@
       </div>
     </div>
   </div>
-  <!-- 磅費待付：使用者 115/08/05「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」。
-       所以這張卡【不是本月】，是把所有還沒匯給司機的磅費全部加起來——欠人家的錢不會因為跨月就不用付了。 -->
+  <!-- 代墊費用待付：使用者 115/08/05「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」，
+       115/08/06 再擴大成「還會有驗車驗板的費用，也會有其他的」。
+       所以這張卡【不是本月】，是把所有還沒匯給司機的代墊全部加起來——欠人家的錢不會因為跨月就不用付了。 -->
   <div class="card" id="ovWeighCard" style="display:none;">
-    <h2>磅費待付<span class="count-badge" id="ovWeighCount">0</span></h2>
-    <div class="muted" style="margin-bottom:10px;">這是司機自己先掏現金付磅場、公司還沒匯錢還他的部分，<strong>不分月份全部列出來</strong>，就是主管這次要匯出去的錢。當場直接用零用金現金付掉的（台南全部、台中大部分司機）不會出現在這裡，因為錢已經付了。要看每一筆是哪一天、哪個磅場、哪個櫃號，或是要下載匯款清單、按結清，請開零用金記帳網頁的「磅費」分頁。系統裡沒有存司機的銀行帳號，匯款時請照人事那邊的資料填。</div>
+    <h2>代墊費用待付<span class="count-badge" id="ovWeighCount">0</span></h2>
+    <div class="muted" style="margin-bottom:10px;">這是司機自己先掏現金付出去（磅費、驗車、驗板、其他）、公司還沒匯錢還他的部分，<strong>不分月份全部列出來</strong>，就是主管這次要匯出去的錢。當場直接用零用金現金付掉的（台南全部、台中大部分司機）不會出現在這裡，因為錢已經付了。要看每一筆是哪一天、哪個磅場或檢驗廠、哪個櫃號車號，或是要下載匯款清單、按批次結清，請開零用金記帳網頁的「代墊費用」分頁——不同類別可以一次結清成同一個批號。系統裡沒有存司機的銀行帳號，匯款時請照人事那邊的資料填。</div>
     <div class="table-scroll">
-      <table><thead><tr><th>零用金帳本</th><th>司機</th><th class="num">筆數</th><th>最早一筆</th><th>最晚一筆</th><th class="num">要匯給司機</th></tr></thead><tbody id="ovWeighBody"></tbody></table>
+      <table><thead><tr><th>零用金帳本</th><th>司機</th><th>內容</th><th class="num">筆數</th><th>最早一筆</th><th>最晚一筆</th><th class="num">要匯給司機</th></tr></thead><tbody id="ovWeighBody"></tbody></table>
     </div>
     <div class="muted" style="margin-top:8px;" id="ovWeighFoot"></div>
   </div>
@@ -763,7 +764,7 @@ async function loadAll(){
   const _pbIds = (STATE.pettyBooks || []).map(b => b.book_id).filter(v => v != null);
   if(_pbIds.length){
     try{
-      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status,payee,weigh_fee,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
+      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status,payee,weigh_fee,advance_type,vehicle_plate,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
     }catch(e){ STATE.pettyEntries = []; }
   }
 }
@@ -873,9 +874,9 @@ function renderOverview(){
      <div class="stat-card red"><div class="n">${money(pt.exp)}</div><div class="l">掛帳中應付（還沒付出的錢）</div></div>
      <div class="stat-card ${mi-me>=0?'green':'red'}"><div class="n">${moneySigned(mi-me)}</div><div class="l">本月收支淨額（收 ${money(mi)}／支 ${money(me)}）</div></div>` +
     (books.length ? `<div class="stat-card ${pettyTotal<0?'red':''}"><div class="n">${moneySigned(pettyTotal)}</div><div class="l">零用金餘額（${books.map(b=>esc(b.book_name)).join('、')}）</div></div>` : '') +
-    // 磅費待付：跟零用金餘額並排的獨立一格，主管一眼就看得到這次要匯多少給司機。
+    // 代墊費用待付：跟零用金餘額並排的獨立一格，主管一眼就看得到這次要匯多少給司機。
     // 【刻意不限本月】——上個月沒匯的還是要匯。
-    (pw.any ? `<div class="stat-card ${pw.total>0?'amber':'green'}"><div class="n">${money(pw.total)}</div><div class="l">磅費待付${pw.total>0?'　要匯給 '+esc(pwNames(pw.names)):'　都付清了'}</div></div>` : '');
+    (pw.any ? `<div class="stat-card ${pw.total>0?'amber':'green'}"><div class="n">${money(pw.total)}</div><div class="l">代墊待付${pw.total>0?'　要匯給 '+esc(pwNames(pw.names)):'　都付清了'}</div></div>` : '');
 
   document.getElementById('ovPettyCard').style.display = books.length ? '' : 'none';
   renderPettyCard(books, mS, mE);
@@ -990,13 +991,20 @@ function renderPettyCard(books, mS, mE){
     '<td class="num"><strong>' + money(grand) + '</strong></td><td class="num">100.0%</td></tr>';
 }
 
-// 磅費的 settle_batch：空＝還欠司機、'零用金付訖'＝當場現金付掉、其他＝匯款批號。
+// 代墊的 settle_batch：空＝還欠司機、'零用金付訖'＝當場現金付掉、其他＝匯款批號。
 // 這個字串要跟 petty_cash.html 的 WG_CASH_TAG 一模一樣，改一邊就要改另一邊。
 const PW_CASH_TAG = '零用金付訖';
 function PW_CASH_OK(e){ return !!(e && e.settle_batch && String(e.settle_batch).trim()); }
 
-// 還沒匯給司機的磅費（不分月份）。
-// 使用者 115/08/05：「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」。
+// 代墊類別。舊資料沒有 advance_type 的一律當磅費——#51 之前這一欄只可能是磅費。
+// 這份清單要跟 petty_cash.html 的 ADV_TYPES 一致。
+const PW_TYPES = ['磅費','驗車','驗板','其他'];
+function pwType(e){ return String((e && e.advance_type) || '').trim() || '磅費'; }
+
+// 還沒匯給司機的代墊費用（不分月份）。
+// 使用者 115/08/05：「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」，
+// 115/08/06 擴大到驗車、驗板、其他，但一樣是批次結清，所以這裡照樣一位司機加總成一行，
+// 類別只是拆在「內容」那一欄給主管看，不會拆成好幾行害人以為要匯好幾次。
 // ★ 這裡【刻意不篩月份】。上個月忘了匯的錢這個月還是要匯，
 //   如果照本月篩，八月的欠款到了九月就會從畫面上消失，主管會漏匯。
 // 只看 weigh_fee 有填、沒作廢、settle_batch 還是空的那些列。
@@ -1006,13 +1014,16 @@ function pettyWeighOwed(books){
   const all = (STATE.pettyEntries || []).filter(e =>
     bookName[e.book_id] !== undefined && e.status !== '已作廢' && num(e.weigh_fee) > 0);
   const g = {};
+  const byType = {};
   all.forEach(e => {
     if(PW_CASH_OK(e)) return;   // 有 settle_batch＝已經付掉或匯掉了，不是待付
     const who = String(e.payee || '').trim() || '（未填司機）';
     const k = e.book_id + '|' + who;
-    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, first: '', last: '' };
-    const o = g[k], d = String(e.entry_date).slice(0,10);
+    if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, first: '', last: '', t: {} };
+    const o = g[k], d = String(e.entry_date).slice(0,10), t = pwType(e);
     o.n += 1; o.amt += num(e.weigh_fee);
+    o.t[t] = (o.t[t] || 0) + num(e.weigh_fee);
+    byType[t] = (byType[t] || 0) + num(e.weigh_fee);
     if(!o.first || d < o.first) o.first = d;
     if(!o.last  || d > o.last)  o.last  = d;
   });
@@ -1023,8 +1034,16 @@ function pettyWeighOwed(books){
     n:     list.reduce((s,o) => s + o.n, 0),
     total: list.reduce((s,o) => s + o.amt, 0),
     names: list.map(o => o.who),
+    byType: byType,
     allRows: all
   };
+}
+
+// 「磅費 1,200／驗車 3,000」這種一行小字。只列真的有錢的類別。
+function pwTypeTxt(t){
+  const bits = PW_TYPES.filter(k => t && t[k]).map(k => k + ' ' + money(t[k]));
+  Object.keys(t || {}).forEach(k => { if(PW_TYPES.indexOf(k) < 0 && t[k]) bits.push(k + ' ' + money(t[k])); });
+  return bits.join('／') || '—';
 }
 
 // 統計卡那一行的人名：最多列兩位，再多就寫「等 N 人」，免得一行擠爆。
@@ -1033,7 +1052,7 @@ function pwNames(names){
   return u.length <= 2 ? u.join('、') : u.slice(0,2).join('、') + ' 等 ' + u.length + ' 人';
 }
 
-// 「磅費待付」卡：一位司機一行，就是主管要匯出去的錢。
+// 「代墊費用待付」卡：一位司機一行，就是主管要匯出去的錢；類別拆在「內容」那一欄。
 function renderPettyWeigh(books, mS, mE){
   const card = document.getElementById('ovWeighCard');
   const body = document.getElementById('ovWeighBody');
@@ -1048,23 +1067,27 @@ function renderPettyWeigh(books, mS, mE){
     ? pw.list.map(o =>
         '<tr><td>' + esc(o.book) + '</td>' +
         '<td><strong>' + esc(o.who) + '</strong></td>' +
+        '<td>' + esc(pwTypeTxt(o.t)) + '</td>' +
         '<td class="num">' + o.n + '</td>' +
         '<td>' + esc(invROC(o.first)) + '</td>' +
         '<td>' + esc(invROC(o.last)) + '</td>' +
         '<td class="num"><strong>' + money(o.amt) + '</strong></td></tr>').join('') +
       '<tr style="border-top:2px solid var(--line);"><td colspan="2"><strong>要匯出去的合計</strong></td>' +
+      '<td>' + esc(pwTypeTxt(pw.byType)) + '</td>' +
       '<td class="num"><strong>' + pw.n + '</strong></td><td></td><td></td>' +
       '<td class="num"><strong>' + money(pw.total) + '</strong></td></tr>'
-    : '<tr><td colspan="6" class="empty">磅費都付清了，這次不用匯錢給司機</td></tr>';
-  // 底下一行小字：本月的磅費總共花了多少、其中多少是當場現金付掉的（只是給個概念，不是要匯的錢）
+    : '<tr><td colspan="7" class="empty">代墊費用都付清了，這次不用匯錢給司機</td></tr>';
+  // 底下一行小字：本月的代墊總共花了多少、其中多少是當場現金付掉的（只是給個概念，不是要匯的錢）
   if(foot){
     const mon = pw.allRows.filter(e => String(e.entry_date) >= mS && String(e.entry_date) <= mE);
     const mAmt  = mon.reduce((s,e) => s + num(e.weigh_fee), 0);
     const mCash = mon.filter(e => String(e.settle_batch || '').trim() === PW_CASH_TAG)
                      .reduce((s,e) => s + num(e.weigh_fee), 0);
+    const mBy = {};
+    mon.forEach(e => { const t = pwType(e); mBy[t] = (mBy[t] || 0) + num(e.weigh_fee); });
     foot.textContent = mon.length
-      ? '本月磅費一共 ' + mon.length + ' 筆 ' + money(mAmt) + '，其中當場用零用金現金付掉的有 ' + money(mCash) + '（那些不用匯）。'
-      : '本月還沒有磅費。';
+      ? '本月代墊一共 ' + mon.length + ' 筆 ' + money(mAmt) + '（' + pwTypeTxt(mBy) + '），其中當場用零用金現金付掉的有 ' + money(mCash) + '（那些不用匯）。'
+      : '本月還沒有代墊費用。';
   }
 }
 
@@ -1078,7 +1101,7 @@ let TAX_FOR = {};  // 主列的 entry_id → [稅那幾列]
 function isBlankSubject(e){ return e.subject_code === null || e.subject_code === undefined || e.subject_code === ''; }
 function looksLikeFee(e){ return /匯費|手續費|郵資|工本費|運費/.test(String(e.description || '') + ' ' + String(e.notes || '')); }
 // 摸起來像稅的列：不掛科目，摘要或備註有「稅」或英文 tax（日記簿裡有一整批寫成「5% Tax」的）。
-// 匯費、磅費那種也不掛科目，但不是稅，靠 looksLikeFee() 跟關鍵字排掉。
+// 匯費、磅費那種也不掛科目，但不是稅，靠 looksLikeFee() 跟關鍵字排掉。（跟代墊費用卡無關）
 function looksLikeTax(e){
   if(!isBlankSubject(e) || looksLikeFee(e) || num(e.amount) <= 0) return false;
   const s = String(e.description || '') + ' ' + String(e.notes || '');

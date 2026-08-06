@@ -257,7 +257,7 @@
     <nav>
       <button data-tab="cash" class="active">記一筆</button>
       <button data-tab="month">明細帳</button>
-      <button data-tab="weigh">磅費</button>
+      <button data-tab="weigh">代墊費用</button>
       <button data-tab="compare">各帳本比較</button>
       <button data-tab="refill">撥補／入零用金</button>
       <button data-tab="statement">對帳單</button>
@@ -302,7 +302,7 @@
         <div><div style="font-size:12px;opacity:.7;">本月支出</div><div id="pcMonthOut" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
         <div><div style="font-size:12px;opacity:.7;">本月收入</div><div id="pcMonthIn" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
         <div><div style="font-size:12px;opacity:.7;">本月筆數</div><div id="pcMonthCnt" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
-        <div id="pcMonthWeighWrap"><div style="font-size:12px;opacity:.7;">本月磅費</div><div id="pcMonthWeigh" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
+        <div id="pcMonthWeighWrap"><div style="font-size:12px;opacity:.7;">本月代墊</div><div id="pcMonthWeigh" style="font-family:Montserrat,sans-serif;font-size:22px;font-weight:600;">—</div></div>
       </div>
     </div>
   </div>
@@ -319,7 +319,14 @@
       <label>日期<input type="date" id="pc_date"></label>
       <label>科目<select id="pc_subject"></select></label>
       <label>金額<input type="number" id="pc_amount" min="0" step="1" placeholder="0"></label>
-      <label id="pc_weigh_wrap">磅費（司機代墊）<input type="number" id="pc_weigh" min="0" step="1" placeholder="不是磅費就留空"></label>
+      <label id="pc_weigh_wrap">代墊金額（司機先墊的）<input type="number" id="pc_weigh" min="0" step="1" placeholder="不是代墊就留空"></label>
+      <label id="pc_advtype_wrap">代墊類別<select id="pc_advtype">
+        <option value="">— 不是代墊 —</option>
+        <option value="磅費">磅費</option>
+        <option value="驗車">驗車</option>
+        <option value="驗板">驗板</option>
+        <option value="其他">其他</option>
+      </select></label>
       <label>領款人<input type="text" id="pc_payee" list="payeeList" placeholder="例：李奕樺"></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="pc_memo" placeholder="例：聯華磅費、KLJ-3207 驗車"></label>
       <label>單據狀態<select id="pc_status"><option>已入帳</option><option>待補單據</option></select></label>
@@ -374,12 +381,15 @@
   </div>
 </div>
 
-<!-- ============ 磅費（登錄＋結清） ============ -->
+<!-- ============ 代墊費用（登錄＋批次結清） ============ -->
 <div id="weigh" class="panel">
   <div class="card">
-    <h2>登錄磅費</h2>
-    <div class="muted">選司機 → 一行一張磅單（過磅日、磅場、櫃號、金額）→ 按「全部記進去」。
-      摘要會自動照舊格式組好，例如 <code>立豐磅費(6/23HMIU7878617)</code>；磅場、過磅日、櫃號也會分欄存起來，之後查得到。</div>
+    <h2>登錄代墊費用</h2>
+    <div class="muted">司機自己先掏錢付掉、公司事後要還他的都記在這裡：<strong>磅費、驗車、驗板、其他</strong>。
+      選司機 → 一行一張單據，先選類別，右邊欄位會跟著換 → 按「全部記進去」。<br>
+      摘要會自動組好，例如 <code>立豐磅費(6/23HMIU7878617)</code>、<code>KLJ-3207 驗車(8/6)</code>；
+      日期、磅場／檢驗廠、櫃號／車號都會分欄存起來，之後查得到。
+      每一行會記到哪一個零用金科目，直接寫在類別下面給你確認。</div>
     <div class="form-grid">
       <label>司機<select id="wq_driver"></select></label>
       <label>記帳日（錢從零用金出去那一天）<input type="date" id="wq_date"></label>
@@ -388,16 +398,18 @@
     <div class="table-scroll" style="max-height:none;">
       <table>
         <thead><tr>
-          <th style="width:160px;">過磅日</th>
-          <th style="width:130px;">磅場</th>
-          <th style="min-width:200px;">櫃號（多個用空白或、隔開）</th>
-          <th class="num" style="width:120px;">金額</th>
+          <th style="width:130px;">類別</th>
+          <th style="width:150px;">日期</th>
+          <th style="width:140px;">磅場／檢驗廠</th>
+          <th style="min-width:190px;">櫃號／車號／說明</th>
+          <th class="num" style="width:110px;">金額</th>
           <th style="width:56px;"></th>
         </tr></thead>
         <tbody id="wqRows"></tbody>
       </table>
     </div>
     <datalist id="wqStationList"></datalist>
+    <datalist id="wqPlateList"></datalist>
     <div class="toolbar" style="margin-top:12px;">
       <button class="btn ghost tiny" id="wq_addrow">＋ 再加一行</button>
       <button class="btn ghost tiny" id="wq_clear">清空</button>
@@ -409,18 +421,27 @@
   </div>
 
   <div class="card">
-    <h2>磅費明細</h2>
-    <div class="muted">勾選要結清的那幾筆 → 填結清日 → 按<strong>「批次結清」</strong>，會同時下載一張匯款清單 CSV（一位司機一列的金額）。
-      結清過的那一列會顯示結清的月／日。當場就用零用金付掉的，記進去就直接算結清，不會出現在這裡等你處理。</div>
+    <h2>代墊費用明細</h2>
+    <div class="muted">勾選要結清的那幾筆 → 填結清日 → 按<strong>「批次結清」</strong>，會同時下載一張匯款清單 CSV（一位司機一列的金額，下面附各類別小計）。
+      結清過的那一列會顯示結清的月／日。當場就用零用金付掉的，記進去就直接算結清，不會出現在這裡等你處理。
+      <strong>不同類別可以一起勾、一起結清</strong>，一次匯一筆給司機就好。</div>
     <div class="toolbar">
       <label>起<input type="date" id="wg_from"></label>
       <label>迄<input type="date" id="wg_to"></label>
       <button class="btn tiny" id="wg_m">本月</button>
       <button class="btn tiny" id="wg_all">全部</button>
+      <label>類別<select id="wg_type" style="width:120px;">
+        <option value="all">全部類別</option>
+        <option value="磅費">磅費</option>
+        <option value="驗車">驗車</option>
+        <option value="驗板">驗板</option>
+        <option value="其他">其他</option>
+      </select></label>
       <label class="inline"><input type="checkbox" id="wg_open_only" checked> 只看還沒結清的</label>
       <span style="flex:1;"></span>
       <span class="muted" id="wg_sum"></span>
     </div>
+    <div class="muted" id="wg_bytype" style="margin:-4px 0 10px;"></div>
     <div class="toolbar" style="border-top:1px dashed rgba(13,27,44,.14);padding-top:12px;">
       <span class="muted" id="wg_seltxt"></span>
       <span style="flex:1;"></span>
@@ -432,8 +453,8 @@
       <table>
         <thead><tr>
           <th style="width:38px;"><input type="checkbox" id="wg_ckall" style="width:16px;height:16px;"></th>
-          <th>記帳日</th><th>過磅日</th><th>司機</th><th>磅場</th><th>摘要</th>
-          <th class="num">磅費</th><th>結清</th><th></th>
+          <th>記帳日</th><th>類別</th><th>費用日</th><th>司機</th><th>磅場／檢驗廠</th><th>車號</th><th>摘要</th>
+          <th class="num">代墊金額</th><th>結清</th><th></th>
         </tr></thead>
         <tbody id="wgDetail"></tbody>
       </table>
@@ -580,12 +601,20 @@
       <label>收支<select id="em_dir"><option>支出</option><option>收入</option></select></label>
       <label>科目<select id="em_subject"></select></label>
       <label>金額<input type="number" id="em_amount" step="1"></label>
-      <label id="em_weigh_wrap">磅費（司機代墊）<input type="number" id="em_weigh" step="1" placeholder="不是磅費就留空"></label>
+      <label id="em_weigh_wrap">代墊金額（司機先墊的）<input type="number" id="em_weigh" step="1" placeholder="不是代墊就留空"></label>
+      <label id="em_advtype_wrap">代墊類別<select id="em_advtype">
+        <option value="">— 不是代墊 —</option>
+        <option value="磅費">磅費</option>
+        <option value="驗車">驗車</option>
+        <option value="驗板">驗板</option>
+        <option value="其他">其他</option>
+      </select></label>
       <label>領款人<input type="text" id="em_payee"></label>
-      <label id="em_station_wrap">磅場<input type="text" id="em_station" list="wqStationList" placeholder="立豐"></label>
-      <label id="em_wdate_wrap">過磅日<input type="date" id="em_wdate"></label>
+      <label id="em_station_wrap">磅場／檢驗廠／對象<input type="text" id="em_station" list="wqStationList" placeholder="立豐"></label>
+      <label id="em_wdate_wrap">費用發生日<input type="date" id="em_wdate"></label>
       <label id="em_cno_wrap">櫃號<input type="text" id="em_cno" placeholder="HMIU7878617" style="text-transform:uppercase;"></label>
-      <label id="em_settle_wrap">磅費怎麼給的<select id="em_settle">
+      <label id="em_plate_wrap">車號（驗車／驗板）<input type="text" id="em_plate" list="wqPlateList" placeholder="KLJ-3207" style="text-transform:uppercase;"></label>
+      <label id="em_settle_wrap">這筆錢怎麼給的<select id="em_settle">
         <option value="">還沒匯款（等主管匯給司機）</option>
         <option value="cash">當場用零用金付掉，不用匯款</option>
         <option value="old">115/07 以前的舊帳，早就匯過了</option>
@@ -682,14 +711,15 @@ async function authFetch(url, options={}){
 //   petty_cash_tainan.html BOOK_LOCK = '台南零用金' → 只看得到台南那一本，其他帳本連載入都不會載入
 // 兩邊寫進去的是同一張 petty_entries 表，所以台南記的帳，順亞這邊立刻看得到。
 var BOOK_LOCK = null; // BUILD:BOOK_LOCK
-// 這一本帳要不要「獨立記磅費」。台南版是 false —— 使用者 115/08/05：
+// 這一本帳要不要「獨立記司機代墊費用」。台南版是 false —— 使用者 115/08/05：
 //「台南零用金的磅費可以拿掉，他們磅費是用零用金支出，不用獨立記磅費」。
-// false 的時候 init() 會呼叫 dropWeighUI() 把磅費分頁、記一筆的磅費格、
-// 編輯視窗的磅費欄位、餘額卡的「本月磅費」全部從 DOM 拿掉。
+// 115/08/06 這一套從「只有磅費」擴大到「磅費／驗車／驗板／其他」，台南照樣整組不要。
+// false 的時候 init() 會呼叫 dropWeighUI() 把代墊費用分頁、記一筆的代墊格、
+// 編輯視窗的代墊欄位、餘額卡的「本月代墊」全部從 DOM 拿掉。
 // ★ 資料庫欄位一格都不動，台南那幾筆舊的 weigh_fee 還在，只是這一頁不顯示也不寫它。
 var WEIGH_TAB = true; // BUILD:WEIGH_TAB
 
-const STATE = { books: [], subjects: [], entries: [], accounts: [], drivers: [] };
+const STATE = { books: [], subjects: [], entries: [], accounts: [], drivers: [], vehicles: [] };
 let CUR_BOOK = null;      // 目前帳本物件
 let EDIT_ID  = null;
 let LOCK_MISSING = false; // 鎖定的帳本在雲端找不到
@@ -799,7 +829,12 @@ async function loadAll(){
   }
   try{ STATE.accounts = await sbSelect('acc_accounts', 'select=*&order=sort_order.asc'); }
   catch(e){ STATE.accounts = []; }
-  // 在職司機名單，給「磅費快速登錄」的下拉用。
+  // 車號名單，給「驗車／驗板」那一欄的下拉用。讀不到就退回讓人自己打，不會讓整頁掛掉。
+  try{
+    const vs = await sbSelect('vehicles', 'select=plate,status,vehicle_category&order=plate.asc');
+    STATE.vehicles = (vs || []).filter(v => v.plate && v.status !== '報廢' && v.status !== '繳銷');
+  }catch(e){ STATE.vehicles = []; }
+  // 在職司機名單，給「代墊費用登錄」的下拉用。
   // 這一頁有登入閘門才敢讀 employees；沒有登入的公開頁面（電動板車預約、尿素登記）刻意不讀這張表。
   // 讀不到就退回只用歷史領款人，不會讓整頁掛掉。
   try{
@@ -851,8 +886,18 @@ function renderSubjectPicker(){
   dl.innerHTML = names.sort().map(n => '<option value="' + esc(n) + '">').join('');
   syncWeighBox();
 }
-// 磅費那一格：選到磅費科目就自動帶入金額；自己動過就不再自動蓋掉
+// 代墊那一格：選到磅費科目就自動帶入金額；自己動過就不再自動蓋掉。
+// 驗車、驗板、其他【不】自動帶，因為那些科目公司自己付掉的居多，
+// 自動帶會讓一堆本來不用還司機的錢跑進「待付」裡，反而要一筆一筆去清。
 var WEIGH_TOUCHED = false;
+// 從科目名稱猜代墊類別，只是給下拉一個預設值，隨時可以改
+function advTypeFromSubject(name){
+  const n = String(name || '');
+  if(n.indexOf('磅費') >= 0) return '磅費';
+  if(n.indexOf('驗板') >= 0 || n.indexOf('半拖車') >= 0) return '驗板';
+  if(n.indexOf('驗車') >= 0 || n.indexOf('定期檢修') >= 0) return '驗車';
+  return '其他';
+}
 function syncWeighBox(){
   const w = $('pc_weigh'), wrap = $('pc_weigh_wrap');
   if(!w) return;
@@ -861,8 +906,15 @@ function syncWeighBox(){
     wrap.style.opacity = on ? '1' : '.5';
     wrap.style.color   = on ? '#7d5624' : '';
   }
-  if(WEIGH_TOUCHED) return;
-  w.value = on ? ($('pc_amount').value || '') : '';
+  if(!WEIGH_TOUCHED) w.value = on ? ($('pc_amount').value || '') : '';
+  // 類別下拉：有填代墊金額才需要它，沒填就歸零，免得存進去一個沒有金額的類別
+  const at = $('pc_advtype');
+  if(at){
+    const has = num(w.value) > 0;
+    at.disabled = !has;
+    if(!has) at.value = '';
+    else if(!at.value) at.value = advTypeFromSubject($('pc_subject').value);
+  }
 }
 function renderBalanceCard(){
   const bal = calcBalance();
@@ -912,11 +964,43 @@ function renderRecent(){
     : '<tr><td colspan="9" class="muted">還沒有資料。</td></tr>';
 }
 
-// ---------- 磅費（司機代墊） ----------
-// 只有「磅費」那一格有填金額（weigh_fee）的才算數。
+// ---------- 司機代墊費用（磅費／驗車／驗板／其他） ----------
+// 只有「代墊金額」那一格有填（weigh_fee）的才算數。
 // 金額（amount）是抽屜實際付出去的錢，餘額永遠以它為準；
-// weigh_fee 只是把「這筆裡面有多少是磅費」標出來，給主管看各司機請了多少，不影響任何餘額。
-function isWeighSubject(name){ return String(name || '').indexOf('磅費') >= 0; }
+// weigh_fee 只是把「這筆裡面有多少是司機先墊的」標出來，給主管看要還他多少，不影響任何餘額。
+//
+// ★ 115/08/06 起這一套不再只管磅費。使用者：「張誌元申請零用金的部份，還會有驗車驗板的
+//   費用，也會有其他的，那幫我重整，但一樣也是批次結清」。
+//   欄位名稱 weigh_fee / weigh_station / weigh_date 刻意沒改 —— 改名要同時動三個網頁和
+//   一整批舊資料，風險遠大於好處。改的是它們的「意思」：
+//     weigh_fee     → 這一筆裡屬於司機代墊的金額（不分類別）
+//     weigh_station → 磅場／檢驗廠／對象
+//     weigh_date    → 費用發生日（過磅日、驗車日…）
+//   類別另外存在 advance_type，車號存在 vehicle_plate（SQL #51 新增的兩欄）。
+const ADV_TYPES = ['磅費','驗車','驗板','其他'];
+// 每一種類別要記到哪一個零用金科目：照這個順序找第一個名字對得上的支出科目。
+// 找不到就退回這本帳的第一個支出科目，並且在畫面上把科目名寫出來讓人確認，不會偷偷記錯。
+const ADV_SUBJ_KEYS = {
+  '磅費': ['代墊磅費','磅費'],
+  '驗車': ['驗車','定期檢修','檢驗','規費'],
+  '驗板': ['驗板','半拖車','定期檢修','驗車'],
+  '其他': ['雜項','其他款項','其他','雜支']
+};
+// 舊資料（SQL #51 還沒跑、或跑之前就記好的）沒有 advance_type，一律當磅費看。
+function advType(e){ return String((e && e.advance_type) || '').trim() || '磅費'; }
+function advSubject(t){
+  const exp = bookSubjects('支出').filter(x => x.is_active !== false);
+  const keys = ADV_SUBJ_KEYS[t] || [];
+  for(let i = 0; i < keys.length; i++){
+    const hit = exp.filter(x => String(x.subject_name).indexOf(keys[i]) >= 0)[0];
+    if(hit) return hit.subject_name;
+  }
+  return (exp[0] || {}).subject_name || '';
+}
+function isWeighSubject(name){
+  const n = String(name || '');
+  return n.indexOf('磅費') >= 0;
+}
 function weighAmt(e){ return e && e.weigh_fee != null && e.weigh_fee !== '' ? num(e.weigh_fee) : 0; }
 function isWeighEntry(e){ return weighAmt(e) > 0; }
 // 司機是誰：優先用領款人；領款人留白時，才從摘要括號裡的中文姓名帶出來（會標示來源，不會偷改資料）
@@ -932,7 +1016,8 @@ function weighTag(e){
   if(!isWeighEntry(e)) return '';
   const w = weighAmt(e);
   const partial = w < num(e.amount) - 0.001;
-  return ' <span class="pill ' + (partial ? 'amber' : 'green') + '">磅費 ' + fmt(w) + (partial ? '（其餘非磅費）' : '') + '</span>';
+  return ' <span class="pill ' + (partial ? 'amber' : 'green') + '">代墊 ' + esc(advType(e)) + ' ' + fmt(w)
+    + (partial ? '（其餘非代墊）' : '') + '</span>';
 }
 // 結清＝已經匯款給司機了。settle_batch 有值就是結清，金額（amount / weigh_fee）永遠不會因為結清而改變。
 function isSettled(e){ return !!(e && e.settle_batch && String(e.settle_batch).trim()); }
@@ -975,7 +1060,23 @@ function wgRowsAll(){
 }
 // 畫面上真正看得到的那些（「只看還沒匯款的」打勾時會濾掉已結清的）
 function wgOpenOnly(){ const el = $('wg_open_only'); return el ? !!el.checked : false; }
-function wgRows(){ return wgRowsAll().filter(e => !(wgOpenOnly() && isSettled(e))); }
+function wgTypeFilter(){ const el = $('wg_type'); return (el && el.value) || 'all'; }
+function wgRows(){
+  const tf = wgTypeFilter();
+  return wgRowsAll()
+    .filter(e => tf === 'all' || advType(e) === tf)
+    .filter(e => !(wgOpenOnly() && isSettled(e)));
+}
+// 各類別小計（用區間內全部的代墊算，不受「類別」下拉影響，這樣才看得出比重）
+function wgByType(){
+  const m = {}; ADV_TYPES.forEach(t => { m[t] = { n:0, amt:0, open:0 }; });
+  wgRowsAll().filter(e => !(wgOpenOnly() && isSettled(e))).forEach(e => {
+    const t = advType(e); if(!m[t]) m[t] = { n:0, amt:0, open:0 };
+    m[t].n++; m[t].amt += weighAmt(e);
+    if(!isSettled(e)) m[t].open += weighAmt(e);
+  });
+  return m;
+}
 // 匯款批次
 function wgBatches(){
   const m = {}, order = [];
@@ -1020,10 +1121,18 @@ function renderWeigh(){
   const tot  = rows.reduce((s,e) => s + weighAmt(e), 0);
   const open = rows.filter(e => !isSettled(e));
   const openAmt = open.reduce((s,e) => s + weighAmt(e), 0);
+  const tf = wgTypeFilter();
   if($('wg_sum')) $('wg_sum').textContent = rows.length
-    ? '這個區間 ' + rows.length + ' 筆，合計 NT$ ' + fmt(tot)
+    ? '這個區間' + (tf === 'all' ? '' : '的' + tf) + ' ' + rows.length + ' 筆，合計 NT$ ' + fmt(tot)
       + (open.length ? '；還沒結清 ' + open.length + ' 筆 NT$ ' + fmt(openAmt) : '；都結清了')
-    : '這個區間沒有磅費。';
+    : (tf === 'all' ? '這個區間沒有代墊費用。' : '這個區間沒有' + tf + '。');
+  // 類別小計那一行：不受「類別」下拉影響，讓人一眼看出這個區間各類別各多少
+  if($('wg_bytype')){
+    const m = wgByType();
+    const parts = ADV_TYPES.filter(t => m[t] && m[t].n).map(t =>
+      t + ' ' + m[t].n + ' 筆 NT$ ' + fmt(m[t].amt) + (m[t].open ? '（未結 ' + fmt(m[t].open) + '）' : ''));
+    $('wg_bytype').textContent = parts.length ? '各類別：' + parts.join('　｜　') : '';
+  }
   const vis = {};
   rows.forEach(e => { vis[e.pe_id] = 1; });
   Object.keys(WG_SEL).forEach(k => { if(!vis[k]) delete WG_SEL[k]; });
@@ -1039,18 +1148,20 @@ function renderWeigh(){
     return '<tr' + (done ? ' style="background:#fbfaf8;"' : '') + '>' +
       '<td>' + (done ? '' : '<input type="checkbox" class="wg-ck" data-pe="' + e.pe_id + '"' + (WG_SEL[e.pe_id] ? ' checked' : '') + ' style="width:16px;height:16px;">') + '</td>' +
       '<td>' + toROC(e.entry_date) + '</td>' +
+      '<td><span class="pill gray">' + esc(advType(e)) + '</span></td>' +
       '<td>' + (e.weigh_date ? toROC(e.weigh_date) : '<span class="muted">—</span>') + '</td>' +
       '<td>' + esc(d.name) + (d.guessed ? ' <span class="pill gray">取自摘要</span>' : '') + '</td>' +
       '<td>' + (e.weigh_station ? esc(e.weigh_station) : '<span class="muted">—</span>') + '</td>' +
+      '<td>' + (e.vehicle_plate ? esc(e.vehicle_plate) : '<span class="muted">—</span>') + '</td>' +
       '<td>' + esc(e.memo) + '</td>' +
       '<td class="num"><strong>' + fmt(weighAmt(e)) + '</strong></td>' +
       '<td>' + settle + '</td>' +
       '<td><button class="btn ghost tiny" data-edit="' + e.pe_id + '">修改</button>' +
         (inBatch ? ' <button class="btn ghost tiny" data-unsettle="' + esc(e.settle_batch) + '">取消</button>' : '') +
       '</td></tr>';
-  }).join('') : '<tr><td colspan="9" class="muted">'
-    + (wgOpenOnly() ? '這個區間沒有還沒結清的磅費。（把上面的「只看還沒結清的」取消勾選，就看得到結清過的）'
-                    : '這個區間沒有磅費紀錄。') + '</td></tr>';
+  }).join('') : '<tr><td colspan="11" class="muted">'
+    + (wgOpenOnly() ? '這個區間沒有還沒結清的代墊費用。（把上面的「只看還沒結清的」取消勾選，就看得到結清過的）'
+                    : '這個區間沒有代墊費用紀錄。') + '</td></tr>';
   if($('wg_ckall')) $('wg_ckall').checked = false;
   wgSelTxt();
 }
@@ -1076,30 +1187,62 @@ function wgDownloadBatch(batch){
   out.push([]);
   out.push(['※ 系統裡沒有存司機的銀行帳號，帳號欄請照人事那邊的資料自行填入。']);
   out.push([]);
-  out.push(['【這一批包含的磅費明細】']);
-  out.push(['司機','記帳日','過磅日','磅場','櫃號','磅費','整筆實付','摘要','單據狀態']);
+  out.push(['【這一批的類別小計】']);
+  out.push(['類別','筆數','金額']);
+  ADV_TYPES.forEach(t => {
+    const r = rows.filter(e => advType(e) === t);
+    if(r.length) out.push([t, r.length, r.reduce((s,e) => s + weighAmt(e), 0)]);
+  });
+  out.push([]);
+  out.push(['【這一批包含的明細】']);
+  out.push(['司機','記帳日','類別','費用日','磅場／檢驗廠','櫃號','車號','代墊金額','整筆實付','摘要','單據狀態']);
   rows.slice().sort((a,b) => String(a.entry_date).localeCompare(String(b.entry_date))).forEach(e =>
-    out.push([weighDriver(e).name, toROC(e.entry_date), toROC(e.weigh_date), e.weigh_station || '',
-              e.container_no || '', weighAmt(e), num(e.amount), e.memo || '', e.status]));
-  download('磅費匯款清單_' + batch + '.csv',
-    csvLines([(CUR_BOOK ? CUR_BOOK.book_name : '零用金') + ' 磅費匯款清單',
+    out.push([weighDriver(e).name, toROC(e.entry_date), advType(e), toROC(e.weigh_date), e.weigh_station || '',
+              e.container_no || '', e.vehicle_plate || '', weighAmt(e), num(e.amount), e.memo || '', e.status]));
+  download('代墊費用匯款清單_' + batch + '.csv',
+    csvLines([(CUR_BOOK ? CUR_BOOK.book_name : '零用金') + ' 司機代墊費用匯款清單',
               '批號 ' + batch + '　匯款日 ' + toROC(day)], out));
 }
 
-// ---------- 磅費快速登錄 ----------
+// ---------- 代墊費用快速登錄 ----------
 const WQ_STATIONS = ['立豐','帆宣','建興','亞東','聯華'];
-let WQ_ROWS = [];   // [{d, st, cn, amt}]
+let WQ_ROWS = [];   // [{t, d, st, cn, amt}]　t = 類別，cn 依類別分別是櫃號／車號／說明
 let WG_SEL  = {};   // pe_id -> true
 // 櫃號固定是 4 個大寫英文 + 7 個數字，例 HMIU7878617
 function wqContainers(v){ return String(v || '').toUpperCase().match(/[A-Z]{4}[0-9]{7}/g) || []; }
-// 摘要照舊格式組：立豐磅費(6/23HMIU7878617)、帆宣磅費(5/8HYCU2210777.HYCU1700527)、亞東磅費
+// 第三欄（cn）在不同類別代表不同東西，這裡統一決定它長什麼樣子
+function wqColSpec(t){
+  if(t === '驗車' || t === '驗板')
+    return { ph:'KLJ-3207', list:'wqPlateList', upper:true,  stPh:'監理站／檢驗廠（可留空）' };
+  if(t === '其他')
+    return { ph:'買了什麼、做了什麼', list:'', upper:false, stPh:'店家／對象（可留空）' };
+  return   { ph:'HMIU7878617',        list:'', upper:true,  stPh:'立豐' };
+}
+// 摘要組法：
+//   磅費　　　　立豐磅費(6/23HMIU7878617)　←　跟以前一模一樣，舊資料格式不變
+//   驗車／驗板　KLJ-3207 驗車(8/6) 監理站
+//   其他　　　　全聯 買清潔用品(8/6)
 function wqMemo(r){
-  const st = String(r.st || '').trim();
-  const cn = wqContainers(r.cn);
-  const d  = r.d ? (parseInt(r.d.slice(5,7), 10) + '/' + parseInt(r.d.slice(8,10), 10)) : '';
-  if(!st && !cn.length && !d && !r.amt) return '';
-  let s = st + '磅費';
-  if(cn.length) s += '(' + d + cn.join('.') + ')';
+  const t   = r.t || '磅費';
+  const st  = String(r.st || '').trim();
+  const raw = String(r.cn || '').trim();
+  const d   = r.d ? (parseInt(r.d.slice(5,7), 10) + '/' + parseInt(r.d.slice(8,10), 10)) : '';
+  if(t === '磅費'){
+    const cn = wqContainers(raw);
+    if(!st && !cn.length && !d && !r.amt) return '';
+    let s = st + '磅費';
+    if(cn.length) s += '(' + d + cn.join('.') + ')';
+    return s;
+  }
+  if(t === '驗車' || t === '驗板'){
+    const pl = raw.toUpperCase();
+    let s = (pl ? pl + ' ' : '') + t;
+    if(d)  s += '(' + d + ')';
+    if(st) s += ' ' + st;
+    return s.trim();
+  }
+  let s = [st, raw].filter(Boolean).join(' ');
+  if(s && d) s += '(' + d + ')';
   return s;
 }
 // 使用者 115/08/05 交代：「目前要匯磅費的只有張誌元而已，其他都是從零用金出」。
@@ -1122,14 +1265,15 @@ function wqSyncHint(){
   const drv = wqCurDriver();
   if(!drv){ el.textContent = ''; return; }
   el.textContent = wqDriverCashDefault(drv)
-    ? '（' + drv + ' 的磅費是當場用零用金的現金付掉的，記進去就算結清了，不用再結一次。）'
-    : '（' + drv + ' 的磅費是他自己先墊的，記進去會留在下面等你批次結清。）';
+    ? '（' + drv + ' 的錢是當場用零用金的現金付掉的，記進去就算結清了，不用再結一次。）'
+    : '（' + drv + ' 是他自己先墊的，記進去會留在下面等你批次結清。磅費、驗車、驗板、其他可以混著記，結清的時候一起勾。）';
 }
 function wqCurDriver(){
   const sel = $('wq_driver'); return sel ? sel.value : '';
 }
 function wqEnsureRows(){
-  while(WQ_ROWS.length < 3) WQ_ROWS.push({ d:'', st:'', cn:'', amt:'' });
+  while(WQ_ROWS.length < 3) WQ_ROWS.push({ t:'磅費', d:'', st:'', cn:'', amt:'' });
+  WQ_ROWS.forEach(r => { if(!r.t) r.t = '磅費'; });
 }
 function renderWqDriver(){
   const sel = $('wq_driver'); if(!sel) return;
@@ -1168,33 +1312,55 @@ function renderWqDriver(){
   STATE.entries.forEach(e => { if(e.weigh_station) st[e.weigh_station] = 1; });
   if($('wqStationList')) $('wqStationList').innerHTML =
     Object.keys(st).map(n => '<option value="' + esc(n) + '">').join('');
+  // 車號下拉（驗車／驗板用）：在役車輛 ＋ 以前記過的車號，打得出來的也可以自己打
+  const pl = {};
+  (STATE.vehicles || []).forEach(v => { if(v.plate) pl[v.plate] = 1; });
+  STATE.entries.forEach(e => { if(e.vehicle_plate) pl[e.vehicle_plate] = 1; });
+  if($('wqPlateList')) $('wqPlateList').innerHTML =
+    Object.keys(pl).sort().map(n => '<option value="' + esc(n) + '">').join('');
   wqSyncHint();
 }
-// 記磅費要用哪一個科目：這本帳裡名字有「磅費」的支出科目優先，沒有就用第一個支出科目。
-// 使用者說「做簡單一點」，所以畫面上不再有科目下拉，改成存檔時自己挑。
-function wqSubject(){
-  const exp = bookSubjects('支出').filter(x => x.is_active !== false);
-  const w = exp.filter(x => isWeighSubject(x.subject_name));
-  return ((w[0] || exp[0] || {}).subject_name) || '';
-}
+// 記代墊要用哪一個科目：依類別去 ADV_SUBJ_KEYS 找名字對得上的支出科目。
+// 使用者說「做簡單一點」，所以畫面上不再有科目下拉，改成依類別自己挑；
+// 但挑到哪一個會寫在每一行的類別下面，看到不對可以先去「帳本與科目」補一個科目。
+function wqSubject(t){ return advSubject(t || '磅費'); }
 function renderWq(){
   if(!$('wqRows')) return;
   wqEnsureRows();
   $('wqRows').innerHTML = WQ_ROWS.map((r, i) => {
-    const cn = wqContainers(r.cn);
-    const bad = String(r.cn || '').trim() && !cn.length;
+    const t    = r.t || '磅費';
+    const spec = wqColSpec(t);
+    const raw  = String(r.cn || '').trim();
+    const subj = wqSubject(t);
+    // 第三欄的提示：磅費看櫃號認不認得出來，驗車驗板提醒車號沒填
+    let note = '';
+    if(t === '磅費'){
+      const cn = wqContainers(raw);
+      if(raw && !cn.length) note = '<div class="muted" style="color:var(--red);">看不出櫃號（要 4 個英文字母＋7 個數字）</div>';
+      else if(cn.length > 1) note = '<div class="muted">' + esc(cn.join('、')) + '（' + cn.length + ' 櫃）</div>';
+    }
     return '<tr>' +
+      '<td><select data-wq="t" data-i="' + i + '" style="width:100%;">' +
+        ADV_TYPES.map(x => '<option value="' + x + '"' + (x === t ? ' selected' : '') + '>' + x + '</option>').join('') +
+        '</select>' +
+        (subj ? '<div class="muted" style="font-size:11px;margin-top:3px;">記到「' + esc(subj) + '」</div>'
+              : '<div class="muted" style="font-size:11px;margin-top:3px;color:var(--red);">這本帳沒有支出科目</div>') +
+      '</td>' +
       '<td><input type="date" data-wq="d" data-i="' + i + '" value="' + esc(r.d) + '" style="width:100%;"></td>' +
-      '<td><input type="text" list="wqStationList" data-wq="st" data-i="' + i + '" value="' + esc(r.st) + '" placeholder="立豐" style="width:100%;"></td>' +
-      '<td><input type="text" data-wq="cn" data-i="' + i + '" value="' + esc(r.cn) + '" placeholder="HMIU7878617" style="width:100%;text-transform:uppercase;">' +
-        (bad ? '<div class="muted" style="color:var(--red);">看不出櫃號（要 4 個英文字母＋7 個數字）</div>'
-             : (cn.length > 1 ? '<div class="muted">' + esc(cn.join('、')) + '（' + cn.length + ' 櫃）</div>' : '')) + '</td>' +
+      '<td><input type="text" list="wqStationList" data-wq="st" data-i="' + i + '" value="' + esc(r.st) + '" placeholder="' + esc(spec.stPh) + '" style="width:100%;"></td>' +
+      '<td><input type="text" data-wq="cn" data-i="' + i + '"' + (spec.list ? ' list="' + spec.list + '"' : '') +
+        ' value="' + esc(r.cn) + '" placeholder="' + esc(spec.ph) + '" style="width:100%;' + (spec.upper ? 'text-transform:uppercase;' : '') + '">' +
+        note + '</td>' +
       '<td class="num"><input type="number" step="1" data-wq="amt" data-i="' + i + '" value="' + esc(r.amt) + '" style="width:100%;text-align:right;"></td>' +
       '<td>' + (WQ_ROWS.length > 1 ? '<button class="del-btn" data-wqdel="' + i + '">刪除</button>' : '') + '</td></tr>';
   }).join('');
   const use = WQ_ROWS.filter(r => num(r.amt) > 0);
+  const by  = {};
+  use.forEach(r => { const t = r.t || '磅費'; by[t] = (by[t] || 0) + num(r.amt); });
+  const bits = ADV_TYPES.filter(t => by[t]).map(t => t + ' ' + fmt(by[t]));
   $('wq_sum').textContent = use.length
     ? '會記 ' + use.length + ' 筆，合計 NT$ ' + fmt(use.reduce((s,r) => s + num(r.amt), 0))
+      + (bits.length > 1 ? '（' + bits.join('、') + '）' : '')
     : '還沒有可以記的資料。';
 }
 
@@ -1531,6 +1697,8 @@ function openEdit(id){
   if($('em_station')) $('em_station').value = e.weigh_station || '';
   if($('em_wdate'))   $('em_wdate').value   = String(e.weigh_date || '').slice(0,10);
   if($('em_cno'))     $('em_cno').value     = e.container_no || '';
+  if($('em_plate'))   $('em_plate').value   = e.vehicle_plate || '';
+  if($('em_advtype')) $('em_advtype').value = weighAmt(e) > 0 ? advType(e) : '';
   if($('em_settle')){
     const inBatch = isTransferred(e) && !isOldPaid(e);
     $('em_settle').value = isCashPaid(e) ? 'cash' : isOldPaid(e) ? 'old' : '';
@@ -1581,7 +1749,7 @@ function wire(){
     $('pc_amount').focus();
   };
   $('pc_clear').onclick = () => {
-    ['pc_amount','pc_memo','pc_payee','pc_purpose','pc_weigh'].forEach(id => { if($(id)) $(id).value = ''; });
+    ['pc_amount','pc_memo','pc_payee','pc_purpose','pc_weigh','pc_advtype'].forEach(id => { if($(id)) $(id).value = ''; });
     WEIGH_TOUCHED = false; syncWeighBox();
     $('pc_msg').textContent = '';
   };
@@ -1594,16 +1762,17 @@ function wire(){
       if(!$('pc_date').value) throw new Error('請填日期');
       if(!$('pc_subject').value) throw new Error('請選科目');
       const wf = num($('pc_weigh') ? $('pc_weigh').value : 0);
-      if(wf < 0) throw new Error('磅費不能是負數');
-      if(wf > amt) throw new Error('磅費 ' + fmt(wf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
-      if(wf > 0 && curDir() === '收入') throw new Error('磅費是司機代墊的支出，收入這一邊不用填磅費');
+      if(wf < 0) throw new Error('代墊金額不能是負數');
+      if(wf > amt) throw new Error('代墊 ' + fmt(wf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
+      if(wf > 0 && curDir() === '收入') throw new Error('代墊是司機先墊的支出，收入這一邊不用填');
       msg.textContent = '存檔中…';
       const row = {
         book_id: CUR_BOOK.book_id, entry_date: $('pc_date').value, direction: curDir(),
         subject_name: $('pc_subject').value, memo: $('pc_memo').value || null, amount: amt,
         payee: $('pc_payee').value || null, purpose: $('pc_purpose').value || null,
         status: $('pc_status').value,
-        weigh_fee: wf > 0 ? wf : null
+        weigh_fee: wf > 0 ? wf : null,
+        advance_type: wf > 0 ? (($('pc_advtype') && $('pc_advtype').value) || advTypeFromSubject($('pc_subject').value)) : null
       };
       const saved = await sbInsert('petty_entries', row);
       STATE.entries.push(saved);
@@ -1626,8 +1795,8 @@ function wire(){
       const amt = num($('em_amount').value);
       if(amt <= 0) throw new Error('金額要大於 0');
       const emwf = num($('em_weigh') ? $('em_weigh').value : 0);
-      if(emwf < 0) throw new Error('磅費不能是負數');
-      if(emwf > amt) throw new Error('磅費 ' + fmt(emwf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
+      if(emwf < 0) throw new Error('代墊金額不能是負數');
+      if(emwf > amt) throw new Error('代墊 ' + fmt(emwf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
       msg.textContent = '存檔中…';
       const patch = {
         entry_date: $('em_date').value, direction: $('em_dir').value, subject_name: $('em_subject').value,
@@ -1639,6 +1808,10 @@ function wire(){
       //   不然使用者去改一筆台南的舊磅費，一按存檔就會把資料庫裡的 weigh_fee 洗成 null。
       if($('em_weigh')){
         patch.weigh_fee     = emwf > 0 ? emwf : null;
+        patch.advance_type  = emwf > 0
+          ? ((($('em_advtype') && $('em_advtype').value) || advTypeFromSubject($('em_subject').value)))
+          : null;
+        patch.vehicle_plate = ($('em_plate') && $('em_plate').value.trim().toUpperCase()) || null;
         patch.weigh_station = ($('em_station') && $('em_station').value.trim()) || null;
         patch.weigh_date    = ($('em_wdate') && $('em_wdate').value) || null;
         patch.container_no  = ($('em_cno') && wqContainers($('em_cno').value).join('、')) || null;
@@ -1659,14 +1832,18 @@ function wire(){
 
   // ----- 磅費 -----
   if($('pc_weigh')){
-    $('pc_weigh').oninput  = () => { WEIGH_TOUCHED = true; };
+    $('pc_weigh').oninput  = () => { WEIGH_TOUCHED = true; syncWeighBox(); };
     $('pc_amount').oninput = syncWeighBox;
     $('pc_subject').onchange = syncWeighBox;
   }
-  // ----- 磅費快速登錄 -----
+  // ----- 代墊費用登錄 -----
   if($('wq_driver')){
     $('wq_driver').onchange = wqSyncHint;
-    $('wq_addrow').onclick = () => { WQ_ROWS.push({ d:'', st:'', cn:'', amt:'' }); renderWq(); };
+    // 再加一行的時候沿用上一行的類別，連續記同一種比較順手
+    $('wq_addrow').onclick = () => {
+      const last = WQ_ROWS[WQ_ROWS.length - 1];
+      WQ_ROWS.push({ t:(last && last.t) || '磅費', d:'', st:'', cn:'', amt:'' }); renderWq();
+    };
     $('wq_clear').onclick  = () => { WQ_ROWS = []; wqEnsureRows(); renderWq(); $('wq_msg').textContent = ''; };
     $('wqRows').addEventListener('input', ev => {
       const el = ev.target.closest('[data-wq]'); if(!el) return;
@@ -1677,6 +1854,14 @@ function wire(){
       $('wq_sum').textContent = use.length
         ? '會記 ' + use.length + ' 筆，合計 NT$ ' + fmt(use.reduce((s,x) => s + num(x.amt), 0))
         : '還沒有可以記的資料。';
+    });
+    // 類別是下拉，換了就整張重畫（右邊三欄的提示與科目都要跟著換）。
+    // 文字欄不能這樣做，會打一個字就失焦，所以上面那個 input 監聽只重算合計。
+    $('wqRows').addEventListener('change', ev => {
+      const el = ev.target.closest('[data-wq="t"]'); if(!el) return;
+      const i = parseInt(el.dataset.i, 10); if(!WQ_ROWS[i]) return;
+      WQ_ROWS[i].t = el.value;
+      renderWq();
     });
     $('wqRows').addEventListener('click', ev => {
       const b = ev.target.closest('[data-wqdel]'); if(!b) return;
@@ -1691,8 +1876,6 @@ function wire(){
         if(!drv) throw new Error('請先選司機');
         const date = $('wq_date').value;
         if(!date) throw new Error('請填記帳日');
-        const subj = wqSubject();
-        if(!subj) throw new Error('這本帳還沒有支出科目，要先到「帳本與科目」新增一個「磅費」科目');
         const stt  = '已入帳';
         // 這位司機是不是當場零用金付掉的，看他過去的紀錄（張誌元＝要匯款）
         const cash = wqDriverCashDefault(drv);
@@ -1700,22 +1883,35 @@ function wire(){
         WQ_ROWS.forEach((r, i) => {
           const any = String(r.d || '') + String(r.st || '') + String(r.cn || '') + String(r.amt || '');
           if(!any) return;
+          const t   = r.t || '磅費';
+          const raw = String(r.cn || '').trim();
           const amt = num(r.amt);
           if(amt <= 0) throw new Error('第 ' + (i+1) + ' 行的金額要大於 0');
-          if(!r.d)     throw new Error('第 ' + (i+1) + ' 行沒填過磅日');
-          if(String(r.cn || '').trim() && !wqContainers(r.cn).length)
+          if(!r.d)     throw new Error('第 ' + (i+1) + ' 行沒填日期');
+          if(!wqSubject(t))
+            throw new Error('這本帳還沒有可以記「' + t + '」的支出科目，要先到「帳本與科目」新增一個');
+          if(t === '磅費' && raw && !wqContainers(raw).length)
             throw new Error('第 ' + (i+1) + ' 行的櫃號看不出來，格式是 4 個英文字母＋7 個數字，例 HMIU7878617');
+          if((t === '驗車' || t === '驗板') && !raw)
+            throw new Error('第 ' + (i+1) + ' 行是' + t + '，請填車號（例 KLJ-3207），不然事後查不出是哪一台');
+          if(t === '其他' && !raw)
+            throw new Error('第 ' + (i+1) + ' 行是其他，請在「說明」寫一下這筆是什麼，不然摘要會空白');
           use.push(r);
         });
         if(!use.length) throw new Error('沒有可以記的資料，至少要填一行');
         msg.textContent = '存檔中…';
         const rows = use.map(r => {
-          const cn = wqContainers(r.cn);
+          const t   = r.t || '磅費';
+          const raw = String(r.cn || '').trim();
+          const cn  = t === '磅費' ? wqContainers(raw) : [];
+          const pl  = (t === '驗車' || t === '驗板') ? raw.toUpperCase() : '';
           return {
             book_id: CUR_BOOK.book_id, entry_date: date, direction: '支出',
-            subject_name: subj, memo: wqMemo(r) || null, amount: num(r.amt),
+            subject_name: wqSubject(t), memo: wqMemo(r) || null, amount: num(r.amt),
             payee: drv, purpose: null, status: stt,
             weigh_fee: num(r.amt),
+            advance_type: t,
+            vehicle_plate: pl || null,
             weigh_station: String(r.st || '').trim() || null,
             weigh_date: r.d,
             container_no: cn.length ? cn.join('、') : null,
@@ -1726,10 +1922,13 @@ function wire(){
         const saved = await sbInsertMany('petty_entries', rows);
         saved.forEach(x => STATE.entries.push(x));
         const tot = rows.reduce((s,r) => s + num(r.amount), 0);
+        const tally = {};
+        rows.forEach(r => { tally[r.advance_type] = (tally[r.advance_type] || 0) + 1; });
+        const tallyTxt = ADV_TYPES.filter(t => tally[t]).map(t => t + ' ' + tally[t] + ' 筆').join('、');
         WQ_ROWS = []; wqEnsureRows();
         renderAll();
         msg.style.color = '#3F7D44';
-        msg.textContent = '已記入 ' + saved.length + ' 筆，' + drv + ' 合計 NT$ ' + fmt(tot)
+        msg.textContent = '已記入 ' + saved.length + ' 筆（' + tallyTxt + '），' + drv + ' 合計 NT$ ' + fmt(tot)
           + '，餘額 NT$ ' + fmt(calcBalance())
           + (cash ? '。（零用金付掉，直接算結清）' : '。（在下面等你批次結清）');
       }catch(e){ msg.style.color = '#b3261e'; msg.textContent = '失敗：' + e.message; }
@@ -1737,6 +1936,7 @@ function wire(){
   }
   if($('wg_from')){
     ['wg_from','wg_to'].forEach(id => { $(id).onchange = renderWeigh; });
+    if($('wg_type')) $('wg_type').onchange = renderWeigh;
     $('wg_open_only').onchange = renderWeigh;
     $('wg_m').onclick   = () => { $('wg_from').value = thisMonth() + '-01'; $('wg_to').value = todayISO(); renderWeigh(); };
     $('wg_all').onclick = () => { $('wg_from').value = ''; $('wg_to').value = ''; renderWeigh(); };
@@ -1985,11 +2185,12 @@ function dropWeighUI(){
   // 側邊選單的「磅費」按鈕與整個分頁
   const nav = document.querySelector('.sidebar nav button[data-tab="weigh"]'); if(nav) nav.remove();
   const tab = $('weigh'); if(tab) tab.remove();
-  // 記一筆的「磅費（司機代墊）」那一格、餘額卡的「本月磅費」、編輯視窗的五個磅費欄位
-  ['pc_weigh_wrap','pcMonthWeighWrap','em_weigh_wrap','em_station_wrap','em_wdate_wrap',
-   'em_cno_wrap','em_settle_wrap'].forEach(id => { const el = $(id); if(el) el.remove(); });
+  // 記一筆的代墊那兩格、餘額卡的「本月代墊」、編輯視窗的代墊欄位
+  ['pc_weigh_wrap','pc_advtype_wrap','pcMonthWeighWrap','em_weigh_wrap','em_advtype_wrap',
+   'em_station_wrap','em_wdate_wrap','em_cno_wrap','em_plate_wrap','em_settle_wrap']
+    .forEach(id => { const el = $(id); if(el) el.remove(); });
   // 摘要範例別再舉磅費當例子
-  const memo = $('pc_memo'); if(memo) memo.placeholder = '例：加油、KLJ-3207 驗車';
+  const memo = $('pc_memo'); if(memo) memo.placeholder = '例：加油、辦公室清潔';
 }
 
 // 鎖定單一帳本的版本：把帳本切換、跨帳本比較、新增帳本這些藏起來
@@ -2021,7 +2222,7 @@ async function init(){
     return;
   }
   if(BOOK_LOCK) lockUI();
-  if(!WEIGH_TAB) dropWeighUI();   // 台南：磅費用零用金付掉，不獨立記
+  if(!WEIGH_TAB) dropWeighUI();   // 台南：代墊都用零用金當場付掉，不獨立記
   $('pc_date').value = todayISO();
   $('rf_date').value = todayISO();
   $('mo_month').value = thisMonth();
