@@ -563,6 +563,20 @@
     </div>
 
     <div class="card">
+      <h2>待賣出車輛<span class="count-badge" id="fleet_pending_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">在「編輯車輛」把「賣出/報廢/繳銷原因」選成「待賣出」的車會移到這裡，不再出現在上面的車輛清單／板架清單。<b>這些車仍然算在役</b>——保險、保養、驗車、里程、油耗一切照舊統計與提醒，不會因為掛了待賣出就漏掉。真的賣掉之後，把狀態改成「報廢」或「繳銷」，就會往上移到「車輛/板架歷史」。</div>
+      <div class="toolbar">
+        <input id="fleet_pending_search" placeholder="搜尋車號">
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>類別</th><th>車型</th><th>公司別</th><th>發車地</th><th>狀態</th><th>預計賣出日期</th><th></th></tr></thead>
+          <tbody id="pendingSaleTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>新增車輛保險</h2>
       <div class="form-grid">
         <label>車號
@@ -3357,6 +3371,16 @@ function isRetiredVehicle(v){
   return !!v && (v.status === '報廢' || v.status === '繳銷');
 }
 
+// ===== 「待賣出」：車還在，只是在等買主 =====
+// 刻意「不」算進 isRetiredVehicle()。還沒過戶之前保險、保養、驗車、里程、油耗
+// 都要照常跑，若併進退場車輛，這些到期提醒會整台消失，賣掉之前反而出事。
+// 所以它只影響「車輛管理」分頁的清單位置：從車輛清單／板架清單移到
+// 「車輛/板架歷史」下方的「待賣出車輛」，不跟真正在跑的車混在一起。
+// 真的賣掉之後，把狀態改成「報廢」或「繳銷」，就會照原本的流程進歷史區。
+function isPendingSaleVehicle(v){
+  return !!v && !isRetiredVehicle(v) && v.retirement_reason === '待賣出';
+}
+
 // 統計一台車底下還掛著多少筆關聯紀錄（全部都是用 vehicle_id 關聯）
 function countVehicleLinks(vid){
   const groups = [
@@ -3883,9 +3907,10 @@ function renderVehicleModalEdit(v){
       <label>加油卡號<input id="ve_fuel_card" value="${esc(v.fuel_card_no||'')}"></label>
       <label>ETC標籤編號<input id="ve_etc" value="${esc(v.etc_tag_no||'')}"></label>
       <label>賣出/報廢/繳銷日期（狀態選報廢或繳銷時填寫；日期不可考就留白，留白不會被歷史區的一年期限藏起來）<input id="ve_retire_date" type="date" value="${esc(v.retirement_date||'')}"></label>
-      <label>賣出/報廢/繳銷原因
+      <label>賣出/報廢/繳銷原因（選「待賣出」的車還沒賣掉，仍算在役：保險、保養、驗車、里程提醒都照常跑，只是清單位置會從「車輛清單／板架清單」移到「車輛/板架歷史」下方的「待賣出車輛」）
         <select id="ve_retire_reason">
           <option value="" ${!v.retirement_reason?'selected':''}>未設定</option>
+          <option value="待賣出" ${v.retirement_reason==='待賣出'?'selected':''}>待賣出</option>
           <option value="賣出" ${v.retirement_reason==='賣出'?'selected':''}>賣出</option>
           <option value="報廢" ${v.retirement_reason==='報廢'?'selected':''}>報廢</option>
           <option value="繳銷" ${v.retirement_reason==='繳銷'?'selected':''}>繳銷</option>
@@ -4180,7 +4205,7 @@ function renderFleetTable(){
   const statusFilter = document.getElementById('fleet_status_filter').value;
   const fleetQ = document.getElementById('fleet_search').value.trim();
   const vehicleRows = STATE.vehicles.filter(v =>
-    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && (statusFilter==='all' || v.status===statusFilter) &&
+    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v) && (statusFilter==='all' || v.status===statusFilter) &&
     (!fleetQ || (v.plate||'').includes(fleetQ) || (v.company_name||'').includes(fleetQ) || (v.base_location||'').includes(fleetQ))
   );
   document.getElementById('fleet_vehicle_count').textContent = `共 ${vehicleRows.length} 台`;
@@ -4201,7 +4226,7 @@ function renderFleetTable(){
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
   const trailerQ = document.getElementById('trailer_search').value.trim();
   const trailerRows = STATE.vehicles.filter(v =>
-    v.vehicle_category==='板架' && !isRetiredVehicle(v) && (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
+    v.vehicle_category==='板架' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v) && (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
     (!trailerQ || (v.plate||'').includes(trailerQ) || (v.company_name||'').includes(trailerQ) || (v.base_location||'').includes(trailerQ))
   );
   document.getElementById('fleet_trailer_count').textContent = `共 ${trailerRows.length} 台`;
@@ -4238,6 +4263,27 @@ function renderFleetTable(){
       <td>${esc(v.retirement_date||'—')}</td>
       <td><button class="name-link" data-view-vehicle="${v.id}">查看</button></td>
     </tr>`).join('') || `<tr><td colspan="7" class="empty">${retiredShowAll ? '目前沒有賣出/報廢/繳銷的車輛' : '近一年沒有賣出/報廢/繳銷的車輛（勾「顯示全部」可以看更早的）'}</td></tr>`;
+
+  // 待賣出車輛：位置放在歷史資料下方，但身分還是在役車
+  const _penQEl = document.getElementById('fleet_pending_search');
+  const pendingQ = ((_penQEl && _penQEl.value) || '').trim();
+  const pendingRows = STATE.vehicles.filter(v =>
+    isPendingSaleVehicle(v) && (!pendingQ || (v.plate||'').includes(pendingQ))
+  );
+  const _penCnt = document.getElementById('fleet_pending_count');
+  if(_penCnt) _penCnt.textContent = `共 ${pendingRows.length} 台`;
+  const _penBody = document.getElementById('pendingSaleTableBody');
+  if(_penBody) _penBody.innerHTML = pendingRows.map(v => `
+    <tr>
+      <td><button class="name-link" data-view-vehicle="${v.id}">${esc(v.plate)}</button></td>
+      <td>${esc(v.vehicle_category||'')}</td>
+      <td>${esc(v.vehicle_type||'')}</td>
+      <td>${esc(v.company_name||'')}</td>
+      <td>${esc(v.base_location||'')}</td>
+      <td>${esc(v.status)} <span class="pill gray">待賣出</span></td>
+      <td>${esc(v.retirement_date||'—')}</td>
+      <td><button class="name-link" data-view-vehicle="${v.id}">查看</button></td>
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有待賣出的車輛</td></tr>`;
 }
 
 function renderMaintenanceTables(){
@@ -7651,6 +7697,8 @@ document.getElementById('trailer_search').addEventListener('input', renderFleetT
   if(_rsa) _rsa.addEventListener('change', renderFleetTable);
   const _rs = document.getElementById('fleet_retired_search');
   if(_rs) _rs.addEventListener('input', renderFleetTable);
+  const _ps = document.getElementById('fleet_pending_search');
+  if(_ps) _ps.addEventListener('input', renderFleetTable);
 }
 document.getElementById('vi_plate').addEventListener('change', updateViAutoFields);
 document.getElementById('vi_insurer').addEventListener('change', (e) => {
