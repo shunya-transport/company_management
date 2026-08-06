@@ -313,13 +313,14 @@
     <div class="toolbar" style="margin-bottom:6px;">
       <label class="inline"><input type="radio" name="pcDir" value="支出" checked> 支出（花錢）</label>
       <label class="inline"><input type="radio" name="pcDir" value="收入"> 收入（收錢／撥補）</label>
+      <span id="pcDirHint" class="muted" style="font-size:12px;"></span>
     </div>
     <div id="pcSubjBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 16px;"></div>
     <div class="form-grid">
       <label>日期<input type="date" id="pc_date"></label>
       <label>科目<select id="pc_subject"></select></label>
       <label>金額<input type="number" id="pc_amount" min="0" step="1" placeholder="0"></label>
-      <label>領款人<input type="text" id="pc_payee" list="payeeList" placeholder="例：李奕樺"></label>
+      <label><span id="pc_payee_lb">領款人</span><input type="text" id="pc_payee" list="payeeList" placeholder="例：李奕樺"></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="pc_memo" placeholder="例：聯華磅費、KLJ-3207 驗車"></label>
       <label>單據狀態<select id="pc_status"><option>已入帳</option><option>待補單據</option></select></label>
       <label>用途／備註<input type="text" id="pc_purpose" placeholder="可留空"></label>
@@ -856,14 +857,41 @@ function renderBookPick(){
 
 // ---------- 記一筆 ----------
 function curDir(){ const el = document.querySelector('input[name="pcDir"]:checked'); return el ? el.value : '支出'; }
+// 收入跟支出的畫面用字要分開，不然「領款人」在收入那邊意思剛好相反
+// （收入是別人把錢交進來，填的是交款人，不是領款人）
+function applyDirUI(dir){
+  const inc = dir === '收入';
+  const lb = $('pc_payee_lb'); if(lb) lb.textContent = inc ? '交款人／來源' : '領款人';
+  const pe = $('pc_payee');    if(pe) pe.placeholder = inc ? '例：公司匯款、王小明退還' : '例：李奕樺';
+  const me = $('pc_memo');
+  if(me) me.placeholder = inc ? '例：公司撥補現金、退還多領的代墊款'
+                              : (WEIGH_TAB ? '例：聯華磅費、KLJ-3207 驗車' : '例：加油、辦公室清潔');
+  const bt = $('pc_add');
+  if(bt) bt.textContent = inc ? '記入這一筆收入' : '記入這一筆';
+  const hint = $('pcDirHint');
+  if(hint) hint.textContent = inc ? '收入＝抽屜裡的錢變多（撥補、退款、代收轉付都算）'
+                                  : '支出＝抽屜裡的錢變少';
+  const card = bt ? bt.closest('.card') : null;
+  if(card) card.style.borderLeft = inc ? '4px solid #2e7d5b' : '';
+}
+// 直接跳到「帳本與科目」那一頁，收支別先幫忙選好，游標停在名稱欄
+function gotoNewSubject(dir){
+  const nav = document.querySelector('.sidebar nav button[data-tab="setup"]');
+  if(nav) nav.click();
+  if($('ss_dir'))  $('ss_dir').value = dir;
+  if($('ss_name')) $('ss_name').focus();
+}
 function renderSubjectPicker(){
   const dir = curDir();
   const list = bookSubjects(dir).filter(s => s.is_active !== false);
   $('pc_subject').innerHTML = bookSubjects(dir).map(s =>
     '<option value="' + esc(s.subject_name) + '"' + (s.is_active === false ? ' data-off="1"' : '') + '>' + esc(s.subject_name) + (s.is_active === false ? '（停用）' : '') + '</option>').join('');
-  $('pcSubjBtns').innerHTML = list.map(s =>
-    '<button class="btn ghost tiny subj-btn" data-s="' + esc(s.subject_name) + '">' + esc(s.subject_name) + '</button>').join('') ||
-    '<span class="muted">這本帳還沒有' + dir + '科目，請到「帳本與科目」新增。</span>';
+  const btns = list.map(s =>
+    '<button class="btn ghost tiny subj-btn" data-s="' + esc(s.subject_name) + '">' + esc(s.subject_name) + '</button>').join('');
+  $('pcSubjBtns').innerHTML =
+    (btns || '<span class="muted">這本帳還沒有' + dir + '科目，按右邊那顆虛線按鈕就能自己加一個。</span>') +
+    '<button class="btn ghost tiny" id="pcNewSubj" style="border-style:dashed;opacity:.8;">＋ 新增' + dir + '科目</button>';
+  applyDirUI(dir);
   const dl = $('payeeList');
   const seen = {}; const names = [];
   STATE.entries.forEach(e => { if(e.payee && !seen[e.payee]){ seen[e.payee] = 1; names.push(e.payee); } });
@@ -1725,6 +1753,7 @@ function wire(){
     r.onchange = () => { WEIGH_TOUCHED = false; renderSubjectPicker(); };
   });
   $('pcSubjBtns').onclick = ev => {
+    if(ev.target.closest('#pcNewSubj')){ gotoNewSubject(curDir()); return; }
     const b = ev.target.closest('.subj-btn'); if(!b) return;
     $('pc_subject').value = b.dataset.s;
     document.querySelectorAll('.subj-btn').forEach(x => x.classList.remove('active'));
@@ -1765,6 +1794,7 @@ function wire(){
       const saved = await sbInsert('petty_entries', row);
       STATE.entries.push(saved);
       $('pc_amount').value = ''; $('pc_memo').value = ''; $('pc_purpose').value = '';
+      if(curDir() === '收入') $('pc_payee').value = '';   // 收入的交款人每次都不一樣，不要留著
       if($('pc_weigh')) $('pc_weigh').value = '';
       WEIGH_TOUCHED = false;
       renderWeigh();
@@ -2181,8 +2211,9 @@ function dropWeighUI(){
   //   已經直接從 HTML 拿掉了，兩本帳都沒有，不用再列在這裡。）
   ['pcMonthWeighWrap','em_weigh_wrap','em_advtype_wrap','em_wdate_wrap']
     .forEach(id => { const el = $(id); if(el) el.remove(); });
-  // 摘要範例別再舉磅費當例子
+  // 摘要範例別再舉磅費當例子（收入那一邊的用字由 applyDirUI() 接手）
   const memo = $('pc_memo'); if(memo) memo.placeholder = '例：加油、辦公室清潔';
+  applyDirUI(curDir());
 }
 
 // 鎖定單一帳本的版本：把帳本切換、跨帳本比較、新增帳本這些藏起來
