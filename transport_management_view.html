@@ -1307,7 +1307,7 @@
 
     <div class="card">
       <h2>特休天數清冊<span class="count-badge" id="leave_ledger_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">「特休總天數」「剩餘」依「目前實際年資」直接對照勞基法級距表計算（不做跨年度的提前比例折算）；「已用」則是計算目前這個特休年度（到職第一年為到職週年制，隔年起改曆年制）內已請的特休天數。僅供參考，實際特休天數如涉及留職停薪、年資追溯等特殊狀況，請人工核對。</div>
+      <div class="muted" style="margin-bottom:10px;">「特休總天數」優先採用請假系統當年度核定的天數（已含年資追溯、復職前累計年資等狀況，該列會標「○○年度核定」）；查不到核定值時才依目前實際年資對照勞基法級距表估算，該列會標「依年資估算」。「已用」一律從假單即時累計，所以會比巨集檔的統計新。補休以小時計，請假是以天登錄，換算時已對齊到 0.5 小時。</div>
       <div class="toolbar"><input id="leave_search" placeholder="搜尋姓名"></div>
       <div class="table-scroll">
         <table>
@@ -2617,6 +2617,7 @@ const TABLE_MAP = {
   grease_records: {table:'grease_records', pk:'record_id'},
   instruments: {table:'instruments', pk:'instrument_id'},
   insurance_changes: {table:'insurance_change_records', pk:'record_id'},
+  annual_leave_yearly: {table:'annual_leave_yearly', pk:'id'},
   leave_records: {table:'leave_records', pk:'record_id'},
   lessees: {table:'lessees', pk:'lessee_id'},
   maint_records: {table:'maintenance_records', pk:'record_id'},
@@ -3069,6 +3070,7 @@ async function loadState(){
   STATE.vehicleEquipment = await safeGet('vehicle_equipment', [], true);
   STATE.medicalKitItems = await safeGet('medical_kit_items', SEED.medical_kit_items || [], true);
   STATE.annualLeaveTiers = SEED.annual_leave_tiers || [];
+  STATE.annualLeaveYearly = await safeGet('annual_leave_yearly', SEED.annual_leave_yearly || [], true);
   STATE.leaveRecords = await safeGet('leave_records', SEED.leave_records || [], true);
   STATE.overtimeRecords = await safeGet('overtime_records', SEED.overtime_records || [], true);
   STATE.maintRecords = await safeGet('maint_records', SEED.maint_records || [], true);
@@ -3790,10 +3792,17 @@ function compHoursEarned(employeeId){
     .filter(r => r.employee_id===employeeId && r.settlement_type==='補休')
     .reduce((sum,r) => sum + (parseFloat(r.hours)||0), 0));
 }
+// 請假是用「天」登錄的，補休 3.5 小時會被存成 0.438 天（3.5/8 取到小數第三位），
+// 乘回 8 是 3.504 不是 3.5，一筆一筆累加誤差就跑出來了（已用 17.01、剩餘 9.99）。
+// 加班那邊是用「小時」登錄，一律是 0.5 的倍數，所以換算完對齊到最近的 0.5 小時
+// 就會剛好還原成當初輸入的數字。
+function hoursFromDays(days){
+  return Math.round((parseFloat(days)||0) * 8 * 2) / 2;
+}
 function compHoursUsed(employeeId){
   return fmt2(STATE.leaveRecords
     .filter(r => r.employee_id===employeeId && (r.leave_type||'').trim()==='補休')
-    .reduce((sum,r) => sum + (parseFloat(r.days)||0)*8, 0));
+    .reduce((sum,r) => sum + hoursFromDays(r.days), 0));
 }
 function compHoursRemaining(employeeId){
   return fmt2(compHoursEarned(employeeId) - compHoursUsed(employeeId));
@@ -7757,13 +7766,30 @@ function renderAccessCardLedger(){
     </tr>`).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+// 當年度公司核定的特休（來自請假系統巨集檔「特休統計」那張表）。
+// 裡面已經把年資追溯、復職前累計年資、上年度未休這些特殊狀況算進去了，
+// 比用「今天的實際年資」直接對勞基法級距表估來得準。查不到才退回估算。
+function annualLeaveApproved(emp){
+  const list = STATE.annualLeaveYearly || [];
+  if(!list.length || !emp) return null;
+  const yr = Number(todayISO().slice(0, 4)) - 1911;   // 民國年＝西元年 - 1911
+  const hit = list.find(a => Number(a.year_roc) === yr && (
+        (emp.employee_no && a.employee_no && String(a.employee_no).trim() === String(emp.employee_no).trim())
+     || (a.employee_id != null && String(a.employee_id) === String(emp.id))
+     || (a.employee_name_raw && a.employee_name_raw === emp.name)));
+  if(!hit) return null;
+  const days = parseFloat(hit.leave_days);
+  if(isNaN(days)) return null;
+  return { days, seniority: hit.seniority, prior: hit.prior_years, year: yr };
+}
 function renderLeaveLedger(){
   const q = document.getElementById('leave_search').value.trim();
   let rows = STATE.employees;
   if(q) rows = rows.filter(e => (e.name||'').includes(q));
   document.getElementById('leave_ledger_count').textContent = `共 ${rows.length} 人`;
   document.getElementById('leaveLedgerBody').innerHTML = rows.map(e => {
-    const days = currentPeriodLeaveDays(e.hire_date);
+    const approved = annualLeaveApproved(e);
+    const days = approved ? approved.days : currentPeriodLeaveDays(e.hire_date);
     const years = tenureYears(e.hire_date);
     const used = days===null ? null : annualLeaveUsed(e.id, e.hire_date);
     const remaining = days===null ? null : fmt2(days - used);
@@ -7775,8 +7801,10 @@ function renderLeaveLedger(){
       <td>${esc(e.employee_no)}</td>
       <td>${esc(e.dept_name||'')}</td>
       <td>${esc(e.hire_date||'—')}</td>
-      <td>${years===null ? '—' : years.toFixed(1)+' 年'}</td>
-      <td>${days===null ? '<span class="pill gray">無到職日資料</span>' : `${days} 天`}</td>
+      <td>${years===null ? '—' : years.toFixed(1)+' 年'}${approved && approved.prior ? `<div class="muted" style="font-size:11px;">含追溯 ${esc(approved.prior)} 年</div>` : ''}</td>
+      <td>${days===null ? '<span class="pill gray">無到職日資料</span>'
+            : approved ? `${days} 天<div class="muted" style="font-size:11px;">${approved.year} 年度核定</div>`
+                       : `${days} 天<div class="muted" style="font-size:11px;">依年資估算</div>`}</td>
       <td>${used===null ? '—' : used+' 天'}</td>
       <td>${remaining===null ? '—' : `<b>${remaining} 天</b>（約${(remaining*8).toFixed(2)}小時）`}</td>
       <td>${compEarned}</td>
