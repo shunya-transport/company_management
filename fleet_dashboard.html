@@ -986,6 +986,7 @@
         <label>廠商<input id="mr_vendor" placeholder="可留空，之後再補" list="vendorList" autocomplete="off"></label>
         <label>費用<input id="mr_cost" type="number" min="0" step="1" placeholder="可留空，之後再補"></label>
         <label>發票號碼<input id="mr_invoice" placeholder="可留空，之後再補"></label>
+        <label>發票日期<input id="mr_invoice_date" type="date"></label>
         <label>內容說明<input id="mr_desc" placeholder="例：機油、來令片更換"></label>
         <label>更換零件名稱<input id="mr_parts" placeholder="選填，例：機油芯、來令片"></label>
       </div>
@@ -2278,6 +2279,7 @@
       <label>廠商<input id="me_vendor" list="vendorList" autocomplete="off" placeholder="可留空"></label>
       <label>費用<input id="me_cost" type="number" min="0" step="1" placeholder="可留空"></label>
       <label>發票號碼<input id="me_invoice" placeholder="可留空"></label>
+      <label>發票日期<input id="me_invoice_date" type="date"></label>
       <label>內容說明<input id="me_desc" placeholder="例：機油、來令片更換"></label>
       <label>更換零件名稱<input id="me_parts" placeholder="選填"></label>
       <label>狀態
@@ -6869,9 +6871,13 @@ function maintCostCell(r, scope, editing){
     : `<td>${(r.cost==null||r.cost==='') ? '—' : '$'+esc(r.cost)}</td>`;
 }
 function maintInvoiceCell(r, scope, editing){
+  // 發票日期跟發票號碼放同一格：號碼在上、日期在下面一行小字。
+  // 一張發票常常涵蓋好幾張維修單（廠商月結），所以日期是跟著發票走，不是保修那天。
+  const _d = String(r.invoice_date || '').slice(0, 10);
   return editing
-    ? `<td><input id="mre_invoice_${scope}_${esc(r.id)}" value="${esc(r.invoice_no||'')}" placeholder="發票號碼" style="width:120px"></td>`
-    : `<td>${esc(r.invoice_no||'—')}</td>`;
+    ? `<td><input id="mre_invoice_${scope}_${esc(r.id)}" value="${esc(r.invoice_no||'')}" placeholder="發票號碼" style="width:120px">
+        <input id="mre_invdate_${scope}_${esc(r.id)}" type="date" value="${esc(_d)}" title="發票日期" style="width:130px;margin-top:4px"></td>`
+    : `<td>${esc(r.invoice_no||'—')}${_d ? `<div class="muted" style="font-size:12px;">${esc(_d)}</div>` : ''}</td>`;
 }
 function maintEditButtons(r, scope, editing){
   return editing
@@ -6880,6 +6886,9 @@ function maintEditButtons(r, scope, editing){
 }
 // 維修申請人：這次維修／保養是誰提出來的。
 // 人離職以後名字還是要查得到，所以 id 與姓名兩個都存（跟打油的回報人同一套做法）。
+// 修改視窗申請人下拉的特殊值：選這個代表「這筆的申請人是很久以前離職的人，
+// 員工主檔已經查不到，只剩姓名」，存檔時原封不動保留。
+const MAINT_KEEP_NAME = '__keep_name__';
 function maintApplicantCandidates(){
   return (STATE.employees||[]).filter(e => e.status === '在職')
     .slice().sort((a,b)=> String(a.name||'').localeCompare(String(b.name||'')));
@@ -6905,7 +6914,7 @@ function maintApplicantLabel(r){
 //   2. 有填里程的話，新增時會順手寫一筆里程登錄
 let maintEditId = null;
 
-function renderMaintEditApplicantOptions(cur){
+function renderMaintEditApplicantOptions(cur, curName){
   const el = document.getElementById('me_applicant');
   if(!el) return;
   const list = maintApplicantCandidates();
@@ -6916,6 +6925,17 @@ function renderMaintEditApplicantOptions(cur){
   if(cur != null && cur !== '' && !list.some(e => String(e.id) === String(cur))){
     const _e = (STATE.employees||[]).find(x => String(x.id) === String(cur));
     html += `<option value="${esc(cur)}">${esc(_e ? _e.name : '編號 ' + cur)}（已離職）</option>`;
+    el.innerHTML = html;
+    el.value = String(cur);
+    return;
+  }
+  // 更早以前離職、員工主檔裡連人都沒有了，只剩下一個姓名的舊資料：
+  // 給它一個「保留原本姓名」的選項，存檔時原封不動，不要把歷史洗掉。
+  if((cur == null || cur === '') && curName){
+    html += `<option value="${MAINT_KEEP_NAME}">${esc(curName)}（已離職，保留原紀錄）</option>`;
+    el.innerHTML = html;
+    el.value = MAINT_KEEP_NAME;
+    return;
   }
   el.innerHTML = html;
   el.value = (cur == null) ? '' : String(cur);
@@ -6940,10 +6960,12 @@ function openMaintEditModal(id){
   document.getElementById('me_vendor').value  = r.vendor_name || '';
   document.getElementById('me_cost').value    = (r.cost == null || r.cost === '') ? '' : r.cost;
   document.getElementById('me_invoice').value = r.invoice_no || '';
+  const _mid = document.getElementById('me_invoice_date');
+  if(_mid) _mid.value = String(r.invoice_date||'').slice(0,10);
   document.getElementById('me_desc').value    = d;
   document.getElementById('me_parts').value   = r.parts_replaced || '';
   document.getElementById('me_status').value  = maintStatusOf(r);
-  renderMaintEditApplicantOptions(r.requested_by);
+  renderMaintEditApplicantOptions(r.requested_by, r.requested_by_name);
   const _t = document.getElementById('maintEditModalTitle');
   if(_t) _t.textContent = '修改維修保養記錄　' + (r.plate||'') + '　' + String(r.maintenance_date||'').slice(0,10);
   document.getElementById('maintEditModal').classList.add('show');
@@ -6985,7 +7007,8 @@ async function saveMaintEdit(){
   const descRaw   = document.getElementById('me_desc').value.trim();
   const parts     = document.getElementById('me_parts').value.trim();
   const _apEl  = document.getElementById('me_applicant');
-  const _apId  = _apEl && _apEl.value ? parseInt(_apEl.value) : null;
+  const _apKeep = !!(_apEl && _apEl.value === MAINT_KEEP_NAME);
+  const _apId  = (_apEl && _apEl.value && !_apKeep) ? parseInt(_apEl.value) : null;
   const _apEmp = _apId ? (STATE.employees||[]).find(e => e.id === _apId) : null;
 
   const _oldPlate   = rec.plate;
@@ -7004,11 +7027,15 @@ async function saveMaintEdit(){
   rec.vendor_name = vendorName || '';
   rec.cost = cost;
   rec.invoice_no = invoiceNo || null;
+  const _midEl = document.getElementById('me_invoice_date');
+  if(_midEl) rec.invoice_date = _midEl.value || null;
   rec.description = (type==='小保養'||type==='大保養') ? `${type}：${descRaw}` : descRaw;
   rec.parts_replaced = parts || null;
   if(_apId){
     rec.requested_by = _apId;
     if(_apEmp) rec.requested_by_name = _apEmp.name;
+  }else if(_apKeep){
+    // 選的是「保留原紀錄」，requested_by / requested_by_name 一律不動
   }else{
     rec.requested_by = null;
     rec.requested_by_name = null;
@@ -7128,6 +7155,7 @@ async function maintBodyClick(e){
     const vEl = document.getElementById('mre_vendor_' + scope + '_' + saveId);
     const cEl = document.getElementById('mre_cost_' + scope + '_' + saveId);
     const iEl = document.getElementById('mre_invoice_' + scope + '_' + saveId);
+    const idEl = document.getElementById('mre_invdate_' + scope + '_' + saveId);
     const vendorName = vEl ? vEl.value.trim() : '';
     const costRaw = cEl ? String(cEl.value).trim() : '';
     const invoiceNo = iEl ? iEl.value.trim() : '';
@@ -7147,6 +7175,7 @@ async function maintBodyClick(e){
     rec.vendor_name = vendorName || '';
     rec.cost = costRaw === '' ? null : parseFloat(costRaw);
     rec.invoice_no = invoiceNo || null;
+    if(idEl) rec.invoice_date = idEl.value || null;
     if(maintLooksComplete(rec)){
       rec.status = MAINT_ST_DONE;
     }else{
@@ -11371,6 +11400,8 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   const cost = _costRaw === '' ? null : parseFloat(_costRaw);
   const _invEl = document.getElementById('mr_invoice');
   const invoiceNo = _invEl ? _invEl.value.trim() : '';
+  const _invDEl = document.getElementById('mr_invoice_date');
+  const invoiceDate = _invDEl ? (_invDEl.value || null) : null;
   const desc = document.getElementById('mr_desc').value.trim();
   const partsEl = document.getElementById('mr_parts');
   const parts = partsEl ? partsEl.value.trim() : '';
@@ -11386,7 +11417,7 @@ document.getElementById('mr_add').addEventListener('click', async () => {
     id: nextId(STATE.maintRecords), plate: _mv.plate, vehicle_id: _mv.id, maintenance_type: recordType,
     maintenance_date: date, mileage_at_service: mileage,
     vendor_id: _vendorId, vendor_name: vendorName || null,
-    description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, invoice_no: invoiceNo || null,
+    description: (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc, parts_replaced: parts || null, cost, invoice_no: invoiceNo || null, invoice_date: invoiceDate,
     requested_by: _apId, requested_by_name: _apEmp ? _apEmp.name : null,
     status: (cost == null) ? '待補資料' : '已完成',
     created_at: new Date().toISOString()
