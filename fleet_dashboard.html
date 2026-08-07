@@ -4070,6 +4070,8 @@ function leaveHours(r){
 }
 // 時數換算成天數，顯示用，取到小數第 2 位
 function leaveDaysOf(r){ return Math.round(leaveHours(r) / LEAVE_HOURS_PER_DAY * 100) / 100; }
+// 請假是以半小時為單位，不是 0.5 的倍數多半是誤填（例如把天數 0.1 填到時數欄）
+function isHalfHour(h){ const v = parseFloat(h); return !isNaN(v) && Math.abs(v * 2 - Math.round(v * 2)) < 1e-9; }
 function daysFromHours(h){ return Math.round((parseFloat(h)||0) / LEAVE_HOURS_PER_DAY * 10000) / 10000; }
 function compHoursUsed(employeeId){
   return fmt2(STATE.leaveRecords
@@ -9006,7 +9008,7 @@ function renderLeaveTable(){
       <td>${esc(r.leave_type)}</td>
       <td>${esc(r.start_date)}</td>
       <td>${esc(r.end_date)}</td>
-      <td><b>${fmt2(leaveHours(r))}</b> 小時</td>
+      <td${isHalfHour(leaveHours(r)) ? '' : ' style="background:var(--amber-bg);" title="時數不是 0.5 的倍數，可能是把天數填到時數欄了"'}><b>${fmt2(leaveHours(r))}</b> 小時${isHalfHour(leaveHours(r)) ? '' : ' <span class="pill amber">請確認</span>'}</td>
       <td>${daysCell}</td>
       <td class="muted">${esc(r.notes||'')}</td>
       <td><button class="del-btn" data-del-leave="${r.id}">刪除</button></td>
@@ -10134,6 +10136,12 @@ document.getElementById('lv_add').addEventListener('click', async () => {
     hours = (Math.round((d2-d1)/86400000) + 1) * LEAVE_HOURS_PER_DAY;
   }
   if(hours <= 0){ alert('時數要大於 0。'); return; }
+  // 請假一律以半小時為單位。0.1、0.3 這種通常是把「天數」誤填到時數欄，
+  // 曾渝芬那兩筆 0.1 天就是這樣變成 0.8 小時的，這裡先問一次。
+  if(!isHalfHour(hours) && !confirm('你填的是 ' + hours + ' 小時，不是 0.5 的倍數。\n\n'
+      + '請假通常以半小時為單位（0.5、1、1.5、…）。\n'
+      + '如果你想填的是「天」，1 天請填 8、半天請填 4、1 小時請填 1。\n\n確定要用 '
+      + hours + ' 小時存檔嗎？')) return;
   STATE.leaveRecords.push({
     id: nextId(STATE.leaveRecords), employee_id: empId,
     leave_type: document.getElementById('lv_type').value,
