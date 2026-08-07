@@ -114,6 +114,14 @@
   }
   td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
   tbody tr:hover td{background:#fffaf0;}
+  /* 請假／加班登錄清單專用。日期不能被折成兩行，所以日期整欄 nowrap；
+     姓名與備註字小一點、左右留白縮一點，把寬度讓給日期。 */
+  table.lvot-table th, table.lvot-table td{padding-left:9px;padding-right:9px;}
+  table.lvot-table th{white-space:nowrap;}
+  table.lvot-table .c-nw{white-space:nowrap;}
+  table.lvot-table .c-name{font-size:12px;white-space:nowrap;}
+  table.lvot-table .c-note{font-size:11.5px;line-height:1.45;}
+  table.lvot-table .c-days{font-size:12.5px;white-space:nowrap;}
   tr:last-child td{border-bottom:none;}
   .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
   .pill.red{background:var(--red-bg);color:var(--red);}
@@ -1311,7 +1319,7 @@
         <select id="lv_type_filter"><option value="all">全部假別</option></select>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="lvot-table">
           <thead><tr><th>編號</th><th>姓名</th><th>假別</th><th>起始日期</th><th>結束日期</th><th>時數</th><th>天數<span class="muted" style="font-weight:400;">（÷8）</span></th><th>備註</th><th></th></tr></thead>
           <tbody id="leaveTableBody"></tbody>
         </table>
@@ -1362,7 +1370,7 @@
         <select id="ot_type_filter"><option value="all">全部類別</option></select>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="lvot-table">
           <thead><tr><th>編號</th><th>姓名</th><th>類別</th><th>日期</th><th>時數</th><th>時數級距</th><th>轉換方式</th><th>備註</th><th></th></tr></thead>
           <tbody id="overtimeTableBody"></tbody>
         </table>
@@ -8662,18 +8670,19 @@ function renderLeaveTable(){
     if(r.leave_type.trim()==='特休' && emp){
       const remaining = annualLeaveRemaining(emp.id, emp.hire_date, r.start_date);
       if(remaining!==null){
-        daysCell += ` <span class="muted">（剩特休 ${remaining} 天，約${(remaining*8).toFixed(2)}小時）</span>`;
+        // 原本跟天數擠同一行，整張表最寬的就是這一段，日期因此被擠到折行。
+        daysCell += `<div class="muted" style="font-size:11px;white-space:nowrap;">剩特休 ${remaining} 天（${(remaining*8).toFixed(2)} 小時）</div>`;
       }
     }
     return `<tr>
-      <td>${esc(r.reg_no || ('#'+r.id))}</td>
-      <td>${esc(displayName)}${tag}</td>
-      <td>${esc(r.leave_type)}</td>
-      <td>${esc(r.start_date)}</td>
-      <td>${esc(r.end_date)}</td>
-      <td${isHalfHour(leaveHours(r)) ? '' : ' style="background:var(--amber-bg);" title="時數不是 0.5 的倍數，可能是把天數填到時數欄了"'}><b>${fmt2(leaveHours(r))}</b> 小時${isHalfHour(leaveHours(r)) ? '' : ' <span class="pill amber">請確認</span>'}</td>
-      <td>${daysCell}</td>
-      <td class="muted">${esc(r.notes||'')}</td>
+      <td class="c-nw">${esc(r.reg_no || ('#'+r.id))}</td>
+      <td class="c-name">${esc(displayName)}${tag}</td>
+      <td class="c-nw">${esc(r.leave_type)}</td>
+      <td class="c-nw">${esc(r.start_date)}</td>
+      <td class="c-nw">${esc(r.end_date)}</td>
+      <td class="c-nw"${isHalfHour(leaveHours(r)) ? '' : ' style="background:var(--amber-bg);" title="時數不是 0.5 的倍數，可能是把天數填到時數欄了"'}><b>${fmt2(leaveHours(r))}</b> 小時${isHalfHour(leaveHours(r)) ? '' : ' <span class="pill amber">請確認</span>'}</td>
+      <td class="c-days">${daysCell}</td>
+      <td class="muted c-note">${esc(r.notes||'')}</td>
       <td style="white-space:nowrap;"><button class="name-link" data-edit-leave="${r.id}">修改</button>
           <button class="del-btn" data-del-leave="${r.id}" style="margin-left:8px;">刪除</button></td>
     </tr>`;
@@ -8746,17 +8755,17 @@ function renderOvertimeTable(){
           const pill = settlement==='補休' ? `<span class="pill green">補休</span>`
             : settlement==='加班費' ? `<span class="pill amber">加班費</span>`
             : `<span class="pill gray">未設定</span>`;
-          return `${pill} <button class="name-link" data-edit-settle="${r.id}">修改</button>`;
+          return `${pill} <button class="name-link" data-edit-settle="${r.id}" title="只改轉換方式，不用開修改窗">改</button>`;
         })();
     return `<tr>
-      <td>${esc(r.reg_no || ('#'+r.id))}</td>
-      <td>${esc(displayName)}${tag}</td>
-      <td>${esc(r.ot_type||'')}</td>
-      <td>${esc(r.ot_date)}</td>
-      <td>${fmt2(r.hours)??''}</td>
-      <td class="muted" style="font-size:12px;">${otTierText(r)}</td>
-      <td>${settlementCell}</td>
-      <td class="muted">${esc(r.notes||'')}</td>
+      <td class="c-nw">${esc(r.reg_no || ('#'+r.id))}</td>
+      <td class="c-name">${esc(displayName)}${tag}</td>
+      <td class="c-nw">${esc(r.ot_type||'')}</td>
+      <td class="c-nw">${esc(r.ot_date)}</td>
+      <td class="c-nw">${fmt2(r.hours)??''}</td>
+      <td class="muted c-note" style="font-size:11.5px;">${otTierText(r)}</td>
+      <td class="c-nw">${settlementCell}</td>
+      <td class="muted c-note">${esc(r.notes||'')}</td>
       <td style="white-space:nowrap;"><button class="name-link" data-edit-ot="${r.id}">修改</button>
           <button class="del-btn" data-del-overtime="${r.id}" style="margin-left:8px;">刪除</button></td>
     </tr>`;
