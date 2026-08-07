@@ -6047,6 +6047,8 @@ const MS_DEFS = {
     title: '血壓量測紀錄表',
     subs: ['血壓值', '脈膊'],
     slash: true,                 // 血壓值格子預印「/」，方便寫 120/80
+    // 血壓值要寫「120/80」，脈膊只寫兩三位數，所以左寬右窄
+    nameW: 9.0, subW: [8.2, 4.8],
     rows: 14,
     signLabel: '運務組管理者簽名：',
     formNo: '表單編號：DGTT-P011-R03-01',
@@ -6063,6 +6065,7 @@ const MS_DEFS = {
     title: '酒測量測紀錄表',
     subs: ['上班前', '下班後'],
     slash: false,
+    nameW: 8.6, subW: [6.53, 6.53],   // 上班前／下班後一樣寬
     rows: 15,
     signLabel: '運務組管理者簽核:',
     formNo: '表單編號: DGTT-P011-R04--01',
@@ -6122,7 +6125,7 @@ function buildMeasureSheets(kind){
   const roc    = y - 1911;
   const period = `${roc}年${String(m).padStart(2, '0')}月`;
   // 一張 A4 橫式（794px 高）扣掉抬頭、說明區與簽名後，大概剩這麼多給資料列
-  const rowH = Math.max(15, Math.min(34, Math.floor(452 / rowCount)));
+  const rowH = Math.max(15, Math.min(34, Math.floor(436 / rowCount)));
   const BD  = '1px solid #000';
   const KAI = "'標楷體','DFKai-SB','BiauKai','Kaiti TC','楷体',serif";
 
@@ -6131,7 +6134,7 @@ function buildMeasureSheets(kind){
     const dowRow  = MS_DOW.map(w => `<th colspan="2" style="border:${BD};padding:1px 2px;font-size:13px;font-weight:400;height:19px;background:#fff;text-align:center;color:#000;letter-spacing:0;">${w}</th>`).join('');
     const subRow  = days.map(() => def.subs.map(t => `<th style="border:${BD};padding:1px 0;font-size:12px;font-weight:400;background:#fff;text-align:center;color:#000;letter-spacing:0;">${t}</th>`).join('')).join('');
     // 左上角那格是斜線分隔的「測值／姓名」，用背景漸層畫那條斜線
-    const diag = `<td style="border:${BD};padding:0;position:relative;height:30px;background:linear-gradient(to right bottom,transparent calc(50% - 0.6px),#000 calc(50% - 0.6px),#000 calc(50% + 0.6px),transparent calc(50% + 0.6px));">
+    const diag = `<td style="border:${BD};padding:0;position:relative;height:30px;background:linear-gradient(to top right,transparent calc(50% - 0.6px),#000 calc(50% - 0.6px),#000 calc(50% + 0.6px),transparent calc(50% + 0.6px));">
       <div style="position:absolute;right:3px;top:1px;font-size:11.5px;">測值</div>
       <div style="position:absolute;left:3px;bottom:1px;font-size:11.5px;">姓名</div></td>`;
     let body = '';
@@ -6146,7 +6149,7 @@ function buildMeasureSheets(kind){
     const noteRow = `<tr>
       <td style="border:${BD};text-align:center;font-size:12.5px;padding:0;vertical-align:middle;color:#000;">說明</td>
       <td colspan="14" style="border:${BD};padding:3px 6px;font-size:11px;line-height:1.4;text-align:left;color:#000;">${def.notes.map(n => `<div>${esc(n)}</div>`).join('')}</td></tr>`;
-    const colgroup = `<colgroup><col style="width:8.6%;">${days.map(() => '<col style="width:6.53%;"><col style="width:6.53%;">').join('')}</colgroup>`;
+    const colgroup = `<colgroup><col style="width:${def.nameW}%;">${days.map(() => `<col style="width:${def.subW[0]}%;"><col style="width:${def.subW[1]}%;">`).join('')}</colgroup>`;
     return `<div class="ms-sheet" data-png-width="1123" data-png-height="794"
       data-sheet-name="${esc(def.title + '_' + region + '_' + roc + '年' + String(m).padStart(2,'0') + '月_第' + (idx + 1) + '週')}"
       style="font-family:${KAI};color:#000;${idx ? 'page-break-before:always;margin-top:26px;' : ''}">
@@ -6165,8 +6168,11 @@ function buildMeasureSheets(kind){
         ${body}
         ${noteRow}
       </table>
-      <div style="font-size:13px;margin-top:6px;">${esc(def.signLabel)}<span style="display:inline-block;width:180px;border-bottom:1px solid #000;">&#160;</span></div>
-      <div style="font-size:12px;text-align:right;margin-top:1px;">${esc(def.formNo)}</div>
+      <div style="display:flex;align-items:flex-end;font-size:13px;margin-top:8px;height:38px;">
+        <span style="padding-bottom:2px;">${esc(def.signLabel)}</span>
+        <span style="display:inline-block;width:220px;height:36px;border-bottom:1px solid #000;">&#160;</span>
+      </div>
+      <div style="font-size:12px;text-align:right;margin-top:2px;">${esc(def.formNo)}</div>
     </div>`;
   };
 
