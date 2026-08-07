@@ -600,6 +600,31 @@ async function supaFetchAll(path){
 
 // ===== 載入失敗保護:記住哪些資料沒讀成功,避免用備援資料覆蓋雲端 =====
 const LOAD_FAILED = new Set();
+
+// ===== 存檔失敗還原 =====
+// 每一份清單都留一份「雲端最後確認過的樣子」。存檔失敗時原地還原，
+// 這樣剛才新增但沒存成功的那一筆就不會賴在畫面上；否則排除問題後再按一次儲存，
+// 會變成兩筆一模一樣的資料（維修保養的「待補資料」就這樣被存成兩筆過）。
+const LAST_GOOD = {};
+function rememberGood(key, arr){
+  if(!Array.isArray(arr)) return;
+  try{ LAST_GOOD[key] = arr.map(r => Object.assign({}, r)); }catch(e){ /* 記不起來就算了，不影響存檔 */ }
+}
+// 原地還原：不換陣列物件，STATE.xxx 的參照才不會斷掉
+function restoreGood(key, arr){
+  const good = LAST_GOOD[key];
+  if(!good || !Array.isArray(arr)) return false;
+  arr.length = 0;
+  good.forEach(r => arr.push(Object.assign({}, r)));
+  return true;
+}
+function rollbackAfterFail(key, arr){
+  const ok = restoreGood(key, arr);
+  if(ok && typeof renderAll === 'function'){
+    try{ renderAll(); }catch(e){ console.error('rollback render failed', e); }
+  }
+  return ok;
+}
 function showStorageWarning(detail){
   const el = document.getElementById('storageWarning');
   if(!el) return;
@@ -612,10 +637,14 @@ async function safeGet(key, fallback, shared){
   try{
     const rows = await supaFetchAll(`${map.table}?select=*&order=${map.pk}.asc`);
     if(!rows) return fallback;
-    return rows.map(r => ({...r, id: r[map.pk]}));
+    const _mapped = rows.map(r => ({...r, id: r[map.pk]}));
+    rememberGood(key, _mapped);
+    return _mapped;
   }catch(e){
     console.error('safeGet failed for', key, e);
     LOAD_FAILED.add(key);
+    // 讀失敗時畫面上顯示的是備援資料，就把備援資料當成「目前確認過的樣子」
+    rememberGood(key, fallback);
     showStorageWarning('「' + key + '」讀取失敗,畫面顯示的是內建備援資料,請「不要存檔」以免覆蓋雲端。錯誤訊息:' + (e && e.message ? e.message : e));
     return fallback;
   }
@@ -752,12 +781,14 @@ async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
   if(LOAD_FAILED.has(key)){
+    rollbackAfterFail(key, value);
     alert('「' + key + '」這份資料在開啟頁面時沒有讀取成功,目前畫面上是內建備援資料。\n\n為了避免覆蓋或刪除雲端的正確資料,這次不會存檔。\n請先重新整理頁面,確認上方紅色警告消失後再操作。');
     throw new Error('資料未成功載入,已阻止存檔以保護雲端資料');
   }
   {
     const _bad = checkRequired(map.table, value);
     if(_bad){
+      rollbackAfterFail(key, value);
       alert('資料不完整,沒有存檔。\n\n有 ' + _bad.count + ' 筆資料缺少必填欄位:\n' + _bad.names.join('\n') +
             '\n\n如果是車號或人員,通常代表您打的名稱不在系統清單裡(例如只打了車牌後四碼)。\n請點一下輸入框,從下拉建議清單直接選取正確的名稱。\n\n您輸入的內容仍在畫面上,修正後再按一次即可。');
       throw new Error('必填欄位未填:' + _bad.names.join(','));
@@ -804,11 +835,16 @@ async function saveState(key, value, shared){
       }
       await supaFetch(`${map.table}?${map.pk}=in.(${idsToDelete.join(',')})`, { method:'DELETE' });
     }
+    rememberGood(key, value);   // 這一份已經跟雲端一致了，下次失敗就還原成這個樣子
   }catch(err){
     console.error('saveState failed for', key, err);
+    // 把清單還原成雲端目前的樣子。沒還原的話，剛才那一筆會留在畫面上，
+    // 排除問題後再按一次儲存就會變成兩筆。
+    const _rolled = rollbackAfterFail(key, value);
     showStorageWarning('「' + key + '」存檔失敗:' + (err && err.message ? err.message : err));
-    alert('無法儲存資料到雲端資料庫。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
-          '\n\n您剛才輸入的內容仍在畫面上，請「不要重新整理」，先排除問題後再按一次儲存。');
+    alert('無法儲存資料到雲端資料庫，這次完全沒有寫入。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
+          (_rolled ? '\n\n下面的清單已經還原成雲端目前的內容，不會多出一筆。' : '') +
+          '\n\n您剛才填在表單欄位裡的內容仍在畫面上，請「不要重新整理」，先排除問題後再按一次儲存。');
     throw err;
   }
 }
