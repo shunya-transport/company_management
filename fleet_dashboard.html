@@ -1338,6 +1338,10 @@
             <option value="接種特休假">接種特休假</option>
             <option value="疫苗接種假">疫苗接種假</option>
             <option value="防疫隔離假">防疫隔離假</option>
+            <option value="家庭照顧假">家庭照顧假</option>
+            <option value="產檢假">產檢假</option>
+            <option value="無薪假">無薪假</option>
+            <option value="曠職">曠職</option>
             <option value="其他">其他</option>
           </select>
         </label>
@@ -2144,6 +2148,7 @@
             <option value="equipment_list">物品領用清單</option>
             <option value="pension_contribution">勞健保提撥計算表</option>
             <option value="personal_leave">個人請假清單</option>
+            <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
             <option value="employer_ins_el">僱主險（團保）名冊 — 已加保人員（EL 格式）</option>
             <option value="employer_ins_en">僱主險（團保）名冊 — 全體在職人員（EN 格式）</option>
             <option value="contact_roster">人員通訊資料（依區別分組）</option>
@@ -2162,6 +2167,7 @@
       <div class="form-grid" id="form_extra"></div>
       <button class="btn" id="form_generate">產生表單</button>
       <button class="btn ghost no-print" id="form_print" style="display:none;">列印</button>
+      <button class="btn ghost no-print" id="form_png" style="display:none;">下載圖片（PNG）</button>
       <button class="btn ghost no-print" id="form_export_csv" style="display:none;">匯出 Excel（CSV）</button>
     </div>
 
@@ -6265,6 +6271,11 @@ const EXTRA_FIELDS = {
   ],
   employer_ins_el: [{id:'ex_roster_date', label:'名冊製表日期（空白＝今天）', type:'date'}],
   employer_ins_en: [{id:'ex_roster_date', label:'名冊製表日期（空白＝今天）', type:'date'}],
+  leave_slip: [
+    {id:'ex_slip_mode', label:'列印方式', type:'select', opts:['空白（手寫用）','帶入已登錄的假單']},
+    {id:'ex_slip_year', label:'年度（民國，空白＝今年）', type:'number', placeholder:'例：115'},
+    {id:'ex_slip_rows', label:'列數（空白＝6 列）', type:'number', placeholder:'例：6'}
+  ],
   personal_leave: [
     {id:'ex_leave_mode', label:'顯示方式', type:'select', opts:['依月','依年']},
     {id:'ex_leave_month', label:'月份（顯示方式選"依月"時使用）', type:'month'},
@@ -6467,6 +6478,137 @@ function buildStocktake(scope){
     </table>`;
 }
 
+// ===== 請假單（A4 橫式）=====
+// 版面照公司現行的紙本：抬頭是個人資料，中間 12 欄的簽核表格，最下面四條備註。
+// 特休總天數取當年度公司核定值（跟特休天數清冊同一個來源），沒有核定值才用年資估算。
+const SLIP_REASONS = [['特休','公假','事假','病假'], ['喪假','婚假','產假','陪產假']];
+function slipRocDate(iso){
+  if(!iso) return '';
+  const y = Number(String(iso).slice(0,4)) - 1911;
+  return y + '/' + Number(String(iso).slice(5,7)) + '/' + Number(String(iso).slice(8,10));
+}
+function slipReasonCell(picked){
+  const mark = (t) => `<span style="white-space:nowrap;">${picked === t ? '☑' : '☐'}${t}</span>`;
+  const other = picked && !SLIP_REASONS.flat().includes(picked);
+  return `<div style="line-height:1.9;font-size:10.5px;">
+    <div style="display:flex;gap:6px;">${SLIP_REASONS[0].map(mark).join('')}</div>
+    <div style="display:flex;gap:6px;">${SLIP_REASONS[1].map(mark).join('')}</div>
+    <div>${other ? '☑' : '☐'}其他<span style="display:inline-block;min-width:52px;border-bottom:1px solid #333;text-align:center;">${other ? esc(picked) : ''}</span></div>
+  </div>`;
+}
+function slipTimeCell(r){
+  const ln = (v) => `<span style="display:inline-block;min-width:22px;border-bottom:1px solid #333;text-align:center;">${v || ''}</span>`;
+  const m = (d) => d ? Number(String(d).slice(5,7)) : '';
+  const dd = (d) => d ? Number(String(d).slice(8,10)) : '';
+  return `<div style="line-height:2;font-size:10.5px;white-space:nowrap;">
+    <div>自${ln(m(r && r.start_date))}月${ln(dd(r && r.start_date))}日${ln('')}:${ln('')}</div>
+    <div>至${ln(m(r && r.end_date))}月${ln(dd(r && r.end_date))}日${ln('')}:${ln('')}</div>
+    <div>共請假<span style="display:inline-block;min-width:48px;border-bottom:1px solid #333;text-align:center;">${r ? (fmt2(r.days) ?? '') : ''}</span>天</div>
+  </div>`;
+}
+function buildLeaveSlip(e){
+  const yr = parseInt(extraVal('ex_slip_year')) || (Number(todayISO().slice(0,4)) - 1911);
+  const filled = extraVal('ex_slip_mode') === '帶入已登錄的假單';
+  const want = parseInt(extraVal('ex_slip_rows')) || 6;
+  const appr = annualLeaveApprovedFor(e, yr);
+  const total = appr ? appr.days : (annualLeaveDaysAt(e.hire_date, (yr + 1911) + '-12-31') ?? '');
+  let recs = [];
+  if(filled){
+    recs = (STATE.leaveRecords || [])
+      .filter(r => r.employee_id === e.id && String(r.start_date || '').slice(0,4) === String(yr + 1911))
+      .sort((a,b) => String(a.start_date||'').localeCompare(String(b.start_date||'')));
+  }
+  const rowCount = Math.max(want, recs.length);
+  const TH = (t, w) => `<th style="border:1px solid #333;padding:3px 2px;font-size:10.5px;font-weight:700;background:#DFF0F3;${w?'width:'+w+';':''}">${t}</th>`;
+  const TD = (html, align) => `<td style="border:1px solid #333;padding:3px 3px;font-size:10.5px;vertical-align:top;text-align:${align||'center'};height:62px;">${html}</td>`;
+  let rows = '';
+  for(let i = 0; i < rowCount; i++){
+    const r = recs[i] || null;
+    const remain = (r && String(r.leave_type||'').trim() === '特休')
+      ? annualLeaveRemaining(e.id, e.hire_date, r.start_date) : null;
+    rows += `<tr>
+      ${TD(r ? `<span style="font-size:9.5px;word-break:break-all;">${esc(r.reg_no || '')}</span>` : '')}
+      ${TD(slipTimeCell(r), 'left')}
+      ${TD(slipReasonCell(r ? String(r.leave_type||'').trim() : ''), 'left')}
+      ${TD('')}${TD('')}${TD('')}${TD('')}${TD('')}${TD('')}${TD('')}
+      ${TD(remain === null ? '' : esc(remain))}
+      ${TD(r ? esc(r.notes || '') : '', 'left')}
+    </tr>`;
+  }
+  const hd = (label, val) => `<span style="white-space:nowrap;"><b>${label}</b>${esc(val || '')}</span>`;
+  return `<style>
+    @page { size: A4 landscape; margin: 8mm; }
+    @media print { #printArea{ padding:0 !important; } .slip-wrap{ border:none !important; padding:0 !important; } }
+  </style>
+  <div class="slip-wrap">
+    <div style="text-align:center;font-size:19px;font-weight:700;letter-spacing:2px;margin-bottom:10px;">
+      <span style="border:1px solid #333;padding:1px 8px;">${yr}</span> 年度　請假單
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;margin-bottom:6px;">
+      ${hd('姓　名：', e.name)}${hd('工　號：', e.employee_no)}
+      ${hd('到職日：', slipRocDate(e.hire_date))}${hd('部門：', e.dept_name)}
+      ${hd('職稱：', e.position_name)}${hd('特休總天數：', total)}${hd('區別：', (appr && appr.yard) || e.region)}
+    </div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+      <thead><tr>
+        ${TH('登錄<br>編號','7.5%')}${TH('請假時間','12.5%')}${TH('請假事由','15%')}${TH('申請人<br>簽名','6.5%')}
+        ${TH('職務<br>代理人','7%')}${TH('調度','6%')}${TH('單位<br>主管','6%')}${TH('總經理','6%')}
+        ${TH('登錄<br>人員','6%')}${TH('會計','6%')}${TH('剩餘<br>天數','6%')}${TH('備　註','16%')}
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="font-size:10.5px;margin-top:6px;line-height:1.7;">
+      備註：1.到職滿半年者，始可休特休假。　2.病假請檢附相關証明。　3.事假請於3天前申請。　4.連續請假3天(含)以上者，需簽核至總經理。
+    </div>
+  </div>`;
+}
+// 把畫面上的表單存成 PNG。用 SVG 的 foreignObject 把 HTML 包起來再畫到 canvas，
+// 不需要外部套件（CDN 在公司網路不一定連得到）。失敗就請使用者改用列印另存 PDF。
+async function downloadFormPng(){
+  const box = document.querySelector('#printArea > div');
+  if(!box){ alert('請先按「產生表單」。'); return; }
+  const SCALE = 2;
+  // foreignObject 裡面必須是合法的 XML，<br> 這種沒有結尾的標籤直接用 outerHTML 會讓整張圖畫不出來，
+  // 所以用 XMLSerializer 轉一次。表單本身的樣式都寫在 style 屬性上，不需要外部 CSS，
+  // 這樣也避開字型檔造成 canvas 被標記為跨來源而不能匯出。
+  const clone = box.cloneNode(true);
+  clone.querySelectorAll('style').forEach(el => el.remove());
+  // 量尺寸要在「看得到」的狀態下量。使用者如果不在表單生成那一頁，
+  // printArea 是隱藏的，量出來會是 0，畫出來就變成空白圖。
+  // 所以先把複本掛到畫面外面量，量完再拿掉。
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:-10000px;top:0;background:#fff;';
+  probe.appendChild(clone);
+  document.body.appendChild(probe);
+  const W = Math.max(clone.scrollWidth, clone.offsetWidth, 900);
+  const H = Math.max(clone.scrollHeight, clone.offsetHeight, 200);
+  document.body.removeChild(probe);
+  clone.setAttribute('style', (clone.getAttribute('style') || '') + ';width:' + W + 'px;background:#fff;');
+  let inner;
+  try{ inner = new XMLSerializer().serializeToString(clone); }
+  catch(e){ inner = clone.outerHTML; }
+  const html = `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${W}px;background:#fff;color:#000;font-family:'Microsoft JhengHei','PingFang TC','Noto Sans TC',sans-serif;font-size:13px;">${inner}</div>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+      <foreignObject width="100%" height="100%">${html}</foreignObject></svg>`;
+  try{
+    const img = new Image();
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('圖片轉檔失敗')); img.src = url; });
+    const cv = document.createElement('canvas');
+    cv.width = W * SCALE; cv.height = H * SCALE;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.scale(SCALE, SCALE);
+    ctx.drawImage(img, 0, 0);
+    const a = document.createElement('a');
+    a.download = (document.getElementById('form_type').selectedOptions[0].textContent.replace(/[（(].*/, '').trim() || '表單')
+                  + '_' + todayISO() + '.png';
+    a.href = cv.toDataURL('image/png');
+    a.click();
+  }catch(err){
+    alert('這個瀏覽器沒辦法直接轉成圖片。\n\n請改按「列印」，在印表機那一格選「另存為 PDF」，紙張選 A4、方向選橫向，一樣可以留存或再轉圖檔。\n\n錯誤訊息：' + (err && err.message ? err.message : err));
+  }
+}
 function generateForm(){
   const type = document.getElementById('form_type').value;
   const empId = parseInt(document.getElementById('form_emp').value);
@@ -6690,12 +6832,15 @@ function generateForm(){
   if(type === 'phone_signoff')  bodyHtml = buildPhoneSignoff();
   if(type === 'phone_pool')     bodyHtml = buildPhonePool();
   if(type === 'ext_list')       bodyHtml = buildExtList();
+  if(type === 'leave_slip')     bodyHtml = buildLeaveSlip(e);
   if(type === 'stocktake_vehicle') bodyHtml = buildStocktake('vehicle');
   if(type === 'stocktake_staff')   bodyHtml = buildStocktake('staff');
 
-  const wide = ROSTER_TYPES.includes(type) || type === 'pension_contribution';
+  const wide = ROSTER_TYPES.includes(type) || type === 'pension_contribution' || type === 'leave_slip';
   document.getElementById('printArea').innerHTML = `<div style="max-width:${wide?'900px':'640px'};margin:0 auto;padding:40px;border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
   document.getElementById('form_print').style.display = 'inline-block';
+  const _png = document.getElementById('form_png');
+  if(_png) _png.style.display = 'inline-block';
   document.getElementById('form_export_csv').style.display = wide ? 'inline-block' : 'none';
 }
 
@@ -8717,7 +8862,8 @@ function annualLeaveApprovedFor(emp, yearRoc){
   if(!hit) return null;
   const days = parseFloat(hit.leave_days);
   if(isNaN(days)) return null;
-  return { days, seniority: hit.seniority, prior: hit.prior_years, year: Number(yearRoc) };
+  return { days, seniority: hit.seniority, prior: hit.prior_years, year: Number(yearRoc),
+           yard: hit.yard, dept: hit.dept_name, position: hit.position_name };
 }
 function rocYearOf(dateISO){ return Number(String(dateISO || todayISO()).slice(0, 4)) - 1911; }
 function annualLeaveApproved(emp){ return annualLeaveApprovedFor(emp, rocYearOf(todayISO())); }
@@ -11632,6 +11778,7 @@ if(document.getElementById('wh_period')){
 
 document.getElementById('form_type').addEventListener('change', () => { renderFormEmpSelect(); renderExtraFields(); });
 document.getElementById('form_generate').addEventListener('click', generateForm);
+document.getElementById('form_png').addEventListener('click', downloadFormPng);
 document.getElementById('form_export_csv').addEventListener('click', () => {
   const type = document.getElementById('form_type').value;
   const stamp = (extraVal('ex_roster_date') || todayISO()).replace(/-/g,'');
