@@ -6501,23 +6501,34 @@ function slipRocDate(iso){
   return y + '/' + Number(String(iso).slice(5,7)) + '/' + Number(String(iso).slice(8,10));
 }
 function slipReasonCell(picked){
-  const mark = (t) => `<span style="white-space:nowrap;">${picked === t ? '☑' : '☐'}${t}</span>`;
-  const other = picked && !SLIP_REASONS.flat().includes(picked);
-  return `<div style="line-height:1.9;font-size:10.5px;">
-    <div style="display:flex;gap:6px;">${SLIP_REASONS[0].map(mark).join('')}</div>
-    <div style="display:flex;gap:6px;">${SLIP_REASONS[1].map(mark).join('')}</div>
-    <div>${other ? '☑' : '☐'}其他<span style="display:inline-block;min-width:52px;border-bottom:1px solid #333;text-align:center;">${other ? esc(picked) : ''}</span></div>
+  const mark = (t) => `<span style="white-space:nowrap;margin-right:5px;">${picked === t ? '☑' : '☐'}${t}</span>`;
+  const other = picked && !SLIP_REASONS[0].concat(SLIP_REASONS[1]).includes(picked);
+  return `<div style="line-height:1.75;font-size:11px;">
+    <div>${SLIP_REASONS[0].map(mark).join('')}</div>
+    <div>${SLIP_REASONS[1].map(mark).join('')}</div>
+    <div>${other ? '☑' : '☐'}其他<span style="display:inline-block;min-width:72px;border-bottom:1px solid #000;text-align:center;">${other ? esc(picked) : ''}</span></div>
   </div>`;
 }
 function slipTimeCell(r){
-  const ln = (v) => `<span style="display:inline-block;min-width:22px;border-bottom:1px solid #333;text-align:center;">${v || ''}</span>`;
-  const m = (d) => d ? Number(String(d).slice(5,7)) : '';
-  const dd = (d) => d ? Number(String(d).slice(8,10)) : '';
-  return `<div style="line-height:2;font-size:10.5px;white-space:nowrap;">
-    <div>自${ln(m(r && r.start_date))}月${ln(dd(r && r.start_date))}日${ln('')}:${ln('')}</div>
-    <div>至${ln(m(r && r.end_date))}月${ln(dd(r && r.end_date))}日${ln('')}:${ln('')}</div>
-    <div>共請假<span style="display:inline-block;min-width:48px;border-bottom:1px solid #333;text-align:center;">${r ? leaveDaysOf(r).toFixed(2) : ''}</span>天${r ? `<span class="muted" style="font-size:9.5px;">（${fmt2(leaveHours(r))} 小時）</span>` : ''}</div>
+  // 底線的空格；有值就填上去，沒有就留白給人手寫
+  const ln = (v, w) => `<span style="display:inline-block;min-width:${w||20}px;border-bottom:1px solid #000;text-align:center;">${v === 0 || v ? v : ''}</span>`;
+  const mo = (d) => d ? Number(String(d).slice(5,7)) : '';
+  const dy = (d) => d ? Number(String(d).slice(8,10)) : '';
+  const t = r ? slipTimesFromNote(r.notes) : null;
+  return `<div style="line-height:1.95;font-size:11px;white-space:nowrap;">
+    <div>自${ln(mo(r && r.start_date))}月${ln(dy(r && r.start_date))}日${ln(t ? t.from : '', 34)}</div>
+    <div>至${ln(mo(r && r.end_date))}月${ln(dy(r && r.end_date))}日${ln(t ? t.to : '', 34)}</div>
+    <div>共請假${ln(r ? leaveDaysOf(r).toFixed(2) : '', 46)}天</div>
   </div>`;
+}
+const SLIP_LOGO = 'data:image/png;base64,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';
+// 版面對照公司現行紙本（表單編號 管010-A1）：左上角 LOGO、置中標題、
+// 姓名獨立一行、其餘個資第二行，12 欄簽核表格，最下面備註與表單編號。
+function slipTimesFromNote(note){
+  const m = String(note || '').trim().replace(/[：]/g, ':')
+    .match(/^(\d{1,2}):(\d{2})\s*[-~\u2013\uFF0D]\s*(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return { from: m[1] + ':' + m[2], to: m[3] + ':' + m[4] };
 }
 function buildLeaveSlip(e){
   const yr = parseInt(extraVal('ex_slip_year')) || (Number(todayISO().slice(0,4)) - 1911);
@@ -6532,15 +6543,16 @@ function buildLeaveSlip(e){
       .sort((a,b) => String(a.start_date||'').localeCompare(String(b.start_date||'')));
   }
   const rowCount = Math.max(want, recs.length);
-  const TH = (t, w) => `<th style="border:1px solid #333;padding:3px 2px;font-size:10.5px;font-weight:700;background:#DFF0F3;${w?'width:'+w+';':''}">${t}</th>`;
-  const TD = (html, align) => `<td style="border:1px solid #333;padding:3px 3px;font-size:10.5px;vertical-align:top;text-align:${align||'center'};height:62px;">${html}</td>`;
+  const BD = '1px solid #000';
+  const TH = (t, w) => `<th style="border:${BD};padding:2px 1px;font-size:11.5px;font-weight:700;line-height:1.25;${w?'width:'+w+';':''}">${t}</th>`;
+  const TD = (html, align) => `<td style="border:${BD};padding:3px 4px;font-size:11px;vertical-align:middle;text-align:${align||'center'};height:88px;">${html}</td>`;
   let rows = '';
   for(let i = 0; i < rowCount; i++){
     const r = recs[i] || null;
     const remain = (r && String(r.leave_type||'').trim() === '特休')
       ? annualLeaveRemaining(e.id, e.hire_date, r.start_date) : null;
     rows += `<tr>
-      ${TD(r ? `<span style="font-size:9.5px;word-break:break-all;">${esc(r.reg_no || '')}</span>` : '')}
+      ${TD(r ? `<span style="font-size:10px;word-break:break-all;line-height:1.3;">${esc(r.reg_no || '')}</span>` : '')}
       ${TD(slipTimeCell(r), 'left')}
       ${TD(slipReasonCell(r ? String(r.leave_type||'').trim() : ''), 'left')}
       ${TD('')}${TD('')}${TD('')}${TD('')}${TD('')}${TD('')}${TD('')}
@@ -6548,31 +6560,36 @@ function buildLeaveSlip(e){
       ${TD(r ? esc(r.notes || '') : '', 'left')}
     </tr>`;
   }
-  const hd = (label, val) => `<span style="white-space:nowrap;"><b>${label}</b>${esc(val || '')}</span>`;
+  const hd = (label, val) => `<span style="white-space:nowrap;"><b>${label}</b>${esc(val === 0 || val ? val : '')}</span>`;
   return `<style>
-    @page { size: A4 landscape; margin: 8mm; }
+    @page { size: A4 landscape; margin: 9mm; }
     @media print { #printArea{ padding:0 !important; } .slip-wrap{ border:none !important; padding:0 !important; } }
+    .slip-wrap, .slip-wrap * { font-family:"標楷體","DFKai-SB","BiauKai","Kaiti TC","楷体",serif; color:#000; }
   </style>
-  <div class="slip-wrap">
-    <div style="text-align:center;font-size:19px;font-weight:700;letter-spacing:2px;margin-bottom:10px;">
-      <span style="border:1px solid #333;padding:1px 8px;">${yr}</span> 年度　請假單
+  <div class="slip-wrap" data-png-width="1123" data-png-height="794" style="position:relative;">
+    <img src="${SLIP_LOGO}" alt="DGTT" style="position:absolute;left:0;top:0;height:26px;">
+    <div style="text-align:center;font-size:21px;font-weight:700;letter-spacing:1px;padding:2px 0 8px;">
+      ${yr} 年度　請假單
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;margin-bottom:6px;">
-      ${hd('姓　名：', e.name)}${hd('工　號：', e.employee_no)}
-      ${hd('到職日：', slipRocDate(e.hire_date))}${hd('部門：', e.dept_name)}
-      ${hd('職稱：', e.position_name)}${hd('特休總天數：', total)}${hd('區別：', (appr && appr.yard) || e.region)}
+    <div style="font-size:12.5px;line-height:1.75;margin:0 0 4px 2px;">
+      <div>${hd('姓　名：', e.name)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        ${hd('工　號：', e.employee_no)}${hd('到職日: ', slipRocDate(e.hire_date))}${hd('部門: ', e.dept_name)}
+        ${hd('職稱: ', e.position_name)}${hd('特休總天數: ', total)}${hd('區別: ', (appr && appr.yard) || e.region)}
+      </div>
     </div>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
       <thead><tr>
-        ${TH('登錄<br>編號','7.5%')}${TH('請假時間','12.5%')}${TH('請假事由','15%')}${TH('申請人<br>簽名','6.5%')}
-        ${TH('職務<br>代理人','7%')}${TH('調度','6%')}${TH('單位<br>主管','6%')}${TH('總經理','6%')}
-        ${TH('登錄<br>人員','6%')}${TH('會計','6%')}${TH('剩餘<br>天數','6%')}${TH('備　註','16%')}
+        ${TH('登錄<br>編號','5.0%')}${TH('請假時間','15.0%')}${TH('請假事由','19.5%')}${TH('申請人<br>簽　名','7.0%')}
+        ${TH('職務<br>代理人','6.0%')}${TH('調度','6.5%')}${TH('單位<br>主管','6.5%')}${TH('總經理','6.5%')}
+        ${TH('登錄<br>人員','6.5%')}${TH('會計','6.5%')}${TH('剩餘<br>天數','6.5%')}${TH('備　註','8.5%')}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div style="font-size:10.5px;margin-top:6px;line-height:1.7;">
-      備註：1.到職滿半年者，始可休特休假。　2.病假請檢附相關証明。　3.事假請於3天前申請。　4.連續請假3天(含)以上者，需簽核至總經理。
+    <div style="font-size:12px;margin-top:4px;line-height:1.6;font-weight:700;">
+      備註：1.到職滿半年者，始可休特休假。2.病假請檢附相關証明。3.事假請於3天前申請。4.連續請假3天(含)以上者，需簽核至總經理。
     </div>
+    <div style="font-size:11px;text-align:right;margin-top:3px;">表單編號：管010-A1</div>
   </div>`;
 }
 // 把畫面上的表單存成 PNG。用 SVG 的 foreignObject 把 HTML 包起來再畫到 canvas，
@@ -6589,14 +6606,35 @@ async function downloadFormPng(){
   // 量尺寸要在「看得到」的狀態下量。使用者如果不在表單生成那一頁，
   // printArea 是隱藏的，量出來會是 0，畫出來就變成空白圖。
   // 所以先把複本掛到畫面外面量，量完再拿掉。
+  // 表單如果指定了輸出寬度就照它（請假單是 A4 橫式，1123px＝297mm×96dpi），
+  // 沒有指定就量它自己有多寬。量的時候要把 max-width 拿掉，
+  // 不然表格被壓縮成 900px、內容擠出去，畫出來右邊那幾欄會被切掉。
+  const wantW = parseInt((box.querySelector('[data-png-width]') || {}).dataset
+                  ? box.querySelector('[data-png-width]').dataset.pngWidth : '') || 0;
   const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;left:-10000px;top:0;background:#fff;';
+  probe.style.cssText = 'position:fixed;left:-10000px;top:0;background:#fff;width:'
+                      + (wantW || 1400) + 'px;';
+  // 一定要用 border-box，不然 width 沒把 padding 算進去，
+  // 畫布只有 1123px、內容卻是 1123+左右內距，右邊那幾欄就會被切掉。
+  const PAD = 14;
+  clone.style.maxWidth = 'none';
+  clone.style.boxSizing = 'border-box';
+  clone.style.padding = PAD + 'px';
+  clone.style.border = 'none';
+  clone.style.width = wantW ? ((wantW + PAD * 2) + 'px') : 'auto';
   probe.appendChild(clone);
   document.body.appendChild(probe);
-  const W = Math.max(clone.scrollWidth, clone.offsetWidth, 900);
-  const H = Math.max(clone.scrollHeight, clone.offsetHeight, 200);
+  const W = wantW ? (wantW + PAD * 2)
+                  : Math.max(clone.scrollWidth, clone.offsetWidth, 900);
+  // 有指定紙張高度就照 A4 出圖（1123×794＝A4 橫式 96dpi），內容比較短就在下面留白，
+  // 這樣存出來的圖直接就是一張 A4，不用再自己調。
+  const wantH = parseInt((box.querySelector('[data-png-height]') || {}).dataset
+                  ? box.querySelector('[data-png-height]').dataset.pngHeight : '') || 0;
+  const contentH = Math.max(clone.scrollHeight, clone.offsetHeight, 200) + PAD * 2;
+  const H = Math.max(contentH, wantH);
   document.body.removeChild(probe);
-  clone.setAttribute('style', (clone.getAttribute('style') || '') + ';width:' + W + 'px;background:#fff;');
+  clone.setAttribute('style', (clone.getAttribute('style') || '')
+                     + ';width:' + W + 'px;max-width:none;box-sizing:border-box;background:#fff;');
   let inner;
   try{ inner = new XMLSerializer().serializeToString(clone); }
   catch(e){ inner = clone.outerHTML; }
