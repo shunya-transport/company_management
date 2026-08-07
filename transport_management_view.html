@@ -184,6 +184,22 @@
   .detail-section h4{font-size:12.5px;margin:0 0 10px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
   .badge-team{display:inline-block;padding:2px 9px;background:var(--gray-bg);border-radius:99px;font-size:12px;color:var(--text-2);}
   .tire-body{max-width:260px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:20px 16px;position:relative;}
+.axle-grid{max-width:520px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:18px 14px;}
+.axle-title{text-align:center;font-weight:700;font-size:13px;color:var(--text-2);margin-bottom:10px;}
+.axle-row{display:grid;grid-template-columns:1fr 1fr 18px 1fr 1fr;gap:6px;align-items:stretch;margin-bottom:10px;}
+.axle-spine{background:var(--border-strong);width:3px;justify-self:center;border-radius:2px;}
+.tire-cell{background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:6px 4px;text-align:center;font-size:11px;cursor:pointer;min-height:52px;}
+.tire-cell:hover{box-shadow:0 0 0 2px rgba(201,154,86,.35);}
+.tire-cell.blank{background:transparent;border:none;cursor:default;box-shadow:none;}
+.tire-cell.green{border-color:var(--green);background:var(--green-bg);}
+.tire-cell.amber{border-color:var(--amber);background:var(--amber-bg);}
+.tire-cell.red{border-color:var(--red);background:var(--red-bg);}
+.tire-cell.gray{border-color:var(--border-strong);background:#fafafa;color:var(--text-3);}
+.tire-cell.picked{outline:3px solid var(--gold);outline-offset:1px;}
+.tire-cell .pos{font-weight:700;font-size:11px;color:var(--text-2);}
+.tire-cell .who{font-size:10.5px;line-height:1.45;}
+.ts-table input,.ts-table select{width:100%;box-sizing:border-box;font-size:12px;padding:3px 4px;}
+.ts-table td,.ts-table th{padding:3px 4px;}
   .tire-row{display:flex;justify-content:space-between;margin-bottom:14px;gap:16px;}
   .tire-slot{
     flex:1;background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:8px 6px;
@@ -1034,12 +1050,82 @@
     <div class="card">
       <h2>輪胎位置總覽</h2>
       <div class="form-grid" style="margin-bottom:14px;">
-        <label>選擇車輛
+        <label>車頭車號
           <select id="tire_view_plate"></select>
+        </label>
+        <label>板架車號
+          <select id="tire_view_trailer"></select>
         </label>
       </div>
       <div id="tireLayoutView"></div>
     </div>
+
+
+<div class="card">
+  <h2>輪胎作業單登錄</h2>
+  <div class="muted" style="margin-bottom:10px;">照著輪胎行那張複寫單的順序填。選好車頭與板架之後，直接點下面位置圖上要處理的輪位，明細就會自動加一列；存檔時「裝上」的那幾條會同時更新上面的輪胎位置圖。</div>
+  <div class="form-grid">
+    <label>輪胎行<input id="ts_vendor" list="vendorList" autocomplete="off" placeholder="例：東昇(鉅昌)輪胎企業有限公司"></label>
+    <label>單號<input id="ts_no" placeholder="例：B250780"></label>
+    <label>日期<input id="ts_date" type="date"></label>
+    <label>客戶名稱<input id="ts_customer" placeholder="例：順亞"></label>
+    <label>車牌（車頭）<select id="ts_plate"></select></label>
+    <label>板架車號<select id="ts_trailer"></select></label>
+    <label>保／櫃號<input id="ts_container" placeholder="選填"></label>
+    <label>公里數<input id="ts_mileage" type="number" placeholder="選填"></label>
+    <label>到達時間<input id="ts_time" placeholder="例：11:30"></label>
+    <label>地點<input id="ts_location" placeholder="選填"></label>
+    <label>時段<select id="ts_daynight"><option value="日間">日間</option><option value="夜間或例假日">夜間或例假日</option></select></label>
+    <label>電話<input id="ts_phone" placeholder="選填"></label>
+  </div>
+
+  <div id="tsPicker" style="margin:16px 0;"></div>
+
+  <h3 style="font-size:14px;margin:14px 0 8px;">裝上／拆下輪胎<span class="count-badge" id="ts_tire_count"></span></h3>
+  <div class="table-scroll">
+    <table class="ts-table" style="min-width:1180px;">
+      <thead>
+        <tr>
+          <th rowspan="2" style="width:96px;">輪位</th>
+          <th colspan="6" style="text-align:center;background:rgba(201,154,86,.10);">裝　上　輪　胎</th>
+          <th colspan="6" style="text-align:center;background:rgba(120,140,170,.10);">拆　下　輪　胎</th>
+          <th rowspan="2" style="width:44px;"></th>
+        </tr>
+        <tr>
+          <th>用途代號</th><th style="width:66px;">製造週期</th><th style="width:52px;">溝深</th><th style="width:52px;">類別</th><th>尺寸廠牌</th><th>胎號</th>
+          <th>尺寸廠牌</th><th>胎號</th><th style="width:66px;">製造週期</th><th style="width:52px;">溝深</th><th style="width:52px;">類別</th><th>用途代號</th>
+        </tr>
+      </thead>
+      <tbody id="tsTireBody"></tbody>
+    </table>
+  </div>
+  <button class="name-link" id="ts_tire_add" style="margin-top:6px;">＋ 手動加一列</button>
+
+  <h3 style="font-size:14px;margin:18px 0 8px;">修護內容（花紋）</h3>
+  <div class="table-scroll">
+    <table class="ts-table" style="min-width:640px;">
+      <thead><tr><th>修護內容（花紋）</th><th style="width:110px;">規格</th><th style="width:80px;">數量</th><th style="width:100px;">單價</th><th style="width:110px;">金額小計</th><th style="width:44px;"></th></tr></thead>
+      <tbody id="tsChargeBody"></tbody>
+      <tfoot><tr style="font-weight:700;background:rgba(201,154,86,.08);"><td colspan="4" style="text-align:right;">金額合計 NT$</td><td id="ts_total">0</td><td></td></tr></tfoot>
+    </table>
+  </div>
+  <button class="name-link" id="ts_charge_add" style="margin-top:6px;">＋ 加一列</button>
+
+  <div class="form-grid" style="margin-top:14px;">
+    <label style="grid-column:span 2;">備註<input id="ts_notes" placeholder="選填"></label>
+  </div>
+  <button class="btn" id="ts_save" style="margin-top:10px;">儲存作業單</button>
+</div>
+
+<div class="card">
+  <h2>輪胎作業單歷史<span class="count-badge" id="ts_hist_count"></span></h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>日期</th><th>單號</th><th>輪胎行</th><th>車牌</th><th>板架</th><th>公里數</th><th>輪胎</th><th>金額</th><th>備註</th><th></th></tr></thead>
+      <tbody id="tsHistBody"></tbody>
+    </table>
+  </div>
+</div>
 
     <div class="card">
       <h2>輪軸保養紀錄</h2>
@@ -2523,7 +2609,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
   adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
-  equipmentTypes: [], employeeEquipment: [], tireRecords: [], medicalExamRecords: [], pensionElections: [],
+  equipmentTypes: [], employeeEquipment: [], tireRecords: [], tireOrders: [], tireOrderTires: [], tireOrderCharges: [], medicalExamRecords: [], pensionElections: [],
   stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
   workHourDaily: [], workHourMonthly: [] };
@@ -2636,6 +2722,9 @@ const TABLE_MAP = {
   stock_items: {table:'stock_items', pk:'item_id'},
   stock_transactions: {table:'stock_transactions', pk:'transaction_id'},
   tire_records: {table:'tire_records', pk:'tire_id'},
+  tire_service_orders: {table:'tire_service_orders', pk:'order_id'},
+  tire_service_tires: {table:'tire_service_tires', pk:'item_id'},
+  tire_service_charges: {table:'tire_service_charges', pk:'charge_id'},
   trailer_leases: {table:'trailer_leases', pk:'lease_id'},
   training_log: {table:'training_log', pk:'log_id'},
   urea_logs: {table:'urea_logs', pk:'log_id'},
@@ -3053,6 +3142,9 @@ async function loadState(){
   STATE.equipmentTypes = SEED.equipment_types || [];
   STATE.employeeEquipment = await safeGet('employee_equipment', [], true);
   STATE.tireRecords = await safeGet('tire_records', [], true);
+  STATE.tireOrders = await safeGet('tire_service_orders', [], true);
+  STATE.tireOrderTires = await safeGet('tire_service_tires', [], true);
+  STATE.tireOrderCharges = await safeGet('tire_service_charges', [], true);
   STATE.medicalExamRecords = await safeGet('medical_exam_records', SEED.medical_exam_records || [], true);
   STATE.pensionElections = await safeGet('pension_elections', [], true);
   STATE.stockItems = await safeGet('stock_items', [], true);
@@ -4304,26 +4396,181 @@ function getVehicleLatestMileage(plate){
   const v = STATE.vehicles.find(x => x.plate === plate);
   return v ? (v.current_mileage || null) : null;
 }
+// 輪位編號與輪胎行的紙本作業單完全一致：
+//   A＝車頭   第一軸單輪  A1 ─┬─ A2
+//             第二軸雙輪  A3 A4 ─┼─ A5 A6
+//             第三軸雙輪  A7 A8 ─┴─ A9 A10
+//   B＝板架   三軸都是雙輪 B1 B2 ─┬─ B3 B4 ／ B5 B6 ─┼─ B7 B8 ／ B9 B10 ─┴─ B11 B12
+// 每一列的 5 格對應畫面上的「左外・左內・車身中線・右內・右外」，
+// 車頭第一軸是單輪，所以左內與右內留空。
+const TIRE_LAYOUT = {
+  '車輛': { prefix:'A', title:'A　車頭', rows:[
+      ['A1', null, null, 'A2'],
+      ['A3', 'A4', 'A5', 'A6'],
+      ['A7', 'A8', 'A9', 'A10'] ] },
+  '板架': { prefix:'B', title:'B　板架', rows:[
+      ['B1', 'B2', 'B3', 'B4'],
+      ['B5', 'B6', 'B7', 'B8'],
+      ['B9', 'B10', 'B11', 'B12'] ] }
+};
 const TIRE_POSITIONS = {
-  '車輛': ['1','2','3','4','5','6','7','8'],
-  '板架': ['1','2','3','4','5','6','7','8']
+  '車輛': ['A1','A2','A3','A4','A5','A6','A7','A8','A9','A10'],
+  '板架': ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 };
 function tirePositionsFor(category){ return TIRE_POSITIONS[category] || TIRE_POSITIONS['車輛']; }
+// 輪位在車上的實際位置，下拉選單與明細表都用這個標示，才不會選錯邊
+const TIRE_POS_LABEL = {
+  A1:'左前（單）',  A2:'右前（單）',
+  A3:'第二軸 左外', A4:'第二軸 左內', A5:'第二軸 右內', A6:'第二軸 右外',
+  A7:'第三軸 左外', A8:'第三軸 左內', A9:'第三軸 右內', A10:'第三軸 右外',
+  B1:'第一軸 左外', B2:'第一軸 左內', B3:'第一軸 右內', B4:'第一軸 右外',
+  B5:'第二軸 左外', B6:'第二軸 左內', B7:'第二軸 右內', B8:'第二軸 右外',
+  B9:'第三軸 左外', B10:'第三軸 左內', B11:'第三軸 右內', B12:'第三軸 右外'
+};
+function tirePosLabel(p){ return TIRE_POS_LABEL[p] || p; }
+function tireLayoutFor(category){ return TIRE_LAYOUT[category] || TIRE_LAYOUT['車輛']; }
+// 畫一組輪位圖；pickable 為 true 時每一格可以點（用來挑作業單要登錄哪個輪位）
+function tireAxleGridHtml(vehicle, opts){
+  const o = opts || {};
+  const lay = tireLayoutFor(vehicle ? vehicle.vehicle_category : '車輛');
+  const cell = (pos) => {
+    if(!pos) return '<div class="tire-cell blank"></div>';
+    const t = vehicle ? currentTireAt(vehicle.id, pos) : null;
+    const st = t ? tireAgeStatus(t.install_date) : 'gray';
+    const picked = o.picked && o.picked.indexOf(pos) >= 0 ? ' picked' : '';
+    const body = t ? `${esc(t.brand||'—')}<br>${esc((t.install_date||'').slice(5))}` : '尚無紀錄';
+    return `<div class="tire-cell ${st}${picked}" ${o.pickable ? `data-tire-pos="${esc(pos)}"` : ''}
+      title="${esc(pos)}　${esc(tirePosLabel(pos))}"><div class="pos">${esc(pos.slice(1))}</div><div class="who">${body}</div></div>`;
+  };
+  const rows = lay.rows.map(r =>
+    `<div class="axle-row">${cell(r[0])}${cell(r[1])}<div class="axle-spine"></div>${cell(r[2])}${cell(r[3])}</div>`).join('');
+  return `<div class="axle-grid"><div class="axle-title">${esc(lay.title)}${vehicle ? '　' + esc(vehicle.plate) : ''}</div>${rows}</div>`;
+}
 
+function tireHeadVehicles(){ return (STATE.vehicles||[]).filter(v => v.vehicle_category !== '板架'); }
+function tireTrailerVehicles(){ return (STATE.vehicles||[]).filter(v => v.vehicle_category === '板架'); }
+// ===== 輪胎作業單 =====
+// 欄位順序完全照輪胎行那張黃色複寫單，用途代號也照單上印的那兩排。
+const TS_ON_CODES = ['0.新胎','1.再生胎含胎底','2.客戶再生胎','3.買中古胎','4.客戶寄放中古胎',
+                     '5.新鋼圈','6.補胎','7.拆裝工','8.校正','9.刻溝'];
+const TS_OFF_CODES = ['A.原裝胎','B.再生胎','0.寄放中古胎','01.磨平','02.刻溝','03.再生',
+                      '40-49.處理','50-52.燒部份'];
+let tsDraft = { tires: [], charges: [] };
+
+function tsVeh(which){
+  const el = document.getElementById(which === 'B' ? 'ts_trailer' : 'ts_plate');
+  const p = el ? el.value : '';
+  return p ? (STATE.vehicles || []).find(v => v.plate === p) : null;
+}
+function renderTireOrderPicker(){
+  const box = document.getElementById('tsPicker');
+  if(!box) return;
+  const head = tsVeh('A'), trail = tsVeh('B');
+  const picked = tsDraft.tires.map(t => t.position).filter(Boolean);
+  if(!head && !trail){
+    box.innerHTML = '<div class="empty">先選車牌或板架車號，位置圖就會出來，點一下要處理的輪位。</div>';
+    return;
+  }
+  box.innerHTML = (head ? tireAxleGridHtml(head, {pickable:true, picked}) : '')
+    + (head && trail ? '<div style="height:12px;"></div>' : '')
+    + (trail ? tireAxleGridHtml(trail, {pickable:true, picked}) : '')
+    + '<div class="muted" style="text-align:center;margin-top:10px;">點一下輪位＝加一列明細，再點一下＝把那一列拿掉。</div>';
+}
+function tsBlankTire(pos){
+  return { position: pos || '', on_code:'', on_week:'', on_depth:'', on_class:'', on_brand:'', on_serial:'',
+           off_brand:'', off_serial:'', off_week:'', off_depth:'', off_class:'', off_code:'' };
+}
+function tsPosOptions(sel){
+  const head = tsVeh('A'), trail = tsVeh('B');
+  let list = [];
+  if(head) list = list.concat(tirePositionsFor(head.vehicle_category));
+  if(trail) list = list.concat(tirePositionsFor(trail.vehicle_category));
+  if(!list.length) list = TIRE_POSITIONS['車輛'].concat(TIRE_POSITIONS['板架']);
+  return '<option value="">—</option>' + list.map(p =>
+    `<option value="${esc(p)}"${p===sel?' selected':''}>${esc(p)}</option>`).join('');
+}
+function tsCodeOptions(list, sel){
+  return '<option value="">—</option>' + list.map(cLabel =>
+    `<option value="${esc(cLabel)}"${cLabel===sel?' selected':''}>${esc(cLabel)}</option>`).join('');
+}
+function renderTsTires(){
+  const body = document.getElementById('tsTireBody');
+  if(!body) return;
+  const cnt = document.getElementById('ts_tire_count');
+  if(cnt) cnt.textContent = tsDraft.tires.length ? `共 ${tsDraft.tires.length} 條` : '';
+  const inp = (i, k, w) => `<td><input data-ts-t="${i}" data-k="${k}" value="${esc(tsDraft.tires[i][k]||'')}"${w?` style="min-width:${w}px"`:''}></td>`;
+  body.innerHTML = tsDraft.tires.map((t, i) => `<tr>
+      <td><select data-ts-t="${i}" data-k="position">${tsPosOptions(t.position)}</select>
+          <div class="muted" style="font-size:10px;">${esc(t.position ? tirePosLabel(t.position) : '')}</div></td>
+      <td><select data-ts-t="${i}" data-k="on_code">${tsCodeOptions(TS_ON_CODES, t.on_code)}</select></td>
+      ${inp(i,'on_week')}${inp(i,'on_depth')}${inp(i,'on_class')}${inp(i,'on_brand',110)}${inp(i,'on_serial',110)}
+      ${inp(i,'off_brand',110)}${inp(i,'off_serial',110)}${inp(i,'off_week')}${inp(i,'off_depth')}${inp(i,'off_class')}
+      <td><select data-ts-t="${i}" data-k="off_code">${tsCodeOptions(TS_OFF_CODES, t.off_code)}</select></td>
+      <td><button class="del-btn" data-ts-tdel="${i}">刪</button></td>
+    </tr>`).join('') || '<tr><td colspan="14" class="empty">還沒有輪胎明細，點上面的位置圖或按「手動加一列」。</td></tr>';
+}
+function renderTsCharges(){
+  const body = document.getElementById('tsChargeBody');
+  if(!body) return;
+  body.innerHTML = tsDraft.charges.map((c, i) => `<tr>
+      <td><input data-ts-c="${i}" data-k="item_name" value="${esc(c.item_name||'')}"></td>
+      <td><input data-ts-c="${i}" data-k="spec" value="${esc(c.spec||'')}"></td>
+      <td><input data-ts-c="${i}" data-k="qty" type="number" step="0.5" value="${c.qty==null?'':esc(c.qty)}"></td>
+      <td><input data-ts-c="${i}" data-k="unit_price" type="number" step="1" value="${c.unit_price==null?'':esc(c.unit_price)}"></td>
+      <td style="text-align:right;">${fmt2(tsLineAmount(c)) || 0}</td>
+      <td><button class="del-btn" data-ts-cdel="${i}">刪</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有修護內容。</td></tr>';
+  const tot = document.getElementById('ts_total');
+  if(tot) tot.textContent = Number(tsTotal()).toLocaleString();
+}
+function tsLineAmount(c){
+  const q = parseFloat(c.qty), p = parseFloat(c.unit_price);
+  if(isNaN(q) || isNaN(p)) return 0;
+  return Math.round(q * p * 100) / 100;
+}
+function tsTotal(){ return tsDraft.charges.reduce((s, c) => s + tsLineAmount(c), 0); }
+function renderTireOrderHistory(){
+  const body = document.getElementById('tsHistBody');
+  if(!body) return;
+  const rows = (STATE.tireOrders || []).slice()
+    .sort((a,b) => String(b.service_date||'').localeCompare(String(a.service_date||'')));
+  const cnt = document.getElementById('ts_hist_count');
+  if(cnt) cnt.textContent = rows.length ? `共 ${rows.length} 張` : '';
+  body.innerHTML = rows.map(o => {
+    const n = (STATE.tireOrderTires || []).filter(t => String(t.order_id) === String(o.id)).length;
+    return `<tr>
+      <td>${esc(o.service_date||'')}</td>
+      <td>${esc(o.order_no||'')}</td>
+      <td>${esc(o.vendor_name||'')}</td>
+      <td>${esc(o.plate||'')}</td>
+      <td>${esc(o.trailer_plate||'')}</td>
+      <td>${o.mileage ? esc(Number(o.mileage).toLocaleString()) : '—'}</td>
+      <td>${n} 條</td>
+      <td>${o.total_amount ? '$'+esc(Number(o.total_amount).toLocaleString()) : '—'}</td>
+      <td class="muted">${esc(o.notes||'')}</td>
+      <td><button class="del-btn" data-ts-odel="${esc(o.id)}">刪除</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="10" class="empty">尚無作業單</td></tr>';
+}
 function renderTireSelects(){
-  const plateSel = document.getElementById('tire_plate');
-  const viewSel = document.getElementById('tire_view_plate');
-  const options = STATE.vehicles.map(v => `<option value="${esc(v.plate)}">${esc(v.plate)}</option>`).join('');
-  plateSel.innerHTML = options;
-  viewSel.innerHTML = options;
+  const opt = (list) => list.map(v => `<option value="${esc(v.plate)}">${esc(v.plate)}</option>`).join('');
+  const all = opt(STATE.vehicles || []);
+  const keep = (el, html) => { if(!el) return; const cur = el.value; el.innerHTML = html; if(cur) el.value = cur; };
+  keep(document.getElementById('tire_plate'), all);
+  keep(document.getElementById('tire_view_plate'), opt(tireHeadVehicles()));
+  keep(document.getElementById('tire_view_trailer'), '<option value="">（不顯示板架）</option>' + opt(tireTrailerVehicles()));
+  keep(document.getElementById('ts_plate'), '<option value="">（無）</option>' + opt(tireHeadVehicles()));
+  keep(document.getElementById('ts_trailer'), '<option value="">（無）</option>' + opt(tireTrailerVehicles()));
   updateTirePositionOptions();
   renderTireLayout();
+  renderTireOrderPicker();
+  renderTireOrderHistory();
 }
 function updateTirePositionOptions(){
   const plate = document.getElementById('tire_plate').value;
   const v = STATE.vehicles.find(x => x.plate === plate);
   const positions = tirePositionsFor(v ? v.vehicle_category : '車輛');
-  document.getElementById('tire_position').innerHTML = positions.map(p => `<option value="${esc(p)}">${esc(p)}（${Number(p)%2?'左':'右'}）</option>`).join('');
+  document.getElementById('tire_position').innerHTML = positions.map(p => `<option value="${esc(p)}">${esc(p)}　${esc(tirePosLabel(p))}</option>`).join('');
 }
 
 function currentTireAt(vehicleId, position){
@@ -4344,22 +4591,15 @@ function renderTireLayout(){
   const v = STATE.vehicles.find(x => x.plate === plate);
   const container = document.getElementById('tireLayoutView');
   if(!v){ container.innerHTML = '<div class="empty">請選擇車輛</div>'; return; }
-  const positions = tirePositionsFor(v.vehicle_category);
-  const slot = (pos) => {
-    const t = currentTireAt(v.id, pos);
-    if(!t) return `<div class="tire-slot gray"><div class="pos-label">${esc(pos)}</div><div class="tire-info">尚無紀錄</div></div>`;
-    const s = tireAgeStatus(t.install_date);
-    return `<div class="tire-slot ${s}"><div class="pos-label">${esc(pos)}</div><div class="tire-info">${esc(t.brand||'—')}<br>${esc(t.install_date||'')}</div></div>`;
-  };
-  const bodyHtml = `
-      <div class="tire-row" style="font-size:10px;color:var(--text-3);margin-bottom:6px;"><div style="flex:1;text-align:center;">左（單）</div><div style="flex:1;text-align:center;">右（雙）</div></div>
-      <div class="tire-row">${slot('1')}${slot('2')}</div>
-      <div class="tire-row">${slot('3')}${slot('4')}</div>
-      <div class="tire-row">${slot('5')}${slot('6')}</div>
-      <div class="tire-row">${slot('7')}${slot('8')}</div>
-    `;
-  container.innerHTML = `<div class="tire-body">${bodyHtml}</div>
-    <div class="muted" style="text-align:center;margin-top:10px;">綠色：1年內安裝 ・ 黃色：安裝滿1年 ・ 紅色：安裝滿18個月建議檢查</div>`;
+  // 上半部畫車頭、下半部畫板架，跟輪胎行的紙本作業單一樣
+  const tSel = document.getElementById('tire_view_trailer');
+  const tPlate = tSel ? tSel.value : '';
+  const t = tPlate ? STATE.vehicles.find(x => x.plate === tPlate) : null;
+  container.innerHTML =
+    tireAxleGridHtml(v, {}) +
+    (t ? '<div style="height:14px;"></div>' + tireAxleGridHtml(t, {})
+       : '<div class="muted" style="text-align:center;margin-top:12px;">上面那格選板架車號，就會一起把 B 板架的輪位畫出來。</div>') +
+    '<div class="muted" style="text-align:center;margin-top:12px;">綠色：1年內安裝 ・ 黃色：安裝滿1年 ・ 紅色：安裝滿18個月建議檢查 ・ 滑鼠移到格子上會顯示是哪一軸哪一邊</div>';
 }
 
 // 近 N 個月的月均行駛公里數，用來把「還剩幾公里」換算成「大概什麼時候要保養」
@@ -11021,6 +11261,131 @@ document.getElementById('mr_add').addEventListener('click', async () => {
 
 document.getElementById('tire_plate').addEventListener('change', updateTirePositionOptions);
 document.getElementById('tire_view_plate').addEventListener('change', renderTireLayout);
+document.getElementById('tire_view_trailer').addEventListener('change', renderTireLayout);
+document.getElementById('tsPicker').addEventListener('click', (e) => {
+  const pos = e.target.closest('[data-tire-pos]');
+  if(!pos) return;
+  const p = pos.getAttribute('data-tire-pos');
+  const at = tsDraft.tires.findIndex(t => t.position === p);
+  if(at >= 0) tsDraft.tires.splice(at, 1); else tsDraft.tires.push(tsBlankTire(p));
+  renderTireOrderPicker(); renderTsTires();
+});
+['ts_plate','ts_trailer'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', () => { renderTireOrderPicker(); renderTsTires(); });
+});
+document.getElementById('ts_tire_add').addEventListener('click', () => {
+  tsDraft.tires.push(tsBlankTire('')); renderTsTires(); renderTireOrderPicker();
+});
+document.getElementById('ts_charge_add').addEventListener('click', () => {
+  tsDraft.charges.push({item_name:'', spec:'', qty:null, unit_price:null}); renderTsCharges();
+});
+document.getElementById('tsTireBody').addEventListener('input', (e) => {
+  const i = e.target.getAttribute('data-ts-t'); if(i === null) return;
+  tsDraft.tires[Number(i)][e.target.getAttribute('data-k')] = e.target.value;
+});
+document.getElementById('tsTireBody').addEventListener('change', (e) => {
+  if(e.target.getAttribute('data-k') !== 'position') return;
+  renderTsTires(); renderTireOrderPicker();
+});
+document.getElementById('tsTireBody').addEventListener('click', (e) => {
+  const d = e.target.getAttribute('data-ts-tdel'); if(d === null) return;
+  tsDraft.tires.splice(Number(d), 1); renderTsTires(); renderTireOrderPicker();
+});
+document.getElementById('tsChargeBody').addEventListener('input', (e) => {
+  const i = e.target.getAttribute('data-ts-c'); if(i === null) return;
+  const k = e.target.getAttribute('data-k');
+  tsDraft.charges[Number(i)][k] = (k === 'qty' || k === 'unit_price')
+    ? (e.target.value === '' ? null : parseFloat(e.target.value)) : e.target.value;
+  const tot = document.getElementById('ts_total');
+  if(tot) tot.textContent = Number(tsTotal()).toLocaleString();
+  const cell = e.target.closest('tr').cells[4];
+  if(cell) cell.textContent = fmt2(tsLineAmount(tsDraft.charges[Number(i)])) || 0;
+});
+document.getElementById('tsChargeBody').addEventListener('click', (e) => {
+  const d = e.target.getAttribute('data-ts-cdel'); if(d === null) return;
+  tsDraft.charges.splice(Number(d), 1); renderTsCharges();
+});
+document.getElementById('tsHistBody').addEventListener('click', async (e) => {
+  const id = e.target.getAttribute('data-ts-odel'); if(!id) return;
+  if(!confirm('確定要刪除這張作業單嗎？連同輪胎明細與修護內容都會刪掉。\n\n已經寫進輪胎位置圖的那幾條不會被回復，要的話請自行到上面重新登錄。')) return;
+  STATE.tireOrders = STATE.tireOrders.filter(o => String(o.id) !== String(id));
+  STATE.tireOrderTires = STATE.tireOrderTires.filter(t => String(t.order_id) !== String(id));
+  STATE.tireOrderCharges = STATE.tireOrderCharges.filter(c => String(c.order_id) !== String(id));
+  await saveState('tire_service_orders', STATE.tireOrders, true);
+  await saveState('tire_service_tires', STATE.tireOrderTires, true);
+  await saveState('tire_service_charges', STATE.tireOrderCharges, true);
+  renderAll();
+});
+document.getElementById('ts_save').addEventListener('click', async () => {
+  const date = document.getElementById('ts_date').value;
+  const head = tsVeh('A'), trail = tsVeh('B');
+  if(!date){ alert('請填寫日期'); return; }
+  if(!head && !trail){ alert('請至少選一個車牌或板架車號'); return; }
+  const lines = tsDraft.tires.filter(t => t.position);
+  if(!lines.length && !tsDraft.charges.length){ alert('這張單沒有任何輪胎明細也沒有修護內容，不用存。'); return; }
+  const mileageRaw = document.getElementById('ts_mileage').value;
+  const oid = nextId(STATE.tireOrders);
+  STATE.tireOrders.push({
+    id: oid,
+    order_no: document.getElementById('ts_no').value.trim(),
+    vendor_name: document.getElementById('ts_vendor').value.trim(),
+    service_date: date,
+    customer_name: document.getElementById('ts_customer').value.trim(),
+    vehicle_id: head ? head.id : null, plate: head ? head.plate : null,
+    trailer_id: trail ? trail.id : null, trailer_plate: trail ? trail.plate : null,
+    container_no: document.getElementById('ts_container').value.trim(),
+    phone: document.getElementById('ts_phone').value.trim(),
+    mileage: mileageRaw === '' ? null : parseInt(mileageRaw),
+    arrive_time: document.getElementById('ts_time').value.trim(),
+    location: document.getElementById('ts_location').value.trim(),
+    day_night: document.getElementById('ts_daynight').value,
+    total_amount: tsTotal() || null,
+    notes: document.getElementById('ts_notes').value.trim(),
+    created_at: new Date().toISOString()
+  });
+  let tid = nextId(STATE.tireOrderTires);
+  lines.forEach(t => {
+    STATE.tireOrderTires.push(Object.assign({ id: tid++, order_id: oid }, t));
+  });
+  let cid = nextId(STATE.tireOrderCharges);
+  tsDraft.charges.filter(c => (c.item_name||'').trim() || c.qty || c.unit_price).forEach(c => {
+    STATE.tireOrderCharges.push({ id: cid++, order_id: oid, item_name: c.item_name,
+      spec: c.spec, qty: c.qty, unit_price: c.unit_price, amount: tsLineAmount(c) });
+  });
+  // 「裝上」的輪胎同步寫進輪胎位置圖：同一輪位原本使用中的那條標成已更換，歷史留著
+  const mile = mileageRaw === '' ? null : parseInt(mileageRaw);
+  let installed = 0;
+  lines.forEach(t => {
+    if(!(t.on_brand || t.on_serial || t.on_code)) return;   // 只有拆下、沒有裝上的不動位置圖
+    const veh = String(t.position).charAt(0) === 'B' ? trail : head;
+    if(!veh) return;
+    STATE.tireRecords.forEach(r => {
+      if(r.vehicle_id === veh.id && r.position === t.position && r.status === '使用中'){
+        r.status = '已更換'; r.replaced_date = date;
+      }
+    });
+    STATE.tireRecords.push({
+      id: nextId(STATE.tireRecords), vehicle_id: veh.id, position: t.position,
+      brand: t.on_brand || '', install_date: date, mileage_at_install: mile,
+      status: '使用中', replaced_date: null,
+      notes: [t.on_code, t.on_serial ? '胎號 ' + t.on_serial : '', t.on_week ? '製造 ' + t.on_week : '']
+             .filter(Boolean).join('／')
+    });
+    installed++;
+  });
+  await saveState('tire_service_orders', STATE.tireOrders, true);
+  await saveState('tire_service_tires', STATE.tireOrderTires, true);
+  await saveState('tire_service_charges', STATE.tireOrderCharges, true);
+  if(installed) await saveState('tire_records', STATE.tireRecords, true);
+  tsDraft = { tires: [], charges: [] };
+  ['ts_no','ts_container','ts_mileage','ts_time','ts_notes'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  renderAll();
+  alert('作業單已存檔。' + (installed ? '\n\n其中 ' + installed + ' 條「裝上」的輪胎已經更新到輪胎位置圖。' : ''));
+});
+
 document.getElementById('tire_add').addEventListener('click', async () => {
   const plate = document.getElementById('tire_plate').value;
   const v = STATE.vehicles.find(x => x.plate === plate);
