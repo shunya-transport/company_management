@@ -3912,9 +3912,18 @@ function annualLeaveUsed(employeeId, hireDate, uptoDate){
     .filter(r => r.employee_id===employeeId && (r.leave_type||'').trim()==='特休' && r.start_date >= start && r.start_date <= cutoff)
     .reduce((sum,r) => sum + (parseFloat(r.days)||0), 0));
 }
+// 「剩特休」要跟特休天數清冊算出同一個數字，所以同樣優先採用公司核定的天數。
+// 依「請假那一年」去查（annual_leave_yearly 有 110～115 每年的核定值），
+// 看舊年度的假單就用那一年的核定天數，查不到才退回勞基法級距估算。
+function annualLeaveTotalFor(employeeId, hireDate, uptoDate){
+  const emp = (STATE.employees || []).find(e => e.id === employeeId);
+  const appr = annualLeaveApprovedFor(emp, rocYearOf(uptoDate));
+  if(appr) return appr.days;
+  return annualLeaveDaysAt(hireDate, uptoDate);
+}
 function annualLeaveRemaining(employeeId, hireDate, uptoDate){
   if(!hireDate) return null;
-  const total = annualLeaveDaysAt(hireDate, uptoDate);
+  const total = annualLeaveTotalFor(employeeId, hireDate, uptoDate);
   if(total===null) return null;
   return fmt2(total - annualLeaveUsed(employeeId, hireDate, uptoDate));
 }
@@ -8062,19 +8071,20 @@ function renderAccessCardLedger(){
 // 當年度公司核定的特休（來自請假系統巨集檔「特休統計」那張表）。
 // 裡面已經把年資追溯、復職前累計年資、上年度未休這些特殊狀況算進去了，
 // 比用「今天的實際年資」直接對勞基法級距表估來得準。查不到才退回估算。
-function annualLeaveApproved(emp){
+function annualLeaveApprovedFor(emp, yearRoc){
   const list = STATE.annualLeaveYearly || [];
-  if(!list.length || !emp) return null;
-  const yr = Number(todayISO().slice(0, 4)) - 1911;   // 民國年＝西元年 - 1911
-  const hit = list.find(a => Number(a.year_roc) === yr && (
+  if(!list.length || !emp || !yearRoc) return null;
+  const hit = list.find(a => Number(a.year_roc) === Number(yearRoc) && (
         (emp.employee_no && a.employee_no && String(a.employee_no).trim() === String(emp.employee_no).trim())
      || (a.employee_id != null && String(a.employee_id) === String(emp.id))
      || (a.employee_name_raw && a.employee_name_raw === emp.name)));
   if(!hit) return null;
   const days = parseFloat(hit.leave_days);
   if(isNaN(days)) return null;
-  return { days, seniority: hit.seniority, prior: hit.prior_years, year: yr };
+  return { days, seniority: hit.seniority, prior: hit.prior_years, year: Number(yearRoc) };
 }
+function rocYearOf(dateISO){ return Number(String(dateISO || todayISO()).slice(0, 4)) - 1911; }
+function annualLeaveApproved(emp){ return annualLeaveApprovedFor(emp, rocYearOf(todayISO())); }
 function renderLeaveLedger(){
   const q = document.getElementById('leave_search').value.trim();
   let rows = STATE.employees;
