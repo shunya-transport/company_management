@@ -2152,6 +2152,8 @@
             <option value="pension_contribution">勞健保提撥計算表</option>
             <option value="personal_leave">個人請假清單</option>
             <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
+            <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
+            <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
             <option value="employer_ins_el">僱主險（團保）名冊 — 已加保人員（EL 格式）</option>
             <option value="employer_ins_en">僱主險（團保）名冊 — 全體在職人員（EN 格式）</option>
             <option value="contact_roster">人員通訊資料（依區別分組）</option>
@@ -5721,6 +5723,18 @@ const EXTRA_FIELDS = {
     {id:'ex_slip_year', label:'年度（民國，空白＝今年）', type:'number', placeholder:'例：115'},
     {id:'ex_slip_rows', label:'列數（空白＝6 列）', type:'number', placeholder:'例：6'}
   ],
+  bp_sheet: [
+    {id:'ex_ms_region', label:'區域', type:'select', opts:['台中','新竹','台南']},
+    {id:'ex_ms_month', label:'月份（空白＝本月）', type:'month'},
+    {id:'ex_ms_scope', label:'人員範圍', type:'select', opts:['直接人員','全部在職']},
+    {id:'ex_ms_rows', label:'總列數（空白＝14）', type:'number', placeholder:'例：14'}
+  ],
+  alcohol_sheet: [
+    {id:'ex_ms_region', label:'區域', type:'select', opts:['台中','新竹','台南']},
+    {id:'ex_ms_month', label:'月份（空白＝本月）', type:'month'},
+    {id:'ex_ms_scope', label:'人員範圍', type:'select', opts:['直接人員','全部在職']},
+    {id:'ex_ms_rows', label:'總列數（空白＝15）', type:'number', placeholder:'例：15'}
+  ],
   personal_leave: [
     {id:'ex_leave_mode', label:'顯示方式', type:'select', opts:['依月','依年']},
     {id:'ex_leave_month', label:'月份（顯示方式選"依月"時使用）', type:'month'},
@@ -6024,11 +6038,166 @@ function buildLeaveSlip(e){
     <div style="font-size:12.5px;text-align:right;margin-top:3px;">表單編號：管010-A1</div>
   </div>`;
 }
+// ===== 血壓／酒測量測紀錄表 =====
+// 紙本是 A4 橫式、一週一張：7 天各佔兩欄，左邊姓名，下面說明與運務組管理者簽名。
+// 選區域帶出該區直接人員，選月份就把那個月的每一週各印一張。
+const MS_DOW = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
+const MS_DEFS = {
+  bp: {
+    title: '血壓量測紀錄表',
+    subs: ['血壓值', '脈膊'],
+    slash: true,                 // 血壓值格子預印「/」，方便寫 120/80
+    rows: 14,
+    signLabel: '運務組管理者簽名：',
+    formNo: '表單編號：DGTT-P011-R03-01',
+    notes: [
+      '※測量標準範圍：收縮壓90~120mmHg/舒張壓60~80mmHg、脈博每分鐘60~100下',
+      '測量超標：收縮壓>160 mmHg 、舒張壓>100 mmHg、脈博>每分鐘100下，應再次測量，若2次皆超標需立即通知運務管理部主管，當日停止出車，回家做適當休息。',
+      '1、每日出勤前皆需有血壓記錄，將測量後數值依序填寫於「血壓值」及「脈膊」欄位。',
+      '2、新進、跨區支援人員請自行補填寫姓名並執行測量與填寫測量後數值。',
+      '3、休假/請假/上課/考試時，請在「血壓值」及「脈膊」該欄位註明，不要劃線。',
+      '4、誤填禁用立可白(帶)，請劃『＝』並簽名且在旁邊填上實際數值。'
+    ]
+  },
+  alcohol: {
+    title: '酒測量測紀錄表',
+    subs: ['上班前', '下班後'],
+    slash: false,
+    rows: 15,
+    signLabel: '運務組管理者簽核:',
+    formNo: '表單編號: DGTT-P011-R04--01',
+    notes: [
+      '※酒測數值需為『０』方可出勤工務，數值『不是０』，嚴禁出勤工務，並通知運務管理部主管。',
+      '1、請站立於監視器鏡頭前方執行酒測，將測量後數值面向監視器鏡頭，以便記錄。',
+      '2、每日出勤前/後皆需有酒測記錄，將測量後數值填寫於「上班前」及「下班後」欄位。',
+      '3、新進、跨區支援人員請自行補填寫姓名並執行酒測與填寫測量後數值。',
+      '4、休假/請假/上課/考試時，請在「上班前」及「下班後」該欄位註明，不要劃線。',
+      '5、誤填禁用立可白(帶)，請劃『＝』並簽名且填上實際數值。'
+    ]
+  }
+};
+
+// 一個月拆成幾個「週一到週日」。落在該月以外的日子回傳 null，日期格就留白，
+// 這跟紙本一樣（115/07 最後一張只有 7/27～7/31，六、日空著）。
+function msWeeksOfMonth(ym){
+  const [y, m] = String(ym).split('-').map(Number);
+  if(!y || !m) return [];
+  const last  = new Date(y, m, 0);
+  const start = new Date(y, m - 1, 1);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));   // 退到那一週的星期一
+  const weeks = [];
+  const cur = new Date(start);
+  while(cur <= last && weeks.length < 8){
+    const days = [];
+    for(let i = 0; i < 7; i++){
+      const d = new Date(cur);
+      d.setDate(d.getDate() + i);
+      days.push((d.getFullYear() === y && d.getMonth() + 1 === m) ? d : null);
+    }
+    weeks.push(days);
+    cur.setDate(cur.getDate() + 7);
+  }
+  return weeks;
+}
+
+function msRoster(region, scope){
+  return (STATE.employees || [])
+    .filter(e => String(e.status || '在職').trim() === '在職')
+    .filter(e => String(e.region || '').trim() === String(region).trim())
+    .filter(e => scope === '全部在職' ? true : String(e.employee_type || '').trim() === '直接')
+    .sort((a, b) => String(a.employee_no || '').localeCompare(String(b.employee_no || '')));
+}
+
+function buildMeasureSheets(kind){
+  const def    = MS_DEFS[kind];
+  const region = extraVal('ex_ms_region') || '台中';
+  const scope  = extraVal('ex_ms_scope')  || '直接人員';
+  const ym     = extraVal('ex_ms_month')  || todayISO().slice(0, 7);
+  const wantRows = parseInt(extraVal('ex_ms_rows'), 10);
+  const names  = msRoster(region, scope).map(e => e.name);
+  const rowCount = Math.max(names.length, wantRows > 0 ? wantRows : def.rows);
+  const weeks  = msWeeksOfMonth(ym);
+  if(!weeks.length) return `<div style="padding:20px;">月份格式不對，請重新選一次。</div>`;
+  const [y, m] = ym.split('-').map(Number);
+  const roc    = y - 1911;
+  const period = `${roc}年${String(m).padStart(2, '0')}月`;
+  // 一張 A4 橫式（794px 高）扣掉抬頭、說明區與簽名後，大概剩這麼多給資料列
+  const rowH = Math.max(15, Math.min(34, Math.floor(452 / rowCount)));
+  const BD  = '1px solid #000';
+  const KAI = "'標楷體','DFKai-SB','BiauKai','Kaiti TC','楷体',serif";
+
+  const sheet = (days, idx) => {
+    const dateRow = days.map(d => `<th colspan="2" style="border:${BD};padding:1px 2px;font-size:13px;font-weight:400;height:21px;background:#fff;text-align:center;color:#000;letter-spacing:0;">${d ? (d.getMonth() + 1) + '月' + d.getDate() + '日' : ''}</th>`).join('');
+    const dowRow  = MS_DOW.map(w => `<th colspan="2" style="border:${BD};padding:1px 2px;font-size:13px;font-weight:400;height:19px;background:#fff;text-align:center;color:#000;letter-spacing:0;">${w}</th>`).join('');
+    const subRow  = days.map(() => def.subs.map(t => `<th style="border:${BD};padding:1px 0;font-size:12px;font-weight:400;background:#fff;text-align:center;color:#000;letter-spacing:0;">${t}</th>`).join('')).join('');
+    // 左上角那格是斜線分隔的「測值／姓名」，用背景漸層畫那條斜線
+    const diag = `<td style="border:${BD};padding:0;position:relative;height:30px;background:linear-gradient(to right bottom,transparent calc(50% - 0.6px),#000 calc(50% - 0.6px),#000 calc(50% + 0.6px),transparent calc(50% + 0.6px));">
+      <div style="position:absolute;right:3px;top:1px;font-size:11.5px;">測值</div>
+      <div style="position:absolute;left:3px;bottom:1px;font-size:11.5px;">姓名</div></td>`;
+    let body = '';
+    for(let i = 0; i < rowCount; i++){
+      let cells = '';
+      for(let d = 0; d < 7; d++){
+        cells += `<td style="border:${BD};padding:0;text-align:center;font-size:12px;vertical-align:middle;">${def.slash ? '/' : ''}</td>`;
+        cells += `<td style="border:${BD};padding:0;"></td>`;
+      }
+      body += `<tr style="height:${rowH}px;"><td style="border:${BD};text-align:center;font-size:12.5px;padding:0 2px;white-space:nowrap;vertical-align:middle;color:#000;">${esc(names[i] || '')}</td>${cells}</tr>`;
+    }
+    const noteRow = `<tr>
+      <td style="border:${BD};text-align:center;font-size:12.5px;padding:0;vertical-align:middle;color:#000;">說明</td>
+      <td colspan="14" style="border:${BD};padding:3px 6px;font-size:11px;line-height:1.4;text-align:left;color:#000;">${def.notes.map(n => `<div>${esc(n)}</div>`).join('')}</td></tr>`;
+    const colgroup = `<colgroup><col style="width:8.6%;">${days.map(() => '<col style="width:6.53%;"><col style="width:6.53%;">').join('')}</colgroup>`;
+    return `<div class="ms-sheet" data-png-width="1123" data-png-height="794"
+      data-sheet-name="${esc(def.title + '_' + region + '_' + roc + '年' + String(m).padStart(2,'0') + '月_第' + (idx + 1) + '週')}"
+      style="font-family:${KAI};color:#000;${idx ? 'page-break-before:always;margin-top:26px;' : ''}">
+      <div style="position:relative;height:34px;">
+        <img src="${SLIP_LOGO}" alt="DGTT" style="position:absolute;left:0;top:0;height:32px;">
+        <div style="text-align:center;font-size:19px;font-weight:700;letter-spacing:3px;padding-top:6px;">${esc(def.title)}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin:0 0 2px;">
+        <span>區域：${esc(region)}</span><span>${esc(period)}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;text-align:center;color:#000;font-size:12px;">
+        ${colgroup}
+        <tr><td rowspan="2" style="border:${BD};font-size:13px;letter-spacing:8px;padding:0 0 0 6px;text-align:center;vertical-align:middle;color:#000;">日期</td>${dateRow}</tr>
+        <tr>${dowRow}</tr>
+        <tr>${diag}${subRow}</tr>
+        ${body}
+        ${noteRow}
+      </table>
+      <div style="font-size:13px;margin-top:6px;">${esc(def.signLabel)}<span style="display:inline-block;width:180px;border-bottom:1px solid #000;">&#160;</span></div>
+      <div style="font-size:12px;text-align:right;margin-top:1px;">${esc(def.formNo)}</div>
+    </div>`;
+  };
+
+  return `<style>
+    @page { size: A4 landscape; margin: 8mm; }
+    @media print { #printArea{ padding:0 !important; } .ms-sheet{ margin-top:0 !important; } }
+  </style>` + weeks.map(sheet).join('');
+}
+
 // 把畫面上的表單存成 PNG。用 SVG 的 foreignObject 把 HTML 包起來再畫到 canvas，
 // 不需要外部套件（CDN 在公司網路不一定連得到）。失敗就請使用者改用列印另存 PDF。
 async function downloadFormPng(){
   const box = document.querySelector('#printArea > div');
   if(!box){ alert('請先按「產生表單」。'); return; }
+  // 一次產生很多張的表單（血壓／酒測是一週一張），一張一張存成獨立的圖檔，
+  // 不要疊成一張長圖，不然印出來不是 A4。
+  const sheets = box.querySelectorAll('[data-sheet-name]');
+  if(sheets.length){
+    for(let i = 0; i < sheets.length; i++){
+      await pngFromNode(sheets[i], sheets[i].getAttribute('data-sheet-name') + '.png');
+      // 連續觸發下載瀏覽器會擋，隔一下再存下一張
+      await new Promise(r => setTimeout(r, 350));
+    }
+    return;
+  }
+  const fname = (document.getElementById('form_type').selectedOptions[0].textContent.replace(/[（(].*/, '').trim() || '表單')
+                + '_' + todayISO() + '.png';
+  return pngFromNode(box, fname);
+}
+
+async function pngFromNode(box, fileName){
   const SCALE = 2;
   // foreignObject 裡面必須是合法的 XML，<br> 這種沒有結尾的標籤直接用 outerHTML 會讓整張圖畫不出來，
   // 所以用 XMLSerializer 轉一次。表單本身的樣式都寫在 style 屬性上，不需要外部 CSS，
@@ -6041,8 +6210,13 @@ async function downloadFormPng(){
   // 表單如果指定了輸出寬度就照它（請假單是 A4 橫式，1123px＝297mm×96dpi），
   // 沒有指定就量它自己有多寬。量的時候要把 max-width 拿掉，
   // 不然表格被壓縮成 900px、內容擠出去，畫出來右邊那幾欄會被切掉。
-  const wantW = parseInt((box.querySelector('[data-png-width]') || {}).dataset
-                  ? box.querySelector('[data-png-width]').dataset.pngWidth : '') || 0;
+  // 紙張尺寸可能標在這個節點自己身上（血壓／酒測是一張一張出圖，box 就是那張表），
+  // 也可能標在它裡面（請假單是包一層）。querySelector 不會找自己，所以要先看自己。
+  const pngAttr = (name) => {
+    const el = (box.hasAttribute && box.hasAttribute(name)) ? box : box.querySelector('[' + name + ']');
+    return el ? (parseInt(el.getAttribute(name), 10) || 0) : 0;
+  };
+  const wantW = pngAttr('data-png-width');
   const probe = document.createElement('div');
   probe.style.cssText = 'position:fixed;left:-10000px;top:0;background:#fff;width:'
                       + (wantW || 1400) + 'px;';
@@ -6060,8 +6234,7 @@ async function downloadFormPng(){
                   : Math.max(clone.scrollWidth, clone.offsetWidth, 900);
   // 有指定紙張高度就照 A4 出圖（1123×794＝A4 橫式 96dpi），內容比較短就在下面留白，
   // 這樣存出來的圖直接就是一張 A4，不用再自己調。
-  const wantH = parseInt((box.querySelector('[data-png-height]') || {}).dataset
-                  ? box.querySelector('[data-png-height]').dataset.pngHeight : '') || 0;
+  const wantH = pngAttr('data-png-height');
   const contentH = Math.max(clone.scrollHeight, clone.offsetHeight, 200) + PAD * 2;
   const H = Math.max(contentH, wantH);
   document.body.removeChild(probe);
@@ -6084,8 +6257,7 @@ async function downloadFormPng(){
     ctx.scale(SCALE, SCALE);
     ctx.drawImage(img, 0, 0);
     const a = document.createElement('a');
-    a.download = (document.getElementById('form_type').selectedOptions[0].textContent.replace(/[（(].*/, '').trim() || '表單')
-                  + '_' + todayISO() + '.png';
+    a.download = fileName;
     a.href = cv.toDataURL('image/png');
     a.click();
   }catch(err){
@@ -6098,7 +6270,8 @@ function generateForm(){
   const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
   const e = list.find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff'];
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet'];
+  const MS_TYPES = ['bp_sheet','alcohol_sheet'];
   if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
   const company = e ? (e.company_name || '＿＿＿＿＿＿＿＿＿＿') : '＿＿＿＿＿＿＿＿＿＿';
@@ -6320,15 +6493,19 @@ function generateForm(){
   if(type === 'phone_pool')     bodyHtml = buildPhonePool();
   if(type === 'ext_list')       bodyHtml = buildExtList();
   if(type === 'leave_slip')     bodyHtml = buildLeaveSlip(e);
+  if(type === 'bp_sheet')       bodyHtml = buildMeasureSheets('bp');
+  if(type === 'alcohol_sheet')  bodyHtml = buildMeasureSheets('alcohol');
   if(type === 'stocktake_vehicle') bodyHtml = buildStocktake('vehicle');
   if(type === 'stocktake_staff')   bodyHtml = buildStocktake('staff');
 
   const wide = ROSTER_TYPES.includes(type) || type === 'pension_contribution' || type === 'leave_slip';
-  document.getElementById('printArea').innerHTML = `<div style="max-width:${wide?'900px':'640px'};margin:0 auto;padding:40px;border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
+  // 血壓／酒測是 A4 橫式 15 欄，壓到 900px 會擠成一團，畫面上直接照原寬顯示
+  const maxW = MS_TYPES.includes(type) ? '1180px' : (wide ? '900px' : '640px');
+  document.getElementById('printArea').innerHTML = `<div style="max-width:${maxW};margin:0 auto;padding:${MS_TYPES.includes(type)?'20px':'40px'};border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
   document.getElementById('form_print').style.display = 'inline-block';
   const _png = document.getElementById('form_png');
   if(_png) _png.style.display = 'inline-block';
-  document.getElementById('form_export_csv').style.display = wide ? 'inline-block' : 'none';
+  document.getElementById('form_export_csv').style.display = (wide && !MS_TYPES.includes(type)) ? 'inline-block' : 'none';
 }
 
 // ===== 勞健保提撥計算表 =====
