@@ -2358,6 +2358,64 @@
   </div>
 </div>
 
+<div class="modal-backdrop no-print" id="leaveEditModal">
+  <div class="modal-box">
+    <button class="modal-close" id="leaveEditModalClose">✕</button>
+    <h3 id="leaveEditModalTitle">修改請假登錄</h3>
+    <div class="muted" style="margin-bottom:10px;">改完按「儲存修改」直接寫回雲端。天數會依時數 ÷ 8 重算。</div>
+    <div class="form-grid">
+      <label>登錄編號<input id="lve_regno" placeholder="例：H1101119"></label>
+      <label>人員<select id="lve_emp"></select></label>
+      <label>假別<select id="lve_type"></select></label>
+      <label>起始日期<input id="lve_start" type="date"></label>
+      <label>結束日期<input id="lve_end" type="date"></label>
+      <label>時數（小時）<input id="lve_hours" type="number" step="0.5">
+        <span style="font-size:11px;font-weight:400;color:var(--text-3);">＝ <b id="lve_days_hint">—</b> 天（時數 ÷ 8）</span>
+      </label>
+      <label>備註<input id="lve_notes" placeholder="選填"></label>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn" id="leaveEditModalSave">儲存修改</button>
+      <button class="del-btn" id="leaveEditModalDelete">刪除這筆</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop no-print" id="otEditModal">
+  <div class="modal-box">
+    <button class="modal-close" id="otEditModalClose">✕</button>
+    <h3 id="otEditModalTitle">修改加班登錄</h3>
+    <div class="muted" style="margin-bottom:10px;">七個級距可以直接手改；按「依時數重新自動拆」會照加班類別重算。換補休的不填級距。</div>
+    <div class="form-grid">
+      <label>登錄編號<input id="ote_regno" placeholder="例：H1100862"></label>
+      <label>人員<select id="ote_emp"></select></label>
+      <label>加班類別<select id="ote_type"></select></label>
+      <label>加班日期<input id="ote_date" type="date"></label>
+      <label>加班時數<input id="ote_hours" type="number" step="0.5"></label>
+      <label>轉換方式
+        <select id="ote_settlement">
+          <option value="未設定">未設定</option>
+          <option value="補休">補休</option>
+          <option value="加班費">加班費</option>
+        </select>
+      </label>
+      <label>延長工時≦2h（1.34倍）<input id="ote_le2" type="number" step="0.5"></label>
+      <label>延長工時&gt;2h（1.67倍）<input id="ote_gt2" type="number" step="0.5"></label>
+      <label>延長工時&gt;4h<input id="ote_gt4" type="number" step="0.5"></label>
+      <label>休息日≦2h（1.34倍）<input id="ote_rest_le2" type="number" step="0.5"></label>
+      <label>休息日&gt;2h（1.67倍）<input id="ote_rest_gt2" type="number" step="0.5"></label>
+      <label>休息日&gt;8h（2.67倍）<input id="ote_rest_gt8" type="number" step="0.5"></label>
+      <label>例假／國定加班（加倍）<input id="ote_holiday" type="number" step="0.5"></label>
+      <label>備註<input id="ote_notes" placeholder="選填"></label>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn" id="otEditModalSave">儲存修改</button>
+      <button class="btn ghost" id="otEditModalRecalc">依時數重新自動拆</button>
+      <button class="del-btn" id="otEditModalDelete">刪除這筆</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop no-print" id="maintEditModal">
   <div class="modal-box">
     <button class="modal-close" id="maintEditModalClose">✕</button>
@@ -8977,6 +9035,247 @@ function renderLeaveRegNoBox(){
   if(elBox) elBox.value = next;
 }
 
+// ===== 請假／加班登錄的修改 =====
+// 登錄錯了要能改，不能只有刪除。刪掉重打會拿到新的登錄編號，跟紙本假單就對不起來；
+// 而且舊資料很多是離職人員（只剩姓名、沒有 employee_id），刪掉就接不回去了。
+let leaveEditId = null;
+let otEditId    = null;
+const LVOT_KEEP_NAME = '__keep_name__';
+
+// 人員下拉：原本掛的人已經離職（不在 STATE.employees 裡）時，
+// 補一個「保留原紀錄」的選項並預設選它，避免存個檔就把姓名洗掉。
+function lvotEmpOptions(selId, curId, curName){
+  const el = document.getElementById(selId);
+  if(!el) return;
+  const opts = STATE.employees.map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.employee_no)}）</option>`).join('');
+  const inList = STATE.employees.some(e => String(e.id) === String(curId));
+  if(!inList){
+    const hist = (STATE.employeesHistory || []).find(e => String(e.id) === String(curId));
+    const nm = hist ? hist.name : (curName || '');
+    if(nm){
+      el.innerHTML = `<option value="${LVOT_KEEP_NAME}">${esc(nm)}（已離職，保留原紀錄）</option>` + opts;
+      el.value = LVOT_KEEP_NAME;
+      return;
+    }
+  }
+  el.innerHTML = opts;
+  if(inList) el.value = String(curId);
+}
+
+// 下拉選項直接沿用新增表單那一份，舊資料若有清單上沒有的值就補進去，才不會被改掉
+function lvotFillSelect(targetId, sourceId, cur){
+  const t = document.getElementById(targetId), s = document.getElementById(sourceId);
+  if(!t || !s) return;
+  t.innerHTML = s.innerHTML;
+  const v = String(cur || '').trim();
+  if(v && !Array.from(t.options).some(o => o.value === v)){
+    t.insertAdjacentHTML('afterbegin', `<option value="${esc(v)}">${esc(v)}</option>`);
+  }
+  t.value = v;
+}
+
+function lvotNum(id){
+  const el = document.getElementById(id);
+  if(!el) return null;
+  const v = String(el.value).trim();
+  return v === '' ? null : parseFloat(v);
+}
+function lvotSet(id, v){
+  const el = document.getElementById(id);
+  if(el) el.value = (v == null || v === '') ? '' : v;
+}
+
+// ---- 請假 ----
+function updateLveDaysHint(){
+  const el = document.getElementById('lve_hours'), out = document.getElementById('lve_days_hint');
+  if(!el || !out) return;
+  const h = parseFloat(el.value);
+  out.textContent = isNaN(h) ? '—' : (Math.round(h / LEAVE_HOURS_PER_DAY * 100) / 100).toFixed(2);
+}
+
+function openLeaveEditModal(id){
+  const r = (STATE.leaveRecords || []).find(x => String(x.id) === String(id));
+  if(!r){ alert('找不到這筆請假登錄，可能已經被移除了。'); return; }
+  leaveEditId = r.id;
+  lvotSet('lve_regno', r.reg_no || '');
+  lvotEmpOptions('lve_emp', r.employee_id, r.employee_name_raw);
+  lvotFillSelect('lve_type', 'lv_type', r.leave_type);
+  lvotSet('lve_start', String(r.start_date || '').slice(0, 10));
+  lvotSet('lve_end',   String(r.end_date   || '').slice(0, 10));
+  lvotSet('lve_hours', leaveHours(r));
+  lvotSet('lve_notes', r.notes || '');
+  updateLveDaysHint();
+  const emp = findEmployeeAnywhere(r.employee_id);
+  const nm = emp ? emp.name : (r.employee_name_raw || '');
+  const t = document.getElementById('leaveEditModalTitle');
+  if(t) t.textContent = '修改請假登錄　' + (r.reg_no || ('#' + r.id)) + '　' + nm;
+  document.getElementById('leaveEditModal').classList.add('show');
+}
+function closeLeaveEditModal(){
+  leaveEditId = null;
+  const m = document.getElementById('leaveEditModal');
+  if(m) m.classList.remove('show');
+}
+
+async function saveLeaveEdit(){
+  const rec = (STATE.leaveRecords || []).find(x => String(x.id) === String(leaveEditId));
+  if(!rec){ alert('找不到這筆登錄，可能已經被移除了。'); closeLeaveEditModal(); return; }
+  const start = document.getElementById('lve_start').value;
+  const end   = document.getElementById('lve_end').value || start;
+  const hours = parseFloat(document.getElementById('lve_hours').value);
+  if(!start){ alert('請填起始日期。'); return; }
+  if(end < start){ alert('結束日期不能早於起始日期。'); return; }
+  if(isNaN(hours) || hours <= 0){ alert('時數要大於 0。'); return; }
+  if(!isHalfHour(hours) && !confirm('你填的是 ' + hours + ' 小時，不是 0.5 的倍數。\n\n'
+      + '請假通常以半小時為單位（0.5、1、1.5、…）。\n'
+      + '如果你想填的是「天」，1 天請填 8、半天請填 4、1 小時請填 1。\n\n確定要用 '
+      + hours + ' 小時存檔嗎？')) return;
+  const regNo = document.getElementById('lve_regno').value.trim();
+  if(regNo && (STATE.leaveRecords || []).some(x => String(x.id) !== String(rec.id) && String(x.reg_no || '') === regNo)
+     && !confirm('登錄編號「' + regNo + '」已經有另一筆在用了。\n\n編號重複會讓清單排序跟紙本對不起來。確定還是要存嗎？')) return;
+  const sel  = document.getElementById('lve_emp');
+  const keep = !!(sel && sel.value === LVOT_KEEP_NAME);
+  if(!keep){
+    const empId = parseInt(sel.value);
+    const emp   = STATE.employees.find(e => e.id === empId);
+    if(!emp){ alert('請選擇人員。'); return; }
+    rec.employee_id = empId;
+    rec.employee_name_raw = emp.name;
+  }
+  rec.reg_no     = regNo || null;
+  rec.leave_type = document.getElementById('lve_type').value;
+  rec.start_date = start;
+  rec.end_date   = end;
+  rec.hours      = hours;
+  rec.days       = daysFromHours(hours);
+  rec.notes      = document.getElementById('lve_notes').value.trim();
+  await saveState('leave_records', STATE.leaveRecords, true);
+  closeLeaveEditModal();
+  renderAll();
+}
+
+async function deleteLeaveEdit(){
+  const rec = (STATE.leaveRecords || []).find(x => String(x.id) === String(leaveEditId));
+  if(!rec){ closeLeaveEditModal(); return; }
+  if(!confirm('要刪掉「' + (rec.reg_no || ('#' + rec.id)) + '　' + (rec.employee_name_raw || '')
+      + '　' + (rec.start_date || '') + '」這筆請假登錄嗎？刪掉不能復原。')) return;
+  const id = rec.id;
+  STATE.leaveRecords = STATE.leaveRecords.filter(x => String(x.id) !== String(id));
+  await saveState('leave_records', STATE.leaveRecords, true);
+  closeLeaveEditModal();
+  renderAll();
+}
+
+// ---- 加班 ----
+const OTE_SPLIT_IDS = ['ote_le2','ote_gt2','ote_gt4','ote_rest_le2','ote_rest_gt2','ote_rest_gt8','ote_holiday'];
+
+// 跟新增表單同一套拆法（勞基法第 24、39 條）
+function otEditRecalc(){
+  const hours      = parseFloat(document.getElementById('ote_hours').value) || 0;
+  const settlement = document.getElementById('ote_settlement').value;
+  const type       = document.getElementById('ote_type').value;
+  OTE_SPLIT_IDS.forEach(id => lvotSet(id, ''));
+  if(settlement !== '加班費' || hours <= 0) return;
+  const put = (id, v) => { if(v > 0) lvotSet(id, fmt2(v)); };
+  if(type === '例假日加班' || type === '國定假日加班'){
+    put('ote_holiday', hours);
+  }else if(type === '休假日加班'){
+    put('ote_rest_le2', Math.min(hours, 2));
+    put('ote_rest_gt2', Math.min(Math.max(hours - 2, 0), 6));
+    put('ote_rest_gt8', Math.max(hours - 8, 0));
+  }else{
+    put('ote_le2', Math.min(hours, 2));
+    put('ote_gt2', Math.min(Math.max(hours - 2, 0), 2));
+    put('ote_gt4', Math.max(hours - 4, 0));
+  }
+}
+
+function openOtEditModal(id){
+  const r = (STATE.overtimeRecords || []).find(x => String(x.id) === String(id));
+  if(!r){ alert('找不到這筆加班登錄，可能已經被移除了。'); return; }
+  otEditId = r.id;
+  lvotSet('ote_regno', r.reg_no || '');
+  lvotEmpOptions('ote_emp', r.employee_id, r.employee_name_raw);
+  lvotFillSelect('ote_type', 'ot_type', r.ot_type);
+  lvotSet('ote_date',  String(r.ot_date || '').slice(0, 10));
+  lvotSet('ote_hours', r.hours);
+  document.getElementById('ote_settlement').value = r.settlement_type || '未設定';
+  lvotSet('ote_le2',       r.hours_le2);
+  lvotSet('ote_gt2',       r.hours_gt2);
+  lvotSet('ote_gt4',       r.hours_gt4);
+  lvotSet('ote_rest_le2',  r.rest_hours_le2);
+  lvotSet('ote_rest_gt2',  r.rest_hours_gt2);
+  lvotSet('ote_rest_gt8',  r.rest_hours_gt8);
+  lvotSet('ote_holiday',   r.holiday_hours);
+  lvotSet('ote_notes', r.notes || '');
+  const emp = findEmployeeAnywhere(r.employee_id);
+  const nm = emp ? emp.name : (r.employee_name_raw || '');
+  const t = document.getElementById('otEditModalTitle');
+  if(t) t.textContent = '修改加班登錄　' + (r.reg_no || ('#' + r.id)) + '　' + nm;
+  document.getElementById('otEditModal').classList.add('show');
+}
+function closeOtEditModal(){
+  otEditId = null;
+  const m = document.getElementById('otEditModal');
+  if(m) m.classList.remove('show');
+}
+
+async function saveOtEdit(){
+  const rec = (STATE.overtimeRecords || []).find(x => String(x.id) === String(otEditId));
+  if(!rec){ alert('找不到這筆登錄，可能已經被移除了。'); closeOtEditModal(); return; }
+  const date  = document.getElementById('ote_date').value;
+  const hours = parseFloat(document.getElementById('ote_hours').value);
+  if(!date){ alert('請填加班日期。'); return; }
+  if(isNaN(hours) || hours <= 0){ alert('加班時數要大於 0。'); return; }
+  const settlement = document.getElementById('ote_settlement').value;
+  const tiers = OTE_SPLIT_IDS.map(lvotNum);
+  const tierSum = tiers.reduce((a, b) => a + (b || 0), 0);
+  // 級距合計要等於加班時數，不然工時統計跟薪資會對不起來
+  if(settlement === '加班費' && Math.abs(tierSum - hours) > 0.01
+     && !confirm('級距合計 ' + fmt2(tierSum) + ' 小時，跟加班時數 ' + fmt2(hours) + ' 小時對不起來。\n\n'
+       + '按「取消」回去改，或先按「依時數重新自動拆」讓系統重算。\n\n確定要照現在填的存嗎？')) return;
+  const regNo = document.getElementById('ote_regno').value.trim();
+  if(regNo && (STATE.overtimeRecords || []).some(x => String(x.id) !== String(rec.id) && String(x.reg_no || '') === regNo)
+     && !confirm('登錄編號「' + regNo + '」已經有另一筆在用了。\n\n確定還是要存嗎？')) return;
+  const sel  = document.getElementById('ote_emp');
+  const keep = !!(sel && sel.value === LVOT_KEEP_NAME);
+  if(!keep){
+    const empId = parseInt(sel.value);
+    const emp   = STATE.employees.find(e => e.id === empId);
+    if(!emp){ alert('請選擇人員。'); return; }
+    rec.employee_id = empId;
+    rec.employee_name_raw = emp.name;
+  }
+  rec.reg_no  = regNo || null;
+  rec.ot_type = document.getElementById('ote_type').value;
+  rec.ot_date = date;
+  rec.hours   = hours;
+  rec.hours_le2       = tiers[0];
+  rec.hours_gt2       = tiers[1];
+  rec.hours_gt4       = tiers[2];
+  rec.rest_hours_le2  = tiers[3];
+  rec.rest_hours_gt2  = tiers[4];
+  rec.rest_hours_gt8  = tiers[5];
+  rec.holiday_hours   = tiers[6];
+  rec.settlement_type = settlement;
+  rec.notes = document.getElementById('ote_notes').value.trim();
+  await saveState('overtime_records', STATE.overtimeRecords, true);
+  closeOtEditModal();
+  renderAll();
+}
+
+async function deleteOtEdit(){
+  const rec = (STATE.overtimeRecords || []).find(x => String(x.id) === String(otEditId));
+  if(!rec){ closeOtEditModal(); return; }
+  if(!confirm('要刪掉「' + (rec.reg_no || ('#' + rec.id)) + '　' + (rec.employee_name_raw || '')
+      + '　' + (rec.ot_date || '') + '」這筆加班登錄嗎？刪掉不能復原。')) return;
+  const id = rec.id;
+  STATE.overtimeRecords = STATE.overtimeRecords.filter(x => String(x.id) !== String(id));
+  await saveState('overtime_records', STATE.overtimeRecords, true);
+  closeOtEditModal();
+  renderAll();
+}
+
 function renderLeaveTable(){
   const q = document.getElementById('lv_search').value.trim();
   const typeF = document.getElementById('lv_type_filter').value;
@@ -9011,7 +9310,8 @@ function renderLeaveTable(){
       <td${isHalfHour(leaveHours(r)) ? '' : ' style="background:var(--amber-bg);" title="時數不是 0.5 的倍數，可能是把天數填到時數欄了"'}><b>${fmt2(leaveHours(r))}</b> 小時${isHalfHour(leaveHours(r)) ? '' : ' <span class="pill amber">請確認</span>'}</td>
       <td>${daysCell}</td>
       <td class="muted">${esc(r.notes||'')}</td>
-      <td><button class="del-btn" data-del-leave="${r.id}">刪除</button></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-edit-leave="${r.id}">修改</button>
+          <button class="del-btn" data-del-leave="${r.id}" style="margin-left:8px;">刪除</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="9" class="empty">尚無請假紀錄</td></tr>`;
 }
@@ -9093,7 +9393,8 @@ function renderOvertimeTable(){
       <td class="muted" style="font-size:12px;">${otTierText(r)}</td>
       <td>${settlementCell}</td>
       <td class="muted">${esc(r.notes||'')}</td>
-      <td><button class="del-btn" data-del-overtime="${r.id}">刪除</button></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-edit-ot="${r.id}">修改</button>
+          <button class="del-btn" data-del-overtime="${r.id}" style="margin-left:8px;">刪除</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="9" class="empty">尚無加班登錄</td></tr>`;
 }
@@ -10165,6 +10466,8 @@ document.getElementById('lv_hours').addEventListener('input', updateLeaveDaysHin
 document.getElementById('lv_search').addEventListener('input', renderLeaveTable);
 document.getElementById('lv_type_filter').addEventListener('change', renderLeaveTable);
 document.getElementById('leaveTableBody').addEventListener('click', async (e) => {
+  const editId = e.target.getAttribute('data-edit-leave');
+  if(editId){ openLeaveEditModal(editId); return; }
   const id = e.target.getAttribute('data-del-leave');
   if(id){
     STATE.leaveRecords = STATE.leaveRecords.filter(r => String(r.id) !== id);
@@ -10234,6 +10537,8 @@ document.getElementById('ot_add').addEventListener('click', async () => {
 document.getElementById('ot_search').addEventListener('input', renderOvertimeTable);
 document.getElementById('ot_type_filter').addEventListener('change', renderOvertimeTable);
 document.getElementById('overtimeTableBody').addEventListener('click', async (e) => {
+  const rowEditId = e.target.getAttribute('data-edit-ot');
+  if(rowEditId){ openOtEditModal(rowEditId); return; }
   const delId = e.target.getAttribute('data-del-overtime');
   const editId = e.target.getAttribute('data-edit-settle');
   const saveId = e.target.getAttribute('data-save-settle');
@@ -11972,6 +12277,25 @@ document.getElementById('vehicleModal').addEventListener('click', (e) => {
     _mem.addEventListener('click', (e) => { if(e.target.id === 'maintEditModal') closeMaintEditModal(); });
     document.getElementById('maintEditModalSave').addEventListener('click', saveMaintEdit);
     document.getElementById('maintEditModalDelete').addEventListener('click', deleteMaintEdit);
+  }
+}
+
+{
+  const _lve = document.getElementById('leaveEditModal');
+  if(_lve){
+    document.getElementById('leaveEditModalClose').addEventListener('click', closeLeaveEditModal);
+    _lve.addEventListener('click', (e) => { if(e.target.id === 'leaveEditModal') closeLeaveEditModal(); });
+    document.getElementById('leaveEditModalSave').addEventListener('click', saveLeaveEdit);
+    document.getElementById('leaveEditModalDelete').addEventListener('click', deleteLeaveEdit);
+    document.getElementById('lve_hours').addEventListener('input', updateLveDaysHint);
+  }
+  const _ote = document.getElementById('otEditModal');
+  if(_ote){
+    document.getElementById('otEditModalClose').addEventListener('click', closeOtEditModal);
+    _ote.addEventListener('click', (e) => { if(e.target.id === 'otEditModal') closeOtEditModal(); });
+    document.getElementById('otEditModalSave').addEventListener('click', saveOtEdit);
+    document.getElementById('otEditModalDelete').addEventListener('click', deleteOtEdit);
+    document.getElementById('otEditModalRecalc').addEventListener('click', otEditRecalc);
   }
 }
 
