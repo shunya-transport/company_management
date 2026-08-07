@@ -1296,7 +1296,9 @@
         </label>
         <label>起始日期<input id="lv_start" type="date"></label>
         <label>結束日期<input id="lv_end" type="date"></label>
-        <label>天數（選填，預設依日期自動算）<input id="lv_days" type="number" step="0.5"></label>
+        <label>時數（小時）<input id="lv_hours" type="number" step="0.5" placeholder="例：3.5　留空＝依日期整天計">
+          <span style="font-size:11px;font-weight:400;color:var(--text-3);">＝ <b id="lv_days_hint">—</b> 天（時數 ÷ 8）</span>
+        </label>
         <label>備註<input id="lv_notes" placeholder="選填"></label>
       </div>
       <button class="btn" id="lv_add">新增請假登錄</button>
@@ -1310,7 +1312,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>編號</th><th>姓名</th><th>假別</th><th>起始日期</th><th>結束日期</th><th>天數</th><th>備註</th><th></th></tr></thead>
+          <thead><tr><th>編號</th><th>姓名</th><th>假別</th><th>起始日期</th><th>結束日期</th><th>時數</th><th>天數<span class="muted" style="font-weight:400;">（÷8）</span></th><th>備註</th><th></th></tr></thead>
           <tbody id="leaveTableBody"></tbody>
         </table>
       </div>
@@ -3945,10 +3947,21 @@ function compHoursEarned(employeeId){
 function hoursFromDays(days){
   return Math.round((parseFloat(days)||0) * 8 * 2) / 2;
 }
+// 請假一律以「小時」為準。舊資料如果還沒有 hours（SQL #72 還沒跑），
+// 就用天數乘 8 對齊到 0.5 小時當備援，數字跟以前一樣不會跳動。
+const LEAVE_HOURS_PER_DAY = 8;
+function leaveHours(r){
+  if(!r) return 0;
+  if(r.hours !== null && r.hours !== undefined && r.hours !== '') return parseFloat(r.hours) || 0;
+  return hoursFromDays(r.days);
+}
+// 時數換算成天數，顯示用，取到小數第 2 位
+function leaveDaysOf(r){ return Math.round(leaveHours(r) / LEAVE_HOURS_PER_DAY * 100) / 100; }
+function daysFromHours(h){ return Math.round((parseFloat(h)||0) / LEAVE_HOURS_PER_DAY * 10000) / 10000; }
 function compHoursUsed(employeeId){
   return fmt2(STATE.leaveRecords
     .filter(r => r.employee_id===employeeId && (r.leave_type||'').trim()==='補休')
-    .reduce((sum,r) => sum + hoursFromDays(r.days), 0));
+    .reduce((sum,r) => sum + leaveHours(r), 0));
 }
 function compHoursRemaining(employeeId){
   return fmt2(compHoursEarned(employeeId) - compHoursUsed(employeeId));
@@ -5436,14 +5449,14 @@ function renderStaffModalView(e){
       ${(() => {
         const empLeaves = STATE.leaveRecords.filter(r => r.employee_id === empId).sort((a,b)=>(b.start_date||'').localeCompare(a.start_date||''));
         if(!empLeaves.length) return '<div class="muted">無請假紀錄</div>';
-        return `<div class="table-scroll" style="max-height:200px;"><table><thead><tr><th>假別</th><th>起始日期</th><th>結束日期</th><th>天數</th></tr></thead><tbody>` +
+        return `<div class="table-scroll" style="max-height:200px;"><table><thead><tr><th>假別</th><th>起始日期</th><th>結束日期</th><th>時數</th><th>天數（÷8）</th></tr></thead><tbody>` +
           empLeaves.map(r=>{
-            let daysCell = fmt2(r.days)??'';
+            let daysCell = leaveDaysOf(r).toFixed(2);
             if(r.leave_type.trim()==='特休'){
               const remaining = annualLeaveRemaining(empId, e.hire_date, r.start_date);
               if(remaining!==null) daysCell += ` <span class="muted">（剩特休 ${remaining} 天，約${(remaining*8).toFixed(2)}小時）</span>`;
             }
-            return `<tr><td>${esc(r.leave_type)}</td><td>${esc(r.start_date)}</td><td>${esc(r.end_date)}</td><td>${daysCell}</td></tr>`;
+            return `<tr><td>${esc(r.leave_type)}</td><td>${esc(r.start_date)}</td><td>${esc(r.end_date)}</td><td><b>${fmt2(leaveHours(r))}</b> 小時</td><td>${daysCell}</td></tr>`;
           }).join('') + `</tbody></table></div>`;
       })()}
     </div>
@@ -5867,7 +5880,7 @@ function slipTimeCell(r){
   return `<div style="line-height:2;font-size:10.5px;white-space:nowrap;">
     <div>自${ln(m(r && r.start_date))}月${ln(dd(r && r.start_date))}日${ln('')}:${ln('')}</div>
     <div>至${ln(m(r && r.end_date))}月${ln(dd(r && r.end_date))}日${ln('')}:${ln('')}</div>
-    <div>共請假<span style="display:inline-block;min-width:48px;border-bottom:1px solid #333;text-align:center;">${r ? (fmt2(r.days) ?? '') : ''}</span>天</div>
+    <div>共請假<span style="display:inline-block;min-width:48px;border-bottom:1px solid #333;text-align:center;">${r ? leaveDaysOf(r).toFixed(2) : ''}</span>天${r ? `<span class="muted" style="font-size:9.5px;">（${fmt2(leaveHours(r))} 小時）</span>` : ''}</div>
   </div>`;
 }
 function buildLeaveSlip(e){
@@ -6149,14 +6162,16 @@ function generateForm(){
     }
     const empLeaves = STATE.leaveRecords.filter(r => r.employee_id === e.id && filterFn(r))
       .sort((a,b) => (a.start_date||'').localeCompare(b.start_date||''));
-    const totalDays = fmt2(empLeaves.reduce((sum,r) => sum + (parseFloat(r.days)||0), 0));
+    const totalHours = fmt2(empLeaves.reduce((sum,r) => sum + leaveHours(r), 0));
+    const totalDays = fmt2(Math.round(totalHours / LEAVE_HOURS_PER_DAY * 100) / 100);
     const rowsHtml = empLeaves.length ? empLeaves.map((r,i) => `
       <tr>
         <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${i+1}</td>
         <td style="padding:6px 8px;border:1px solid #ccc;">${esc(r.leave_type)}</td>
         <td style="padding:6px 8px;border:1px solid #ccc;">${esc(r.start_date)}</td>
         <td style="padding:6px 8px;border:1px solid #ccc;">${esc(r.end_date)}</td>
-        <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${fmt2(r.days)??''}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${fmt2(leaveHours(r))}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${leaveDaysOf(r).toFixed(2)}</td>
         <td style="padding:6px 8px;border:1px solid #ccc;" class="muted">${esc(r.notes||'')}</td>
       </tr>`).join('') : `<tr><td colspan="6" style="padding:8px;border:1px solid #ccc;text-align:center;color:#999;">此期間沒有請假紀錄</td></tr>`;
     const annualDays = currentPeriodLeaveDays(e.hire_date);
@@ -6174,14 +6189,16 @@ function generateForm(){
           <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">假別</th>
           <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">起始日期</th>
           <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">結束日期</th>
-          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">天數</th>
+          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">時數</th>
+          <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">天數（÷8）</th>
           <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">備註</th>
         </tr></thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr style="font-weight:700;background:#fafafa;">
-            <td style="padding:6px 8px;border:1px solid #ccc;" colspan="4">此期間請假總天數</td>
-            <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${totalDays}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc;" colspan="4">此期間請假合計</td>
+            <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${totalHours} 小時</td>
+            <td style="padding:6px 8px;border:1px solid #ccc;text-align:center;">${totalDays} 天</td>
             <td style="padding:6px 8px;border:1px solid #ccc;"></td>
           </tr>
         </tfoot>
@@ -8302,7 +8319,7 @@ function renderLeaveTable(){
     const emp = STATE.employees.find(e => e.id === r.employee_id);
     const displayName = emp ? emp.name : (r.employee_name_raw || '');
     const tag = !emp && r.employee_name_raw ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
-    let daysCell = fmt2(r.days)??'';
+    let daysCell = leaveDaysOf(r).toFixed(2);
     if(r.leave_type.trim()==='特休' && emp){
       const remaining = annualLeaveRemaining(emp.id, emp.hire_date, r.start_date);
       if(remaining!==null){
@@ -8315,11 +8332,12 @@ function renderLeaveTable(){
       <td>${esc(r.leave_type)}</td>
       <td>${esc(r.start_date)}</td>
       <td>${esc(r.end_date)}</td>
+      <td><b>${fmt2(leaveHours(r))}</b> 小時</td>
       <td>${daysCell}</td>
       <td class="muted">${esc(r.notes||'')}</td>
       <td><button class="del-btn" data-del-leave="${r.id}">刪除</button></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" class="empty">尚無請假紀錄</td></tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty">尚無請假紀錄</td></tr>`;
 }
 
 function renderOvertimeSelects(){
@@ -9584,22 +9602,34 @@ document.getElementById('lv_add').addEventListener('click', async () => {
   const start = document.getElementById('lv_start').value;
   const end = document.getElementById('lv_end').value || start;
   if(!empId || !start){ alert('請選擇人員並填寫起始日期'); return; }
-  let days = document.getElementById('lv_days').value ? parseFloat(document.getElementById('lv_days').value) : null;
-  if(days===null){
+  // 以小時為準；時數留空就當作整天（起訖日相差幾天就算幾天，一天 8 小時）
+  const _hRaw = document.getElementById('lv_hours').value;
+  let hours = _hRaw === '' ? null : parseFloat(_hRaw);
+  if(hours === null || isNaN(hours)){
     const d1 = new Date(start+'T00:00:00'), d2 = new Date(end+'T00:00:00');
-    days = Math.round((d2-d1)/86400000) + 1;
+    hours = (Math.round((d2-d1)/86400000) + 1) * LEAVE_HOURS_PER_DAY;
   }
+  if(hours <= 0){ alert('時數要大於 0。'); return; }
   STATE.leaveRecords.push({
     id: nextId(STATE.leaveRecords), employee_id: empId,
     leave_type: document.getElementById('lv_type').value,
-    start_date: start, end_date: end, days,
+    start_date: start, end_date: end,
+    hours, days: daysFromHours(hours),
     notes: document.getElementById('lv_notes').value.trim(),
     reg_no: nextLeaveRegNo()
   });
   await saveState('leave_records', STATE.leaveRecords, true);
-  ['lv_start','lv_end','lv_days','lv_notes'].forEach(id=>document.getElementById(id).value='');
+  ['lv_start','lv_end','lv_hours','lv_notes'].forEach(id=>document.getElementById(id).value='');
+  updateLeaveDaysHint();
   renderAll();
 });
+function updateLeaveDaysHint(){
+  const el = document.getElementById('lv_hours'), out = document.getElementById('lv_days_hint');
+  if(!el || !out) return;
+  const h = parseFloat(el.value);
+  out.textContent = isNaN(h) ? '—' : (Math.round(h / LEAVE_HOURS_PER_DAY * 100) / 100).toFixed(2);
+}
+document.getElementById('lv_hours').addEventListener('input', updateLeaveDaysHint);
 document.getElementById('lv_search').addEventListener('input', renderLeaveTable);
 document.getElementById('lv_type_filter').addEventListener('change', renderLeaveTable);
 document.getElementById('leaveTableBody').addEventListener('click', async (e) => {
