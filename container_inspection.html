@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b2c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>順亞運通 貨櫃檢查表</title>
+<style>
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy-900:#0d1b2c; --navy-800:#152a43; --navy-700:#203e61;
+    --gold-600:#c99a56; --gold-bg:#FBF5EC;
+    --ok:#1F5C3D; --ok-bg:#E8F3EC; --bad:#9B2226; --bad-bg:#FBEAEA;
+    --na:#5A6673; --na-bg:#EEF0F2;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text); font-size:16px; line-height:1.6;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    padding-bottom:96px;
+  }
+  header{
+    background:linear-gradient(105deg,var(--navy-900) 0%,var(--navy-800) 60%,#2d4a70 100%);
+    color:#fff; padding:calc(env(safe-area-inset-top) + 12px) 16px 12px; position:sticky; top:0; z-index:30;
+    box-shadow:0 2px 14px rgba(13,27,44,.22);
+  }
+  header .row{display:flex;align-items:center;gap:10px;}
+  header img{height:26px;background:#fff;border-radius:5px;padding:2px 4px;}
+  header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:1px;flex:1;}
+  header .sub{font-size:11.5px;opacity:.72;margin-top:2px;}
+  nav{display:flex;gap:6px;margin-top:10px;}
+  nav button{
+    flex:1;appearance:none;border:none;border-radius:9px;padding:9px 0;font-size:14px;font-weight:600;
+    background:rgba(255,255,255,.14);color:#fff;cursor:pointer;
+  }
+  nav button.on{background:#fff;color:var(--navy-900);}
+  main{padding:14px 12px 0;max-width:760px;margin:0 auto;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;}
+  .card h2{margin:0 0 10px;font-size:15px;font-weight:700;color:var(--navy-900);
+    border-left:4px solid var(--gold-600);padding-left:9px;}
+  label{display:block;font-size:12.5px;color:var(--text-2);font-weight:600;margin:10px 0 4px;}
+  label:first-of-type{margin-top:0;}
+  input,select,textarea{
+    width:100%;font-size:16px;padding:11px 12px;border:1px solid var(--border-strong);
+    border-radius:10px;background:#fff;color:var(--text);font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-600);box-shadow:0 0 0 3px rgba(201,154,86,.16);}
+  textarea{min-height:78px;resize:vertical;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;}
+  .pickrow{display:flex;flex-wrap:wrap;gap:7px;}
+  .pick{
+    appearance:none;border:1px solid var(--border-strong);background:#fff;color:var(--text-2);
+    border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;
+  }
+  .pick.on{background:var(--navy-900);border-color:var(--navy-900);color:#fff;}
+  .item{border-top:1px solid #F1EAE0;padding:11px 0;}
+  .item:first-of-type{border-top:none;padding-top:2px;}
+  .item .t{font-size:14px;line-height:1.5;margin-bottom:8px;}
+  .item .t b{color:var(--navy-700);margin-right:3px;}
+  .subrow{display:flex;align-items:center;gap:8px;margin:6px 0;}
+  .subrow .lbl{width:74px;flex:0 0 74px;font-size:13.5px;color:var(--text-2);font-weight:600;}
+  .vxn{display:flex;gap:6px;flex:1;}
+  .vxn button{
+    flex:1;appearance:none;border:1.5px solid var(--border-strong);background:#fff;color:var(--text-3);
+    border-radius:10px;padding:10px 0;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;min-height:44px;
+  }
+  .vxn button.on[data-v="V"]{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);}
+  .vxn button.on[data-v="X"]{background:var(--bad-bg);border-color:var(--bad);color:var(--bad);}
+  .vxn button.on[data-v="N"]{background:var(--na-bg);border-color:var(--na);color:var(--na);}
+  .btn{
+    appearance:none;border:none;border-radius:12px;padding:14px 20px;font-size:16px;font-weight:700;
+    color:#fff;background:linear-gradient(105deg,var(--navy-900),var(--navy-700));cursor:pointer;
+    width:100%;font-family:inherit;box-shadow:0 8px 20px rgba(13,27,44,.2);
+  }
+  .btn.ghost{background:none;color:var(--text-2);border:1px solid var(--border-strong);box-shadow:none;}
+  .btn.small{padding:9px 14px;font-size:14px;width:auto;}
+  .btn:disabled{opacity:.55;}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,254,251,.97);border-top:1px solid var(--border);
+    padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);z-index:40;backdrop-filter:blur(6px);}
+  .bar .in{max-width:760px;margin:0 auto;display:flex;gap:8px;}
+  .warn{background:var(--bad-bg);border:1px solid var(--bad);color:var(--bad);border-radius:10px;
+    padding:10px 12px;font-size:13.5px;font-weight:600;margin:10px 0;}
+  .note{background:var(--gold-bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;
+    font-size:12.5px;color:var(--text-2);margin-bottom:10px;}
+  .muted{color:var(--text-3);font-size:12.5px;}
+  .rec{border:1px solid var(--border);border-radius:12px;padding:11px 12px;margin-bottom:9px;background:#fff;display:flex;gap:10px;}
+  .rec.bad{border-left:5px solid var(--bad);}
+  .rec.good{border-left:5px solid var(--ok);}
+  .rec .body{flex:1;min-width:0;}
+  .rec .l1{font-size:15px;font-weight:700;}
+  .rec .l2{font-size:12.5px;color:var(--text-2);}
+  .rec .l3{font-size:12px;color:var(--text-3);}
+  .rec input[type=checkbox]{width:22px;height:22px;flex:0 0 22px;margin-top:4px;}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;margin-left:5px;}
+  .tag.bad{background:var(--bad-bg);color:var(--bad);}
+  .tag.ok{background:var(--ok-bg);color:var(--ok);}
+  .hide{display:none !important;}
+  #msg{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:60;max-width:92%;
+    padding:12px 18px;border-radius:12px;font-size:14.5px;font-weight:600;color:#fff;box-shadow:0 10px 28px rgba(0,0,0,.25);}
+  #msg.ok{background:var(--ok);} #msg.err{background:var(--bad);} #msg.hide{display:none;}
+  #printArea{display:none;}
+
+  /* ============ 列印：照紙本 DGTT-P012-R05-02 ============ */
+  @media print{
+    @page{ size:A4 portrait; margin:9mm; }
+    body{background:#fff;padding:0;}
+    header,nav,main,.bar,#msg{display:none !important;}
+    #printArea{display:block !important;}
+    .sheet{page-break-after:always;}
+    .sheet:last-child{page-break-after:auto;}
+  }
+  .sheet{font-family:"標楷體","DFKai-SB","BiauKai",serif;color:#000;width:100%;}
+  .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .sheet td,.sheet th{border:1px solid #000;padding:1px 4px;font-size:10.5px;line-height:1.35;vertical-align:middle;}
+  .sheet .lab{text-align:center;}
+  .sheet .val{text-align:center;font-size:10.5px;word-break:break-all;}
+  .sheet .ttl{text-align:center;font-size:16px;font-weight:700;letter-spacing:3px;}
+  .sheet .lft{text-align:left;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <img src="data:image/png;base64,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" alt="DGTT">
+    <div style="flex:1;">
+      <h1>貨櫃檢查表</h1>
+      <div class="sub">順亞運通　DGTT-P012-R05-02</div>
+    </div>
+  </div>
+  <nav>
+    <button id="tab_new" class="on">填檢查表</button>
+    <button id="tab_find">查詢／列印</button>
+  </nav>
+</header>
+
+<div id="warnBox" class="hide" style="margin:12px;"></div>
+
+<main>
+<!-- ==================== 填表 ==================== -->
+<div id="pane_new">
+  <div class="card">
+    <h2>基本資料</h2>
+    <div class="grid2">
+      <div><label>日期</label><input id="f_date" type="date"></div>
+      <div><label>檢查人（你的名字）</label><input id="f_inspector" list="dl_person" placeholder="例：張誌元" autocomplete="off"></div>
+    </div>
+    <div class="grid2">
+      <div><label>車號</label><input id="f_plate" list="dl_plate" placeholder="例：KLB-6818" autocomplete="off"></div>
+      <div><label>板架號碼</label><input id="f_trailer" list="dl_trailer" placeholder="例：31-H9" autocomplete="off"></div>
+    </div>
+    <label>貨主</label><input id="f_shipper" list="dl_shipper" placeholder="例：台塑" autocomplete="off">
+    <div class="grid2">
+      <div><label>起運地</label><input id="f_origin" list="dl_place" placeholder="例：台中港" autocomplete="off"></div>
+      <div><label>目的地</label><input id="f_dest" list="dl_place" placeholder="例：麥寮" autocomplete="off"></div>
+    </div>
+    <label>貨櫃櫃號</label><input id="f_cno" placeholder="例：TCLU1234567" autocomplete="off" style="text-transform:uppercase;">
+    <label>封條號碼（最多三組，沒有就留空）</label>
+    <input id="f_seal1" placeholder="封條 1" autocomplete="off" style="margin-bottom:7px;">
+    <input id="f_seal2" placeholder="封條 2（選填）" autocomplete="off" style="margin-bottom:7px;">
+    <input id="f_seal3" placeholder="封條 3（選填）" autocomplete="off">
+  </div>
+
+  <div class="card">
+    <h2>貨櫃種類</h2>
+    <div class="pickrow" id="pick_kind"></div>
+    <h2 style="margin-top:16px;">貨櫃規格</h2>
+    <div class="pickrow" id="pick_spec"></div>
+    <div id="specOtherBox" class="hide"><label>其他規格</label><input id="f_spec_other" placeholder="請填寫" autocomplete="off"></div>
+  </div>
+
+  <div class="card">
+    <h2>檢查項目</h2>
+    <div class="note">正常按 <b>V</b>，異常按 <b>X</b>，不適用按 <b>N</b>。有任何一項打 X 都要立即回報運務領班。</div>
+    <button class="btn ghost small" id="allV" style="margin-bottom:6px;">全部先打 V</button>
+    <button class="btn ghost small" id="allClear" style="margin-bottom:6px;">全部清空</button>
+    <div id="items"></div>
+  </div>
+
+  <div class="card">
+    <h2>12. 其他問題，請簡單描述</h2>
+    <textarea id="f_note" placeholder="沒有就留空"></textarea>
+    <div id="abWarn" class="warn hide"></div>
+    <label id="repLbl" class="hide" style="display:flex;align-items:center;gap:9px;font-size:14px;">
+      <input id="f_reported" type="checkbox" style="width:22px;height:22px;">已回報運務領班／調度
+    </label>
+  </div>
+</div>
+
+<!-- ==================== 查詢 ==================== -->
+<div id="pane_find" class="hide">
+  <div class="card">
+    <h2>查詢</h2>
+    <div class="grid2">
+      <div><label>車號</label><input id="q_plate" list="dl_plate" placeholder="全部" autocomplete="off"></div>
+      <div><label>貨櫃櫃號</label><input id="q_cno" placeholder="全部" autocomplete="off"></div>
+    </div>
+    <div class="grid2">
+      <div><label>貨主</label><input id="q_shipper" list="dl_shipper" placeholder="全部" autocomplete="off"></div>
+      <div><label>檢查人</label><input id="q_person" list="dl_person" placeholder="全部" autocomplete="off"></div>
+    </div>
+    <div class="grid2">
+      <div><label>日期從</label><input id="q_from" type="date"></div>
+      <div><label>到</label><input id="q_to" type="date"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:9px;font-size:14px;margin-top:12px;">
+      <input id="q_bad" type="checkbox" style="width:22px;height:22px;">只看有異常的
+    </label>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn small" id="q_go">查詢</button>
+      <button class="btn ghost small" id="q_clear">清除條件</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>結果<span class="muted" id="q_count" style="font-weight:400;margin-left:8px;"></span></h2>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn ghost small" id="selAll">全選</button>
+      <button class="btn ghost small" id="selNone">全不選</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:0;">
+        <input id="p_mode" type="checkbox" style="width:18px;height:18px;">一張紙印 4 筆
+      </label>
+      <button class="btn small" id="doPrint">列印選取的</button>
+    </div>
+    <div id="results"></div>
+  </div>
+</div>
+</main>
+
+<div class="bar" id="bar_new">
+  <div class="in">
+    <button class="btn ghost" id="btnReset" style="flex:0 0 34%;">清空重填</button>
+    <button class="btn" id="btnSave">送出檢查表</button>
+  </div>
+</div>
+
+<div id="msg" class="hide"></div>
+<div id="printArea"></div>
+
+<datalist id="dl_plate"></datalist>
+<datalist id="dl_trailer"></datalist>
+<datalist id="dl_shipper"></datalist>
+<datalist id="dl_place"></datalist>
+<datalist id="dl_person"></datalist>
+
+<script>
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+// ===== 這一頁不需要帳號密碼 =====
+// 司機開網頁就要能填，所以不做 Supabase Auth，只帶 publishable(anon) 金鑰。
+//
+// 【安全提醒，改這個檔案的人請先看完】
+//   1. 這裡只能放 publishable(anon) key。Supabase 後台那把最高權限金鑰
+//      （service role）永遠只放 GitHub Secrets，絕對不可以出現在任何 HTML／JS 裡面。
+//   2. 沒有登入 = 只要知道網址的人都能開、都能寫。所以這一頁
+//      【刻意不去讀 employees、customers 等含個資的表】。
+//      車號與板架號碼是從 vehicles 讀的（只取車牌，沒有個資）；
+//      貨主、起運地、目的地、檢查人的下拉建議一律只從「以前填過的檢查表」學，
+//      不去撈客戶主檔。要加功能請維持這個原則。
+//   3. 資料庫那邊 SQL #78 已經把 anon 限制成「可讀、可寫、只能改最近 7 天」，
+//      刪除完全不開放。要刪紀錄請從有登入的儀表板或 Supabase 後台處理。
+const REST = SUPABASE_URL + '/rest/v1/';
+async function sb(path, options){
+  options = options || {};
+  const h = Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  }, options.headers || {});
+  return fetch(REST + path, Object.assign({}, options, { headers: h }));
+}
+async function sbSelect(table, qs){
+  const r = await sb(table + '?' + (qs || 'select=*'), { method:'GET' });
+  if(!r.ok) throw new Error(table + '　' + r.status + '　' + (await r.text()));
+  return r.json();
+}
+async function sbInsert(table, row){
+  const r = await sb(table, { method:'POST', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
+  if(!r.ok) throw new Error(await r.text());
+  const d = await r.json(); return Array.isArray(d) ? d[0] : d;
+}
+async function sbUpdate(table, pk, id, row){
+  const r = await sb(table + '?' + pk + '=eq.' + id, { method:'PATCH', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
+  if(!r.ok) throw new Error(await r.text());
+  const d = await r.json(); return Array.isArray(d) ? d[0] : d;
+}
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function todayISO(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function toROC(iso){ if(!iso) return ''; const p = String(iso).slice(0,10).split('-'); if(p.length<3) return iso;
+  return (parseInt(p[0],10)-1911)+' 年 '+parseInt(p[1],10)+' 月 '+parseInt(p[2],10)+' 日'; }
+function addDays(iso,n){ const d=new Date(String(iso).slice(0,10)+'T00:00:00'); d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+let msgTimer = null;
+function toast(text, kind){
+  const el = $('msg'); el.textContent = text; el.className = kind === 'err' ? 'err' : 'ok';
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => el.className = 'hide', kind === 'err' ? 7000 : 3200);
+}
+function warnBox(html){
+  const el = $('warnBox');
+  if(!html){ el.className = 'hide'; el.innerHTML = ''; return; }
+  el.className = ''; el.innerHTML = '<div class="warn">' + html + '</div>';
+}
+
+// ---------- 檢查項目定義（照紙本順序與文字） ----------
+const KINDS = ['進口櫃','出口櫃','領空櫃','還空櫃','轉運櫃'];
+const SPECS = ['20呎CY櫃','40呎CY櫃','20呎槽罐櫃','40呎槽罐櫃','其他'];
+const ITEMS = [
+  {no:'1',  k:'r1', t:'貨櫃櫃號與封條是否與資料吻合'},
+  {no:'2',  k:'r2', t:'封條是否完整，如破損立即回報！'},
+  {no:'3',  k:'r3', t:'櫃門之四支門柄是否開關自如無損壞，櫃門可正常開關'},
+  {no:'4',  t:'貨櫃（槽罐體）外觀是否完好，若外觀受損（如：破裂、凹凸、生鏽、刮痕），立即回報！',
+   subs:[['r4_front','前'],['r4_back','後'],['r4_left','左'],['r4_right','右'],['r4_top','上'],['r4_bottom','下']]},
+  {no:'5',  t:'領進口櫃及交出口櫃，危險物品標誌是否張貼及完整（如：破損、剝落、污漬）',
+   subs:[['r5_front','前'],['r5_back','後'],['r5_left','左'],['r5_right','右']]},
+  {no:'6',  t:'貨櫃內部注意事項',
+   subs:[['r6_damage','破損'],['r6_oil','油漬'],['r6_foreign','異物'],['r6_odor','異味/潮濕'],['r6_broken','損壞']]},
+  {no:'7',  k:'r7',  t:'領進口櫃及交出口櫃，確認封條是否扣緊'},
+  {no:'8',  k:'r8',  t:'貨櫃置於板架後確認固定插銷.活動角座是否確實固定'},
+  {no:'9',  k:'r9',  t:'吊櫃前確認固定插銷.活動角座是否移除'},
+  {no:'10', k:'r10', t:'貨櫃(槽罐體)異常部份，是否回報公司並註記於E.I.R上請櫃場簽章'},
+  {no:'11', k:'r11', t:'板架外觀結構是否完整，曳引車頭與板架脫離是否平穩放置地面。'}
+];
+const ALL_KEYS = ITEMS.reduce((a,it) => a.concat(it.k ? [it.k] : it.subs.map(s => s[0])), []);
+
+const FORM = { kind:'', spec:'', res:{}, editId:null };
+const DATA = { rows:[], sel:new Set() };
+
+// ---------- 畫檢查項目 ----------
+function vxn(key){
+  return '<div class="vxn" data-key="' + key + '">'
+    + ['V','X','N'].map(v => '<button type="button" data-v="' + v + '">' + v + '</button>').join('')
+    + '</div>';
+}
+function renderItems(){
+  $('items').innerHTML = ITEMS.map(it => {
+    if(it.k) return '<div class="item"><div class="t"><b>' + it.no + '.</b>' + esc(it.t) + '</div>' + vxn(it.k) + '</div>';
+    return '<div class="item"><div class="t"><b>' + it.no + '.</b>' + esc(it.t) + '</div>'
+      + it.subs.map(s => '<div class="subrow"><div class="lbl">' + esc(s[1]) + '</div>' + vxn(s[0]) + '</div>').join('')
+      + '</div>';
+  }).join('');
+  $('items').querySelectorAll('.vxn button').forEach(b => {
+    b.addEventListener('click', () => {
+      const box = b.parentElement, key = box.getAttribute('data-key'), v = b.getAttribute('data-v');
+      if(FORM.res[key] === v){ delete FORM.res[key]; } else { FORM.res[key] = v; }
+      paintItems();
+    });
+  });
+}
+function paintItems(){
+  $('items').querySelectorAll('.vxn').forEach(box => {
+    const key = box.getAttribute('data-key');
+    box.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', FORM.res[key] === b.getAttribute('data-v')));
+  });
+  const bad = ALL_KEYS.filter(k => FORM.res[k] === 'X');
+  if(bad.length){
+    $('abWarn').className = 'warn';
+    $('abWarn').innerHTML = '⚠ 有 <b>' + bad.length + '</b> 項打了 X。請立即回報運務領班或調度，並在上面「其他問題」簡單寫明狀況。';
+    $('repLbl').className = '';
+  }else{
+    $('abWarn').className = 'warn hide';
+    $('repLbl').className = 'hide';
+  }
+}
+function renderPicks(){
+  $('pick_kind').innerHTML = KINDS.map(k => '<button type="button" class="pick" data-k="' + k + '">' + k + '</button>').join('');
+  $('pick_spec').innerHTML = SPECS.map(k => '<button type="button" class="pick" data-s="' + k + '">' + k + '</button>').join('');
+  $('pick_kind').querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+    FORM.kind = (FORM.kind === b.getAttribute('data-k')) ? '' : b.getAttribute('data-k'); paintPicks();
+  }));
+  $('pick_spec').querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+    FORM.spec = (FORM.spec === b.getAttribute('data-s')) ? '' : b.getAttribute('data-s'); paintPicks();
+  }));
+}
+function paintPicks(){
+  $('pick_kind').querySelectorAll('.pick').forEach(b => b.classList.toggle('on', b.getAttribute('data-k') === FORM.kind));
+  $('pick_spec').querySelectorAll('.pick').forEach(b => b.classList.toggle('on', b.getAttribute('data-s') === FORM.spec));
+  $('specOtherBox').className = (FORM.spec === '其他') ? '' : 'hide';
+}
+
+// ---------- 下拉建議 ----------
+function fillList(id, arr){
+  $(id).innerHTML = [...new Set(arr.filter(Boolean))].sort().map(v => '<option value="' + esc(v) + '"></option>').join('');
+}
+async function loadPlates(){
+  try{
+    const v = await sbSelect('vehicles',
+      'select=plate_number,vehicle_category&status=eq.' + encodeURIComponent('在役') + '&order=plate_number.asc&limit=2000');
+    fillList('dl_plate',   v.filter(x => x.vehicle_category !== '板架').map(x => x.plate_number));
+    fillList('dl_trailer', v.filter(x => x.vehicle_category === '板架').map(x => x.plate_number));
+  }catch(e){ /* 讀不到就讓司機自己打 */ }
+}
+// 貨主、地點、檢查人只從「以前填過的檢查表」學，不去撈客戶或人員主檔
+function learnLists(rows){
+  fillList('dl_shipper', rows.map(r => r.shipper));
+  fillList('dl_place',   rows.map(r => r.origin).concat(rows.map(r => r.destination)));
+  fillList('dl_person',  rows.map(r => r.inspector));
+}
+
+// ---------- 送出 ----------
+function collect(){
+  const row = {
+    inspect_date: $('f_date').value || todayISO(),
+    plate:        $('f_plate').value.trim(),
+    inspector:    $('f_inspector').value.trim(),
+    trailer_no:   $('f_trailer').value.trim(),
+    shipper:      $('f_shipper').value.trim(),
+    origin:       $('f_origin').value.trim(),
+    destination:  $('f_dest').value.trim(),
+    container_no: $('f_cno').value.trim().toUpperCase(),
+    seal_no1:     $('f_seal1').value.trim(),
+    seal_no2:     $('f_seal2').value.trim(),
+    seal_no3:     $('f_seal3').value.trim(),
+    container_kind: FORM.kind || null,
+    container_spec: FORM.spec || null,
+    spec_other:   FORM.spec === '其他' ? $('f_spec_other').value.trim() : null,
+    other_note:   $('f_note').value.trim() || null,
+    reported:     !!$('f_reported').checked
+  };
+  ALL_KEYS.forEach(k => row[k] = FORM.res[k] || null);
+  row.abnormal = ALL_KEYS.some(k => FORM.res[k] === 'X');
+  return row;
+}
+async function save(){
+  const row = collect();
+  if(!row.inspect_date){ toast('請選日期', 'err'); return; }
+  if(!row.plate){ toast('請填車號', 'err'); $('f_plate').focus(); return; }
+  if(!row.inspector){ toast('請填檢查人（你的名字）', 'err'); $('f_inspector').focus(); return; }
+  if(!row.container_no){ toast('請填貨櫃櫃號', 'err'); $('f_cno').focus(); return; }
+  const filled = ALL_KEYS.filter(k => FORM.res[k]).length;
+  if(filled === 0){ toast('檢查項目一項都還沒填', 'err'); return; }
+  if(filled < ALL_KEYS.length &&
+     !confirm('還有 ' + (ALL_KEYS.length - filled) + ' 格沒填。\n\n沒填的會留白，之後在紙本上補。確定要送出嗎？')) return;
+  if(row.abnormal && !row.other_note &&
+     !confirm('有項目打 X 但「其他問題」是空的。\n\n不寫明狀況的話，辦公室看不出來是哪裡有問題。確定要送出嗎？')) return;
+
+  $('btnSave').disabled = true; $('btnSave').textContent = '送出中…';
+  try{
+    if(FORM.editId){
+      await sbUpdate('container_inspections', 'inspection_id', FORM.editId,
+                     Object.assign({}, row, { updated_at: new Date().toISOString() }));
+      toast('已更新這筆檢查表');
+    }else{
+      await sbInsert('container_inspections', row);
+      toast('送出成功，' + row.container_no + ' 已存檔');
+    }
+    resetForm(true);
+    await loadRecent();
+  }catch(e){
+    toast('沒有存進去：' + tidy(e), 'err');
+  }finally{
+    $('btnSave').disabled = false;
+    $('btnSave').textContent = FORM.editId ? '儲存修改' : '送出檢查表';
+  }
+}
+function tidy(e){
+  const m = String(e && e.message || e);
+  if(m.indexOf('42P01') >= 0 || m.indexOf('container_inspections') >= 0 && m.indexOf('does not exist') >= 0)
+    return '雲端還沒有這張表，請先執行 SQL #78。';
+  if(m.indexOf('42501') >= 0 || m.indexOf('permission denied') >= 0)
+    return '沒有寫入權限，請確認 SQL #78 的權限段有跑到。';
+  if(m.indexOf('Failed to fetch') >= 0) return '連不到雲端，請檢查網路。';
+  try{ const j = JSON.parse(m); return j.message || m; }catch(_){ return m.slice(0, 200); }
+}
+function resetForm(keepHeader){
+  FORM.res = {}; FORM.kind = ''; FORM.spec = ''; FORM.editId = null;
+  ['f_trailer','f_shipper','f_origin','f_dest','f_cno','f_seal1','f_seal2','f_seal3','f_spec_other','f_note']
+    .forEach(id => $(id).value = '');
+  $('f_reported').checked = false;
+  if(!keepHeader){ $('f_plate').value = ''; $('f_inspector').value = ''; $('f_date').value = todayISO(); }
+  paintItems(); paintPicks();
+  $('btnSave').textContent = '送出檢查表';
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+// ---------- 查詢 ----------
+async function loadRecent(){
+  try{
+    const rows = await sbSelect('container_inspections',
+      'select=*&order=inspect_date.desc,inspection_id.desc&limit=300');
+    DATA.rows = rows; learnLists(rows); warnBox('');
+  }catch(e){
+    DATA.rows = [];
+    warnBox('讀不到雲端的檢查表資料。' + esc(tidy(e)) + '<br>還是可以填寫送出，但下面的查詢會是空的。');
+  }
+}
+async function runQuery(){
+  const qs = ['select=*', 'order=inspect_date.desc,inspection_id.desc', 'limit=500'];
+  const like = (col, v) => { if(v) qs.push(col + '=ilike.*' + encodeURIComponent(v) + '*'); };
+  like('plate',        $('q_plate').value.trim());
+  like('container_no', $('q_cno').value.trim());
+  like('shipper',      $('q_shipper').value.trim());
+  like('inspector',    $('q_person').value.trim());
+  if($('q_from').value) qs.push('inspect_date=gte.' + $('q_from').value);
+  if($('q_to').value)   qs.push('inspect_date=lte.' + $('q_to').value);
+  if($('q_bad').checked) qs.push('abnormal=is.true');
+  try{
+    DATA.rows = await sbSelect('container_inspections', qs.join('&'));
+    DATA.sel.clear(); renderResults(); warnBox('');
+  }catch(e){ warnBox('查詢失敗：' + esc(tidy(e))); }
+}
+function renderResults(){
+  const el = $('results');
+  $('q_count').textContent = '共 ' + DATA.rows.length + ' 筆，已選 ' + DATA.sel.size + ' 筆';
+  if(!DATA.rows.length){ el.innerHTML = '<div class="muted">沒有符合的紀錄。</div>'; return; }
+  el.innerHTML = DATA.rows.map(r => {
+    const bad = r.abnormal;
+    return '<div class="rec ' + (bad ? 'bad' : 'good') + '">'
+      + '<input type="checkbox" data-id="' + r.inspection_id + '"' + (DATA.sel.has(r.inspection_id) ? ' checked' : '') + '>'
+      + '<div class="body">'
+      + '<div class="l1">' + esc(r.container_no || '（無櫃號）')
+      + (bad ? '<span class="tag bad">有異常</span>' : '<span class="tag ok">正常</span>') + '</div>'
+      + '<div class="l2">' + esc(r.plate || '') + '　' + esc(r.shipper || '') + '　' + esc(r.container_kind || '') + ' ' + esc(r.container_spec || '') + '</div>'
+      + '<div class="l3">' + esc(String(r.inspect_date || '').slice(0,10)) + '　檢查人 ' + esc(r.inspector || '')
+      + (r.origin || r.destination ? '　' + esc(r.origin || '') + ' → ' + esc(r.destination || '') : '')
+      + '</div>'
+      + (r.other_note ? '<div class="l3">備註：' + esc(r.other_note) + '</div>' : '')
+      + '<button type="button" class="btn ghost small" data-edit="' + r.inspection_id + '" style="margin-top:7px;">帶回上面修改</button>'
+      + '</div></div>';
+  }).join('');
+  el.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', () => {
+    const id = Number(cb.getAttribute('data-id'));
+    if(cb.checked) DATA.sel.add(id); else DATA.sel.delete(id);
+    $('q_count').textContent = '共 ' + DATA.rows.length + ' 筆，已選 ' + DATA.sel.size + ' 筆';
+  }));
+  el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => loadIntoForm(Number(b.getAttribute('data-edit')))));
+}
+function loadIntoForm(id){
+  const r = DATA.rows.find(x => x.inspection_id === id);
+  if(!r) return;
+  const days = Math.round((new Date(todayISO()) - new Date(String(r.inspect_date).slice(0,10))) / 86400000);
+  if(days > 7 && !confirm('這一筆是 ' + days + ' 天前的，雲端只開放修改最近 7 天的紀錄，存檔會被擋下來。\n\n還是要帶回去看嗎？')) return;
+  FORM.editId = id;
+  $('f_date').value = String(r.inspect_date || '').slice(0,10);
+  $('f_plate').value = r.plate || ''; $('f_inspector').value = r.inspector || '';
+  $('f_trailer').value = r.trailer_no || ''; $('f_shipper').value = r.shipper || '';
+  $('f_origin').value = r.origin || ''; $('f_dest').value = r.destination || '';
+  $('f_cno').value = r.container_no || '';
+  $('f_seal1').value = r.seal_no1 || ''; $('f_seal2').value = r.seal_no2 || ''; $('f_seal3').value = r.seal_no3 || '';
+  FORM.kind = r.container_kind || ''; FORM.spec = r.container_spec || '';
+  $('f_spec_other').value = r.spec_other || '';
+  $('f_note').value = r.other_note || ''; $('f_reported').checked = !!r.reported;
+  FORM.res = {}; ALL_KEYS.forEach(k => { if(r[k]) FORM.res[k] = r[k]; });
+  paintItems(); paintPicks();
+  $('btnSave').textContent = '儲存修改';
+  showTab('new');
+  toast('已帶回上面，改完按「儲存修改」');
+}
+
+// ---------- 列印：照紙本 DGTT-P012-R05-02 ----------
+function cell(v){ return esc(v == null ? '' : v); }
+function sheetHtml(recs, cols){
+  const g = (i, f) => recs[i] ? cell(recs[i][f]) : '';
+  const r = (i, k) => recs[i] ? cell(recs[i][k]) : '';
+  const head = recs[0] || {};
+  const w = (100 - 45) / cols;                       // 左側標題佔 45%
+  const colgroup = '<colgroup><col style="width:27%"><col style="width:18%">'
+    + Array.from({length: cols}, () => '<col style="width:' + w.toFixed(2) + '%">').join('') + '</colgroup>';
+  const span2 = ' colspan="2"';
+  const valRow = (label, field) =>
+    '<tr><td class="lab"' + span2 + '>' + label + '</td>'
+    + Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, field) + '</td>').join('') + '</tr>';
+  const pickRow = (label, list, field, first) =>
+    list.map((name, idx) =>
+      '<tr>' + (idx === 0 ? '<td class="lab" rowspan="' + list.length + '">' + label + '</td>' : '')
+      + '<td class="lab" style="font-size:10px;">' + name + '</td>'
+      + Array.from({length: cols}, (_, i) =>
+          '<td class="val">' + (recs[i] && recs[i][field] === name ? 'V' : '') + '</td>').join('')
+      + '</tr>').join('');
+  const chk = (label, key, sub) =>
+    '<tr>' + (sub ? '<td class="lab lft" style="font-size:10.5px;">' + sub + '</td>'
+                  : '<td class="lft"' + span2 + '>' + label + '</td>')
+    + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, key) + '</td>').join('') + '</tr>';
+
+  let body = '';
+  ITEMS.forEach(it => {
+    if(it.k){
+      body += '<tr><td class="lft"' + span2 + '>' + it.no + '.' + esc(it.t) + '</td>'
+            + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, it.k) + '</td>').join('') + '</tr>';
+    }else{
+      it.subs.forEach((s, idx) => {
+        body += '<tr>'
+          + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + esc(it.t) + '</td>' : '')
+          + '<td class="lab" style="font-size:10.5px;">' + esc(s[1]) + '</td>'
+          + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, s[0]) + '</td>').join('')
+          + '</tr>';
+      });
+    }
+  });
+
+  return '<div class="sheet">'
+   + '<div style="position:relative;height:30px;margin-bottom:2px;">'
+   + '<img src="' + LOGO + '" style="position:absolute;left:0;top:0;height:26px;">'
+   + '<div class="ttl" style="padding-top:4px;">貨櫃檢查表</div></div>'
+   // 抬頭照紙本是「日期／車號／檢查人」三格，跟下面的欄位格數無關，
+   // 所以獨立一張表，不然一筆一張時 檢查人 那格會被壓成一條直的。
+   + '<table style="margin-bottom:-1px;"><colgroup><col style="width:45%"><col style="width:30%"><col style="width:25%"></colgroup>'
+   + '<tr><td class="lft">日期：' + toROC(head.inspect_date) + '</td>'
+   +     '<td class="lft">車號：' + cell(head.plate) + '</td>'
+   +     '<td class="lft">檢查人：' + cell(head.inspector) + '</td></tr></table>'
+   + '<table>' + colgroup
+   + valRow('板架號碼', 'trailer_no')
+   + valRow('貨　　主', 'shipper')
+   + valRow('起 運 地', 'origin')
+   + valRow('目 的 地', 'destination')
+   + valRow('貨櫃櫃號', 'container_no')
+   + '<tr><td class="lab" rowspan="3"' + '>封條號碼</td><td class="lab" style="font-size:10.5px;">1</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no1') + '</td>').join('') + '</tr>'
+   + '<tr><td class="lab" style="font-size:10.5px;">2</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no2') + '</td>').join('') + '</tr>'
+   + '<tr><td class="lab" style="font-size:10.5px;">3</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no3') + '</td>').join('') + '</tr>'
+   + pickRow('貨櫃種類', KINDS, 'container_kind')
+   + pickRow('貨櫃規格', SPECS, 'container_spec')
+   + '<tr><td class="lab"' + span2 + ' style="font-weight:700;">檢 查 項 目</td>'
+   +   '<td class="lab" colspan="' + cols + '" style="font-weight:700;">檢 查 結 果</td></tr>'
+   + body
+   + '<tr><td class="lft"' + span2 + '>12.其他問題，請簡單描述</td>'
+   +   '<td class="lft" colspan="' + cols + '" style="font-size:10px;">'
+   +   recs.map((x, i) => x.other_note ? (cols > 1 ? (i+1) + '. ' : '') + esc(x.other_note) : '').filter(Boolean).join('　／　')
+   +   '</td></tr>'
+   + '</table>'
+   + '<div style="font-size:9.5px;margin-top:2px;">註：檢查結果正常者打V，異常者打X，不適用者寫N，異常請立即回報。</div>'
+   + '<div style="display:flex;justify-content:space-between;font-size:11.5px;margin-top:14px;">'
+   +   '<span>運務領班：' + cell(head.foreman) + '<span style="display:inline-block;width:110px;border-bottom:1px solid #000;">&#160;</span></span>'
+   +   '<span>調度人員：' + cell(head.dispatcher) + '<span style="display:inline-block;width:110px;border-bottom:1px solid #000;">&#160;</span></span>'
+   + '</div>'
+   + '<div style="font-size:9.5px;text-align:right;margin-top:6px;">表單編號 :DGTT-P012-R05-02</div>'
+   + '</div>';
+}
+function doPrint(){
+  const picked = DATA.rows.filter(r => DATA.sel.has(r.inspection_id));
+  if(!picked.length){ toast('請先勾選要列印的紀錄', 'err'); return; }
+  const per = $('p_mode').checked ? 4 : 1;
+  const sheets = [];
+  for(let i = 0; i < picked.length; i += per) sheets.push(picked.slice(i, i + per));
+  $('printArea').innerHTML = sheets.map(g => sheetHtml(g, per)).join('');
+  setTimeout(() => window.print(), 120);
+}
+
+// ---------- 分頁 ----------
+function showTab(which){
+  $('tab_new').classList.toggle('on', which === 'new');
+  $('tab_find').classList.toggle('on', which === 'find');
+  $('pane_new').className  = which === 'new'  ? '' : 'hide';
+  $('pane_find').className = which === 'find' ? '' : 'hide';
+  $('bar_new').style.display = which === 'new' ? '' : 'none';
+  if(which === 'find') renderResults();
+  window.scrollTo({ top:0 });
+}
+
+const LOGO = 'data:image/png;base64,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';
+
+// ---------- 啟動 ----------
+(async function init(){
+  $('f_date').value = todayISO();
+  $('q_from').value = addDays(todayISO(), -30);
+  $('q_to').value   = todayISO();
+  renderPicks(); renderItems(); paintItems(); paintPicks();
+
+  $('tab_new').addEventListener('click', () => showTab('new'));
+  $('tab_find').addEventListener('click', () => showTab('find'));
+  $('btnSave').addEventListener('click', save);
+  $('btnReset').addEventListener('click', () => { if(confirm('確定要清空重填嗎？')) resetForm(false); });
+  $('allV').addEventListener('click', () => { ALL_KEYS.forEach(k => FORM.res[k] = 'V'); paintItems(); });
+  $('allClear').addEventListener('click', () => { FORM.res = {}; paintItems(); });
+  $('q_go').addEventListener('click', runQuery);
+  $('q_clear').addEventListener('click', () => {
+    ['q_plate','q_cno','q_shipper','q_person'].forEach(id => $(id).value = '');
+    $('q_from').value = addDays(todayISO(), -30); $('q_to').value = todayISO();
+    $('q_bad').checked = false; runQuery();
+  });
+  $('selAll').addEventListener('click', () => { DATA.rows.forEach(r => DATA.sel.add(r.inspection_id)); renderResults(); });
+  $('selNone').addEventListener('click', () => { DATA.sel.clear(); renderResults(); });
+  $('doPrint').addEventListener('click', doPrint);
+
+  await Promise.all([loadPlates(), loadRecent()]);
+  renderResults();
+})();
+</script>
+</body>
+</html>
