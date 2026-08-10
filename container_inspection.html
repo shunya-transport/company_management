@@ -107,14 +107,19 @@
 
   /* ============ 列印：照紙本 DGTT-P012-R05-02 ============ */
   @media print{
+    /* 固定 A4 直式、上下左右 9mm 邊界。紙張大小寫死在這裡，
+       不會因為瀏覽器上次印過什麼而跑掉。 */
     @page{ size:A4 portrait; margin:9mm; }
-    body{background:#fff;padding:0;}
+    html,body{width:192mm;background:#fff;padding:0;margin:0;}
     header,nav,main,.bar,#msg{display:none !important;}
     #printArea{display:block !important;}
-    .sheet{page-break-after:always;}
+    .sheet{page-break-after:always;page-break-inside:avoid;}
     .sheet:last-child{page-break-after:auto;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
-  .sheet{font-family:"標楷體","DFKai-SB","BiauKai",serif;color:#000;width:100%;}
+  /* 192mm＝A4 寬 210mm 扣掉左右各 9mm。寬度寫死，
+     不管螢幕多寬印出來都是同一個版面。 */
+  .sheet{font-family:"標楷體","DFKai-SB","BiauKai",serif;color:#000;width:192mm;max-width:100%;}
   .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;}
   .sheet td,.sheet th{border:1px solid #000;padding:1px 4px;font-size:10.5px;line-height:1.35;vertical-align:middle;}
   .sheet .lab{text-align:center;}
@@ -159,6 +164,8 @@
       <div><label>起運地</label><input id="f_origin" list="dl_place" placeholder="例：台中港" autocomplete="off"></div>
       <div><label>目的地</label><input id="f_dest" list="dl_place" placeholder="例：麥寮" autocomplete="off"></div>
     </div>
+    <label>這一趟是</label>
+    <div class="pickrow" id="pick_leg"></div>
     <label>貨櫃櫃號</label><input id="f_cno" placeholder="例：TCLU1234567" autocomplete="off" style="text-transform:uppercase;">
     <label>封條號碼（最多三組，沒有就留空）</label>
     <input id="f_seal1" placeholder="封條 1" autocomplete="off" style="margin-bottom:7px;">
@@ -172,6 +179,11 @@
     <h2 style="margin-top:16px;">貨櫃規格</h2>
     <div class="pickrow" id="pick_spec"></div>
     <div id="specOtherBox" class="hide"><label>其他規格</label><input id="f_spec_other" placeholder="請填寫" autocomplete="off"></div>
+    <label>註記（選填）</label>
+    <input id="f_spec_note" list="dl_specnote" placeholder="例：還、當天還空、移櫃" autocomplete="off">
+    <h2 style="margin-top:16px;">單據</h2>
+    <div class="pickrow" id="pick_docs"></div>
+    <input id="f_docs_other" placeholder="其他單據（選填，例：收據、押款單據）" autocomplete="off" style="margin-top:8px;">
   </div>
 
   <div class="card">
@@ -223,9 +235,13 @@
       <button class="btn ghost small" id="selAll">全選</button>
       <button class="btn ghost small" id="selNone">全不選</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:0;">
-        <input id="p_mode" type="checkbox" style="width:18px;height:18px;">一張紙印 4 筆
+        <input id="p_mode" type="checkbox" style="width:18px;height:18px;" checked>同一天同一台車併成一張
       </label>
       <button class="btn small" id="doPrint">列印選取的</button>
+      <div class="muted" style="width:100%;">
+        紙本一張有 4 個結果欄，所以同一天、同一台車、同一個檢查人的最多 4 個櫃會併在一張；
+        超過 4 櫃會自動接下一張。列印時紙張選 <b>A4 直式</b>、縮放用「預設」或 100%。
+      </div>
     </div>
     <div id="results"></div>
   </div>
@@ -247,6 +263,7 @@
 <datalist id="dl_shipper"></datalist>
 <datalist id="dl_place"></datalist>
 <datalist id="dl_person"></datalist>
+<datalist id="dl_specnote"></datalist>
 
 <script>
 const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
@@ -310,6 +327,11 @@ function warnBox(html){
 }
 
 // ---------- 檢查項目定義（照紙本順序與文字） ----------
+// 運送明細（你那份 Excel）把日期拆成「領櫃日／交櫃日」兩欄，
+// 檢查表只有一個日期，所以要問這一趟是領還是交，月報表才填得進正確那一欄。
+const LEGS = ['領櫃', '交櫃'];
+// 單據可以複選，對應 Excel 的「單據」欄
+const DOCS = ['放行單', 'EIR', '簽單', 'ASN', '磅單', '還櫃單', '毒管單'];
 const KINDS = ['進口櫃','出口櫃','領空櫃','還空櫃','轉運櫃'];
 const SPECS = ['20呎CY櫃','40呎CY櫃','20呎槽罐櫃','40呎槽罐櫃','其他'];
 const ITEMS = [
@@ -330,7 +352,7 @@ const ITEMS = [
 ];
 const ALL_KEYS = ITEMS.reduce((a,it) => a.concat(it.k ? [it.k] : it.subs.map(s => s[0])), []);
 
-const FORM = { kind:'', spec:'', res:{}, editId:null };
+const FORM = { kind:'', spec:'', leg:'', docs:new Set(), res:{}, editId:null };
 const DATA = { rows:[], sel:new Set() };
 
 // ---------- 畫檢查項目 ----------
@@ -371,6 +393,16 @@ function paintItems(){
   }
 }
 function renderPicks(){
+  $('pick_leg').innerHTML = LEGS.map(k => '<button type="button" class="pick" data-leg="' + k + '">' + k + '</button>').join('');
+  $('pick_docs').innerHTML = DOCS.map(k => '<button type="button" class="pick" data-doc="' + k + '">' + k + '</button>').join('');
+  $('pick_leg').querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+    FORM.leg = (FORM.leg === b.getAttribute('data-leg')) ? '' : b.getAttribute('data-leg'); paintPicks();
+  }));
+  $('pick_docs').querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+    const d = b.getAttribute('data-doc');
+    if(FORM.docs.has(d)) FORM.docs.delete(d); else FORM.docs.add(d);
+    paintPicks();
+  }));
   $('pick_kind').innerHTML = KINDS.map(k => '<button type="button" class="pick" data-k="' + k + '">' + k + '</button>').join('');
   $('pick_spec').innerHTML = SPECS.map(k => '<button type="button" class="pick" data-s="' + k + '">' + k + '</button>').join('');
   $('pick_kind').querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
@@ -381,6 +413,8 @@ function renderPicks(){
   }));
 }
 function paintPicks(){
+  $('pick_leg').querySelectorAll('.pick').forEach(b => b.classList.toggle('on', b.getAttribute('data-leg') === FORM.leg));
+  $('pick_docs').querySelectorAll('.pick').forEach(b => b.classList.toggle('on', FORM.docs.has(b.getAttribute('data-doc'))));
   $('pick_kind').querySelectorAll('.pick').forEach(b => b.classList.toggle('on', b.getAttribute('data-k') === FORM.kind));
   $('pick_spec').querySelectorAll('.pick').forEach(b => b.classList.toggle('on', b.getAttribute('data-s') === FORM.spec));
   $('specOtherBox').className = (FORM.spec === '其他') ? '' : 'hide';
@@ -390,11 +424,15 @@ function paintPicks(){
 function fillList(id, arr){
   $(id).innerHTML = [...new Set(arr.filter(Boolean))].sort().map(v => '<option value="' + esc(v) + '"></option>').join('');
 }
+// 車號只列「營業貨櫃曳引車」——這張表是拉貨櫃在用的，
+// 大貨車、堆高機、公務車出現在下拉裡只會讓司機選錯。
+// 板架號碼一樣只列板架。兩者都只取車牌，沒有任何個資。
+const CONTAINER_TRACTOR = '營業貨櫃曳引車';
 async function loadPlates(){
   try{
     const v = await sbSelect('vehicles',
-      'select=plate_number,vehicle_category&status=eq.' + encodeURIComponent('在役') + '&order=plate_number.asc&limit=2000');
-    fillList('dl_plate',   v.filter(x => x.vehicle_category !== '板架').map(x => x.plate_number));
+      'select=plate_number,vehicle_category,vehicle_type&status=eq.' + encodeURIComponent('在役') + '&order=plate_number.asc&limit=2000');
+    fillList('dl_plate',   v.filter(x => String(x.vehicle_type || '').trim() === CONTAINER_TRACTOR).map(x => x.plate_number));
     fillList('dl_trailer', v.filter(x => x.vehicle_category === '板架').map(x => x.plate_number));
   }catch(e){ /* 讀不到就讓司機自己打 */ }
 }
@@ -403,6 +441,7 @@ function learnLists(rows){
   fillList('dl_shipper', rows.map(r => r.shipper));
   fillList('dl_place',   rows.map(r => r.origin).concat(rows.map(r => r.destination)));
   fillList('dl_person',  rows.map(r => r.inspector));
+  fillList('dl_specnote', rows.map(r => r.spec_note).concat(['還', '當天還空', '移櫃', '還櫃']));
 }
 
 // ---------- 送出 ----------
@@ -422,6 +461,14 @@ function collect(){
     container_kind: FORM.kind || null,
     container_spec: FORM.spec || null,
     spec_other:   FORM.spec === '其他' ? $('f_spec_other').value.trim() : null,
+    leg_type:     FORM.leg || null,
+    spec_note:    $('f_spec_note').value.trim() || null,
+    docs:         (() => {
+                    const list = DOCS.filter(d => FORM.docs.has(d));
+                    const other = $('f_docs_other').value.trim();
+                    if(other) list.push(other);
+                    return list.length ? list.join(',') : null;
+                  })(),
     other_note:   $('f_note').value.trim() || null,
     reported:     !!$('f_reported').checked
   };
@@ -435,6 +482,7 @@ async function save(){
   if(!row.plate){ toast('請填車號', 'err'); $('f_plate').focus(); return; }
   if(!row.inspector){ toast('請填檢查人（你的名字）', 'err'); $('f_inspector').focus(); return; }
   if(!row.container_no){ toast('請填貨櫃櫃號', 'err'); $('f_cno').focus(); return; }
+  if(!row.leg_type && !confirm('還沒選「這一趟是領櫃還是交櫃」。\n\n沒選的話，這一筆在貨櫃運送明細上會落不到領櫃日或交櫃日。確定要送出嗎？')) return;
   const filled = ALL_KEYS.filter(k => FORM.res[k]).length;
   if(filled === 0){ toast('檢查項目一項都還沒填', 'err'); return; }
   if(filled < ALL_KEYS.length &&
@@ -471,8 +519,9 @@ function tidy(e){
   try{ const j = JSON.parse(m); return j.message || m; }catch(_){ return m.slice(0, 200); }
 }
 function resetForm(keepHeader){
-  FORM.res = {}; FORM.kind = ''; FORM.spec = ''; FORM.editId = null;
-  ['f_trailer','f_shipper','f_origin','f_dest','f_cno','f_seal1','f_seal2','f_seal3','f_spec_other','f_note']
+  FORM.res = {}; FORM.kind = ''; FORM.spec = ''; FORM.leg = ''; FORM.docs = new Set(); FORM.editId = null;
+  ['f_trailer','f_shipper','f_origin','f_dest','f_cno','f_seal1','f_seal2','f_seal3','f_spec_other',
+   'f_note','f_spec_note','f_docs_other']
     .forEach(id => $(id).value = '');
   $('f_reported').checked = false;
   if(!keepHeader){ $('f_plate').value = ''; $('f_inspector').value = ''; $('f_date').value = todayISO(); }
@@ -518,7 +567,10 @@ function renderResults(){
       + '<div class="body">'
       + '<div class="l1">' + esc(r.container_no || '（無櫃號）')
       + (bad ? '<span class="tag bad">有異常</span>' : '<span class="tag ok">正常</span>') + '</div>'
-      + '<div class="l2">' + esc(r.plate || '') + '　' + esc(r.shipper || '') + '　' + esc(r.container_kind || '') + ' ' + esc(r.container_spec || '') + '</div>'
+      + '<div class="l2">' + esc(r.plate || '') + '　' + esc(r.shipper || '')
+      + (r.leg_type ? '　<b>' + esc(r.leg_type) + '</b>' : '')
+      + '　' + esc(r.container_kind || '') + ' ' + esc(r.container_spec || '')
+      + (r.docs ? '　單據：' + esc(r.docs) : '') + '</div>'
       + '<div class="l3">' + esc(String(r.inspect_date || '').slice(0,10)) + '　檢查人 ' + esc(r.inspector || '')
       + (r.origin || r.destination ? '　' + esc(r.origin || '') + ' → ' + esc(r.destination || '') : '')
       + '</div>'
@@ -546,6 +598,11 @@ function loadIntoForm(id){
   $('f_cno').value = r.container_no || '';
   $('f_seal1').value = r.seal_no1 || ''; $('f_seal2').value = r.seal_no2 || ''; $('f_seal3').value = r.seal_no3 || '';
   FORM.kind = r.container_kind || ''; FORM.spec = r.container_spec || '';
+  FORM.leg = r.leg_type || '';
+  FORM.docs = new Set(String(r.docs || '').split(',').map(x => x.trim()).filter(x => DOCS.includes(x)));
+  $('f_docs_other').value = String(r.docs || '').split(',').map(x => x.trim())
+                              .filter(x => x && !DOCS.includes(x)).join('、');
+  $('f_spec_note').value = r.spec_note || '';
   $('f_spec_other').value = r.spec_other || '';
   $('f_note').value = r.other_note || ''; $('f_reported').checked = !!r.reported;
   FORM.res = {}; ALL_KEYS.forEach(k => { if(r[k]) FORM.res[k] = r[k]; });
@@ -625,7 +682,7 @@ function sheetHtml(recs, cols){
    + body
    + '<tr><td class="lft"' + span2 + '>12.其他問題，請簡單描述</td>'
    +   '<td class="lft" colspan="' + cols + '" style="font-size:10px;">'
-   +   recs.map((x, i) => x.other_note ? (cols > 1 ? (i+1) + '. ' : '') + esc(x.other_note) : '').filter(Boolean).join('　／　')
+   +   recs.map((x, i) => x.other_note ? (recs.length > 1 ? (i+1) + '. ' : '') + esc(x.other_note) : '').filter(Boolean).join('　／　')
    +   '</td></tr>'
    + '</table>'
    + '<div style="font-size:9.5px;margin-top:2px;">註：檢查結果正常者打V，異常者打X，不適用者寫N，異常請立即回報。</div>'
@@ -636,14 +693,31 @@ function sheetHtml(recs, cols){
    + '<div style="font-size:9.5px;text-align:right;margin-top:6px;">表單編號 :DGTT-P012-R05-02</div>'
    + '</div>';
 }
+// 一律照紙本的 4 個結果欄出圖，只是填幾欄看那一張有幾個櫃。
+// 併頁的分組是「同一天 ＋ 同一台車 ＋ 同一個檢查人」——抬頭那一列只放得下一組
+// 日期／車號／檢查人，三個有一個不一樣就不能併在同一張。
+const PRINT_COLS = 4;
 function doPrint(){
   const picked = DATA.rows.filter(r => DATA.sel.has(r.inspection_id));
   if(!picked.length){ toast('請先勾選要列印的紀錄', 'err'); return; }
-  const per = $('p_mode').checked ? 4 : 1;
   const sheets = [];
-  for(let i = 0; i < picked.length; i += per) sheets.push(picked.slice(i, i + per));
-  $('printArea').innerHTML = sheets.map(g => sheetHtml(g, per)).join('');
-  setTimeout(() => window.print(), 120);
+  if($('p_mode').checked){
+    const groups = new Map();
+    picked.forEach(r => {
+      const k = [String(r.inspect_date || '').slice(0, 10), r.plate || '', r.inspector || ''].join('|');
+      if(!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    });
+    [...groups.keys()].sort().forEach(k => {
+      const g = groups.get(k).sort((a, b) => String(a.container_no || '').localeCompare(String(b.container_no || '')));
+      for(let i = 0; i < g.length; i += PRINT_COLS) sheets.push(g.slice(i, i + PRINT_COLS));
+    });
+  }else{
+    picked.forEach(r => sheets.push([r]));
+  }
+  $('printArea').innerHTML = sheets.map(g => sheetHtml(g, PRINT_COLS)).join('');
+  toast('選了 ' + picked.length + ' 筆，印成 ' + sheets.length + ' 張');
+  setTimeout(() => window.print(), 150);
 }
 
 // ---------- 分頁 ----------

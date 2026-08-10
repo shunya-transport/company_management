@@ -256,6 +256,7 @@
       <button data-tab="ledgers">請假管理</button>
       <button data-tab="fleet">車輛管理</button>
       <button data-tab="maintenance">車輛維護</button>
+        <button data-tab="container">貨櫃運送</button>
       <button data-tab="leases">板架管理</button>
       <button data-tab="trainings">外訓証照</button>
       <button data-tab="trainrecord">訓練紀錄</button>
@@ -1852,6 +1853,40 @@
     </div>
   </div>
 
+  <div id="container" class="panel">
+    <div class="card">
+      <h2>貨櫃目前位置</h2>
+      <div class="muted" style="margin-bottom:10px;">資料來自司機自己填的貨櫃檢查表。每個櫃號取<b>最新一筆</b>的「目的地」當作目前位置。</div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>貨櫃櫃號<input id="cl_cno" placeholder="打幾碼就好，例：HYCU" autocomplete="off"></label>
+      </div>
+      <div id="cl_where"></div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table class="lvot-table">
+          <thead><tr><th>櫃號</th><th>目前位置</th><th>最後異動</th><th>動作</th><th>車號</th><th>板架</th><th>貨主</th><th>上一站</th><th>司機</th></tr></thead>
+          <tbody id="clWhereBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>貨櫃運送明細<span class="count-badge" id="cl_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">欄位跟你的月報表 Excel 一致。「領櫃日／交櫃日」是依司機填的「這一趟是領櫃還是交櫃」分開放。</div>
+      <div class="toolbar">
+        <select id="cl_month"></select>
+        <input id="cl_search" placeholder="搜尋貨主／櫃號／司機／板架／啟運／目的">
+        <button class="btn ghost" id="cl_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+      </div>
+      <div class="table-scroll" style="max-height:640px;">
+        <table class="lvot-table">
+          <thead><tr><th>貨主</th><th>領櫃日</th><th>交櫃日</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th></tr></thead>
+          <tbody id="clLedgerBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" style="margin-top:8px;">司機填表的網址：<b>container_inspection.html</b>（不用登入，手機可直接開）。這一頁只讀不改。</div>
+    </div>
+  </div>
+
   <div id="mileage" class="panel">
     <div class="card">
       <h2>登錄里程</h2>
@@ -2700,7 +2735,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
   adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
-  equipmentTypes: [], employeeEquipment: [], tireRecords: [], tireOrders: [], tireOrderTires: [], tireOrderCharges: [], medicalExamRecords: [], pensionElections: [],
+  equipmentTypes: [], employeeEquipment: [], tireRecords: [], tireOrders: [], tireOrderTires: [], tireOrderCharges: [], containerInspections: [], medicalExamRecords: [], pensionElections: [],
   stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], equipTransfers: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
   workHourDaily: [], workHourMonthly: [] };
@@ -2799,6 +2834,7 @@ const TABLE_MAP = {
   lessees: {table:'lessees', pk:'lessee_id'},
   maint_records: {table:'maintenance_records', pk:'record_id'},
   maintenance_schedules: {table:'maintenance_schedules', pk:'schedule_id'},
+  container_inspections: {table:'container_inspections', pk:'inspection_id'},
   medical_exam_records: {table:'medical_exam_records', pk:'record_id'},
   medical_kit_items: {table:'medical_kit_items', pk:'item_id'},
   office_extensions: {table:'office_extensions', pk:'ext_id'},
@@ -3280,6 +3316,9 @@ async function loadState(){
   STATE.tireOrderTires = await safeGet('tire_service_tires', [], true);
   STATE.tireOrderCharges = await safeGet('tire_service_charges', [], true);
   STATE.medicalExamRecords = await safeGet('medical_exam_records', SEED.medical_exam_records || [], true);
+  // 貨櫃檢查表：司機用 container_inspection.html 填的，這裡只讀不寫。
+  // 還沒跑 SQL #78 的話會讀失敗，畫面上會顯示提示，不影響其他分頁。
+  STATE.containerInspections = await safeGet('container_inspections', [], true);
   STATE.pensionElections = await safeGet('pension_elections', [], true);
   STATE.stockItems = await safeGet('stock_items', [], true);
   STATE.stockTransactions = await safeGet('stock_transactions', [], true);
@@ -4482,6 +4521,122 @@ async function saveTrailerSizeInline(el){
     await saveState('roster_vehicles', STATE.vehicles, true);
     refreshTrailerSizeList();
   }catch(e){ /* saveState 失敗時已經有還原機制與提示，這裡不再重複跳窗 */ }
+}
+
+// ===== 貨櫃運送 =====
+// 資料來源是司機在 container_inspection.html 填的貨櫃檢查表（container_inspections）。
+// 這一頁只讀不寫，不會動到司機填的東西。
+// 欄位對照使用者的月報表 Excel：貨主｜領櫃日｜交櫃日｜櫃號｜啟運｜目的｜板架｜尺寸｜司機｜單據｜備註
+function clRows(){ return (STATE.containerInspections || []).filter(r => r && r.container_no); }
+function clRoc(iso){
+  const d = String(iso || '').slice(0, 10);
+  if(d.length < 7) return '';
+  return String(Number(d.slice(0, 4)) - 1911) + d.slice(5, 7);   // 2026-04 → 11504
+}
+// 「尺寸」欄照 Excel 的用法：司機填的註記優先（還／當天還空／移櫃），沒填才放貨櫃規格
+function clSizeCell(r){
+  if(String(r.spec_note || '').trim()) return r.spec_note;
+  return r.container_spec === '其他' ? (r.spec_other || '其他') : (r.container_spec || '');
+}
+function clRenderMonths(){
+  const sel = document.getElementById('cl_month');
+  if(!sel) return;
+  const keep = sel.value;
+  const months = [...new Set(clRows().map(r => clRoc(r.inspect_date)).filter(Boolean))].sort().reverse();
+  sel.innerHTML = '<option value="all">全部月份</option>'
+    + months.map(m => `<option value="${m}">${m.slice(0,3)} 年 ${m.slice(3)} 月（${m}）</option>`).join('');
+  if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+  else if(months.length) sel.value = months[0];
+}
+function clLedgerRows(){
+  const m = (document.getElementById('cl_month') || {}).value || 'all';
+  const q = ((document.getElementById('cl_search') || {}).value || '').trim();
+  let rows = clRows();
+  if(m !== 'all') rows = rows.filter(r => clRoc(r.inspect_date) === m);
+  if(q){
+    rows = rows.filter(r => [r.shipper, r.container_no, r.inspector, r.trailer_no, r.origin, r.destination, r.plate]
+      .some(v => String(v || '').toUpperCase().includes(q.toUpperCase())));
+  }
+  return rows.slice().sort((a, b) =>
+    String(a.inspect_date || '').localeCompare(String(b.inspect_date || ''))
+    || (a.inspection_id || 0) - (b.inspection_id || 0));
+}
+function clLedgerCells(r){
+  const d = String(r.inspect_date || '').slice(0, 10);
+  const pick = String(r.leg_type || '').trim() === '領櫃' ? d : '';
+  const drop = String(r.leg_type || '').trim() === '交櫃' ? d : '';
+  // 沒填領／交的，日期兩欄都放不下，統一擺在領櫃日並在備註標出來，才不會整筆看不到日期
+  const note = (r.other_note || '') + (r.leg_type ? '' : (r.other_note ? '；' : '') + '（未填領/交）');
+  return [r.shipper || '', pick || (r.leg_type ? '' : d), drop, r.container_no || '',
+          r.origin || '', r.destination || '', r.trailer_no || '', clSizeCell(r),
+          r.inspector || '', r.docs || '', note];
+}
+function renderContainerLedger(){
+  const body = document.getElementById('clLedgerBody');
+  if(!body) return;
+  clRenderMonths();
+  const rows = clLedgerRows();
+  const cEl = document.getElementById('cl_count');
+  if(cEl) cEl.textContent = `共 ${rows.length} 筆`;
+  body.innerHTML = rows.map(r => {
+    const c = clLedgerCells(r);
+    return `<tr${r.abnormal ? ' style="background:var(--amber-bg);" title="這一趟的檢查表有異常"' : ''}>`
+      + `<td class="c-nw">${esc(c[0])}</td><td class="c-nw">${esc(c[1])}</td><td class="c-nw">${esc(c[2])}</td>`
+      + `<td class="c-nw">${esc(c[3])}</td><td class="c-nw">${esc(c[4])}</td><td class="c-nw">${esc(c[5])}</td>`
+      + `<td class="c-nw">${esc(c[6])}</td><td class="c-nw">${esc(c[7])}</td><td class="c-name">${esc(c[8])}</td>`
+      + `<td class="c-note">${esc(c[9])}</td><td class="c-note">${esc(c[10])}</td></tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">這個月份沒有資料。司機還沒填，或還沒執行 SQL #78。</td></tr>`;
+}
+function containerLedgerCsv(){
+  return csvLines(['貨主','領櫃日','交櫃日','櫃號','啟運','目的','板架','尺寸','司機','單據','備註'],
+                  clLedgerRows().map(clLedgerCells));
+}
+// 每個櫃號取最新一筆，那一筆的「目的」就是它現在在哪
+function clLatestByContainer(){
+  const map = new Map();
+  clRows().forEach(r => {
+    const k = String(r.container_no).trim().toUpperCase();
+    const cur = map.get(k);
+    const key = String(r.inspect_date || '') + '|' + String(r.inspection_id || 0).padStart(12, '0');
+    if(!cur || key > cur._k) map.set(k, Object.assign({ _k: key }, r));
+  });
+  return [...map.values()].sort((a, b) => String(b.inspect_date || '').localeCompare(String(a.inspect_date || '')));
+}
+function renderContainerWhere(){
+  const body = document.getElementById('clWhereBody');
+  if(!body) return;
+  const q = ((document.getElementById('cl_cno') || {}).value || '').trim().toUpperCase();
+  let list = clLatestByContainer();
+  if(q) list = list.filter(r => String(r.container_no).toUpperCase().includes(q));
+  body.innerHTML = list.slice(0, 400).map(r => `<tr>
+      <td class="c-nw"><b>${esc(r.container_no)}</b></td>
+      <td class="c-nw"><b>${esc(r.destination || '—')}</b></td>
+      <td class="c-nw">${esc(String(r.inspect_date || '').slice(0,10))}</td>
+      <td class="c-nw">${esc(r.leg_type || '—')}</td>
+      <td class="c-nw">${esc(r.plate || '')}</td>
+      <td class="c-nw">${esc(r.trailer_no || '')}</td>
+      <td class="c-name">${esc(r.shipper || '')}</td>
+      <td class="c-nw">${esc(r.origin || '')}</td>
+      <td class="c-name">${esc(r.inspector || '')}</td>
+    </tr>`).join('') || `<tr><td colspan="9" class="empty">沒有符合的櫃號。</td></tr>`;
+
+  // 只命中一個櫃號時，把它的移動軌跡整條列出來
+  const box = document.getElementById('cl_where');
+  if(!box) return;
+  if(q && list.length === 1){
+    const cno = list[0].container_no;
+    const legs = clRows().filter(r => String(r.container_no).toUpperCase() === String(cno).toUpperCase())
+      .sort((a, b) => String(a.inspect_date || '').localeCompare(String(b.inspect_date || ''))
+                   || (a.inspection_id || 0) - (b.inspection_id || 0));
+    box.innerHTML = `<div style="background:var(--gold-bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+      <div style="font-size:15px;font-weight:700;">${esc(cno)}　目前位置：<span style="color:var(--navy-700);">${esc(list[0].destination || '（最後一筆沒填目的地）')}</span></div>
+      <div class="muted" style="margin:4px 0 8px;">最後異動 ${esc(String(list[0].inspect_date||'').slice(0,10))}　共 ${legs.length} 趟</div>
+      <div style="font-size:12.5px;line-height:1.9;">
+        ${legs.map(l => `${esc(String(l.inspect_date||'').slice(0,10))}　${esc(l.leg_type||'—')}　${esc(l.origin||'?')} → <b>${esc(l.destination||'?')}</b>　${esc(l.plate||'')}／${esc(l.trailer_no||'')}　${esc(l.inspector||'')}`).join('<br>')}
+      </div></div>`;
+  }else{
+    box.innerHTML = '';
+  }
 }
 
 function renderVehicleModalView(v){
@@ -9797,6 +9952,26 @@ function renderAll(){
   renderExternalStatusTable();
   renderTrainingLogTable();
   renderDatalists();
+  renderContainerLedger();
+  renderContainerWhere();
+}
+
+{
+  const _m = document.getElementById('cl_month');
+  const _s = document.getElementById('cl_search');
+  const _c = document.getElementById('cl_cno');
+  if(_m) _m.addEventListener('change', renderContainerLedger);
+  if(_s) _s.addEventListener('input', renderContainerLedger);
+  if(_c) _c.addEventListener('input', renderContainerWhere);
+  const _csv = document.getElementById('cl_csv');
+  if(_csv) _csv.addEventListener('click', () => {
+    const m = (document.getElementById('cl_month') || {}).value || 'all';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + containerLedgerCsv()], {type:'text/csv;charset=utf-8;'}));
+    a.download = '貨櫃運送明細_' + (m === 'all' ? '全部' : m) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
 }
 
 document.querySelectorAll('nav button').forEach(btn => {
