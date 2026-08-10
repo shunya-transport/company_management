@@ -2220,6 +2220,7 @@
       <div style="color:var(--red);font-weight:700;margin-bottom:8px;">⚠️ 請確認要將這位人員移至離職歷史資料</div>
       <div class="muted">移過去之後，這個人不會再出現於「在職人員清單」，需要的話可以到「離職歷史」用「復職」按鈕移回來。</div>
     </div>
+    <div id="rs_impact" style="margin-bottom:16px;"></div>
     <div class="form-grid">
       <label>離職日期<input id="rs_date" type="date"></label>
       <label>離職原因（選填）<input id="rs_reason" placeholder="選填"></label>
@@ -10713,6 +10714,7 @@ document.getElementById('staffTableBody').addEventListener('click', async (e) =>
   document.getElementById('resignModalTitle').textContent = `移至離職歷史資料 — ${emp.name}`;
   document.getElementById('rs_date').value = todayISO();
   document.getElementById('rs_reason').value = '';
+  renderResignImpact(emp);
   document.getElementById('resignModal').classList.add('show');
 });
 
@@ -10721,12 +10723,90 @@ document.getElementById('resignModalCancel').addEventListener('click', () => doc
 document.getElementById('resignModal').addEventListener('click', (e) => {
   if(e.target.id === 'resignModal') document.getElementById('resignModal').classList.remove('show');
 });
+// 離職會動到什麼、不會動到什麼，按下去之前先講清楚。
+// 「會收回」的東西是我們自己在程式裡處理掉的；「保留」的那些是歷史紀錄，一筆都不刪。
+function resignImpactOf(emp){
+  const id = emp.id;
+  const cnt = (arr, fn) => (arr || []).filter(fn).length;
+  return {
+    equip:   cnt(STATE.employeeEquipment, x => x.employee_id === id && x.status === '使用中'),
+    phone:   cnt(STATE.companyPhones,     x => x.employee_id === id && x.status !== '已歸還'),
+    instr:   cnt(STATE.instruments,       x => x.current_holder_id === id),
+    card:    cnt(STATE.accessCards,       x => x.employee_id === id) + (String(emp.access_card_no || '').trim() ? 1 : 0),
+    ext:     cnt(STATE.officeExtensions,  x => x.employee_id === id),
+    check:   cnt(STATE.docChecklist,      x => x.employee_id === id),
+    medical: cnt(STATE.medicalExamRecords, x => x.employee_id === id),
+    lic:     cnt(STATE.trainings,         x => x.employee_id === id),
+    leave:   cnt(STATE.leaveRecords,      x => x.employee_id === id),
+    ot:      cnt(STATE.overtimeRecords,   x => x.employee_id === id)
+  };
+}
+function renderResignImpact(emp){
+  const el = document.getElementById('rs_impact');
+  if(!el) return;
+  const i = resignImpactOf(emp);
+  const line = (label, n, unit) => n ? `<li>${label} <b>${n}</b> ${unit}</li>` : '';
+  const back = [line('配備領用（使用中）', i.equip, '件'), line('公務機', i.phone, '支'),
+                line('儀器', i.instr, '台'), line('門禁卡', i.card, '張'), line('分機', i.ext, '線')]
+                .filter(Boolean).join('');
+  const gone = line('必繳文件檢核', i.check, '項');
+  const keep = [line('體檢紀錄', i.medical, '筆'), line('證照', i.lic, '張'),
+                line('請假紀錄', i.leave, '筆'), line('加班紀錄', i.ot, '筆')].filter(Boolean).join('');
+  el.innerHTML = `
+    <div style="font-size:12.5px;line-height:1.7;">
+      ${back ? `<div style="margin-bottom:8px;"><b>會收回（標記歸還，紀錄留著）</b><ul style="margin:2px 0 0;padding-left:20px;">${back}</ul></div>` : ''}
+      ${gone ? `<div style="margin-bottom:8px;color:var(--red);"><b>會清除</b><ul style="margin:2px 0 0;padding-left:20px;">${gone}</ul></div>` : ''}
+      ${keep ? `<div class="muted"><b>完整保留</b><ul style="margin:2px 0 0;padding-left:20px;">${keep}</ul>投保異動、駕照、工時、訓練紀錄也都保留。</div>` : ''}
+    </div>`;
+}
+
 document.getElementById('resignModalConfirm').addEventListener('click', async () => {
   const emp = STATE.employees.find(x => String(x.id) === currentResignEmpId);
   if(!emp) return;
   const resignDate = document.getElementById('rs_date').value;
   if(!resignDate){ alert('請填寫離職日期'); return; }
   const reason = document.getElementById('rs_reason').value.trim();
+  // ===== 先把該收回的收回來，再把人搬走 =====
+  // 不先做的話，資料庫的外鍵會用 SET NULL 直接把持有人清掉，
+  // 「誰用過這支門號、這張卡」就查不到了。
+  const _touched = new Set();
+  (STATE.employeeEquipment || []).forEach(x => {
+    if(x.employee_id === emp.id && x.status === '使用中'){
+      x.status = '已歸還'; x.return_date = resignDate; _touched.add('employee_equipment');
+    }
+  });
+  (STATE.companyPhones || []).forEach(x => {
+    if(x.employee_id === emp.id && x.status !== '已歸還'){
+      x.status = '已歸還'; x.return_date = resignDate;
+      x.notes = ((x.notes ? x.notes + '；' : '') + '原持有人 ' + emp.name + '（' + resignDate + ' 離職繳回）');
+      x.employee_id = null; _touched.add('company_phones');
+    }
+  });
+  (STATE.instruments || []).forEach(x => {
+    if(x.current_holder_id === emp.id){
+      x.current_holder_id = null;
+      x.notes = ((x.notes ? x.notes + '；' : '') + '原領用人 ' + emp.name + '（' + resignDate + ' 離職繳回）');
+      _touched.add('instruments');
+    }
+  });
+  (STATE.officeExtensions || []).forEach(x => {
+    if(x.employee_id === emp.id){ x.employee_id = null; _touched.add('office_extensions'); }
+  });
+  if((STATE.accessCards || []).some(x => x.employee_id === emp.id)){
+    STATE.accessCards = STATE.accessCards.filter(x => x.employee_id !== emp.id);
+    _touched.add('access_cards');
+  }
+  (STATE.accessCardRoster || []).forEach(x => {
+    if(x.employee_id === emp.id){ x.employee_id = null; _touched.add('access_card_roster'); }
+  });
+  // 必繳文件檢核：人走了這份檢核就沒意義，前端一併移除
+  // （資料庫那邊也設了 ON DELETE CASCADE，兩邊一致）
+  if((STATE.docChecklist || []).some(x => x.employee_id === emp.id)){
+    STATE.docChecklist = STATE.docChecklist.filter(x => x.employee_id !== emp.id);
+    _touched.add('doc_checklist');
+  }
+  emp.access_card_no = null;
+
   STATE.employees = STATE.employees.filter(x => String(x.id) !== currentResignEmpId);
   STATE.employeesHistory.push({...emp, resign_date: resignDate, resign_reason: reason});
   STATE.insuranceChanges.push({
@@ -10735,8 +10815,18 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
     insured_salary: null, has_dependents: false, dependents_count: 0,
     notes: '離職自動產生退保紀錄'
   });
-  await saveState('roster_employees', STATE.employees, true);
+  // 順序很重要：子表要先存好（東西已歸還、卡已收回），最後才刪員工那一列。
+  // 反過來的話會被外鍵擋住，或是被資料庫搶先清掉持有人。
+  if(_touched.has('employee_equipment')) await saveState('employee_equipment', STATE.employeeEquipment, true);
+  if(_touched.has('company_phones'))     await saveState('company_phones', STATE.companyPhones, true);
+  if(_touched.has('instruments'))        await saveState('instruments', STATE.instruments, true);
+  if(_touched.has('office_extensions'))  await saveState('office_extensions', STATE.officeExtensions, true);
+  if(_touched.has('access_card_roster')) await saveState('access_card_roster', STATE.accessCardRoster, true);
+  if(_touched.has('access_cards'))       await saveState('access_cards', STATE.accessCards, true);
+  if(_touched.has('doc_checklist'))      await saveState('doc_checklist', STATE.docChecklist, true);
+  // 離職歷史要先寫進去，人員主檔那一列才刪得安心（萬一中途失敗，人還查得到）
   await saveState('roster_employees_history', STATE.employeesHistory, true);
+  await saveState('roster_employees', STATE.employees, true);
   await saveState('insurance_changes', STATE.insuranceChanges, true);
   document.getElementById('resignModal').classList.remove('show');
   renderAll();
