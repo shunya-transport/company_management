@@ -256,7 +256,6 @@
       <button data-tab="ledgers">請假管理</button>
       <button data-tab="fleet">車輛管理</button>
       <button data-tab="maintenance">車輛維護</button>
-        <button data-tab="container">貨櫃運送</button>
       <button data-tab="leases">板架管理</button>
       <button data-tab="trainings">外訓証照</button>
       <button data-tab="trainrecord">訓練紀錄</button>
@@ -1848,48 +1847,7 @@
     </div>
   </div>
 
-  <div id="container" class="panel">
-    <div class="card">
-      <h2>貨櫃目前位置</h2>
-      <div class="muted" style="margin-bottom:10px;">資料來自司機自己填的貨櫃檢查表。每個櫃號取<b>最新一筆</b>的「目的地」當作目前位置。</div>
-      <div class="form-grid" style="margin-bottom:10px;">
-        <label>貨櫃櫃號<input id="cl_cno" placeholder="打幾碼就好，例：HYCU" autocomplete="off"></label>
-      </div>
-      <div id="cl_where"></div>
-      <div class="table-scroll" style="max-height:420px;">
-        <table class="lvot-table">
-          <colgroup><col style="width:15%"><col style="width:13%"><col style="width:12%"><col style="width:11%">
-                 <col style="width:11%"><col style="width:13%"><col style="width:12%"><col style="width:13%"></colgroup>
-          <thead><tr><th>櫃號</th><th>目前位置</th><th>最後異動</th><th>車號</th><th>板架</th><th>貨主</th><th>上一站</th><th>司機</th></tr></thead>
-          <tbody id="clWhereBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>貨櫃運送明細<span class="count-badge" id="cl_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">欄位跟你的月報表 Excel 一致，日期就是貨櫃檢查表上填的日期。</div>
-      <div class="toolbar">
-        <select id="cl_month"></select>
-        <input id="cl_search" placeholder="搜尋貨主／櫃號／司機／板架／啟運／目的">
-        <button class="btn ghost" id="cl_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
-      </div>
-      <div class="table-scroll" style="max-height:640px;">
-        <table class="lvot-table" style="table-layout:fixed;width:100%;min-width:1000px;">
-          <colgroup>
-            <col style="width:9%"><col style="width:8.5%"><col style="width:13%"><col style="width:7.5%">
-            <col style="width:7.5%"><col style="width:9%"><col style="width:9%"><col style="width:7.5%">
-            <col style="width:11%"><col style="width:18%">
-          </colgroup>
-          <thead><tr><th>貨主</th><th>日期</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th></tr></thead>
-          <tbody id="clLedgerBody"></tbody>
-        </table>
-      </div>
-      <div class="muted" style="margin-top:8px;">司機填表的網址：<b>container_inspection.html</b>（不用登入，手機可直接開）。這一頁只讀不改。</div>
-    </div>
-  </div>
-
-  <div id="mileage" class="panel">
+<div id="mileage" class="panel">
     <div class="card">
       <h2>登錄里程</h2>
       <div class="muted" style="margin-bottom:10px;">每台車每月月底登錄一次。「里程表讀數」是儀表板上的累積數字，「當月行駛」是這個月實際跑的公里數。兩個只填一個也可以：只填讀數時，系統會用上個月的讀數幫你算出當月行駛；只填當月行駛時，系統會用上個月讀數加上去。</div>
@@ -3318,9 +3276,7 @@ async function loadState(){
   STATE.tireOrderTires = await safeGet('tire_service_tires', [], true);
   STATE.tireOrderCharges = await safeGet('tire_service_charges', [], true);
   STATE.medicalExamRecords = await safeGet('medical_exam_records', SEED.medical_exam_records || [], true);
-  // 貨櫃檢查表：司機用 container_inspection.html 填的，這裡只讀不寫。
-  // 還沒跑 SQL #78 的話會讀失敗，畫面上會顯示提示，不影響其他分頁。
-  STATE.containerInspections = await safeGet('container_inspections', [], true);
+  // 貨櫃運送分頁已從這一支移除，改放在「運輸管理資料庫」，所以這裡不再讀 container_inspections。
   STATE.pensionElections = await safeGet('pension_elections', [], true);
   STATE.stockItems = await safeGet('stock_items', [], true);
   STATE.stockTransactions = await safeGet('stock_transactions', [], true);
