@@ -3336,6 +3336,7 @@ async function loadState(){
   STATE.refDepartments = SEED.ref_departments || [];
   STATE.refYards = SEED.ref_yards || [];
   STATE.refCompanies = SEED.companies_full || [];
+  await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
   STATE.adminRewards = await safeGet('admin_rewards', SEED.admin_rewards || [], true);
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
@@ -3685,20 +3686,75 @@ function renderDatalists(){
   renderMaintApplicantOptions();
 }
 
+// ===== 部門／職稱／公司別：名稱 ↔ 編號對照 =====
+// employees 表存的是 dept_id / position_id / company_id，畫面上顯示的是join出來的名稱。
+// 名稱欄（dept_name / position_name / company_name）在 COMPUTED_FIELDS 裡，存檔前一定會被濾掉，
+// 所以存檔時【一定要】把名稱換算成編號寫回去，只寫名稱等於什麼都沒存。
+const REF_NAME2ID = { dept:{}, position:{}, company:{} };
+async function loadOrgRefs(){
+  const grab = async (table, idCol, nameCol, key) => {
+    try{
+      const rows = await supaFetch(table + '?select=' + idCol + ',' + nameCol + '&order=' + idCol + '.asc');
+      (rows || []).forEach(r => {
+        const nm = String(r[nameCol] == null ? '' : r[nameCol]).trim();
+        if(nm) REF_NAME2ID[key][nm] = r[idCol];
+      });
+    }catch(e){ /* 讀不到就退回用現有人員資料推 */ }
+  };
+  await Promise.all([
+    grab('departments', 'dept_id', 'dept_name', 'dept'),
+    grab('positions', 'position_id', 'position_name', 'position'),
+    grab('companies', 'company_id', 'company_name', 'company')
+  ]);
+  // 退路：在職人員身上同時有編號與名稱，拿來補對照表
+  (STATE.employees || []).forEach(e => {
+    if(e.dept_id && e.dept_name && REF_NAME2ID.dept[e.dept_name] == null) REF_NAME2ID.dept[e.dept_name] = e.dept_id;
+    if(e.position_id && e.position_name && REF_NAME2ID.position[e.position_name] == null) REF_NAME2ID.position[e.position_name] = e.position_id;
+    if(e.company_id && e.company_name && REF_NAME2ID.company[e.company_name] == null) REF_NAME2ID.company[e.company_name] = e.company_id;
+  });
+}
+function orgNames(kind){ return Object.keys(REF_NAME2ID[kind]); }
+// 把畫面上選的名稱寫回三個編號欄。有選了卻對不到編號就回報，寧可擋下來也不要靜靜存成空白。
+function applyOrgIds(e, deptName, posName, compName){
+  const bad = [];
+  const set = (kind, name, idField, nameField) => {
+    const n = String(name == null ? '' : name).trim();
+    e[nameField] = n || null;
+    if(!n){ e[idField] = null; return; }
+    const id = REF_NAME2ID[kind][n];
+    if(id == null){ bad.push(n); return; }
+    e[idField] = id;
+  };
+  set('dept', deptName, 'dept_id', 'dept_name');
+  set('position', posName, 'position_id', 'position_name');
+  set('company', compName, 'company_id', 'company_name');
+  return bad;
+}
+function orgWarn(bad){
+  alert('「' + bad.join('、') + '」不在系統的部門／職稱／公司別清單裡，\n'
+      + '找不到對應的編號，這次沒有存檔（存下去這三欄會變空白）。\n\n'
+      + '請從下拉選單直接選現有的項目；真的要新增類別，要先在資料庫的\n'
+      + 'departments / positions / companies 建好才會出現在選單。');
+}
+
 function renderNewStaffSelects(){
   const deptSel = document.getElementById('sf_dept');
-  const deptOptions = STATE.refDepartments.length ? STATE.refDepartments.map(d=>d.name)
-    : [...new Set(STATE.employees.map(e=>e.dept_name).filter(Boolean))];
+  // 只列對照得到編號的名稱，避免選了存不進去
+  const deptOptions = orgNames('dept').length ? orgNames('dept')
+    : (STATE.refDepartments.length ? STATE.refDepartments.map(d=>d.name)
+    : [...new Set(STATE.employees.map(e=>e.dept_name).filter(Boolean))]);
   deptSel.innerHTML = deptOptions.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');
 
   const posSel = document.getElementById('sf_position');
-  const posOptions = STATE.refPositions.length ? STATE.refPositions.map(p=>p.name)
-    : [...new Set(STATE.employees.map(e=>e.position_name).filter(Boolean))];
+  const posOptions = orgNames('position').length ? orgNames('position')
+    : (STATE.refPositions.length ? STATE.refPositions.map(p=>p.name)
+    : [...new Set(STATE.employees.map(e=>e.position_name).filter(Boolean))]);
   posSel.innerHTML = posOptions.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
 
   const companySel = document.getElementById('sf_company');
-  const companyOptions = STATE.refCompanies.length ? STATE.refCompanies.map(c=>c.name)
-    : [...new Set(STATE.employees.map(e=>e.company_name).filter(Boolean))];
+  const companyOptions = orgNames('company').length ? orgNames('company')
+    : (STATE.refCompanies.length ? STATE.refCompanies.map(c=>c.name)
+    : [...new Set(STATE.employees.map(e=>e.company_name).filter(Boolean))]);
   companySel.innerHTML = companyOptions.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
   const regionSel = document.getElementById('sf_region');
@@ -5760,9 +5816,14 @@ function renderStaffModalView(e){
 }
 
 function renderStaffModalEdit(e){
-  const deptOptions = STATE.refDepartments.length ? STATE.refDepartments.map(d=>d.name) : [...new Set(STATE.employees.map(x=>x.dept_name).filter(Boolean))];
-  const posOptions = STATE.refPositions.length ? STATE.refPositions.map(p=>p.name) : [...new Set(STATE.employees.map(x=>x.position_name).filter(Boolean))];
-  const companyOptions = STATE.refCompanies.length ? STATE.refCompanies.map(c=>c.name) : [...new Set(STATE.employees.map(x=>x.company_name).filter(Boolean))];
+  // 只列對照得到編號的名稱，避免選了存不進去；目前這個人的值不在清單裡也要補回來才選得到
+  const withCur = (list, cur) => (cur && list.indexOf(cur) < 0) ? [cur].concat(list) : list;
+  const deptOptions = withCur(orgNames('dept').length ? orgNames('dept')
+    : [...new Set(STATE.employees.map(x=>x.dept_name).filter(Boolean))], e.dept_name);
+  const posOptions = withCur(orgNames('position').length ? orgNames('position')
+    : [...new Set(STATE.employees.map(x=>x.position_name).filter(Boolean))], e.position_name);
+  const companyOptions = withCur(orgNames('company').length ? orgNames('company')
+    : [...new Set(STATE.employees.map(x=>x.company_name).filter(Boolean))], e.company_name);
   const regionOptions = yardOptions(e.region);
   const opt = (list, current) => list.map(v => `<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
 
@@ -5818,10 +5879,13 @@ function renderStaffModalEdit(e){
   renderGateChecks('se_gates', 'se-gate', _curGates);
   document.getElementById('staffModalCancelBtn').addEventListener('click', () => renderStaffModalView(e));
   document.getElementById('staffModalSaveBtn').addEventListener('click', async () => {
-    e.dept_name = document.getElementById('se_dept').value;
-    e.position_name = document.getElementById('se_position').value;
+    // 部門／職稱／公司別要換算成編號才存得進去，名稱欄存檔前會被濾掉
+    const _orgBad = applyOrgIds(e,
+      document.getElementById('se_dept').value,
+      document.getElementById('se_position').value,
+      document.getElementById('se_company').value);
+    if(_orgBad.length){ orgWarn(_orgBad); return; }
     e.employee_type = document.getElementById('se_type').value;
-    e.company_name = document.getElementById('se_company').value;
     e.region = document.getElementById('se_region').value;
     e.fleet_team = document.getElementById('se_fleet').value.trim();
     e.id_number = document.getElementById('se_idnumber').value.trim();
@@ -10865,13 +10929,20 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     }
     if(!cardGates && !confirm('這張卡一個門禁點都沒有勾，等於發了一張不能通行的卡。\n\n確定要這樣建立嗎？')) return;
   }
+  // 部門／職稱／公司別要換算成編號才存得進去，名稱欄存檔前會被濾掉
+  const _org = {};
+  const _orgBad = applyOrgIds(_org,
+    document.getElementById('sf_dept').value,
+    document.getElementById('sf_position').value,
+    document.getElementById('sf_company').value);
+  if(_orgBad.length){ orgWarn(_orgBad); return; }
   const newEmpId = nextId(STATE.employees);
   STATE.employees.push({
     id: newEmpId, employee_no: no, name,
-    dept_name: document.getElementById('sf_dept').value.trim(),
-    position_name: document.getElementById('sf_position').value.trim(),
+    dept_id: _org.dept_id, dept_name: _org.dept_name,
+    position_id: _org.position_id, position_name: _org.position_name,
+    company_id: _org.company_id, company_name: _org.company_name,
     employee_type: document.getElementById('sf_type').value,
-    company_name: document.getElementById('sf_company').value.trim(),
     region: document.getElementById('sf_region').value.trim(),
     id_number: document.getElementById('sf_idnumber').value.trim(),
     birth_date: document.getElementById('sf_birth').value || null,
@@ -10882,7 +10953,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     emergency_contact: document.getElementById('sf_emergency_contact').value.trim(),
     emergency_phone: document.getElementById('sf_emergency_phone').value.trim(),
     bank_account: document.getElementById('sf_bank').value.trim() || null,
-    employer_ins_status: document.getElementById('sf_empins_status').checked ? '已加保' : '未加保',
+    employer_ins_status: document.getElementById('sf_empins_status').checked ? '已加保'
+                         : (document.getElementById('sf_type').value === '間接' ? '不需加保' : '未加保'),
     bp_alcohol_status: bpStatusFromGates(cardGates, document.getElementById('sf_type').value),
     bp_alcohol_date: null,
     bp_alcohol_code: null,
@@ -10927,7 +10999,8 @@ function applyStaffTypeDefaults(){
   const t = document.getElementById('sf_type');
   const ins = document.getElementById('sf_empins_status');
   if(!t || !ins) return;
-  ins.value = (t.value === '間接') ? '不需加保' : '未加保';
+  // 這一格已經改成打勾框，預設一律不打勾；間接人員存檔時會自動記成「不需加保」
+  ins.checked = false;
   // 門禁權限也依類別帶：司機要開酒測系統和各場區，內勤只開新竹大小門
   renderGateChecks('sf_gates', 'sf-gate', GATE_DEFAULTS[t.value] || []);
 }
