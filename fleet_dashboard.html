@@ -504,6 +504,7 @@
         <label>車身號碼<input id="vf_chassis" placeholder="選填"></label>
         <label>引擎號碼<input id="vf_engine" placeholder="選填"></label>
         <label>載重量(噸)<input id="vf_load" type="number" placeholder="選填"></label>
+      <label>板架尺寸<input id="vf_trailer_size" list="trailerSizeList" placeholder="板架才填，例：40呎" autocomplete="off"></label>
         <label>購買日期<input id="vf_purchase" type="date"></label>
         <label>加油卡號<input id="vf_fuel_card" placeholder="選填"></label>
         <label>ETC標籤編號<input id="vf_etc" placeholder="選填"></label>
@@ -604,7 +605,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>發車地</th><th>狀態</th><th>滅火器</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>車型</th><th style="width:110px;">尺寸</th><th>公司別</th><th>發車地</th><th>狀態</th><th>滅火器</th><th></th></tr></thead>
           <tbody id="trailerTableBody"></tbody>
         </table>
       </div>
@@ -772,7 +773,9 @@
       <h2>新增 / 更新租賃</h2>
       <div class="form-grid">
         <label>車號<input id="lf_plate" placeholder="例：HBD-1234"></label>
-        <label>板架類型<input id="lf_vtype" placeholder="例：22呎-31.5"></label>
+        <label>板架尺寸<input id="lf_vtype" list="trailerSizeList" placeholder="選車號會自動帶出" autocomplete="off">
+        <span style="font-size:11px;font-weight:400;color:var(--text-3);">在這裡改會一併存回車輛主檔</span>
+      </label>
         <label>驗車到期日<input id="lf_exp" type="date"></label>
         <label>承租方
           <select id="lf_lessee"></select>
@@ -1202,6 +1205,7 @@
     </div>
 
     <datalist id="plateList"></datalist>
+<datalist id="trailerSizeList"></datalist>
     <datalist id="vendorList"></datalist>
 
     <div class="card">
@@ -4454,6 +4458,32 @@ function openVehicleModal(vehicleId){
 }
 function closeVehicleModal(){ document.getElementById('vehicleModal').classList.remove('show'); }
 
+// ===== 板架尺寸 =====
+// 資料庫本來沒有這個欄位（SQL #79 才加的），所以建議清單以「已經填過的值」為主，
+// 再補幾個常見寫法當起手式。這只是輸入建議，想怎麼寫就怎麼寫，不受清單限制。
+const TRAILER_SIZE_HINTS = ['20呎', '40呎', '45呎', '20呎雙載', '平板'];
+function refreshTrailerSizeList(){
+  const dl = document.getElementById('trailerSizeList');
+  if(!dl) return;
+  const used = (STATE.vehicles || []).map(v => (v.trailer_size || '').trim()).filter(Boolean);
+  const all = [...new Set(used.concat(TRAILER_SIZE_HINTS))];
+  dl.innerHTML = all.map(v => `<option value="${esc(v)}"></option>`).join('');
+}
+// 在板架清單就地改尺寸：跳出欄位（change）才存，存完不重畫，游標不會被吃掉
+async function saveTrailerSizeInline(el){
+  const id = parseInt(el.getAttribute('data-tsz'), 10);
+  const v = (STATE.vehicles || []).find(x => x.id === id);
+  if(!v) return;
+  const val = el.value.trim() || null;
+  if((v.trailer_size || null) === val) return;
+  v.trailer_size = val;
+  el.style.background = val ? '' : 'var(--amber-bg)';
+  try{
+    await saveState('roster_vehicles', STATE.vehicles, true);
+    refreshTrailerSizeList();
+  }catch(e){ /* saveState 失敗時已經有還原機制與提示，這裡不再重複跳窗 */ }
+}
+
 function renderVehicleModalView(v){
   const docTypes = ['驗車','行照','行車記錄器','自主管理標章'];
   const schedules = STATE.maintSchedules.filter(s => s.plate === v.plate);
@@ -4469,6 +4499,7 @@ function renderVehicleModalView(v){
       <dt>車身號碼</dt><dd>${esc(v.chassis_no||'—')}</dd>
       <dt>引擎號碼</dt><dd>${esc(v.engine_no||'—')}</dd>
       <dt>載重量</dt><dd>${v.load_capacity ? esc(v.load_capacity)+' 噸' : '—'}</dd>
+      ${v.vehicle_category === '板架' ? `<dt>板架尺寸</dt><dd>${v.trailer_size ? esc(v.trailer_size) : '<span class="pill amber">尚未填寫</span>'}</dd>` : ''}
       <dt>購買日期</dt><dd>${esc(v.purchase_date||'—')}</dd>
       <dt>公司別</dt><dd>${esc(v.company_name||'—')}</dd>
       <dt>發車地</dt><dd>${esc(v.base_location||'—')}</dd>
@@ -4550,6 +4581,7 @@ function renderVehicleModalEdit(v){
       <label>車身號碼<input id="ve_chassis" value="${esc(v.chassis_no||'')}"></label>
       <label>引擎號碼<input id="ve_engine" value="${esc(v.engine_no||'')}"></label>
       <label>載重量(噸)<input id="ve_load" type="number" value="${esc(v.load_capacity||'')}"></label>
+      <label>板架尺寸<input id="ve_trailer_size" list="trailerSizeList" value="${esc(v.trailer_size||'')}" placeholder="板架才填，例：40呎"></label>
       <label>購買日期<input id="ve_purchase" type="date" value="${esc(v.purchase_date||'')}"></label>
       <label>公司別<input id="ve_company" value="${esc(v.company_name||'')}" list="companyList2"></label>
       <label>發車地<input id="ve_base" value="${esc(v.base_location||'')}"></label>
@@ -4600,6 +4632,7 @@ function renderVehicleModalEdit(v){
     v.chassis_no = document.getElementById('ve_chassis').value.trim();
     v.engine_no = document.getElementById('ve_engine').value.trim();
     v.load_capacity = document.getElementById('ve_load').value || null;
+    v.trailer_size = document.getElementById('ve_trailer_size').value.trim() || null;
     v.purchase_date = document.getElementById('ve_purchase').value || null;
     v.company_name = document.getElementById('ve_company').value.trim();
     v.base_location = document.getElementById('ve_base').value.trim();
@@ -5110,6 +5143,7 @@ function renderFleetTable(){
       <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="10" class="empty">目前沒有車輛資料</td></tr>`;
 
+  refreshTrailerSizeList();
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
   const trailerQ = document.getElementById('trailer_search').value.trim();
   const trailerRows = STATE.vehicles.filter(v =>
@@ -5117,16 +5151,21 @@ function renderFleetTable(){
     (!trailerQ || (v.plate||'').includes(trailerQ) || (v.company_name||'').includes(trailerQ) || (v.base_location||'').includes(trailerQ))
   );
   document.getElementById('fleet_trailer_count').textContent = `共 ${trailerRows.length} 台`;
+  // 尺寸做成可以就地打字的輸入框：110 台要一台一台開視窗填太慢，
+  // 在清單上打完跳出欄位就存（不重畫畫面，才不會打到一半游標被吃掉）。
   document.getElementById('trailerTableBody').innerHTML = trailerRows.map(v => `
     <tr>
       <td><button class="name-link" data-view-vehicle="${v.id}">${esc(v.plate)}</button></td>
       <td>${esc(v.vehicle_type||'')}</td>
+      <td><input class="tsz-in" data-tsz="${v.id}" value="${esc(v.trailer_size||'')}" list="trailerSizeList"
+                 placeholder="未填" autocomplete="off"
+                 style="width:96px;padding:4px 7px;font-size:12.5px;border-radius:7px;${v.trailer_size?'':'background:var(--amber-bg);'}"></td>
       <td>${esc(v.company_name||'')}</td>
       <td>${esc(v.base_location||'')}</td>
       <td>${esc(v.status)}</td>
       <td><button class="name-link" data-edit-doc="${v.id}|滅火器">滅火器 (${STATE.vehicleDocuments.filter(x=>x.vehicle_id===v.id && x.doc_type==='滅火器').length})</button></td>
       <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="7" class="empty">目前沒有板架資料</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有板架資料</td></tr>`;
 
   const _retEl = document.getElementById('fleet_retired_show_all');
   const _retQEl = document.getElementById('fleet_retired_search');
@@ -10044,6 +10083,9 @@ document.getElementById('icTableBody').addEventListener('click', async (e) => {
 document.getElementById('fleet_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('trailer_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('fleet_search').addEventListener('input', renderFleetTable);
+document.getElementById('trailerTableBody').addEventListener('change', (e) => {
+  if(e.target && e.target.classList && e.target.classList.contains('tsz-in')) saveTrailerSizeInline(e.target);
+});
 document.getElementById('trailer_search').addEventListener('input', renderFleetTable);
 {
   const _rsa = document.getElementById('fleet_retired_show_all');
@@ -10818,6 +10860,20 @@ document.getElementById('trainingLogBody').addEventListener('click', async (e) =
   }
 });
 
+// 選好車號就把車輛主檔的板架尺寸帶出來，不用再打一次。
+// （這一格以前存的是計算欄位 vtype，存檔時會被剝掉，打了等於沒打。）
+function fillLeaseTrailerSize(){
+  const el = document.getElementById('lf_vtype');
+  const plateEl = document.getElementById('lf_plate');
+  if(!el || !plateEl) return;
+  const v = (STATE.vehicles || []).find(x => x.plate === plateEl.value.trim());
+  if(v) el.value = v.trailer_size || '';
+}
+{
+  const _lp = document.getElementById('lf_plate');
+  if(_lp){ _lp.addEventListener('change', fillLeaseTrailerSize); _lp.addEventListener('blur', fillLeaseTrailerSize); }
+}
+
 document.getElementById('lf_add').addEventListener('click', async () => {
   const plate = document.getElementById('lf_plate').value.trim();
   if(!plate){ alert('請輸入車號'); return; }
@@ -10846,6 +10902,14 @@ document.getElementById('lf_add').addEventListener('click', async () => {
     notes: document.getElementById('lf_notes').value.trim()
   });
   await saveState('trailer_leases', STATE.leases, true);
+  // 尺寸存回車輛主檔才留得住（trailer_leases.vtype 是計算欄位，存不進資料庫）
+  const _lsz = document.getElementById('lf_vtype').value.trim();
+  const _lv = (STATE.vehicles || []).find(x => x.plate === plate);
+  if(_lv && _lsz && (_lv.trailer_size || '') !== _lsz){
+    _lv.trailer_size = _lsz;
+    await saveState('roster_vehicles', STATE.vehicles, true);
+    refreshTrailerSizeList();
+  }
   ['lf_plate','lf_vtype','lf_exp','lf_notes'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
@@ -12556,6 +12620,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
   if(STATE.vehicles.some(v=>v.plate===plate)){ alert('這個車號已經存在'); return; }
   STATE.vehicles.push({
     id: nextId(STATE.vehicles), plate, plate_number: plate,
+    trailer_size: document.getElementById('vf_trailer_size').value.trim() || null,
     vehicle_category: document.getElementById('vf_category').value,
     vehicle_type: document.getElementById('vf_type').value.trim(),
     brand: document.getElementById('vf_brand').value.trim(),
