@@ -3013,6 +3013,10 @@ async function enrichDenormalizedFields(){
 const COMPUTED_FIELDS = {
   axle_maintenance_records: ['plate'],
   roster_employees: ['dept_name','position_name','company_name'],
+  // 離職歷史是從 employees 整列複製過去的，同樣會夾帶這三個 join 出來的顯示欄位。
+  // 漏了這一行的話，移至離職歷史會被 PostgREST 擋下來：
+  // PGRST204 Could not find the 'company_name' column of 'employees_history'
+  roster_employees_history: ['dept_name','position_name','company_name'],
   roster_vehicles: ['plate','company_name'],
   admin_tolls: ['plate'],
   employee_trainings: ['employee_name','type_name','cert_no'],
@@ -11219,6 +11223,9 @@ function historyRowFor(emp, resignDate, reason){
   const row = Object.assign({}, emp, {
     status: '離職', resign_date: resignDate, resign_reason: reason
   });
+  // 部門／職稱／公司別是 join 出來給畫面看的，資料庫裡沒有這三欄，先拿掉。
+  // （存檔時 COMPUTED_FIELDS 也會再擋一次，這裡是讓記憶體裡的陣列本身就乾淨。）
+  (COMPUTED_FIELDS.roster_employees_history || []).forEach(k => { delete row[k]; });
   const sample = (STATE.employeesHistory || []).find(x => x && typeof x === 'object');
   if(!sample) return row;   // 還沒有任何離職資料可以參考，就整包送，讓資料庫自己說話
   const allowed = new Set(Object.keys(sample));
