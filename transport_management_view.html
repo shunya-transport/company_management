@@ -10723,6 +10723,25 @@ document.getElementById('resignModalCancel').addEventListener('click', () => doc
 document.getElementById('resignModal').addEventListener('click', (e) => {
   if(e.target.id === 'resignModal') document.getElementById('resignModal').classList.remove('show');
 });
+// 搬進離職歷史的那一列。
+// employees_history 的欄位不見得跟 employees 一樣多（線上就少了 status、
+// medical_exam_date、bank_account 這些），整包送過去 PostgREST 會回 PGRST204
+// 「找不到這個欄位」直接擋掉。所以照「已經載入的離職資料實際有哪些欄位」過濾一次，
+// 之後就算 employees 又多了欄位也不會再壞。
+// （SQL #77 會把兩張表的欄位對齊，對齊之後這裡就一個欄位都不會被濾掉。）
+function historyRowFor(emp, resignDate, reason){
+  const row = Object.assign({}, emp, {
+    status: '離職', resign_date: resignDate, resign_reason: reason
+  });
+  const sample = (STATE.employeesHistory || []).find(x => x && typeof x === 'object');
+  if(!sample) return row;   // 還沒有任何離職資料可以參考，就整包送，讓資料庫自己說話
+  const allowed = new Set(Object.keys(sample));
+  ['id', 'resign_date', 'resign_reason'].forEach(k => allowed.add(k));
+  const out = {};
+  Object.keys(row).forEach(k => { if(allowed.has(k)) out[k] = row[k]; });
+  return out;
+}
+
 // 離職會動到什麼、不會動到什麼，按下去之前先講清楚。
 // 「會收回」的東西是我們自己在程式裡處理掉的；「保留」的那些是歷史紀錄，一筆都不刪。
 function resignImpactOf(emp){
@@ -10808,7 +10827,7 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
   emp.access_card_no = null;
 
   STATE.employees = STATE.employees.filter(x => String(x.id) !== currentResignEmpId);
-  STATE.employeesHistory.push({...emp, resign_date: resignDate, resign_reason: reason});
+  STATE.employeesHistory.push(historyRowFor(emp, resignDate, reason));
   STATE.insuranceChanges.push({
     id: nextId(STATE.insuranceChanges), employee_id: emp.id,
     change_type: '退保', effective_date: resignDate,
