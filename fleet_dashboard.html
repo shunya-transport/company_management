@@ -10022,6 +10022,7 @@ document.getElementById('ic_add').addEventListener('click', async () => {
     notes: document.getElementById('ic_notes').value.trim()
   });
   await saveState('insurance_changes', STATE.insuranceChanges, true);
+  if(syncInsuredDate(empId)) await saveState('roster_employees', STATE.employees, true);
   ['ic_salary','ic_date','ic_notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ic_has_dep').value = '0';
   document.getElementById('ic_dep_count').value = 0;
@@ -11522,6 +11523,35 @@ document.getElementById('medicalModalClose').addEventListener('click', closeMedi
 document.getElementById('medicalModal').addEventListener('click', (e) => {
   if(e.target.id === 'medicalModal') closeMedicalModal();
 });
+// ===== 子表存完要回寫員工主檔的兩格 =====
+// 這兩格在人員明細與人員編輯畫面上看得到，如果只存子表不回寫，
+// 畫面上會一直顯示舊值（體檢那一格就這樣停在 113 年停了兩年多）。
+// 回傳 true 表示員工主檔真的有變、需要一起存檔。
+function syncMedicalExamDate(empId){
+  const e = (STATE.employees || []).find(x => x.id === empId);
+  if(!e) return false;
+  const dates = (STATE.medicalExamRecords || [])
+    .filter(r => r.employee_id === empId && r.exam_date)
+    .map(r => String(r.exam_date).slice(0, 10)).sort();
+  const latest = dates.length ? dates[dates.length - 1] : null;
+  if((e.medical_exam_date || null) === latest) return false;
+  e.medical_exam_date = latest;
+  return true;
+}
+// 投保日只在「原本空白」或「比異動表舊」時才更新，人工調過的比較新就不覆蓋
+function syncInsuredDate(empId){
+  const e = (STATE.employees || []).find(x => x.id === empId);
+  if(!e) return false;
+  const dates = (STATE.insuranceChanges || [])
+    .filter(r => r.employee_id === empId && r.effective_date && String(r.change_type || '').indexOf('加保') >= 0)
+    .map(r => String(r.effective_date).slice(0, 10)).sort();
+  const latest = dates.length ? dates[dates.length - 1] : null;
+  if(!latest) return false;
+  if(e.insured_date && String(e.insured_date).slice(0, 10) >= latest) return false;
+  e.insured_date = latest;
+  return true;
+}
+
 document.getElementById('medicalModalAdd').addEventListener('click', async () => {
   const date = document.getElementById('med_date').value;
   if(!date){ alert('請填寫體檢日期'); return; }
@@ -11533,6 +11563,7 @@ document.getElementById('medicalModalAdd').addEventListener('click', async () =>
     notes: document.getElementById('med_notes').value.trim()
   });
   await saveState('medical_exam_records', STATE.medicalExamRecords, true);
+  if(syncMedicalExamDate(currentMedicalEmpId)) await saveState('roster_employees', STATE.employees, true);
   ['med_date','med_hospital','med_next','med_notes'].forEach(id=>document.getElementById(id).value='');
   renderMedicalModalBody();
   renderAll();
@@ -11542,6 +11573,7 @@ document.getElementById('medicalModalBody').addEventListener('click', async (e) 
   if(id){
     STATE.medicalExamRecords = STATE.medicalExamRecords.filter(x => String(x.id) !== id);
     await saveState('medical_exam_records', STATE.medicalExamRecords, true);
+    if(syncMedicalExamDate(currentMedicalEmpId)) await saveState('roster_employees', STATE.employees, true);
     renderMedicalModalBody();
     renderAll();
   }
