@@ -10841,7 +10841,8 @@ document.getElementById('staffHistoryBody').addEventListener('click', async (e) 
   const rehireDate = prompt('請輸入復職日期（YYYY-MM-DD）：', todayISO());
   if(!rehireDate) return;
   STATE.employeesHistory = STATE.employeesHistory.filter(x => String(x.id) !== id);
-  const { resign_date, resign_reason, ...rest } = emp;
+  // moved_to_history_at 只有離職歷史表才有，帶回 employees 會被 PostgREST 擋掉（PGRST204）
+  const { resign_date, resign_reason, moved_to_history_at, ...rest } = emp;
   STATE.employees.push({...rest, status:'在職', rehire_date: rehireDate});
   await saveState('roster_employees', STATE.employees, true);
   await saveState('roster_employees_history', STATE.employeesHistory, true);
