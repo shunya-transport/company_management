@@ -363,20 +363,15 @@
         <div class="form-grid" id="sf_checklist"></div>
       </div>
       <div class="detail-section">
-        <h4>報到辦理事項（雇主險團保，直接人員必辦，間接人員可留「不需加保」）</h4>
+        <h4>報到辦理事項</h4>
         <div class="form-grid">
-          <label>是否加保雇主險（團保）
-            <select id="sf_empins_status">
-              <option value="未加保">未加保</option>
-              <option value="已加保">已加保</option>
-              <option value="不需加保">不需加保</option>
-            </select>
+          <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off"></label>
+          <label>雇主險（團保）
+            <span style="display:flex;align-items:center;gap:8px;font-weight:400;padding:6px 0;">
+              <input id="sf_empins_status" type="checkbox" style="width:18px;height:18px;">
+              <span>已加保</span>
+            </span>
           </label>
-          <label>團保加保日期
-            <input id="sf_empins_date" type="date">
-            <span style="font-size:11px;font-weight:400;color:var(--text-3);white-space:nowrap;">可早於到職日，照保單填</span>
-          </label>
-          <label>團保保險公司<input id="sf_empins_insurer" placeholder="選填"></label>
         </div>
       </div>
       <div class="detail-section">
@@ -1863,7 +1858,9 @@
       <div id="cl_where"></div>
       <div class="table-scroll" style="max-height:420px;">
         <table class="lvot-table">
-          <thead><tr><th>櫃號</th><th>目前位置</th><th>最後異動</th><th>動作</th><th>車號</th><th>板架</th><th>貨主</th><th>上一站</th><th>司機</th></tr></thead>
+          <colgroup><col style="width:15%"><col style="width:13%"><col style="width:12%"><col style="width:11%">
+                 <col style="width:11%"><col style="width:13%"><col style="width:12%"><col style="width:13%"></colgroup>
+          <thead><tr><th>櫃號</th><th>目前位置</th><th>最後異動</th><th>車號</th><th>板架</th><th>貨主</th><th>上一站</th><th>司機</th></tr></thead>
           <tbody id="clWhereBody"></tbody>
         </table>
       </div>
@@ -1871,15 +1868,20 @@
 
     <div class="card">
       <h2>貨櫃運送明細<span class="count-badge" id="cl_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">欄位跟你的月報表 Excel 一致。「領櫃日／交櫃日」是依司機填的「這一趟是領櫃還是交櫃」分開放。</div>
+      <div class="muted" style="margin-bottom:10px;">欄位跟你的月報表 Excel 一致，日期就是貨櫃檢查表上填的日期。</div>
       <div class="toolbar">
         <select id="cl_month"></select>
         <input id="cl_search" placeholder="搜尋貨主／櫃號／司機／板架／啟運／目的">
         <button class="btn ghost" id="cl_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
       </div>
       <div class="table-scroll" style="max-height:640px;">
-        <table class="lvot-table">
-          <thead><tr><th>貨主</th><th>領櫃日</th><th>交櫃日</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th></tr></thead>
+        <table class="lvot-table" style="table-layout:fixed;width:100%;min-width:1000px;">
+          <colgroup>
+            <col style="width:9%"><col style="width:8.5%"><col style="width:13%"><col style="width:7.5%">
+            <col style="width:7.5%"><col style="width:9%"><col style="width:9%"><col style="width:7.5%">
+            <col style="width:11%"><col style="width:18%">
+          </colgroup>
+          <thead><tr><th>貨主</th><th>日期</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th></tr></thead>
           <tbody id="clLedgerBody"></tbody>
         </table>
       </div>
@@ -4500,7 +4502,7 @@ function closeVehicleModal(){ document.getElementById('vehicleModal').classList.
 // ===== 板架尺寸 =====
 // 資料庫本來沒有這個欄位（SQL #79 才加的），所以建議清單以「已經填過的值」為主，
 // 再補幾個常見寫法當起手式。這只是輸入建議，想怎麼寫就怎麼寫，不受清單限制。
-const TRAILER_SIZE_HINTS = ['20呎', '40呎', '45呎', '20呎雙載', '平板'];
+const TRAILER_SIZE_HINTS = ['22呎', '40呎', '20呎'];
 function refreshTrailerSizeList(){
   const dl = document.getElementById('trailerSizeList');
   if(!dl) return;
@@ -4526,7 +4528,8 @@ async function saveTrailerSizeInline(el){
 // ===== 貨櫃運送 =====
 // 資料來源是司機在 container_inspection.html 填的貨櫃檢查表（container_inspections）。
 // 這一頁只讀不寫，不會動到司機填的東西。
-// 欄位對照使用者的月報表 Excel：貨主｜領櫃日｜交櫃日｜櫃號｜啟運｜目的｜板架｜尺寸｜司機｜單據｜備註
+// 欄位對照使用者的月報表 Excel：貨主｜日期｜櫃號｜啟運｜目的｜板架｜尺寸｜司機｜單據｜備註
+// 日期原本拆成兩欄（領／交），使用者後來要求併回一欄，就用檢查表上的日期。
 function clRows(){ return (STATE.containerInspections || []).filter(r => r && r.container_no); }
 function clRoc(iso){
   const d = String(iso || '').slice(0, 10);
@@ -4562,14 +4565,10 @@ function clLedgerRows(){
     || (a.inspection_id || 0) - (b.inspection_id || 0));
 }
 function clLedgerCells(r){
-  const d = String(r.inspect_date || '').slice(0, 10);
-  const pick = String(r.leg_type || '').trim() === '領櫃' ? d : '';
-  const drop = String(r.leg_type || '').trim() === '交櫃' ? d : '';
-  // 沒填領／交的，日期兩欄都放不下，統一擺在領櫃日並在備註標出來，才不會整筆看不到日期
-  const note = (r.other_note || '') + (r.leg_type ? '' : (r.other_note ? '；' : '') + '（未填領/交）');
-  return [r.shipper || '', pick || (r.leg_type ? '' : d), drop, r.container_no || '',
+  // 日期就用貨櫃檢查表上填的那一個，不再拆成兩欄
+  return [r.shipper || '', String(r.inspect_date || '').slice(0, 10), r.container_no || '',
           r.origin || '', r.destination || '', r.trailer_no || '', clSizeCell(r),
-          r.inspector || '', r.docs || '', note];
+          r.inspector || '', r.docs || '', r.other_note || ''];
 }
 function renderContainerLedger(){
   const body = document.getElementById('clLedgerBody');
@@ -4581,14 +4580,14 @@ function renderContainerLedger(){
   body.innerHTML = rows.map(r => {
     const c = clLedgerCells(r);
     return `<tr${r.abnormal ? ' style="background:var(--amber-bg);" title="這一趟的檢查表有異常"' : ''}>`
-      + `<td class="c-nw">${esc(c[0])}</td><td class="c-nw">${esc(c[1])}</td><td class="c-nw">${esc(c[2])}</td>`
+      + `<td class="c-name">${esc(c[0])}</td><td class="c-nw">${esc(c[1])}</td><td class="c-nw">${esc(c[2])}</td>`
       + `<td class="c-nw">${esc(c[3])}</td><td class="c-nw">${esc(c[4])}</td><td class="c-nw">${esc(c[5])}</td>`
-      + `<td class="c-nw">${esc(c[6])}</td><td class="c-nw">${esc(c[7])}</td><td class="c-name">${esc(c[8])}</td>`
-      + `<td class="c-note">${esc(c[9])}</td><td class="c-note">${esc(c[10])}</td></tr>`;
-  }).join('') || `<tr><td colspan="11" class="empty">這個月份沒有資料。司機還沒填，或還沒執行 SQL #78。</td></tr>`;
+      + `<td class="c-nw">${esc(c[6])}</td><td class="c-name">${esc(c[7])}</td>`
+      + `<td class="c-note">${esc(c[8])}</td><td class="c-note">${esc(c[9])}</td></tr>`;
+  }).join('') || `<tr><td colspan="10" class="empty">這個月份沒有資料。司機還沒填，或還沒執行 SQL #78。</td></tr>`;
 }
 function containerLedgerCsv(){
-  return csvLines(['貨主','領櫃日','交櫃日','櫃號','啟運','目的','板架','尺寸','司機','單據','備註'],
+  return csvLines(['貨主','日期','櫃號','啟運','目的','板架','尺寸','司機','單據','備註'],
                   clLedgerRows().map(clLedgerCells));
 }
 // 每個櫃號取最新一筆，那一筆的「目的」就是它現在在哪
@@ -4612,13 +4611,12 @@ function renderContainerWhere(){
       <td class="c-nw"><b>${esc(r.container_no)}</b></td>
       <td class="c-nw"><b>${esc(r.destination || '—')}</b></td>
       <td class="c-nw">${esc(String(r.inspect_date || '').slice(0,10))}</td>
-      <td class="c-nw">${esc(r.leg_type || '—')}</td>
       <td class="c-nw">${esc(r.plate || '')}</td>
       <td class="c-nw">${esc(r.trailer_no || '')}</td>
       <td class="c-name">${esc(r.shipper || '')}</td>
       <td class="c-nw">${esc(r.origin || '')}</td>
       <td class="c-name">${esc(r.inspector || '')}</td>
-    </tr>`).join('') || `<tr><td colspan="9" class="empty">沒有符合的櫃號。</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合的櫃號。</td></tr>`;
 
   // 只命中一個櫃號時，把它的移動軌跡整條列出來
   const box = document.getElementById('cl_where');
@@ -4632,7 +4630,7 @@ function renderContainerWhere(){
       <div style="font-size:15px;font-weight:700;">${esc(cno)}　目前位置：<span style="color:var(--navy-700);">${esc(list[0].destination || '（最後一筆沒填目的地）')}</span></div>
       <div class="muted" style="margin:4px 0 8px;">最後異動 ${esc(String(list[0].inspect_date||'').slice(0,10))}　共 ${legs.length} 趟</div>
       <div style="font-size:12.5px;line-height:1.9;">
-        ${legs.map(l => `${esc(String(l.inspect_date||'').slice(0,10))}　${esc(l.leg_type||'—')}　${esc(l.origin||'?')} → <b>${esc(l.destination||'?')}</b>　${esc(l.plate||'')}／${esc(l.trailer_no||'')}　${esc(l.inspector||'')}`).join('<br>')}
+        ${legs.map(l => `${esc(String(l.inspect_date||'').slice(0,10))}　${esc(l.origin||'?')} → <b>${esc(l.destination||'?')}</b>　${esc(l.plate||'')}／${esc(l.trailer_no||'')}　${esc(l.inspector||'')}`).join('<br>')}
       </div></div>`;
   }else{
     box.innerHTML = '';
@@ -6311,7 +6309,8 @@ function renderStaffModalView(e){
       <dt>體檢日期</dt><dd>${esc(e.medical_exam_date||'—')}</dd>
       <dt>司機上線日期</dt><dd>${esc(e.online_date||'—')}</dd>
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
-      <dt>雇主險（團保）</dt><dd>${esc(e.employer_ins_status||'—')}${e.employer_ins_date?'（'+esc(e.employer_ins_date)+' 加保）':''}${e.employer_ins_insurer?' '+esc(e.employer_ins_insurer):''}</dd>
+      <dt>合作金庫帳號</dt><dd>${esc(e.bank_account||'—')}</dd>
+      <dt>雇主險（團保）</dt><dd>${e.employer_ins_status==='已加保' ? '<b>✓ 已加保</b>' : esc(e.employer_ins_status||'未加保')}</dd>
       <dt>血壓酒測機</dt><dd>${esc(e.bp_alcohol_status||'—')}${e.bp_alcohol_date?'（'+esc(e.bp_alcohol_date)+' 登錄）':''}${e.bp_alcohol_code?' 代號 '+esc(e.bp_alcohol_code):''}</dd>
       <dt>勞退自提比例</dt><dd>${(() => { const p = STATE.pensionElections.find(x=>x.employee_id===empId); return p && p.self_contribution_rate ? p.self_contribution_rate+'%' : '未自提'; })()}</dd>
     </dl>
@@ -6429,13 +6428,14 @@ function renderStaffModalEdit(e){
       <label>體檢日期<input id="se_medical" type="date" value="${esc(e.medical_exam_date||'')}"></label>
       <label>司機上線日期<input id="se_online" type="date" value="${esc(e.online_date||'')}"></label>
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
-      <label>是否加保雇主險（團保）
-        <select id="se_empins_status">
-          ${['未加保','已加保','不需加保'].map(v=>`<option value="${v}" ${(e.employer_ins_status||'未加保')===v?'selected':''}>${v}</option>`).join('')}
-        </select>
+      <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off"></label>
+      <label>雇主險（團保）
+        <span style="display:flex;align-items:center;gap:8px;font-weight:400;padding:6px 0;">
+          <input id="se_empins_status" type="checkbox" style="width:18px;height:18px;" ${e.employer_ins_status==='已加保'?'checked':''}>
+          <span>已加保</span>
+          <span class="muted" style="font-size:11.5px;">${e.employer_ins_status==='不需加保'?'（原本標記為「不需加保」，不打勾就會保留這個狀態）':''}</span>
+        </span>
       </label>
-      <label>團保加保日期<input id="se_empins_date" type="date" value="${esc(e.employer_ins_date||'')}"></label>
-      <label>團保保險公司<input id="se_empins_insurer" value="${esc(e.employer_ins_insurer||'')}"></label>
       <label>勞退自提比例(%)<input id="se_pension_rate" type="number" step="0.5" min="0" max="6" value="${esc((STATE.pensionElections.find(p=>p.employee_id===e.id)||{}).self_contribution_rate||0)}"></label>
     </div>
     <div class="detail-section">
@@ -6472,9 +6472,10 @@ function renderStaffModalEdit(e){
     e.medical_exam_date = document.getElementById('se_medical').value || null;
     e.online_date = document.getElementById('se_online').value || null;
     e.access_card_no = document.getElementById('se_card').value.trim();
-    e.employer_ins_status = document.getElementById('se_empins_status').value;
-    e.employer_ins_date = document.getElementById('se_empins_date').value || null;
-    e.employer_ins_insurer = document.getElementById('se_empins_insurer').value.trim() || null;
+    e.bank_account = document.getElementById('se_bank').value.trim() || null;
+    // 打勾＝已加保；沒打勾的話，原本標記「不需加保」的就維持不動，其餘算未加保
+    e.employer_ins_status = document.getElementById('se_empins_status').checked ? '已加保'
+                          : (e.employer_ins_status === '不需加保' ? '不需加保' : '未加保');
     const rate = parseFloat(document.getElementById('se_pension_rate').value) || 0;
     let elec = STATE.pensionElections.find(p => p.employee_id === e.id);
     if(elec){ elec.self_contribution_rate = rate; elec.effective_date = todayISO(); }
@@ -11366,9 +11367,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     address: document.getElementById('sf_address').value.trim(),
     emergency_contact: document.getElementById('sf_emergency_contact').value.trim(),
     emergency_phone: document.getElementById('sf_emergency_phone').value.trim(),
-    employer_ins_status: document.getElementById('sf_empins_status').value,
-    employer_ins_date: document.getElementById('sf_empins_date').value || null,
-    employer_ins_insurer: document.getElementById('sf_empins_insurer').value.trim() || null,
+    bank_account: document.getElementById('sf_bank').value.trim() || null,
+    employer_ins_status: document.getElementById('sf_empins_status').checked ? '已加保' : '未加保',
     bp_alcohol_status: bpStatusFromGates(cardGates, document.getElementById('sf_type').value),
     bp_alcohol_date: null,
     bp_alcohol_code: null,
@@ -11400,7 +11400,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     await saveState('access_cards', STATE.accessCards, true);
     await saveState('access_card_roster', STATE.accessCardRoster, true);
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_empins_date','sf_empins_insurer','sf_card'].forEach(id=>document.getElementById(id).value='');
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('sf_empins_status').checked = false;
   applyStaffTypeDefaults();
   renderStaffNoBox();
   renderNewStaffChecklist();
@@ -13184,6 +13185,72 @@ document.getElementById('maintScheduleTableBody').addEventListener('click', asyn
 });
 
 
+// ===================== 全系統日期顯示民國年 =====================
+// 使用者要求「全資料庫都改成民國年」。
+//
+// 做法：資料庫、存檔、CSV 匯出【一律維持西元 ISO（YYYY-MM-DD）】不動，
+//       只在畫面呈現的最後一刻把 2026-08-10 換成 115/08/10。
+//       這樣雲端資料、排序、比對、跟外部系統交換都不會壞，
+//       但你在螢幕上、列印出來看到的全部是民國年。
+//
+// 實作用 MutationObserver 監看畫面，任何一段新畫出來的內容都會自動換算，
+// 不需要去改幾百個地方的樣板字串，以後新增功能也自動跟著民國年。
+//
+// 【改不了的一個地方】<input type="date"> 是瀏覽器內建的日期選擇器，
+//   顯示格式由作業系統決定，網頁沒有權限改，所以「輸入」日期時還是西元。
+//   輸入完存檔、回到清單上看到的就是民國年了。
+const ROC_RE = /(?:19|20)\d{2}-\d{2}-\d{2}/g;
+function rocOne(m){
+  const y = parseInt(m.slice(0, 4), 10) - 1911;
+  return y > 0 ? (y + '/' + m.slice(5, 7) + '/' + m.slice(8, 10)) : m;
+}
+function rocText(iso){ return String(iso || '').replace(ROC_RE, rocOne); }
+const ROC_SKIP_TAG = { SCRIPT:1, STYLE:1, TEXTAREA:1, INPUT:1, NOSCRIPT:1 };
+function rocifyTextNode(t){
+  const v = t.nodeValue;
+  if(!v || v.indexOf('-') < 0) return;
+  const p = t.parentNode;
+  if(!p || p.nodeType !== 1 || ROC_SKIP_TAG[p.nodeName]) return;
+  if(p.closest && p.closest('[data-no-roc]')) return;
+  const nv = v.replace(ROC_RE, rocOne);
+  if(nv !== v) t.nodeValue = nv;
+}
+function rocifyTree(root){
+  if(!root) return;
+  if(root.nodeType === 3){ rocifyTextNode(root); return; }
+  if(root.nodeType !== 1 || ROC_SKIP_TAG[root.nodeName]) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const list = [];
+  while(w.nextNode()) list.push(w.currentNode);
+  for(let i = 0; i < list.length; i++) rocifyTextNode(list[i]);
+}
+let ROC_OBS = null, ROC_BUSY = false, ROC_QUEUE = [], ROC_TICK = 0;
+function rocFlush(){
+  ROC_TICK = 0; ROC_BUSY = true;
+  const q = ROC_QUEUE; ROC_QUEUE = [];
+  try{ for(let i = 0; i < q.length; i++) rocifyTree(q[i]); }
+  catch(e){ /* 換算失敗不能影響主畫面 */ }
+  finally{ if(ROC_OBS) ROC_OBS.takeRecords(); ROC_BUSY = false; }
+}
+function startRocDisplay(){
+  if(ROC_OBS) return;
+  try{
+    rocifyTree(document.body);
+    ROC_OBS = new MutationObserver(function(ms){
+      if(ROC_BUSY) return;
+      for(let i = 0; i < ms.length; i++){
+        const m = ms[i];
+        if(m.type === 'characterData') ROC_QUEUE.push(m.target);
+        else for(let j = 0; j < m.addedNodes.length; j++) ROC_QUEUE.push(m.addedNodes[j]);
+      }
+      if(ROC_QUEUE.length && !ROC_TICK) ROC_TICK = requestAnimationFrame(rocFlush);
+    });
+    ROC_OBS.observe(document.body, { childList:true, subtree:true, characterData:true });
+  }catch(e){ /* 舊瀏覽器沒有 MutationObserver 就維持西元，不影響功能 */ }
+}
+// ================== 民國年顯示結束 ==================
+
+
 (async function init(){
   await ensureLogin();
   await loadState();
@@ -13208,6 +13275,7 @@ document.getElementById('maintScheduleTableBody').addEventListener('click', asyn
   renderStockSelects();
   renderInstrumentSelects();
   renderAll();
+  startRocDisplay();
 })();
 </script>
 </body>
