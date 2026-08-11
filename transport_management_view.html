@@ -758,6 +758,50 @@
       <button class="btn" id="lf_add">新增租賃紀錄</button>
     </div>
     <div class="card">
+      <h2>自用板架目前位置<span class="count-badge" id="selfuse_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">未出租、公司自行調度使用的板架。按「修改」可以一起改<b>使用業主</b>與<b>目前位置</b>。使用業主是指這台板架現在掛給哪一家貨主在跑，不是出租，所以不會進租賃清單。</div>
+      <div class="toolbar">
+        <input id="selfuse_search" placeholder="搜尋車號">
+        <select id="selfuse_company_filter"><option value="all">全部公司別</option></select>
+        <select id="selfuse_filter">
+          <option value="all">全部狀態</option>
+          <option value="overdue">已逾期</option>
+          <option value="soon">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
+          <option value="normal">正常</option>
+          <option value="unset">未設定</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
+          <tbody id="selfUseTrailerBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>租賃清單</h2>
+      <div class="toolbar">
+        <input id="lease_search" placeholder="搜尋車號">
+        <select id="lease_lessee_filter"><option value="all">全部承租方</option></select>
+        <select id="lease_filter">
+          <option value="all">全部狀態</option>
+          <option value="overdue">已逾期</option>
+          <option value="soon">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
+          <option value="normal">正常</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>類型</th><th>承租方</th><th style="width:180px;">目前位置</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th style="width:80px;">備註</th><th></th></tr></thead>
+          <tbody id="leaseTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  <div class="card">
       <h2>板架打油登錄<span class="count-badge" id="grease_rec_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">板架、貨櫃架、堆高機、吊掛機的打油一律從這裡登錄。<b>司機用電話或 LINE 回報時，只要填車號、打油日期、回報人就可以先存檔</b>，廠商、費用、發票號碼留空，之後在下方「待補打油費用」補登即可。到期日只看打油日期，所以一存檔「上次打油日」與「下次到期日」就會立刻更新，不必等費用回來。</div>
       <div class="form-grid">
@@ -821,52 +865,7 @@
         </table>
       </div>
     </div>
-    <div class="card">
-      <h2>自用板架目前位置<span class="count-badge" id="selfuse_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">未出租、公司自行調度使用的板架，可自行修改目前放置的位置。</div>
-      <div class="toolbar">
-        <input id="selfuse_search" placeholder="搜尋車號">
-        <select id="selfuse_company_filter"><option value="all">全部公司別</option></select>
-        <select id="selfuse_filter">
-          <option value="all">全部狀態</option>
-          <option value="overdue">已逾期</option>
-          <option value="soon">30天內到期</option>
-          <option value="soon60">60天內到期</option>
-          <option value="soon90">90天內到期</option>
-          <option value="normal">正常</option>
-          <option value="unset">未設定</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
-          <tbody id="selfUseTrailerBody"></tbody>
-        </table>
-      </div>
     </div>
-    <div class="card">
-      <h2>租賃清單</h2>
-      <div class="toolbar">
-        <input id="lease_search" placeholder="搜尋車號">
-        <select id="lease_lessee_filter"><option value="all">全部承租方</option></select>
-        <select id="lease_filter">
-          <option value="all">全部狀態</option>
-          <option value="overdue">已逾期</option>
-          <option value="soon">30天內到期</option>
-          <option value="soon60">60天內到期</option>
-          <option value="soon90">90天內到期</option>
-          <option value="normal">正常</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>類型</th><th>承租方</th><th style="width:180px;">目前位置</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th style="width:80px;">備註</th><th></th></tr></thead>
-          <tbody id="leaseTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <div id="container" class="panel">
     <div class="card">
       <h2>貨櫃目前位置</h2>
@@ -887,7 +886,7 @@
 
     <div class="card">
       <h2>貨櫃運送明細<span class="count-badge" id="cl_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">欄位跟你的月報表 Excel 一致，日期就是貨櫃檢查表上填的日期。</div>
+      <div class="muted" style="margin-bottom:10px;">欄位跟你的月報表 Excel 一致，日期就是貨櫃檢查表上填的日期。司機那一頁只能新增，填錯的<b>從這裡按「改」修正</b>。</div>
       <div class="toolbar">
         <select id="cl_month"></select>
         <input id="cl_search" placeholder="搜尋貨主／櫃號／司機／板架／啟運／目的">
@@ -899,9 +898,9 @@
           <colgroup>
             <col style="width:9%"><col style="width:8.5%"><col style="width:13%"><col style="width:7.5%">
             <col style="width:7.5%"><col style="width:9%"><col style="width:9%"><col style="width:7.5%">
-            <col style="width:10%"><col style="width:15%"><col style="width:5%">
+            <col style="width:10%"><col style="width:13%"><col style="width:7%">
           </colgroup>
-          <thead><tr><th>貨主</th><th>日期</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th><th>列印</th></tr></thead>
+          <thead><tr><th>貨主</th><th>日期</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th><th>操作</th></tr></thead>
           <tbody id="clLedgerBody"></tbody>
         </table>
       </div>
@@ -1217,6 +1216,7 @@
     </div>
 
     <datalist id="plateList"></datalist>
+<datalist id="selfUsePartyList"></datalist>
 <datalist id="trailerSizeList"></datalist>
     <datalist id="vendorList"></datalist>
 
@@ -2248,6 +2248,13 @@
 </div>
     </div>
   </div>
+
+<div class="modal-backdrop no-print" id="ciEditModal">
+  <div class="modal-box">
+    <button class="modal-close" id="ciEditClose">✕</button>
+    <div id="ciEditContent"></div>
+  </div>
+</div>
 
 <div class="modal-backdrop no-print" id="staffModal">
   <div class="modal-box">
@@ -3889,9 +3896,13 @@ function renderSelfUseTrailers(){
     const locCell = isEditing
       ? `<input type="text" id="loc_input_${v.id}" value="${esc(v.current_location||'')}" style="width:140px;">`
       : esc(v.current_location||'—未設定');
+    // 使用業主：這台自用板架現在掛給哪一家貨主在跑
+    const partyCell = isEditing
+      ? `<input type="text" id="party_input_${v.id}" list="selfUsePartyList" value="${esc(v.used_by_party||'')}" style="width:130px;">`
+      : esc(v.used_by_party||'—未填');
     const actionCell = isEditing
       ? `<button class="name-link" data-save-location="${v.id}">儲存</button> <button class="del-btn" data-cancel-location="${v.id}">取消</button>`
-      : `<button class="name-link" data-edit-location="${v.id}">修改位置</button>`;
+      : `<button class="name-link" data-edit-location="${v.id}">修改</button>`;
     const docStatus = vehicleDocStatus(v.id, '驗車');
     const inspectionExpiry = docStatus ? docStatus.expiry : '—';
     const grace = docStatus ? docStatus.grace : null;
@@ -3900,6 +3911,7 @@ function renderSelfUseTrailers(){
       <td>${esc(v.plate)}</td>
       <td>${esc(v.vehicle_type||'')}</td>
       <td>${esc(v.company_name||'')}</td>
+      <td>${partyCell}</td>
       <td>${locCell}</td>
       <td class="muted">${esc((v.location_updated_at||'').slice(0,16).replace('T',' '))}</td>
       <td>${esc(inspectionExpiry)}</td>
@@ -3907,7 +3919,17 @@ function renderSelfUseTrailers(){
       <td>${statusPill}</td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="9" class="empty">目前沒有自用板架</td></tr>`;
+  }).join('') || `<tr><td colspan="10" class="empty">目前沒有自用板架</td></tr>`;
+  // 使用業主的輸入建議：已經填過的值 ＋ 租賃清單的承租方
+  const _pl = document.getElementById('selfUsePartyList');
+  if(_pl){
+    const names = [...new Set(
+      STATE.vehicles.map(x => x.used_by_party)
+        .concat(STATE.lessees.map(x => x.name))
+        .map(x => String(x == null ? '' : x).trim()).filter(Boolean)
+    )].sort();
+    _pl.innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+  }
 }
 
 function certStatusCode(t){
@@ -4642,6 +4664,134 @@ function ciPrintOne(id){
   ciPrint(all.filter(r => ciGroupKey(r) === ciGroupKey(one)));
 }
 
+// ===================== 貨櫃檢查表：修改／刪除 =====================
+// 司機頁 container_inspection.html 只能新增，填錯一律從這裡改。
+// 資料走既有的 STATE + saveState，跟其他分頁同一套機制。
+const CI_DOCS = ['放行單', 'EIR', '簽單', 'ASN', '磅單', '還櫃單', '毒管單'];
+const CI_ALL_KEYS = CI_ITEMS.reduce((a, it) => a.concat(it.k ? [it.k] : it.subs.map(x => x[0])), []);
+let ciEditId = null;
+
+function ciVxnSelect(key, cur){
+  return '<select data-ci-res="' + key + '" style="padding:3px 4px;font-size:13px;min-width:56px;">'
+    + ['', 'V', 'X', 'N'].map(v =>
+        '<option value="' + v + '"' + (String(cur || '') === v ? ' selected' : '') + '>'
+        + (v || '—') + '</option>').join('')
+    + '</select>';
+}
+function ciOpenEdit(id){
+  const r = (STATE.containerInspections || []).find(x => String(x.inspection_id) === String(id));
+  if(!r){ alert('找不到這一筆檢查表。'); return; }
+  ciEditId = r.inspection_id;
+  const t = (label, key, extra) =>
+    `<label>${label}<input id="cie_${key}" value="${esc(r[key] == null ? '' : r[key])}" ${extra || ''}></label>`;
+  const pick = (label, key, list) =>
+    `<label>${label}<select id="cie_${key}">`
+    + ['', ...list].map(v => `<option value="${esc(v)}"${(r[key] || '') === v ? ' selected' : ''}>${esc(v || '—')}</option>`).join('')
+    + `</select></label>`;
+  const cur = String(r.docs || '').split(',').map(x => x.trim()).filter(Boolean);
+  const itemsHtml = CI_ITEMS.map(it => {
+    if(it.k){
+      return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);">
+        <div style="flex:1;font-size:13px;">${it.no}. ${esc(it.t)}</div>${ciVxnSelect(it.k, r[it.k])}</div>`;
+    }
+    return `<div style="padding:4px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;margin-bottom:4px;">${it.no}. ${esc(it.t)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;">`
+      + it.subs.map(x => `<span style="font-size:12.5px;">${esc(x[1])} ${ciVxnSelect(x[0], r[x[0]])}</span>`).join('')
+      + `</div></div>`;
+  }).join('');
+
+  document.getElementById('ciEditContent').innerHTML = `
+    <h3>修改貨櫃檢查表 — ${esc(r.container_no || '（無櫃號）')}</h3>
+    <div class="muted" style="margin-bottom:10px;">這一筆是司機在 container_inspection.html 填的。改完按「儲存」會直接寫回雲端。</div>
+    <div class="form-grid">
+      <label>日期<input id="cie_inspect_date" type="date" value="${esc(String(r.inspect_date || '').slice(0,10))}"></label>
+      ${t('車號', 'plate')}
+      ${t('檢查人', 'inspector')}
+      ${t('板架號碼', 'trailer_no')}
+      ${t('板架尺寸', 'trailer_size')}
+      ${t('貨主', 'shipper')}
+      ${t('起運地', 'origin')}
+      ${t('目的地', 'destination')}
+      ${t('貨櫃櫃號', 'container_no', 'style="text-transform:uppercase;"')}
+      ${t('封條號碼 1', 'seal_no1')}
+      ${t('封條號碼 2', 'seal_no2')}
+      ${pick('貨櫃種類', 'container_kind', CI_KINDS)}
+      ${pick('貨櫃規格', 'container_spec', CI_SPECS)}
+      ${t('規格「其他」自填', 'spec_other')}
+      ${t('尺寸註記（運送明細用）', 'spec_note')}
+    </div>
+    <div class="detail-section">
+      <h4>單據</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 18px;">
+        ${CI_DOCS.map(d => `<label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+          <input type="checkbox" class="cie-doc" value="${esc(d)}"${cur.indexOf(d) >= 0 ? ' checked' : ''}>${esc(d)}</label>`).join('')}
+      </div>
+      <label style="display:block;margin-top:8px;">單據其他（逗號分隔）
+        <input id="cie_docs_other" value="${esc(cur.filter(x => CI_DOCS.indexOf(x) < 0).join(','))}"></label>
+    </div>
+    <div class="detail-section">
+      <h4>檢查項目（空白＝沒填）</h4>
+      ${itemsHtml}
+      <label style="display:block;margin-top:10px;">12. 其他問題
+        <input id="cie_other_note" value="${esc(r.other_note || '')}"></label>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:400;">
+        <input id="cie_reported" type="checkbox" style="width:18px;height:18px;"${r.reported ? ' checked' : ''}>已回報運務領班／調度</label>
+    </div>
+    <button class="btn" id="ciEditSave">儲存</button>
+    <button class="btn ghost" id="ciEditCancel">取消</button>
+    <button class="del-btn" id="ciEditDelete" style="margin-left:14px;">刪除這一筆</button>
+  `;
+  document.getElementById('ciEditModal').classList.add('show');
+  document.getElementById('ciEditCancel').addEventListener('click', ciCloseEdit);
+  document.getElementById('ciEditSave').addEventListener('click', ciSaveEdit);
+  document.getElementById('ciEditDelete').addEventListener('click', ciDeleteEdit);
+}
+function ciCloseEdit(){
+  ciEditId = null;
+  document.getElementById('ciEditModal').classList.remove('show');
+  document.getElementById('ciEditContent').innerHTML = '';
+}
+async function ciSaveEdit(){
+  const r = (STATE.containerInspections || []).find(x => String(x.inspection_id) === String(ciEditId));
+  if(!r){ alert('找不到這一筆檢查表。'); return; }
+  const v = k => { const el = document.getElementById('cie_' + k); return el ? el.value.trim() : ''; };
+  if(!v('inspect_date')){ alert('日期不能空白。'); return; }
+  if(!v('container_no')){ alert('貨櫃櫃號不能空白。'); return; }
+  r.inspect_date = v('inspect_date');
+  ['plate','inspector','trailer_no','trailer_size','shipper','origin','destination',
+   'seal_no1','seal_no2','spec_other','spec_note'].forEach(k => { r[k] = v(k) || null; });
+  r.container_no = v('container_no').toUpperCase();
+  r.container_kind = v('container_kind') || null;
+  r.container_spec = v('container_spec') || null;
+  const docs = [...document.querySelectorAll('.cie-doc:checked')].map(x => x.value);
+  const other = document.getElementById('cie_docs_other').value.trim();
+  if(other) docs.push(other);
+  r.docs = docs.length ? docs.join(',') : null;
+  document.querySelectorAll('[data-ci-res]').forEach(sel => {
+    r[sel.getAttribute('data-ci-res')] = sel.value || null;
+  });
+  r.other_note = document.getElementById('cie_other_note').value.trim() || null;
+  r.reported = !!document.getElementById('cie_reported').checked;
+  r.abnormal = CI_ALL_KEYS.some(k => r[k] === 'X');
+  try{
+    await saveState('container_inspections', STATE.containerInspections, true);
+    ciCloseEdit();
+    renderAll();
+  }catch(e){ /* saveState 失敗時本身已經跳過提示並還原，這裡不再重複 */ }
+}
+async function ciDeleteEdit(){
+  const r = (STATE.containerInspections || []).find(x => String(x.inspection_id) === String(ciEditId));
+  if(!r) return;
+  if(!confirm('確定要刪除 ' + (r.container_no || '這一筆') + ' 的檢查表嗎？\n刪掉就救不回來了。')) return;
+  STATE.containerInspections = STATE.containerInspections.filter(x => x !== r);
+  try{
+    await saveState('container_inspections', STATE.containerInspections, true);
+    ciCloseEdit();
+    renderAll();
+  }catch(e){ /* 失敗時 saveState 已經還原清單 */ }
+}
+
 // ===== 貨櫃運送 =====
 // 資料來源是司機在 container_inspection.html 填的貨櫃檢查表（container_inspections）。
 // 這一頁只讀不寫，不會動到司機填的東西。
@@ -4701,7 +4851,8 @@ function renderContainerLedger(){
       + `<td class="c-nw">${esc(c[3])}</td><td class="c-nw">${esc(c[4])}</td><td class="c-nw">${esc(c[5])}</td>`
       + `<td class="c-nw">${esc(c[6])}</td><td class="c-name">${esc(c[7])}</td>`
       + `<td class="c-note">${esc(c[8])}</td><td class="c-note">${esc(c[9])}</td>`
-      + `<td class="c-nw"><button type="button" class="name-link" data-ci-print="${r.inspection_id}">印</button></td></tr>`;
+      + `<td class="c-nw"><button type="button" class="name-link" data-ci-print="${r.inspection_id}">印</button>`
+      + `　<button type="button" class="name-link" data-ci-edit="${r.inspection_id}">改</button></td></tr>`;
   }).join('') || `<tr><td colspan="11" class="empty">這個月份沒有資料。司機還沒填，或還沒執行 SQL #78。</td></tr>`;
 }
 function containerLedgerCsv(){
@@ -9736,8 +9887,12 @@ if(document.getElementById('cbRosterBody')){
   const _tb = document.getElementById('clLedgerBody');
   if(_tb) _tb.addEventListener('click', ev => {
     const b = ev.target.closest('[data-ci-print]');
-    if(b) ciPrintOne(b.getAttribute('data-ci-print'));
+    if(b){ ciPrintOne(b.getAttribute('data-ci-print')); return; }
+    const e2 = ev.target.closest('[data-ci-edit]');
+    if(e2) ciOpenEdit(e2.getAttribute('data-ci-edit'));
   });
+  const _cc = document.getElementById('ciEditClose');
+  if(_cc) _cc.addEventListener('click', ciCloseEdit);
   const _csv = document.getElementById('cl_csv');
   if(_csv) _csv.addEventListener('click', () => {
     const m = (document.getElementById('cl_month') || {}).value || 'all';
@@ -10933,6 +11088,8 @@ document.getElementById('selfUseTrailerBody').addEventListener('click', async (e
     const v = STATE.vehicles.find(x => String(x.id) === String(id));
     const input = document.getElementById(`loc_input_${id}`);
     if(!v || !input) return;
+    const party = document.getElementById(`party_input_${id}`);
+    if(party) v.used_by_party = party.value.trim() || null;
     v.current_location = input.value.trim();
     v.location_updated_at = new Date().toISOString();
     await saveState('roster_vehicles', STATE.vehicles, true);

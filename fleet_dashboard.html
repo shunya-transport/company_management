@@ -783,6 +783,50 @@
       <button class="btn" id="lf_add">新增租賃紀錄</button>
     </div>
     <div class="card">
+      <h2>自用板架目前位置<span class="count-badge" id="selfuse_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">未出租、公司自行調度使用的板架。按「修改」可以一起改<b>使用業主</b>與<b>目前位置</b>。使用業主是指這台板架現在掛給哪一家貨主在跑，不是出租，所以不會進租賃清單。</div>
+      <div class="toolbar">
+        <input id="selfuse_search" placeholder="搜尋車號">
+        <select id="selfuse_company_filter"><option value="all">全部公司別</option></select>
+        <select id="selfuse_filter">
+          <option value="all">全部狀態</option>
+          <option value="overdue">已逾期</option>
+          <option value="soon">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
+          <option value="normal">正常</option>
+          <option value="unset">未設定</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
+          <tbody id="selfUseTrailerBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>租賃清單</h2>
+      <div class="toolbar">
+        <input id="lease_search" placeholder="搜尋車號">
+        <select id="lease_lessee_filter"><option value="all">全部承租方</option></select>
+        <select id="lease_filter">
+          <option value="all">全部狀態</option>
+          <option value="overdue">已逾期</option>
+          <option value="soon">30天內到期</option>
+          <option value="soon60">60天內到期</option>
+          <option value="soon90">90天內到期</option>
+          <option value="normal">正常</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>類型</th><th>承租方</th><th style="width:180px;">目前位置</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th style="width:80px;">備註</th><th></th></tr></thead>
+          <tbody id="leaseTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  <div class="card">
       <h2>板架打油登錄<span class="count-badge" id="grease_rec_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">板架、貨櫃架、堆高機、吊掛機的打油一律從這裡登錄。<b>司機用電話或 LINE 回報時，只要填車號、打油日期、回報人就可以先存檔</b>，廠商、費用、發票號碼留空，之後在下方「待補打油費用」補登即可。到期日只看打油日期，所以一存檔「上次打油日」與「下次到期日」就會立刻更新，不必等費用回來。</div>
       <div class="form-grid">
@@ -846,52 +890,7 @@
         </table>
       </div>
     </div>
-    <div class="card">
-      <h2>自用板架目前位置<span class="count-badge" id="selfuse_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">未出租、公司自行調度使用的板架，可自行修改目前放置的位置。</div>
-      <div class="toolbar">
-        <input id="selfuse_search" placeholder="搜尋車號">
-        <select id="selfuse_company_filter"><option value="all">全部公司別</option></select>
-        <select id="selfuse_filter">
-          <option value="all">全部狀態</option>
-          <option value="overdue">已逾期</option>
-          <option value="soon">30天內到期</option>
-          <option value="soon60">60天內到期</option>
-          <option value="soon90">90天內到期</option>
-          <option value="normal">正常</option>
-          <option value="unset">未設定</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
-          <tbody id="selfUseTrailerBody"></tbody>
-        </table>
-      </div>
     </div>
-    <div class="card">
-      <h2>租賃清單</h2>
-      <div class="toolbar">
-        <input id="lease_search" placeholder="搜尋車號">
-        <select id="lease_lessee_filter"><option value="all">全部承租方</option></select>
-        <select id="lease_filter">
-          <option value="all">全部狀態</option>
-          <option value="overdue">已逾期</option>
-          <option value="soon">30天內到期</option>
-          <option value="soon60">60天內到期</option>
-          <option value="soon90">90天內到期</option>
-          <option value="normal">正常</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>類型</th><th>承租方</th><th style="width:180px;">目前位置</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th style="width:80px;">備註</th><th></th></tr></thead>
-          <tbody id="leaseTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <div id="trainings" class="panel">
     <div class="card">
       <h2>新增受訓紀錄</h2>
@@ -1200,6 +1199,7 @@
     </div>
 
     <datalist id="plateList"></datalist>
+<datalist id="selfUsePartyList"></datalist>
 <datalist id="trailerSizeList"></datalist>
     <datalist id="vendorList"></datalist>
 
@@ -3929,9 +3929,13 @@ function renderSelfUseTrailers(){
     const locCell = isEditing
       ? `<input type="text" id="loc_input_${v.id}" value="${esc(v.current_location||'')}" style="width:140px;">`
       : esc(v.current_location||'—未設定');
+    // 使用業主：這台自用板架現在掛給哪一家貨主在跑
+    const partyCell = isEditing
+      ? `<input type="text" id="party_input_${v.id}" list="selfUsePartyList" value="${esc(v.used_by_party||'')}" style="width:130px;">`
+      : esc(v.used_by_party||'—未填');
     const actionCell = isEditing
       ? `<button class="name-link" data-save-location="${v.id}">儲存</button> <button class="del-btn" data-cancel-location="${v.id}">取消</button>`
-      : `<button class="name-link" data-edit-location="${v.id}">修改位置</button>`;
+      : `<button class="name-link" data-edit-location="${v.id}">修改</button>`;
     const docStatus = vehicleDocStatus(v.id, '驗車');
     const inspectionExpiry = docStatus ? docStatus.expiry : '—';
     const grace = docStatus ? docStatus.grace : null;
@@ -3940,6 +3944,7 @@ function renderSelfUseTrailers(){
       <td>${esc(v.plate)}</td>
       <td>${esc(v.vehicle_type||'')}</td>
       <td>${esc(v.company_name||'')}</td>
+      <td>${partyCell}</td>
       <td>${locCell}</td>
       <td class="muted">${esc((v.location_updated_at||'').slice(0,16).replace('T',' '))}</td>
       <td>${esc(inspectionExpiry)}</td>
@@ -3947,7 +3952,17 @@ function renderSelfUseTrailers(){
       <td>${statusPill}</td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="9" class="empty">目前沒有自用板架</td></tr>`;
+  }).join('') || `<tr><td colspan="10" class="empty">目前沒有自用板架</td></tr>`;
+  // 使用業主的輸入建議：已經填過的值 ＋ 租賃清單的承租方
+  const _pl = document.getElementById('selfUsePartyList');
+  if(_pl){
+    const names = [...new Set(
+      STATE.vehicles.map(x => x.used_by_party)
+        .concat(STATE.lessees.map(x => x.name))
+        .map(x => String(x == null ? '' : x).trim()).filter(Boolean)
+    )].sort();
+    _pl.innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+  }
 }
 
 function certStatusCode(t){
@@ -11190,6 +11205,8 @@ document.getElementById('selfUseTrailerBody').addEventListener('click', async (e
     const v = STATE.vehicles.find(x => String(x.id) === String(id));
     const input = document.getElementById(`loc_input_${id}`);
     if(!v || !input) return;
+    const party = document.getElementById(`party_input_${id}`);
+    if(party) v.used_by_party = party.value.trim() || null;
     v.current_location = input.value.trim();
     v.location_updated_at = new Date().toISOString();
     await saveState('roster_vehicles', STATE.vehicles, true);

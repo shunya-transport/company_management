@@ -211,6 +211,8 @@
 <div id="pane_find" class="hide">
   <div class="card">
     <h2>查詢</h2>
+    <div class="note">這一頁只能查詢與列印。<b>送出後就不能在這裡改了</b>，
+      填錯請通知辦公室，由「運輸管理資料庫 → 貨櫃運送」修改。</div>
     <div class="grid2">
       <div><label>車號</label><input id="q_plate" list="dl_plate" placeholder="全部" autocomplete="off"></div>
       <div><label>貨櫃櫃號</label><input id="q_cno" placeholder="全部" autocomplete="off"></div>
@@ -353,7 +355,7 @@ const ITEMS = [
 ];
 const ALL_KEYS = ITEMS.reduce((a,it) => a.concat(it.k ? [it.k] : it.subs.map(s => s[0])), []);
 
-const FORM = { kind:'', spec:'', docs:new Set(), res:{}, editId:null };
+const FORM = { kind:'', spec:'', docs:new Set(), res:{} };
 const DATA = { rows:[], sel:new Set() };
 
 // ---------- 畫檢查項目 ----------
@@ -498,21 +500,15 @@ async function save(){
 
   $('btnSave').disabled = true; $('btnSave').textContent = '送出中…';
   try{
-    if(FORM.editId){
-      await sbUpdate('container_inspections', 'inspection_id', FORM.editId,
-                     Object.assign({}, row, { updated_at: new Date().toISOString() }));
-      toast('已更新這筆檢查表');
-    }else{
-      await sbInsert('container_inspections', row);
-      toast('送出成功，' + row.container_no + ' 已存檔');
-    }
+    await sbInsert('container_inspections', row);
+    toast('送出成功，' + row.container_no + ' 已存檔');
     resetForm(true);
     await loadRecent();
   }catch(e){
     toast('沒有存進去：' + tidy(e), 'err');
   }finally{
     $('btnSave').disabled = false;
-    $('btnSave').textContent = FORM.editId ? '儲存修改' : '送出檢查表';
+    $('btnSave').textContent = '送出檢查表';
   }
 }
 function tidy(e){
@@ -525,7 +521,7 @@ function tidy(e){
   try{ const j = JSON.parse(m); return j.message || m; }catch(_){ return m.slice(0, 200); }
 }
 function resetForm(keepHeader){
-  FORM.res = {}; FORM.kind = ''; FORM.spec = ''; FORM.docs = new Set(); FORM.editId = null;
+  FORM.res = {}; FORM.kind = ''; FORM.spec = ''; FORM.docs = new Set();
   ['f_trailer','f_tsize','f_shipper','f_origin','f_dest','f_cno','f_seal1','f_seal2','f_spec_other',
    'f_note','f_spec_note','f_docs_other']
     .forEach(id => $(id).value = '');
@@ -580,7 +576,6 @@ function renderResults(){
       + (r.origin || r.destination ? '　' + esc(r.origin || '') + ' → ' + esc(r.destination || '') : '')
       + '</div>'
       + (r.other_note ? '<div class="l3">備註：' + esc(r.other_note) + '</div>' : '')
-      + '<button type="button" class="btn ghost small" data-edit="' + r.inspection_id + '" style="margin-top:7px;">帶回上面修改</button>'
       + '</div></div>';
   }).join('');
   el.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', () => {
@@ -588,33 +583,6 @@ function renderResults(){
     if(cb.checked) DATA.sel.add(id); else DATA.sel.delete(id);
     $('q_count').textContent = '共 ' + DATA.rows.length + ' 筆，已選 ' + DATA.sel.size + ' 筆';
   }));
-  el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => loadIntoForm(Number(b.getAttribute('data-edit')))));
-}
-function loadIntoForm(id){
-  const r = DATA.rows.find(x => x.inspection_id === id);
-  if(!r) return;
-  const days = Math.round((new Date(todayISO()) - new Date(String(r.inspect_date).slice(0,10))) / 86400000);
-  if(days > 7 && !confirm('這一筆是 ' + days + ' 天前的，雲端只開放修改最近 7 天的紀錄，存檔會被擋下來。\n\n還是要帶回去看嗎？')) return;
-  FORM.editId = id;
-  $('f_date').value = String(r.inspect_date || '').slice(0,10);
-  $('f_plate').value = r.plate || ''; $('f_inspector').value = r.inspector || '';
-  $('f_trailer').value = r.trailer_no || ''; $('f_tsize').value = r.trailer_size || '';
-  $('f_shipper').value = r.shipper || '';
-  $('f_origin').value = r.origin || ''; $('f_dest').value = r.destination || '';
-  $('f_cno').value = r.container_no || '';
-  $('f_seal1').value = r.seal_no1 || ''; $('f_seal2').value = r.seal_no2 || '';
-  FORM.kind = r.container_kind || ''; FORM.spec = r.container_spec || '';
-  FORM.docs = new Set(String(r.docs || '').split(',').map(x => x.trim()).filter(x => DOCS.includes(x)));
-  $('f_docs_other').value = String(r.docs || '').split(',').map(x => x.trim())
-                              .filter(x => x && !DOCS.includes(x)).join('、');
-  $('f_spec_note').value = r.spec_note || '';
-  $('f_spec_other').value = r.spec_other || '';
-  $('f_note').value = r.other_note || ''; $('f_reported').checked = !!r.reported;
-  FORM.res = {}; ALL_KEYS.forEach(k => { if(r[k]) FORM.res[k] = r[k]; });
-  paintItems(); paintPicks();
-  $('btnSave').textContent = '儲存修改';
-  showTab('new');
-  toast('已帶回上面，改完按「儲存修改」');
 }
 
 // ---------- 列印：照紙本 DGTT-P012-R05-03 ----------
