@@ -1030,7 +1030,7 @@
       <h2>待補維修費用<span class="count-badge" id="maint_pending_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">維修保養已經做了、但金額或發票號碼還沒補上來的紀錄都會列在這裡。<b>標成「⚠ 疑似重複」的</b>代表同一台車、同一天、同樣內容還有另一筆，通常是連點了兩下新增，確認之後按右邊「刪除」清掉即可。按「補登」就地填廠商、金額、發票號碼；<b>要改車號、日期、里程、內容說明，請按「修改」。</b>若這次確實沒有費用（廠商沒收費、保固內、自行處理），金額填 0 即可。</div>
       <div class="toolbar">
-        <input id="maint_pending_search" placeholder="搜尋車號 / 內容 / 申請人">
+        <input id="maint_pending_search" placeholder="關鍵字：車號／廠商／內容／申請人">
       </div>
       <div class="table-scroll" style="max-height:360px;">
         <table>
@@ -1042,7 +1042,8 @@
     <div class="card">
       <h2>維修保養歷史記錄<span class="count-badge" id="maint_history_count"></span></h2>
       <div class="toolbar">
-        <input id="mh_search" placeholder="搜尋車號 / 申請人">
+        <input id="mh_search" placeholder="關鍵字：車號／廠商／申請人／內容／零件／發票" style="min-width:270px;">
+        <select id="mh_vendor_filter"><option value="all">全部廠商</option></select>
         <select id="mh_status_filter">
           <option value="all">全部狀態</option>
           <option value="pending">待補資料</option>
@@ -1055,7 +1056,10 @@
           <option value="年度驗車">年度驗車</option>
           <option value="其他">其他</option>
         </select>
+        <button class="btn ghost" id="mh_clear" style="padding:8px 14px;font-size:13px;">清除條件</button>
+        <button class="btn ghost" id="mh_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
       </div>
+      <div id="mh_summary" class="muted" style="margin-bottom:8px;"></div>
       <div class="table-scroll">
         <table class="mh-table">
           <colgroup>
@@ -8082,6 +8086,35 @@ function maintInvoiceCell(r, scope, editing){
 }
 // 同一筆維修單被登錄兩次的判斷：同一台車 ＋ 同一天 ＋ 同樣的內容說明。
 // 維修保養本來就可能同一天做兩件事，所以只當提醒，不強制擋。
+function bindMaintHistoryTools(){
+  const sel = document.getElementById('mh_vendor_filter');
+  if(sel && !sel.dataset.bound){
+    sel.dataset.bound = '1';
+    sel.addEventListener('change', renderMaintHistoryTable);
+  }
+  const clr = document.getElementById('mh_clear');
+  if(clr && !clr.dataset.bound){
+    clr.dataset.bound = '1';
+    clr.addEventListener('click', () => {
+      document.getElementById('mh_search').value = '';
+      ['mh_vendor_filter','mh_status_filter','mh_type_filter'].forEach(id => {
+        const e2 = document.getElementById(id); if(e2) e2.value = 'all';
+      });
+      renderMaintHistoryTable();
+    });
+  }
+  const csv = document.getElementById('mh_csv');
+  if(csv && !csv.dataset.bound){
+    csv.dataset.bound = '1';
+    csv.addEventListener('click', () => {
+      if(!MH_ROWS.length){ alert('目前的條件沒有任何紀錄可以匯出。'); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff' + maintHistoryCsv()], {type:'text/csv;charset=utf-8'}));
+      a.download = '維修保養紀錄_' + todayISO().replace(/-/g, '') + '.csv';
+      a.click(); URL.revokeObjectURL(a.href);
+    });
+  }
+}
 function maintDupKey(r){
   return [String(r.plate || '').trim().toUpperCase(),
           String(r.maintenance_date || '').slice(0, 10),
@@ -8096,6 +8129,18 @@ function maintDupIds(){
     else seen[k] = r.id;
   });
   return dup;
+}
+// 篩出來的那一批（匯出 CSV 用，不受畫面只顯示 200 筆的限制）
+let MH_ROWS = [];
+function maintHistoryCsv(){
+  return csvLines(
+    ['車號','類型','日期','申請人','里程','廠商','內容','更換零件','金額','發票號碼','狀態'],
+    MH_ROWS.map(r => [
+      r.plate || '', r.maintenance_type || '', String(r.maintenance_date || '').slice(0, 10),
+      maintApplicantLabel(r) || '', r.mileage_at_service == null ? '' : r.mileage_at_service,
+      r.vendor_name || '', r.description || '', r.parts_replaced || '',
+      r.cost == null ? '' : r.cost, r.invoice_no || '', maintStatusOf(r)
+    ]));
 }
 function maintEditButtons(r, scope, editing){
   return editing
@@ -8326,8 +8371,7 @@ function renderMaintPendingTable(){
   const kw = ((document.getElementById('maint_pending_search')||{}).value || '').trim().toUpperCase();
   const all = (STATE.maintRecords||[]).filter(r => maintStatusOf(r) === MAINT_ST_PENDING);
   const rows = all
-    .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw) || String(r.description||'').toUpperCase().includes(kw)
-                     || String(maintApplicantLabel(r)||'').toUpperCase().includes(kw))
+    .filter(r => !kw || maintKwMatch(r, kw))
     .slice().sort((a,b)=> String(a.maintenance_date||'').slice(0,10).localeCompare(String(b.maintenance_date||'').slice(0,10)));
   const cEl = document.getElementById('maint_pending_count');
   if(cEl) cEl.textContent = all.length ? `${all.length} 筆待補` : '目前沒有待補';
@@ -8415,12 +8459,48 @@ async function maintBodyClick(e){
     renderAll();
   }
 }
+// 一筆維修單所有可以被關鍵字搜到的文字（含廠商）串成一條
+function maintHaystack(r){
+  return [r.plate, r.vendor_name, maintApplicantLabel(r), r.maintenance_type,
+          r.description, r.parts_replaced, r.invoice_no,
+          String(r.maintenance_date || '').slice(0, 10),
+          (r.cost == null ? '' : r.cost)]
+    .join(' ').toUpperCase().replace(/\s+/g, ' ');
+}
+// 空白隔開的多個關鍵字要全部命中，例如「耀輝 螺絲」
+function maintKwMatch(r, q){
+  const terms = String(q || '').trim().split(/\s+/).filter(Boolean).map(t => t.toUpperCase());
+  if(!terms.length) return true;
+  const hay = maintHaystack(r);
+  return terms.every(t => hay.indexOf(t) >= 0);
+}
+// 廠商下拉：只列真的在維修紀錄裡出現過的，後面帶筆數
+function renderMaintVendorFilter(){
+  const sel = document.getElementById('mh_vendor_filter');
+  if(!sel) return;
+  const keep = sel.value;
+  const cnt = {};
+  (STATE.maintRecords || []).forEach(r => {
+    const n = String(r.vendor_name || '').trim();
+    if(n) cnt[n] = (cnt[n] || 0) + 1;
+  });
+  const names = Object.keys(cnt).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  const noVendor = (STATE.maintRecords || []).filter(r => !String(r.vendor_name || '').trim()).length;
+  sel.innerHTML = '<option value="all">全部廠商</option>'
+    + (noVendor ? `<option value="__none__">（沒填廠商）${noVendor}</option>` : '')
+    + names.map(n => `<option value="${esc(n)}">${esc(n)}（${cnt[n]}）</option>`).join('');
+  if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
 function renderMaintHistoryTable(){
+  renderMaintVendorFilter();
   const q = document.getElementById('mh_search').value.trim();
   const typeF = document.getElementById('mh_type_filter').value;
   const stF = ((document.getElementById('mh_status_filter')||{}).value) || 'all';
+  const vdF = ((document.getElementById('mh_vendor_filter')||{}).value) || 'all';
   let rows = STATE.maintRecords;
-  if(q) rows = rows.filter(r => (r.plate||'').includes(q) || String(maintApplicantLabel(r)||'').includes(q));
+  if(q) rows = rows.filter(r => maintKwMatch(r, q));
+  if(vdF === '__none__') rows = rows.filter(r => !String(r.vendor_name || '').trim());
+  else if(vdF !== 'all') rows = rows.filter(r => String(r.vendor_name || '').trim() === vdF);
   if(typeF !== 'all') rows = rows.filter(r => r.maintenance_type === typeF);
   if(stF === 'pending') rows = rows.filter(r => maintStatusOf(r) === MAINT_ST_PENDING);
   else if(stF === 'done') rows = rows.filter(r => maintStatusOf(r) === MAINT_ST_DONE);
@@ -8433,6 +8513,18 @@ function renderMaintHistoryTable(){
   });
   const _pendCnt = (STATE.maintRecords||[]).filter(x => maintStatusOf(x) === MAINT_ST_PENDING).length;
   document.getElementById('maint_history_count').textContent = _pendCnt ? `共 ${rows.length} 筆／待補 ${_pendCnt}` : `共 ${rows.length} 筆`;
+  // 篩出來這一批的金額小計，跟廠商對帳直接看這裡
+  MH_ROWS = rows;
+  const _sum = rows.reduce((a, r) => a + (Number(r.cost) || 0), 0);
+  const _noCost = rows.filter(r => r.cost == null).length;
+  const _sumEl = document.getElementById('mh_summary');
+  if(_sumEl){
+    const _filtered = q || (vdF !== 'all') || (typeF !== 'all') || (stF !== 'all');
+    _sumEl.innerHTML = !_filtered ? ''
+      : `符合條件 <b>${rows.length}</b> 筆，金額小計 <b>$${_sum.toLocaleString()}</b>`
+        + (_noCost ? `（其中 ${_noCost} 筆還沒填金額，沒算進去）` : '')
+        + (rows.length > 200 ? '　<span class="muted">下面只顯示最新 200 筆，要看全部請匯出 CSV</span>' : '');
+  }
   const shown = rows.slice(0,200);
   document.getElementById('maintHistoryBody').innerHTML = shown.map(r => {
     const editing = String(editingMaintId) === String(r.id);
@@ -10214,6 +10306,7 @@ function renderAll(){
   renderTrainingLogTable();
   renderDatalists();
   attachVendorPickers();
+  bindMaintHistoryTools();
   renderContainerLedger();
   renderContainerWhere();
 }
