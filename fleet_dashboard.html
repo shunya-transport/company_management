@@ -3396,8 +3396,13 @@ async function saveState(key, value, shared){
         }
       }
     }
-    // 找出資料庫裡有、但目前清單已經沒有的ID（代表使用者刪除過），只刪這些，不整表清空
-    const existingRows = await supaFetch(`${map.table}?select=${map.pk}`);
+    // 找出資料庫裡有、但目前清單已經沒有的ID（代表使用者刪除過），只刪這些，不整表清空。
+    // ★ 一定要用會分頁的 supaFetchAll。PostgREST 一次最多回 1000 筆，
+    //   用不分頁的 supaFetch 只看得到前 1000 個編號，超過 1000 筆的表
+    //   （工時、訓練紀錄、勞健保月報、維修保養…）後面的紀錄會刪不掉：
+    //   畫面上不見了，重新整理又跑回來。
+    //   分頁一定要指定 order，不然每一頁的順序不保證一致，會漏抓或重複。
+    const existingRows = await supaFetchAll(`${map.table}?select=${map.pk}&order=${map.pk}.asc`);
     const currentIds = new Set((value||[]).map(item => String(item.id)));
     const idsToDelete = (existingRows||[])
       .map(r => r[map.pk])
@@ -3405,7 +3410,8 @@ async function saveState(key, value, shared){
     if(idsToDelete.length > 0){
       // 保險:一次要刪掉超過5筆且佔全表一半以上,先跳出確認,避免整表誤刪
       if(idsToDelete.length > 5 && idsToDelete.length >= ((existingRows||[]).length * 0.5)){
-        if(!confirm('系統偵測到這次存檔會從雲端刪除 ' + idsToDelete.length + ' 筆「' + map.table + '」資料。\n\n這通常代表資料沒有正常載入。如果您不是刻意要刪除,請按「取消」。\n\n確定要刪除嗎?')){
+        if(!confirm('系統偵測到這次存檔會從雲端刪除 ' + idsToDelete.length + ' 筆「' + map.table + '」資料'
+                    + '（雲端目前共 ' + (existingRows||[]).length + ' 筆）。\n\n這通常代表資料沒有正常載入。如果您不是刻意要刪除,請按「取消」。\n\n確定要刪除嗎?')){
           throw new Error('已取消刪除動作,雲端資料未變更');
         }
       }
