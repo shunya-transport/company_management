@@ -7907,6 +7907,18 @@ function bindMaintHistoryTools(){
     });
   }
 }
+// 存檔前把維修紀錄裡型別不對的值修回來，避免整批 upsert 被一筆擋掉。
+// 目前只有 mileage_estimated：資料庫是 integer，舊程式碼曾經寫過布林值。
+function maintNormalize(){
+  (STATE.maintRecords || []).forEach(x => {
+    if(typeof x.mileage_estimated === 'boolean') x.mileage_estimated = x.mileage_estimated ? 1 : 0;
+  });
+}
+async function saveMaintRecords(){
+  maintNormalize();
+  // 注意：這裡一定要直接呼叫 saveState，不能再走 saveMaintRecords，會無限遞迴
+  return saveState('maint_records', STATE.maintRecords, true);
+}
 function maintDupKey(r){
   return [String(r.plate || '').trim().toUpperCase(),
           String(r.maintenance_date || '').slice(0, 10),
@@ -8194,8 +8206,10 @@ async function saveMaintEdit(){
   rec.maintenance_type = (type==='小保養'||type==='大保養') ? '定期保養' : type;
   rec.maintenance_date = date;
   rec.mileage_at_service = mileage;
-  // 使用者自己打進去的里程就不是推估值了
-  if(mileage != null && String(mileage) !== String(_oldMileage)) rec.mileage_estimated = false;
+  // 使用者自己打進去的里程就不是推估值了。
+  // ★ mileage_estimated 在資料庫是 integer（0／1），不是布林。
+  //   寫 false 進去 PostgREST 會回 400：invalid input syntax for type integer: "false"。
+  if(mileage != null && String(mileage) !== String(_oldMileage)) rec.mileage_estimated = 0;
   rec.vendor_id = vendorId;
   rec.vendor_name = vendorName || '';
   rec.cost = cost;
@@ -8214,7 +8228,7 @@ async function saveMaintEdit(){
     rec.requested_by_name = null;
   }
   rec.status = document.getElementById('me_status').value || (cost == null ? MAINT_ST_PENDING : MAINT_ST_DONE);
-  await saveState('maint_records', STATE.maintRecords, true);
+  await saveMaintRecords();
 
   // 保養週期紀錄:只有在這筆是該車該類型最新的一筆時才跟著改,
   // 不然回頭修一筆兩年前的舊保養,會把「最近一次保養」倒退回兩年前。
@@ -8267,7 +8281,7 @@ async function deleteMaintEdit(){
               '\n內容:' + (rec.description||'(空白)') +
               '\n\n刪除後無法復原。當初一併寫入的里程登錄與保養週期紀錄不會跟著刪除。')) return;
   STATE.maintRecords = STATE.maintRecords.filter(x => String(x.id) !== String(rec.id));
-  await saveState('maint_records', STATE.maintRecords, true);
+  await saveMaintRecords();
   closeMaintEditModal();
   editingMaintId = null;
   renderAll();
@@ -8316,7 +8330,7 @@ async function maintBodyClick(e){
                 '\n內容：' + (rec.description||'（空白）') +
                 '\n\n刪除後無法復原。保養週期紀錄不會跟著刪除。')) return;
     STATE.maintRecords = STATE.maintRecords.filter(x => String(x.id) !== String(rec.id));
-    await saveState('maint_records', STATE.maintRecords, true);
+    await saveMaintRecords();
     editingMaintId = null;
     renderAll();
     return;
@@ -8366,7 +8380,7 @@ async function maintBodyClick(e){
       rec.status = confirm('金額還沒填。\n\n按「確定」＝標記為已完成(例如這次確實沒有費用)\n按「取消」＝保留在「待補維修費用」清單裡') ? MAINT_ST_DONE : MAINT_ST_PENDING;
     }
     // 補登只改廠商／金額／發票號碼,不動日期與里程,所以保養週期紀錄與到期估算完全不受影響
-    await saveState('maint_records', STATE.maintRecords, true);
+    await saveMaintRecords();
     editingMaintId = null;
     renderAll();
   }
@@ -13396,7 +13410,7 @@ document.getElementById('mr_add').addEventListener('click', async () => {
     status: (cost == null) ? '待補資料' : '已完成',
     created_at: new Date().toISOString()
   });
-  await saveState('maint_records', STATE.maintRecords, true);
+  await saveMaintRecords();
 
   // 小保養/大保養：同步更新保養週期紀錄，供到期估算使用
   if(type==='小保養' || type==='大保養'){
