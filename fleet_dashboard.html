@@ -843,7 +843,7 @@
       <div class="form-grid">
         <label>車號<input id="gr_plate" placeholder="例：HBD-3200" list="greasePlateList" autocomplete="off"></label>
         <label>打油日期<input id="gr_date" type="date"></label>
-        <label>回報人<select id="gr_reporter"></select></label>
+        <label>回報人（貨櫃車隊）<select id="gr_reporter"></select></label>
         <label>施作廠商<input id="gr_vendor" placeholder="可留空，之後再補" list="vendorList" autocomplete="off"></label>
         <label>費用<input id="gr_cost" type="number" min="0" step="1" placeholder="可留空，之後再補"></label>
         <label>發票號碼<input id="gr_invoice" placeholder="可留空，之後再補"></label>
@@ -9181,17 +9181,37 @@ function greaseLooksComplete(r){
   const hasCost = r.cost != null && r.cost !== '';
   return hasVendor && hasCost;
 }
+// 板架、貨櫃架的打油只有貨櫃車隊的司機會回報，所以回報人下拉只列這個車隊的人。
+const GREASE_REPORTER_TEAM = '貨櫃車隊';
 function greaseReporterCandidates(){
-  return (STATE.employees||[]).filter(e => e.status === '在職' && e.employee_type === '直接')
+  const all = (STATE.employees||[]).filter(e => e.status === '在職' && e.employee_type === '直接');
+  const team = all.filter(e => String(e.fleet_team || '').trim() === GREASE_REPORTER_TEAM);
+  // 保險：貨櫃車隊一個人都撈不到（所屬車隊沒填、或資料還沒載入）就退回全部直接人員，
+  // 不然下拉會是空的，等於整個登錄功能不能用。
+  return (team.length ? team : all)
     .slice().sort((a,b)=> String(a.name||'').localeCompare(String(b.name||'')));
 }
 function renderGreaseReporterOptions(){
   const el = document.getElementById('gr_reporter');
   if(!el) return;
   const cur = el.value;
+  // 正常情況整份都是貨櫃車隊，名字後面就不再重複標；只有退回全部人員時才標出車隊
   el.innerHTML = '<option value="">未填（可稍後補）</option>' +
-    greaseReporterCandidates().map(e => `<option value="${e.id}">${esc(e.name)}${e.fleet_team ? '（' + esc(e.fleet_team) + '）' : ''}</option>`).join('');
+    greaseReporterCandidates().map(e => {
+      const tag = (e.fleet_team && String(e.fleet_team).trim() !== GREASE_REPORTER_TEAM)
+        ? '（' + esc(e.fleet_team) + '）' : '';
+      return `<option value="${e.id}">${esc(e.name)}${tag}</option>`;
+    }).join('');
   if(cur) el.value = cur;
+  // 選過的人如果不在名單裡（例如舊資料的回報人已經調到別的車隊），補回去才不會被清掉
+  if(cur && el.value !== cur){
+    const old = (STATE.employees||[]).find(x => String(x.id) === String(cur));
+    if(old){
+      el.insertAdjacentHTML('beforeend',
+        `<option value="${old.id}">${esc(old.name)}（${esc(old.fleet_team || '非貨櫃車隊')}）</option>`);
+      el.value = cur;
+    }
+  }
 }
 function greaseReporterLabel(r){
   if(r.reported_by_name) return r.reported_by_name;
