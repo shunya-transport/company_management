@@ -2199,6 +2199,31 @@
     </div>
   </div>
 
+<div class="modal-backdrop no-print" id="vendorPickModal">
+  <div class="modal-box">
+    <button class="modal-close" id="vendorPickClose">✕</button>
+    <h3>找廠商</h3>
+    <div class="muted" style="margin-bottom:10px;">
+      名稱、聯絡人、電話、統編、類別、地區<b>任何一個關鍵字都可以搜</b>，不用打全名。
+      例如打「輪胎」「新竹」「05-」「東昇」都找得到。點一下該列就帶回表單。
+    </div>
+    <div class="toolbar">
+      <input id="vp_q" placeholder="輸入關鍵字…" autocomplete="off" style="min-width:240px;">
+      <select id="vp_cat"><option value="all">全部類別</option></select>
+      <select id="vp_region"><option value="all">全部地區</option></select>
+      <span class="count-badge" id="vp_count"></span>
+    </div>
+    <div id="vp_recent" style="margin-bottom:10px;"></div>
+    <div class="table-scroll" style="max-height:420px;">
+      <table>
+        <thead><tr><th>廠商名稱</th><th>類別</th><th>地區</th><th>聯絡人</th><th>電話</th><th>統一編號</th></tr></thead>
+        <tbody id="vpBody"></tbody>
+      </table>
+    </div>
+    <div id="vp_new" style="margin-top:10px;"></div>
+  </div>
+</div>
+
 <div class="modal-backdrop no-print" id="staffModal">
   <div class="modal-box">
     <button class="modal-close" id="staffModalClose">✕</button>
@@ -2610,6 +2635,140 @@ async function createVendor(name){
   return newId;
 }
 
+// ===================== 廠商關鍵字查詢 =====================
+// 廠商名字又長又像（「英屬維京群島商永德福汽車股份有限公司-新竹」），
+// 用原生下拉一個字一個字比對很痛苦，所以做一個關鍵字查詢視窗：
+// 名稱、聯絡人、電話、統編、類別、地區任一命中就列出來，點一下帶回表單。
+let vpTargetId = null;
+function vpNorm(s){ return String(s == null ? '' : s).trim().toUpperCase().replace(/\s+/g, ''); }
+// 一家廠商所有可以被搜到的文字串成一條
+function vpHaystack(v){
+  return vpNorm([v.name, v.contact_person, v.phone, v.fax, v.tax_id, v.category, v.region, v.address].join(''));
+}
+// 空白隔開的多個關鍵字要「全部命中」，才好縮小範圍（例：輪胎 新竹）
+function vpMatch(v, q){
+  const terms = String(q || '').trim().split(/\s+/).filter(Boolean).map(vpNorm);
+  if(!terms.length) return true;
+  const hay = vpHaystack(v);
+  return terms.every(t => hay.indexOf(t) >= 0);
+}
+// 最近常用：從維修保養與打油紀錄統計，最常出現的排前面，入資料時多半就是這幾家
+function vpRecent(){
+  const cnt = {};
+  const bump = n => { const k = String(n || '').trim(); if(k) cnt[k] = (cnt[k] || 0) + 1; };
+  (STATE.maintRecords || []).forEach(r => bump(r.vendor_name));
+  (STATE.greaseRecords || []).forEach(r => bump(r.vendor_name));
+  return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 8).map(n => ({ name: n, n: cnt[n] }));
+}
+function vpRender(){
+  const q = (document.getElementById('vp_q') || {}).value || '';
+  const cat = (document.getElementById('vp_cat') || {}).value || 'all';
+  const reg = (document.getElementById('vp_region') || {}).value || 'all';
+  let list = (STATE.vendors || []).filter(v =>
+    (cat === 'all' || (v.category || '') === cat) &&
+    (reg === 'all' || (v.region || '') === reg) &&
+    vpMatch(v, q));
+  list = list.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'));
+  const cEl = document.getElementById('vp_count');
+  if(cEl) cEl.textContent = '共 ' + list.length + ' 家';
+  document.getElementById('vpBody').innerHTML = list.slice(0, 300).map(v => `
+    <tr style="cursor:pointer;" data-vp-pick="${esc(v.name)}">
+      <td><b>${esc(v.name)}</b></td>
+      <td>${esc(v.category || '')}</td>
+      <td>${esc(v.region || '')}</td>
+      <td>${esc(v.contact_person || '')}</td>
+      <td class="c-nw">${esc(v.phone || '')}</td>
+      <td class="c-nw">${esc(v.tax_id || '')}</td>
+    </tr>`).join('') || `<tr><td colspan="6" class="empty">找不到符合的廠商</td></tr>`;
+
+  // 找不到就直接建一家，省得跳出去別的地方新增
+  const nb = document.getElementById('vp_new');
+  const typed = String(q || '').trim();
+  if(nb){
+    nb.innerHTML = (list.length === 0 && typed)
+      ? `<button class="btn ghost" id="vp_create">清單裡沒有，直接建立「${esc(typed)}」</button>`
+      : '';
+    const cb = document.getElementById('vp_create');
+    if(cb) cb.addEventListener('click', async () => {
+      if(!confirm('要把「' + typed + '」建成新的廠商嗎？')) return;
+      try{
+        await createVendor(typed);
+        vpApply(typed);
+      }catch(e){ alert('建立廠商失敗：' + (e && e.message ? e.message : e)); }
+    });
+  }
+}
+function vpApply(name){
+  const el = vpTargetId ? document.getElementById(vpTargetId) : null;
+  if(el){
+    el.value = name;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  vpClose();
+}
+function vpClose(){
+  vpTargetId = null;
+  document.getElementById('vendorPickModal').classList.remove('show');
+}
+function openVendorPick(targetId){
+  vpTargetId = targetId;
+  const cats = [...new Set((STATE.vendors || []).map(v => v.category).filter(Boolean))].sort();
+  const regs = [...new Set((STATE.vendors || []).map(v => v.region).filter(Boolean))].sort();
+  document.getElementById('vp_cat').innerHTML = '<option value="all">全部類別</option>'
+    + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  document.getElementById('vp_region').innerHTML = '<option value="all">全部地區</option>'
+    + regs.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // 帶入輸入框裡已經打的字當關鍵字，打一半也能直接開來找
+  const cur = document.getElementById(targetId);
+  document.getElementById('vp_q').value = cur ? cur.value.trim() : '';
+  const rec = vpRecent();
+  document.getElementById('vp_recent').innerHTML = rec.length
+    ? '<span class="muted" style="font-size:12.5px;">最近常用：</span> '
+      + rec.map(r => `<button type="button" class="btn ghost small" data-vp-pick="${esc(r.name)}"
+          style="font-size:12px;padding:3px 10px;margin:3px 5px 0 0;">${esc(r.name)}<span class="muted"> ${r.n}</span></button>`).join('')
+    : '';
+  vpRender();
+  document.getElementById('vendorPickModal').classList.add('show');
+  setTimeout(() => { const q = document.getElementById('vp_q'); if(q){ q.focus(); q.select(); } }, 50);
+}
+// 打字時把原生下拉的內容換成關鍵字命中的那些。
+// 瀏覽器的 datalist 有的只比對開頭，這樣改成打中間的字也找得到。
+function rebuildVendorList(q){
+  const el = document.getElementById('vendorList');
+  if(!el) return;
+  const list = (STATE.vendors || []).filter(v => vpMatch(v, q)).slice(0, 200);
+  el.innerHTML = list.map(v => `<option value="${esc(v.name)}"></option>`).join('');
+}
+// 每個廠商輸入框後面掛一顆「找廠商」。用掃 DOM 的方式，
+// 以後再多加輸入框只要 list="vendorList" 就會自動有這顆按鈕。
+function attachVendorPickers(){
+  document.querySelectorAll('input[list="vendorList"]').forEach(inp => {
+    if(inp.dataset.vpick) return;
+    inp.dataset.vpick = '1';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn ghost small'; btn.textContent = '🔍 找廠商';
+    btn.style.cssText = 'margin-top:4px;font-size:12px;padding:4px 10px;font-weight:400;';
+    btn.addEventListener('click', () => openVendorPick(inp.id));
+    inp.insertAdjacentElement('afterend', btn);
+    inp.addEventListener('input', () => rebuildVendorList(inp.value));
+  });
+  const modal = document.getElementById('vendorPickModal');
+  if(modal && !modal.dataset.bound){
+    modal.dataset.bound = '1';
+    document.getElementById('vendorPickClose').addEventListener('click', vpClose);
+    modal.addEventListener('click', e => { if(e.target === modal) vpClose(); });
+    ['vp_q'].forEach(id => document.getElementById(id).addEventListener('input', vpRender));
+    ['vp_cat','vp_region'].forEach(id => document.getElementById(id).addEventListener('change', vpRender));
+    modal.addEventListener('click', e => {
+      const t = e.target.closest('[data-vp-pick]');
+      if(t) vpApply(t.getAttribute('data-vp-pick'));
+    });
+    document.addEventListener('keydown', e => {
+      if(e.key === 'Escape' && modal.classList.contains('show')) vpClose();
+    });
+  }
+}
+
 function normPlate(p){ return String(p==null?'':p).trim().toUpperCase().replace(/\s+/g,''); }
 function vehicleByPlate(plate){
   const key = normPlate(plate);
@@ -2958,11 +3117,19 @@ async function safeGet(key, fallback, shared){
 // 補回其餘表格需要的文字欄位（車號、廠商名稱、人員姓名、訓練項目等），
 // 因為資料庫存的是編號，需要對照 employees/vehicles/lessees/vendors/trainingTypes 轉換成文字
 async function enrichDenormalizedFields(){
-  const vendorRows = await supaFetch(`vendors?select=vendor_id,vendor_name`).catch(()=>[]);
+  // 多撈幾個欄位是為了「找廠商」可以用聯絡人、電話、統編、類別、地區當關鍵字搜。
+  // 舊資料庫沒有這些欄位也不會壞，撈失敗就退回只有名稱的版本。
+  let vendorRows = await supaFetch(
+    `vendors?select=vendor_id,vendor_name,contact_person,phone,fax,tax_id,category,region,address`).catch(()=>null);
+  if(!vendorRows) vendorRows = await supaFetch(`vendors?select=vendor_id,vendor_name`).catch(()=>[]);
   const vendorById = {};
   (vendorRows||[]).forEach(v => { vendorById[v.vendor_id] = v.vendor_name; });
   // 保留一份廠商清單在 STATE,新增維修記錄時要把廠商名稱換成 vendor_id 才存得進去
-  STATE.vendors = (vendorRows||[]).map(v => ({ id: v.vendor_id, name: v.vendor_name }));
+  STATE.vendors = (vendorRows||[]).map(v => ({
+    id: v.vendor_id, name: v.vendor_name,
+    contact_person: v.contact_person || '', phone: v.phone || '', fax: v.fax || '',
+    tax_id: v.tax_id || '', category: v.category || '', region: v.region || '', address: v.address || ''
+  }));
 
   const empById = {};
   STATE.employees.forEach(e => { empById[e.id] = e; });
@@ -10010,6 +10177,7 @@ function renderAll(){
   renderExternalStatusTable();
   renderTrainingLogTable();
   renderDatalists();
+  attachVendorPickers();
   renderContainerLedger();
   renderContainerWhere();
 }
