@@ -8069,27 +8069,18 @@ async function saveMaintEdit(){
     }
   }
 
-  // 里程登錄:新增時若有填里程會自動寫一筆,改的時候要找回同一筆一起改,
-  // 不然舊的錯誤里程會繼續留在里程統計裡。
-  const _autoLog = (STATE.mileageLogs||[]).find(x =>
+  // 維修單上的里程【不再寫進里程統計】。
+  // 舊版會自動寫一筆進 vehicle_mileage_logs，SQL #88 已經把那些清掉；
+  // 這裡順手把漏網的也一併刪掉，改完維修單就不會再有殘留。
+  const _stale = (STATE.mileageLogs||[]).filter(x =>
     String(x.notes||'') === '維修保養記錄自動帶入' &&
     String(x.log_date||'').slice(0,10) === _oldDate &&
     (String(x.vehicle_id) === String(_oldVehicle) || String(x.plate||'') === String(_oldPlate)));
-  let _logChanged = false;
-  if(mileage != null){
-    if(_autoLog){
-      _autoLog.plate = rec.plate; _autoLog.vehicle_id = rec.vehicle_id;
-      _autoLog.log_date = date; _autoLog.mileage = mileage;
-    }else{
-      STATE.mileageLogs.push({ id: nextId(STATE.mileageLogs), plate: rec.plate, vehicle_id: rec.vehicle_id,
-        log_date: date, mileage, notes: '維修保養記錄自動帶入' });
-    }
-    _logChanged = true;
-  }else if(_autoLog){
-    STATE.mileageLogs = STATE.mileageLogs.filter(x => String(x.id) !== String(_autoLog.id));
-    _logChanged = true;
+  if(_stale.length){
+    const _ids = new Set(_stale.map(x => String(x.id)));
+    STATE.mileageLogs = STATE.mileageLogs.filter(x => !_ids.has(String(x.id)));
+    await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
   }
-  if(_logChanged) await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
 
   closeMaintEditModal();
   editingMaintId = null;
@@ -12992,11 +12983,9 @@ document.getElementById('mr_add').addEventListener('click', async () => {
     await saveState('maintenance_schedules', STATE.maintSchedules, true);
   }
 
-  // 里程數一併記錄，讓「目前里程」與到期估算保持最新
-  if(mileage != null){
-    STATE.mileageLogs.push({ id: nextId(STATE.mileageLogs), plate, vehicle_id: plateToVehicleId(plate), log_date: date, mileage, notes: '維修保養記錄自動帶入' });
-    await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
-  }
+  // 維修單上的里程【不再寫進里程統計】。
+  // 里程一律以「公里數登錄檔」與加油耗月結為準；維修單填的里程只留在維修紀錄本身，
+  // 並透過上面的 maintenance_schedules.last_service_mileage 供保養到期估算使用。
 
   ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_invoice','mr_desc','mr_parts','mr_applicant'].forEach(id=>{ const _el=document.getElementById(id); if(_el) _el.value=''; });
   renderAll();
