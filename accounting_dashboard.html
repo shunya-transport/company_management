@@ -408,8 +408,9 @@
   <div class="card">
     <h2>掛帳中<span class="count-badge" id="pdCount">0</span></h2>
     <div class="toolbar">
-      <input id="pd_search" placeholder="搜尋對象、摘要、發票號碼、科目、傳票編號" style="min-width:250px;">
+      <input id="pd_search" placeholder="搜尋對象、摘要、發票號碼、科目、傳票編號、帳戶" style="min-width:250px;">
       <select id="pd_dir"><option value="">全部方向</option><option value="收入">只看收入（應收）</option><option value="支出">只看支出（應付）</option></select>
+      <select id="pd_account"><option value="">全部帳戶</option></select>
       <select id="pd_sort"><option value="due">依預計收付日</option><option value="date">依發生日</option><option value="amount">依金額</option></select>
       <button class="btn ghost" id="pd_export">匯出 CSV</button>
     </div>
@@ -425,7 +426,7 @@
     </div>
     <div class="muted" id="pdRangeNote" style="margin-bottom:8px;"></div>
     <div class="table-scroll">
-      <table><thead><tr><th>傳票編號</th><th>發生日</th><th>預計收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>發票號碼</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>來源</th><th>操作</th></tr></thead><tbody id="pdBody"></tbody></table>
+      <table><thead><tr><th>傳票編號</th><th>發生日</th><th>預計收付日</th><th>方向</th><th>科目</th><th>對象</th><th>摘要</th><th>收付帳戶</th><th>發票號碼</th><th class="num">稅前</th><th class="num">稅額</th><th class="num">合計</th><th>來源</th><th>操作</th></tr></thead><tbody id="pdBody"></tbody></table>
     </div>
   </div>
 </div>
@@ -764,7 +765,7 @@ async function loadAll(){
   const _pbIds = (STATE.pettyBooks || []).map(b => b.book_id).filter(v => v != null);
   if(_pbIds.length){
     try{
-      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status,payee,weigh_fee,advance_type,vehicle_plate,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
+      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status,payee,memo,weigh_fee,advance_type,vehicle_plate,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
     }catch(e){ STATE.pettyEntries = []; }
   }
 }
@@ -1000,6 +1001,15 @@ function PW_CASH_OK(e){ return !!(e && e.settle_batch && String(e.settle_batch).
 // 這份清單要跟 petty_cash.html 的 ADV_TYPES 一致。
 const PW_TYPES = ['磅費','驗車','驗板','其他'];
 function pwType(e){ return String((e && e.advance_type) || '').trim() || '磅費'; }
+// 司機是誰：跟 petty_cash.html 的 weighDriver() 同一套——領款人留白時，
+// 才從摘要括號裡的中文姓名帶出來。兩邊規則不一樣的話，同一筆在零用金頁有名字、
+// 在這張卡卻變成「（未填司機）」，主管會以為是兩件事。
+function pwDriver(e){
+  const p = String((e && e.payee) || '').trim();
+  if(p) return p;
+  const m = String((e && e.memo) || '').match(/[（(]([\u4e00-\u9fa5]{2,4})[）)]/);
+  return m ? m[1] : '（未填司機）';
+}
 
 // 還沒匯給司機的代墊費用（不分月份）。
 // 使用者 115/08/05：「台中的磅費我希望跟零用金一樣獨立一行讓主管看到說需要支付多少」，
@@ -1017,7 +1027,7 @@ function pettyWeighOwed(books){
   const byType = {};
   all.forEach(e => {
     if(PW_CASH_OK(e)) return;   // 有 settle_batch＝已經付掉或匯掉了，不是待付
-    const who = String(e.payee || '').trim() || '（未填司機）';
+    const who = pwDriver(e);
     const k = e.book_id + '|' + who;
     if(!g[k]) g[k] = { book: bookName[e.book_id] || '', who: who, n: 0, amt: 0, first: '', last: '', t: {} };
     const o = g[k], d = String(e.entry_date).slice(0,10), t = pwType(e);
@@ -1455,6 +1465,7 @@ let PD_OVERDUE = false, PD_HIDDEN_NODATE = 0;
 function pendingRows(){
   const kw = (document.getElementById('pd_search').value || '').trim().toLowerCase();
   const dir = document.getElementById('pd_dir').value;
+  const acc = ((document.getElementById('pd_account') || {}).value) || '';
   const sort = document.getElementById('pd_sort').value;
   const field = document.getElementById('pd_datefield').value;   // due=預計收付日 / entry=發生日
   const from = document.getElementById('pd_from').value;
@@ -1474,7 +1485,10 @@ function pendingRows(){
   }
   if(PD_OVERDUE) rows = rows.filter(e => e.due_date && e.due_date < t);
   if(dir) rows = rows.filter(e => e.direction === dir);
-  if(kw) rows = rows.filter(e => [e.voucher_no,e.counterparty,e.description,e.invoice_no,e.subject_name,e.subject_code,e.notes]
+  // 帳戶：選了就只看這個帳戶要收／要付的。「未指定」的那些用 __none__ 挑出來對。
+  if(acc === '__none__') rows = rows.filter(e => !e.account_id);
+  else if(acc) rows = rows.filter(e => String(e.account_id) === acc);
+  if(kw) rows = rows.filter(e => [e.voucher_no,e.counterparty,e.description,e.invoice_no,e.subject_name,e.subject_code,e.account_name,e.notes]
     .map(v => String(v==null?'':v).toLowerCase()).join(' ').indexOf(kw) >= 0);
   rows.sort((a,b) => {
     if(sort === 'amount') return grossAmt(b) - grossAmt(a);
@@ -1490,7 +1504,8 @@ function renderPending(){
   const allCnt = STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e)).length;
   const field = document.getElementById('pd_datefield').value;
   const from = document.getElementById('pd_from').value, to = document.getElementById('pd_to').value;
-  const filtering = !!(from || to || PD_OVERDUE || document.getElementById('pd_dir').value || (document.getElementById('pd_search').value || '').trim());
+  const filtering = !!(from || to || PD_OVERDUE || document.getElementById('pd_dir').value
+    || ((document.getElementById('pd_account') || {}).value) || (document.getElementById('pd_search').value || '').trim());
   const btnOv = document.getElementById('pd_overdue');
   if(btnOv) btnOv.classList.toggle('active', PD_OVERDUE);
   const note = document.getElementById('pdRangeNote');
@@ -1520,14 +1535,16 @@ function renderPending(){
     return `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td>
       <td>${e.due_date ? (late ? `<span class="pill red">${esc(e.due_date)}</span>` : esc(e.due_date)) : '<span class="muted">未定</span>'}</td>
       <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
-      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td><td>${esc(e.invoice_no)}</td>${amtCells(e)}
+      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
+      <td>${e.account_name ? esc(e.account_name) : '<span class="muted">未指定</span>'}</td>
+      <td>${esc(e.invoice_no)}</td>${amtCells(e)}
       <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
       <td style="white-space:nowrap;">
         <button class="btn" style="padding:5px 12px;font-size:12px;" data-settle="${e.entry_id}">${e.direction === '收入' ? '已收款' : '已匯款'}</button>
         <button class="move-btn" data-edit="${e.entry_id}">修改</button>
         <button class="del-btn" data-void="${e.entry_id}">作廢</button>
       </td></tr>`;
-  }).join('') || '<tr><td colspan="13" class="empty">沒有掛帳中的資料</td></tr>';
+  }).join('') || '<tr><td colspan="14" class="empty">沒有掛帳中的資料</td></tr>';
 }
 
 // ---------- 歷史資料 ----------
@@ -1971,7 +1988,7 @@ function bindEvents(){
   document.getElementById('ne_add_settled').addEventListener('click', () => neAdd(true));
   document.getElementById('ne_clear').addEventListener('click', neClear);
 
-  ['pd_search','pd_dir','pd_sort','pd_datefield','pd_from','pd_to'].forEach(id => document.getElementById(id).addEventListener('input', renderPending));
+  ['pd_search','pd_dir','pd_account','pd_sort','pd_datefield','pd_from','pd_to'].forEach(id => document.getElementById(id).addEventListener('input', renderPending));
   document.getElementById('pd_thismonth').addEventListener('click', () => {
     document.getElementById('pd_from').value = monthStart(); document.getElementById('pd_to').value = monthEnd(); renderPending();
   });
@@ -1987,6 +2004,7 @@ function bindEvents(){
   document.getElementById('pd_clear').addEventListener('click', () => {
     ['pd_search','pd_from','pd_to'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('pd_dir').value = '';
+    document.getElementById('pd_account').value = '';
     document.getElementById('pd_datefield').value = 'due';
     PD_OVERDUE = false;
     renderPending();
@@ -1995,8 +2013,8 @@ function bindEvents(){
     const rows = pendingRows();
     const _f = document.getElementById('pd_from').value, _t = document.getElementById('pd_to').value;
     csvDownload('掛帳中_' + ((_f || _t) ? (_f || '起') + '至' + (_t || '訖') + '_' : '') + todayISO() + '.csv',
-      ['傳票編號','發生日','預計收付日','方向','科目代號','科目','對象','摘要','發票號碼','車號','稅前','稅額','合計','來源','備註'],
-      rows.map(e => [e.voucher_no, e.entry_date, e.due_date, e.direction, e.subject_code, e.subject_name, e.counterparty, e.description, e.invoice_no, e.vehicle_plate, num(e.amount), taxAmt(e), grossAmt(e), e.source, e.notes]));
+      ['傳票編號','發生日','預計收付日','方向','科目代號','科目','對象','摘要','收付帳戶','發票號碼','車號','稅前','稅額','合計','來源','備註'],
+      rows.map(e => [e.voucher_no, e.entry_date, e.due_date, e.direction, e.subject_code, e.subject_name, e.counterparty, e.description, e.account_name, e.invoice_no, e.vehicle_plate, num(e.amount), taxAmt(e), grossAmt(e), e.source, e.notes]));
   });
 
   ['hs_from','hs_to','hs_account','hs_flow','hs_dir','hs_source','hs_search'].forEach(id =>
@@ -2114,6 +2132,9 @@ function bindEvents(){
   fillSubjectSelect(document.getElementById('ne_subject'));
   fillAccountSelect(document.getElementById('ne_account'), '（先不指定）');
   fillAccountSelect(document.getElementById('hs_account'), '全部帳戶');
+  fillAccountSelect(document.getElementById('pd_account'), '全部帳戶');
+  // 還沒指定帳戶的也要挑得出來，不然那些帳會找不到
+  document.getElementById('pd_account').insertAdjacentHTML('beforeend', '<option value="__none__">（未指定帳戶）</option>');
   const flowSel = document.getElementById('hs_flow'), stFlow = document.getElementById('st_sub_flow'), newFlow = document.getElementById('st_sub_flowNew');
   FLOWS.forEach(f => {
     flowSel.insertAdjacentHTML('beforeend', `<option value="${f}">${f}</option>`);
