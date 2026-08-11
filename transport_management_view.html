@@ -456,6 +456,10 @@
         <label>區域
           <select id="sf_region"></select>
         </label>
+        <label>所屬車隊
+          <input id="sf_fleet" list="fleetTeamList" autocomplete="off" placeholder="例：亞東液態車隊（可留空）">
+          <span style="font-size:11px;font-weight:400;color:var(--text-3);">影響儀器領用人、打油回報人等名單，請從建議清單選</span>
+        </label>
         <label>身分證字號<input id="sf_idnumber" placeholder="必填"></label>
         <label>出生日期<input id="sf_birth" type="date"></label>
         <label>到職日<input id="sf_hire" type="date"></label>
@@ -618,6 +622,7 @@
         </label>
       </div>
       <datalist id="companyList2"></datalist>
+<datalist id="fleetTeamList"></datalist>
       <button class="btn" id="vf_add">新增車輛</button>
     </div>
     <div class="card">
@@ -3958,6 +3963,14 @@ function renderDatalists(){
   if(vendorListEl){
     vendorListEl.innerHTML = (STATE.vendors||[]).map(v=>`<option value="${esc(v.name)}">`).join('');
   }
+  const fleetTeamEl = document.getElementById('fleetTeamList');
+  if(fleetTeamEl){
+    // 現有人員身上有的車隊 ＋ 幾個固定的，避免第一個人打錯就一路錯下去
+    const base = ['亞東液態車隊','亞東氣態車隊','貨櫃車隊','三福鋼瓶車隊','國喬鋼瓶車隊','其他鋼瓶車隊','德謙車隊'];
+    const teams = [...new Set(base.concat((STATE.employees || []).map(e => String(e.fleet_team || '').trim())))]
+      .filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    fleetTeamEl.innerHTML = teams.map(t => `<option value="${esc(t)}">`).join('');
+  }
   renderGreasePlateOptions();
   renderGreaseReporterOptions();
   renderMaintApplicantOptions();
@@ -4552,15 +4565,50 @@ function renderStockTxTable(){
   }).join('') || `<tr><td colspan="7" class="empty">尚無異動紀錄</td></tr>`;
 }
 
+// 氧氣偵測器等儀器主要是亞東液態／氣態車隊在用。
+// 「所屬車隊」是手打的欄位，所以比對前先把空白（含全形）清掉，
+// 而且只要是「亞東」開頭都算，不然打成「亞東液態」就整個人不見了。
+const INSTRUMENT_TEAMS = ['亞東液態車隊', '亞東氣態車隊'];
+function teamNorm(v){ return String(v == null ? '' : v).replace(/[\s\u3000]/g, ''); }
+function inTeamOrder(a, b){ return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'); }
 function instrumentHolderCandidates(){
-  const teams = ['亞東液態車隊', '亞東氣態車隊'];
-  return STATE.employees.filter(e => teams.includes(e.fleet_team));
+  const want = INSTRUMENT_TEAMS.map(teamNorm);
+  return (STATE.employees || [])
+    .filter(e => e.status !== '離職')
+    .filter(e => { const t = teamNorm(e.fleet_team); return !!t && (want.includes(t) || t.indexOf('亞東') === 0); })
+    .slice().sort(inTeamOrder);
+}
+// 其他在職人員。放在下拉的第二組，避免「所屬車隊沒填或打錯就永遠選不到這個人」。
+function instrumentOtherCandidates(){
+  const ids = new Set(instrumentHolderCandidates().map(e => String(e.id)));
+  return (STATE.employees || [])
+    .filter(e => e.status !== '離職' && !ids.has(String(e.id)))
+    .slice().sort(inTeamOrder);
+}
+// 領用人下拉的選項。selectedId 是目前的領用人，就算他已離職或不在名單裡也要留著。
+function instrumentHolderOptions(selectedId, blankLabel){
+  const sel = (selectedId == null) ? '' : String(selectedId);
+  const seen = new Set();
+  const opt = e => {
+    seen.add(String(e.id));
+    return `<option value="${e.id}"${String(e.id) === sel ? ' selected' : ''}>`
+         + `${esc(e.name)}（${esc(e.fleet_team || '未填車隊')}）</option>`;
+  };
+  const main = instrumentHolderCandidates(), other = instrumentOtherCandidates();
+  let html = `<option value=""${sel ? '' : ' selected'}>${esc(blankLabel || '未指定')}</option>`
+    + (main.length ? '<optgroup label="亞東液態／氣態車隊">' + main.map(opt).join('') + '</optgroup>' : '')
+    + (other.length ? '<optgroup label="其他人員（所屬車隊不是亞東，或還沒填）">' + other.map(opt).join('') + '</optgroup>' : '');
+  if(sel && !seen.has(sel)){
+    const old = (STATE.employees || []).find(x => String(x.id) === sel);
+    if(old) html += '<optgroup label="目前領用人（已離職）">' + opt(old) + '</optgroup>';
+  }
+  return html;
 }
 
 function renderInstrumentSelects(){
   const instrumentTypes = STATE.equipmentTypes.filter(t => t.category === '儀器設備');
   document.getElementById('in_type').innerHTML = instrumentTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
-  document.getElementById('in_holder').innerHTML = '<option value="">未指定</option>' + instrumentHolderCandidates().map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.fleet_team)}）</option>`).join('');
+  document.getElementById('in_holder').innerHTML = instrumentHolderOptions('', '未指定');
   document.getElementById('cal_instrument').innerHTML = (STATE.instruments || []).filter(i => !isInstrumentOff(i)).map(i => `<option value="${i.instrument_id}">${esc(i.asset_no)}</option>`).join('');
 }
 
@@ -4612,8 +4660,7 @@ function renderInstrumentsTable(){
     const isEditing = String(editingInstrumentHolderId) === String(i.instrument_id);
     const holderCell = isEditing
       ? `<select id="inst_holder_select_${i.instrument_id}">
-           <option value="">公司備存（退回）</option>
-           ${instrumentHolderCandidates().map(e => `<option value="${e.id}" ${e.id===i.current_holder_id?'selected':''}>${esc(e.name)}（${esc(e.fleet_team)}）</option>`).join('')}
+           ${instrumentHolderOptions(i.current_holder_id, '公司備存（退回）')}
          </select>`
       : esc(holder ? holder.name : (i.notes || '公司備存'));
     const holderAction = isEditing
@@ -6444,7 +6491,7 @@ function renderStaffModalEdit(e){
       </label>
       <label>公司別<select id="se_company">${opt(companyOptions, e.company_name)}</select></label>
       <label>區域<select id="se_region">${opt(regionOptions, e.region)}</select></label>
-      <label>所屬車隊<input id="se_fleet" value="${esc(e.fleet_team||'')}"></label>
+      <label>所屬車隊<input id="se_fleet" list="fleetTeamList" autocomplete="off" value="${esc(e.fleet_team||'')}"></label>
       <label>身分證字號<input id="se_idnumber" value="${esc(e.id_number||'')}"></label>
       <label>出生日期<input id="se_birth" type="date" value="${esc(e.birth_date||'')}"></label>
       <label>到職日<input id="se_hire" type="date" value="${esc(e.hire_date||'')}"></label>
@@ -11879,6 +11926,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     company_id: _org.company_id, company_name: _org.company_name,
     employee_type: document.getElementById('sf_type').value,
     region: document.getElementById('sf_region').value.trim(),
+    // 所屬車隊：儀器領用人、板架打油回報人的名單都靠這一欄篩，漏填的話新人會挑不到
+    fleet_team: document.getElementById('sf_fleet').value.trim() || null,
     id_number: document.getElementById('sf_idnumber').value.trim(),
     birth_date: document.getElementById('sf_birth').value || null,
     hire_date: document.getElementById('sf_hire').value || null,
@@ -11921,7 +11970,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     await saveState('access_cards', STATE.accessCards, true);
     await saveState('access_card_roster', STATE.accessCardRoster, true);
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card'].forEach(id=>document.getElementById(id).value='');
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('sf_empins_status').checked = false;
   applyStaffTypeDefaults();
   renderStaffNoBox();
