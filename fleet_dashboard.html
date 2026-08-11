@@ -1028,7 +1028,7 @@
 
     <div class="card">
       <h2>待補維修費用<span class="count-badge" id="maint_pending_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">維修保養已經做了、但金額或發票號碼還沒補上來的紀錄都會列在這裡。按「補登」就地填廠商、金額、發票號碼；<b>要改車號、日期、里程、內容說明，請按「修改」。</b>若這次確實沒有費用（廠商沒收費、保固內、自行處理），金額填 0 即可。</div>
+      <div class="muted" style="margin-bottom:10px;">維修保養已經做了、但金額或發票號碼還沒補上來的紀錄都會列在這裡。<b>標成「⚠ 疑似重複」的</b>代表同一台車、同一天、同樣內容還有另一筆，通常是連點了兩下新增，確認之後按右邊「刪除」清掉即可。按「補登」就地填廠商、金額、發票號碼；<b>要改車號、日期、里程、內容說明，請按「修改」。</b>若這次確實沒有費用（廠商沒收費、保固內、自行處理），金額填 0 即可。</div>
       <div class="toolbar">
         <input id="maint_pending_search" placeholder="搜尋車號 / 內容 / 申請人">
       </div>
@@ -8080,10 +8080,28 @@ function maintInvoiceCell(r, scope, editing){
         <input id="mre_invdate_${scope}_${esc(r.id)}" type="date" value="${esc(_d)}" title="發票日期" style="width:130px;margin-top:4px"></td>`
     : `<td>${esc(r.invoice_no||'—')}${_d ? `<div class="muted" style="font-size:12px;">${esc(_d)}</div>` : ''}</td>`;
 }
+// 同一筆維修單被登錄兩次的判斷：同一台車 ＋ 同一天 ＋ 同樣的內容說明。
+// 維修保養本來就可能同一天做兩件事，所以只當提醒，不強制擋。
+function maintDupKey(r){
+  return [String(r.plate || '').trim().toUpperCase(),
+          String(r.maintenance_date || '').slice(0, 10),
+          String(r.description || '').trim()].join('|');
+}
+function maintDupIds(){
+  const seen = {}, dup = new Set();
+  (STATE.maintRecords || []).forEach(r => {
+    const k = maintDupKey(r);
+    if(!k.replace(/\|/g, '')) return;      // 三個都空白的不算
+    if(seen[k] != null) { dup.add(String(seen[k])); dup.add(String(r.id)); }
+    else seen[k] = r.id;
+  });
+  return dup;
+}
 function maintEditButtons(r, scope, editing){
   return editing
     ? `<button class="name-link" data-save-maint="${esc(r.id)}" data-maint-scope="${scope}">存檔</button> <button class="del-btn" data-cancel-maint="${esc(r.id)}">取消</button>`
-    : `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button> <button class="name-link" data-open-maint="${esc(r.id)}">修改</button>`;
+    : `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button> <button class="name-link" data-open-maint="${esc(r.id)}">修改</button>`
+      + (scope === 'p' ? ` <button class="del-btn" data-del-maint="${esc(r.id)}">刪除</button>` : '');
 }
 // 維修申請人：這次維修／保養是誰提出來的。
 // 人離職以後名字還是要查得到，所以 id 與姓名兩個都存（跟打油的回報人同一套做法）。
@@ -8313,11 +8331,14 @@ function renderMaintPendingTable(){
     .slice().sort((a,b)=> String(a.maintenance_date||'').slice(0,10).localeCompare(String(b.maintenance_date||'').slice(0,10)));
   const cEl = document.getElementById('maint_pending_count');
   if(cEl) cEl.textContent = all.length ? `${all.length} 筆待補` : '目前沒有待補';
+  const _dups = maintDupIds();
   body.innerHTML = rows.map(r => {
     const editing = String(editingMaintId) === String(r.id);
+    const _isDup = _dups.has(String(r.id));
     return `
-    <tr>
-      <td>${esc(String(r.maintenance_date||'').slice(0,10))}</td>
+    <tr${_isDup ? ' style="background:var(--amber-bg);"' : ''}>
+      <td>${esc(String(r.maintenance_date||'').slice(0,10))}
+        ${_isDup ? '<br><span class="pill amber" title="同一台車、同一天、同樣內容還有另一筆，可能是登錄兩次">⚠ 疑似重複</span>' : ''}</td>
       <td>${esc(r.plate||'')}</td>
       <td>${esc(r.maintenance_type||'')}</td>
       <td class="muted" title="${esc(r.description||'')}">${esc(r.description||'')}</td>
@@ -8329,6 +8350,21 @@ function renderMaintPendingTable(){
   }).join('') || `<tr><td colspan="10" class="empty">${kw ? '沒有符合條件的紀錄' : '目前沒有等待補金額或發票的維修紀錄'}</td></tr>`;
 }
 async function maintBodyClick(e){
+  // 待補清單就地刪除（重複登錄的那種）。走跟修改視窗同一套刪除流程。
+  const delId = e.target.getAttribute('data-del-maint');
+  if(delId){
+    const rec = (STATE.maintRecords||[]).find(x => String(x.id) === String(delId));
+    if(!rec) return;
+    if(!confirm('確定要刪除這一筆維修保養記錄嗎？\n\n車號：' + (rec.plate||'') +
+                '\n日期：' + String(rec.maintenance_date||'').slice(0,10) +
+                '\n內容：' + (rec.description||'（空白）') +
+                '\n\n刪除後無法復原。保養週期紀錄不會跟著刪除。')) return;
+    STATE.maintRecords = STATE.maintRecords.filter(x => String(x.id) !== String(rec.id));
+    await saveState('maint_records', STATE.maintRecords, true);
+    editingMaintId = null;
+    renderAll();
+    return;
+  }
   const editId = e.target.getAttribute('data-edit-maint');
   const cancelId = e.target.getAttribute('data-cancel-maint');
   const saveId = e.target.getAttribute('data-save-maint');
@@ -13172,6 +13208,21 @@ document.getElementById('mr_add').addEventListener('click', async () => {
 
   // maintenance_records.maintenance_type 只接受 定期保養/臨時維修/年度驗車/其他，小保養/大保養歸類為定期保養
   const recordType = (type==='小保養'||type==='大保養') ? '定期保養' : type;
+  // 同車同日同內容已經有了就先問一次。之前有整筆被登錄兩次、
+  // 補登完一筆另一筆還一直留在待補清單的狀況。
+  {
+    const _descFull = (type==='小保養'||type==='大保養') ? `${type}：${desc}` : desc;
+    const _same = (STATE.maintRecords||[]).filter(x =>
+      String(x.plate||'').trim().toUpperCase() === String(_mv.plate||'').trim().toUpperCase() &&
+      String(x.maintenance_date||'').slice(0,10) === date &&
+      String(x.description||'').trim() === String(_descFull).trim());
+    if(_same.length && !confirm('這台車同一天已經有一筆內容一樣的維修保養記錄了：\n\n'
+        + '車號：' + _mv.plate + '\n日期：' + date + '\n內容：' + (_descFull || '（空白）') + '\n\n'
+        + '確定要再新增一筆嗎？（同一天真的做了兩次才按確定，不然按取消）')) return;
+  }
+  const _addBtn = document.getElementById('mr_add');
+  if(_addBtn){ if(_addBtn.disabled) return; _addBtn.disabled = true; _addBtn.textContent = '存檔中…'; }
+  try{
   STATE.maintRecords.unshift({
     id: nextId(STATE.maintRecords), plate: _mv.plate, vehicle_id: _mv.id, maintenance_type: recordType,
     maintenance_date: date, mileage_at_service: mileage,
@@ -13205,6 +13256,10 @@ document.getElementById('mr_add').addEventListener('click', async () => {
 
   ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_invoice','mr_desc','mr_parts','mr_applicant'].forEach(id=>{ const _el=document.getElementById(id); if(_el) _el.value=''; });
   renderAll();
+  }finally{
+    // 存檔成功或失敗都要把按鈕放開，不然使用者會卡住
+    if(_addBtn){ _addBtn.disabled = false; _addBtn.textContent = '新增維修保養記錄'; }
+  }
   // 存檔成功才會執行到這裡(saveState 失敗會丟出錯誤),明確告知使用者已寫入雲端
   alert('已存檔到雲端\n\n車號:' + _mv.plate + '\n日期:' + date + '\n類型:' + type +
         (_apEmp ? '\n維修申請人:' + _apEmp.name : '') +
