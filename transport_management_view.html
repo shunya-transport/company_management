@@ -230,7 +230,32 @@
     #printArea, #printArea *{visibility:visible;}
     #printArea{position:absolute;left:0;top:0;width:100%;padding:40px;}
     .no-print{display:none !important;}
-  }/* ===== 唯讀版：隱藏車輛管理/車輛維護/外訓証照的新增、編輯、刪除功能 ===== */
+  }
+  /* ===== 貨櫃檢查表列印版面（跟司機頁同一份） =====
+     192mm＝A4 寬 210mm 扣掉左右各 9mm；276mm＝高 297mm 扣掉上下各 9mm 再留餘裕。
+     儀表板本身的 td/th 樣式會蓋進來，所以這裡的關鍵屬性一律加 !important。 */
+  .ci-sheet{font-family:'標楷體','DFKai-SB','BiauKai',serif;color:#000;
+            width:192mm;max-width:100%;height:276mm;box-sizing:border-box;
+            display:flex;flex-direction:column;background:#fff;}
+  .ci-sheet table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;
+                  margin:0!important;box-shadow:none!important;}
+  .ci-sheet table.main{flex:1 1 auto;}
+  .ci-sheet td,.ci-sheet th{border:1px solid #000!important;padding:1px 5px!important;
+                            font-size:13px!important;line-height:1.3!important;vertical-align:middle!important;
+                            background:#fff!important;color:#000!important;letter-spacing:0!important;
+                            font-weight:400!important;white-space:normal!important;}
+  .ci-sheet .lab{text-align:center!important;}
+  .ci-sheet .val{text-align:center!important;word-break:break-all;}
+  .ci-sheet .lft{text-align:left!important;}
+  .ci-sheet .ttl{text-align:center;font-size:22px;font-weight:700;letter-spacing:4px;}
+  .ci-sheet [style*="font-weight:700"]{font-weight:700!important;}
+  @media print{
+    #printArea.ci-print{padding:0!important;}
+    .ci-sheet{page-break-after:always;page-break-inside:avoid;}
+    .ci-sheet:last-child{page-break-after:auto;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+/* ===== 唯讀版：隱藏車輛管理/車輛維護/外訓証照的新增、編輯、刪除功能 ===== */
 #fleet .card:has(#vf_add),
 #fleet .card:has(#vi_add),
 #maintenance .card:has(#mr_add),
@@ -867,15 +892,16 @@
         <select id="cl_month"></select>
         <input id="cl_search" placeholder="搜尋貨主／櫃號／司機／板架／啟運／目的">
         <button class="btn ghost" id="cl_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+        <button class="btn ghost" id="cl_print" style="padding:8px 14px;font-size:13px;">列印檢查表</button>
       </div>
       <div class="table-scroll" style="max-height:640px;">
         <table class="lvot-table" style="table-layout:fixed;width:100%;min-width:1000px;">
           <colgroup>
             <col style="width:9%"><col style="width:8.5%"><col style="width:13%"><col style="width:7.5%">
             <col style="width:7.5%"><col style="width:9%"><col style="width:9%"><col style="width:7.5%">
-            <col style="width:11%"><col style="width:18%">
+            <col style="width:10%"><col style="width:15%"><col style="width:5%">
           </colgroup>
-          <thead><tr><th>貨主</th><th>日期</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th></tr></thead>
+          <thead><tr><th>貨主</th><th>日期</th><th>櫃號</th><th>啟運</th><th>目的</th><th>板架</th><th>尺寸</th><th>司機</th><th>單據</th><th>備註</th><th>列印</th></tr></thead>
           <tbody id="clLedgerBody"></tbody>
         </table>
       </div>
@@ -4465,6 +4491,157 @@ async function saveTrailerSizeInline(el){
   }catch(e){ /* saveState 失敗時已經有還原機制與提示，這裡不再重複跳窗 */ }
 }
 
+// ===================== 貨櫃檢查表列印 =====================
+// 版面跟司機頁 container_inspection.html 完全一樣（程式是從那一支抽出來的），
+// 差別只在這裡是唯讀：只能印，不能改司機填的內容。
+function ciROC(iso){
+  const p = String(iso || '').slice(0, 10).split('-');
+  if(p.length < 3) return String(iso || '');
+  return (parseInt(p[0], 10) - 1911) + ' 年 ' + parseInt(p[1], 10) + ' 月 ' + parseInt(p[2], 10) + ' 日';
+}
+const CI_KINDS = ['進口櫃','出口櫃','領空櫃','還空櫃','轉運櫃'];
+const CI_SPECS = ['20呎CY櫃','40呎CY櫃','20呎槽罐櫃','40呎槽罐櫃','其他'];
+const CI_ITEMS = [
+  {no:'1',  k:'r1', t:'貨櫃櫃號與封條是否與資料吻合'},
+  {no:'2',  k:'r2', t:'封條是否完整，如破損立即回報！'},
+  {no:'3',  k:'r3', t:'櫃門之四支門柄是否開關自如無損壞，櫃門可正常開關'},
+  {no:'4',  t:'貨櫃（槽罐體）外觀是否完好，若外觀受損(如：破裂、凹凸、生鏽、刮痕)，立即回報！',
+   subs:[['r4_front','前'],['r4_back','後'],['r4_left','左'],['r4_right','右'],['r4_top','上'],['r4_bottom','下']]},
+  {no:'5',  t:'領進口櫃及交出口櫃，危險物品標誌與品名是否一致有無張貼及完整(如：破損、剝落、污漬)',
+   subs:[['r5_front','前'],['r5_back','後'],['r5_left','左'],['r5_right','右']]},
+  {no:'6',  t:'貨櫃內部注意事項',
+   subs:[['r6_damage','破損'],['r6_oil','油漬'],['r6_foreign','異物'],['r6_odor','異味/潮濕'],['r6_broken','損壞']]},
+  {no:'7',  k:'r7',  t:'領進口櫃及交出口櫃，確認封條是否扣緊'},
+  {no:'8',  k:'r8',  t:'貨櫃置於板架後確認固定插銷.活動角座是否確實固定'},
+  {no:'9',  k:'r9',  t:'吊櫃前確認固定插銷.活動角座是否移除'},
+  {no:'10', k:'r10', t:'貨櫃(槽罐體)異常部份，是否回報公司並註記於E.I.R上請櫃場簽章'},
+  {no:'11', k:'r11', t:'板架外觀結構是否完整，曳引車頭與板架脫離是否平穩放置地面。'}
+];
+
+function ciCell(v){ return esc(v == null ? '' : v); }
+function ciSheetHtml(recs, cols){
+  const g = (i, f) => recs[i] ? ciCell(recs[i][f]) : '';
+  const r = (i, k) => recs[i] ? ciCell(recs[i][k]) : '';
+  const head = recs[0] || {};
+  const w = (100 - 45) / cols;                       // 左側標題佔 45%
+  const colgroup = '<colgroup><col style="width:27%"><col style="width:18%">'
+    + Array.from({length: cols}, () => '<col style="width:' + w.toFixed(2) + '%">').join('') + '</colgroup>';
+  const span2 = ' colspan="2"';
+  const valRow = (label, field) =>
+    '<tr><td class="lab"' + span2 + '>' + label + '</td>'
+    + Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, field) + '</td>').join('') + '</tr>';
+  // 「其他」那一列照紙本印成「其他：」，勾到的話把自填內容一起印出來
+  const pickRow = (label, list, field, otherField) =>
+    list.map((name, idx) =>
+      '<tr>' + (idx === 0 ? '<td class="lab" rowspan="' + list.length + '">' + label + '</td>' : '')
+      + '<td class="lab" style="font-size:12px;">' + (name === '其他' ? '其他：' : name) + '</td>'
+      + Array.from({length: cols}, (_, i) => {
+          if(!recs[i] || recs[i][field] !== name) return '<td class="val"></td>';
+          const extra = otherField && recs[i][otherField] ? '　' + ciCell(recs[i][otherField]) : '';
+          return '<td class="val">V' + extra + '</td>';
+        }).join('')
+      + '</tr>').join('');
+  const chk = (label, key, sub) =>
+    '<tr>' + (sub ? '<td class="lab lft" style="font-size:10.5px;">' + sub + '</td>'
+                  : '<td class="lft"' + span2 + '>' + label + '</td>')
+    + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, key) + '</td>').join('') + '</tr>';
+
+  let body = '';
+  CI_ITEMS.forEach(it => {
+    if(it.k){
+      body += '<tr><td class="lft"' + span2 + '>' + it.no + '.' + esc(it.t) + '</td>'
+            + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, it.k) + '</td>').join('') + '</tr>';
+    }else{
+      it.subs.forEach((s, idx) => {
+        body += '<tr>'
+          + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + esc(it.t) + '</td>' : '')
+          + '<td class="lab" style="font-size:12px;">' + esc(s[1]) + '</td>'
+          + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, s[0]) + '</td>').join('')
+          + '</tr>';
+      });
+    }
+  });
+
+  return '<div class="ci-sheet">'
+   + '<div style="position:relative;height:38px;margin-bottom:3px;flex:0 0 auto;">'
+   + '<img src="' + SLIP_LOGO + '" style="position:absolute;left:0;top:0;height:34px;">'
+   + '<div class="ttl" style="padding-top:5px;">貨櫃檢查表</div></div>'
+   // 抬頭照紙本是「日期／車號／檢查人」三格，跟下面的欄位格數無關，
+   // 所以獨立一張表，不然一筆一張時 檢查人 那格會被壓成一條直的。
+   + '<table style="margin-bottom:-1px;flex:0 0 auto;"><colgroup><col style="width:45%"><col style="width:30%"><col style="width:25%"></colgroup>'
+   + '<tr><td class="lft" style="font-size:13.5px;">日期：' + ciROC(head.inspect_date) + '</td>'
+   +     '<td class="lft">車號：' + ciCell(head.plate) + '</td>'
+   +     '<td class="lft">檢查人：' + ciCell(head.inspector) + '</td></tr></table>'
+   + '<table class="main">' + colgroup
+   + '<tr><td class="lab"' + span2 + '>板架號碼與尺寸</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
+         + (recs[i] ? ciCell([recs[i].trailer_no, recs[i].trailer_size].filter(Boolean).join(' ')) : '')
+         + '</td>').join('') + '</tr>'
+   + valRow('貨　　主', 'shipper')
+   + valRow('起 運 地', 'origin')
+   + valRow('目 的 地', 'destination')
+   + valRow('貨櫃櫃號', 'container_no')
+   + '<tr><td class="lab" rowspan="2"' + '>封條號碼</td><td class="lab" style="font-size:12px;">1</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no1') + '</td>').join('') + '</tr>'
+   + '<tr><td class="lab" style="font-size:12px;">2</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no2') + '</td>').join('') + '</tr>'
+   + pickRow('貨櫃種類', CI_KINDS, 'container_kind')
+   + pickRow('貨櫃規格', CI_SPECS, 'container_spec', 'spec_other')
+   + '<tr><td class="lab"' + span2 + ' style="font-weight:700;">檢 查 項 目</td>'
+   +   '<td class="lab" colspan="' + cols + '" style="font-weight:700;">檢 查 結 果</td></tr>'
+   + body
+   + '<tr><td class="lft"' + span2 + '>12.其他問題，請簡單描述</td>'
+   +   Array.from({length: cols}, (_, i) =>
+         '<td class="lft" style="font-size:11.5px;">' + (recs[i] ? ciCell(recs[i].other_note) : '') + '</td>').join('')
+   +   '</tr>'
+   + '</table>'
+   + '<div style="font-size:11.5px;margin-top:3px;flex:0 0 auto;">註：檢查結果正常者打V，異常者打X，不適用者寫N，異常請立即回報。</div>'
+   + '<div style="display:flex;justify-content:space-between;font-size:14px;margin-top:12px;flex:0 0 auto;">'
+   +   '<span>運務領班：' + ciCell(head.foreman) + '<span style="display:inline-block;width:150px;border-bottom:1px solid #000;">&#160;</span></span>'
+   +   '<span>調度人員：' + ciCell(head.dispatcher) + '<span style="display:inline-block;width:150px;border-bottom:1px solid #000;">&#160;</span></span>'
+   + '</div>'
+   + '<div style="font-size:10.5px;text-align:right;margin-top:5px;flex:0 0 auto;">表單編號 :DGTT-P012-R05-03</div>'
+   + '</div>';
+}
+
+// 一張紙固定 4 個結果欄。併頁的分組是「同一天 ＋ 同一台車 ＋ 同一個檢查人」，
+// 抬頭那一列只放得下一組日期／車號／檢查人，三個有一個不一樣就不能併。
+const CI_PRINT_COLS = 4;
+function ciGroupKey(r){
+  return [String(r.inspect_date || '').slice(0, 10), r.plate || '', r.inspector || ''].join('|');
+}
+function ciPrint(rows){
+  if(!rows || !rows.length){ alert('沒有可以列印的檢查表。'); return; }
+  const groups = new Map();
+  rows.forEach(r => {
+    const k = ciGroupKey(r);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  });
+  const sheets = [];
+  [...groups.keys()].sort().forEach(k => {
+    const g = groups.get(k).slice().sort((x, y) =>
+      String(x.container_no || '').localeCompare(String(y.container_no || '')));
+    for(let i = 0; i < g.length; i += CI_PRINT_COLS) sheets.push(g.slice(i, i + CI_PRINT_COLS));
+  });
+  const area = document.getElementById('printArea');
+  // @page 寫在這裡而不是全域，印完清掉就不會影響其他表單的紙張設定
+  area.innerHTML = '<style>@media print{ @page{ size:A4 portrait; margin:9mm; } }</style>'
+                 + sheets.map(g => ciSheetHtml(g, CI_PRINT_COLS)).join('');
+  area.classList.add('ci-print');
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => { area.innerHTML = ''; area.classList.remove('ci-print'); }, 1200);
+  }, 150);
+}
+function ciPrintOne(id){
+  const all = clRows();
+  const one = all.find(r => String(r.inspection_id) === String(id));
+  if(!one){ alert('找不到這一筆檢查表。'); return; }
+  // 同一天、同一台車、同一個檢查人的併在同一張印，跟紙本作業一致
+  ciPrint(all.filter(r => ciGroupKey(r) === ciGroupKey(one)));
+}
+
 // ===== 貨櫃運送 =====
 // 資料來源是司機在 container_inspection.html 填的貨櫃檢查表（container_inspections）。
 // 這一頁只讀不寫，不會動到司機填的東西。
@@ -4523,8 +4700,9 @@ function renderContainerLedger(){
       + `<td class="c-name">${esc(c[0])}</td><td class="c-nw">${esc(c[1])}</td><td class="c-nw">${esc(c[2])}</td>`
       + `<td class="c-nw">${esc(c[3])}</td><td class="c-nw">${esc(c[4])}</td><td class="c-nw">${esc(c[5])}</td>`
       + `<td class="c-nw">${esc(c[6])}</td><td class="c-name">${esc(c[7])}</td>`
-      + `<td class="c-note">${esc(c[8])}</td><td class="c-note">${esc(c[9])}</td></tr>`;
-  }).join('') || `<tr><td colspan="10" class="empty">這個月份沒有資料。司機還沒填，或還沒執行 SQL #78。</td></tr>`;
+      + `<td class="c-note">${esc(c[8])}</td><td class="c-note">${esc(c[9])}</td>`
+      + `<td class="c-nw"><button type="button" class="name-link" data-ci-print="${r.inspection_id}">印</button></td></tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">這個月份沒有資料。司機還沒填，或還沒執行 SQL #78。</td></tr>`;
 }
 function containerLedgerCsv(){
   return csvLines(['貨主','日期','櫃號','啟運','目的','板架','尺寸','司機','單據','備註'],
@@ -9553,6 +9731,13 @@ if(document.getElementById('cbRosterBody')){
   if(_m) _m.addEventListener('change', renderContainerLedger);
   if(_s) _s.addEventListener('input', renderContainerLedger);
   if(_c) _c.addEventListener('input', renderContainerWhere);
+  const _pr = document.getElementById('cl_print');
+  if(_pr) _pr.addEventListener('click', () => ciPrint(clLedgerRows()));
+  const _tb = document.getElementById('clLedgerBody');
+  if(_tb) _tb.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-ci-print]');
+    if(b) ciPrintOne(b.getAttribute('data-ci-print'));
+  });
   const _csv = document.getElementById('cl_csv');
   if(_csv) _csv.addEventListener('click', () => {
     const m = (document.getElementById('cl_month') || {}).value || 'all';

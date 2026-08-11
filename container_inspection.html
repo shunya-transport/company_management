@@ -117,14 +117,18 @@
     .sheet:last-child{page-break-after:auto;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
-  /* 192mm＝A4 寬 210mm 扣掉左右各 9mm。寬度寫死，
-     不管螢幕多寬印出來都是同一個版面。 */
-  .sheet{font-family:"標楷體","DFKai-SB","BiauKai",serif;color:#000;width:192mm;max-width:100%;}
+  /* 192mm＝A4 寬 210mm 扣掉左右各 9mm；276mm 是高 297mm 扣掉上下各 9mm 再留一點餘裕。
+     寬高都寫死，不管螢幕多寬，印出來都是撐滿整張 A4 的同一個版面。
+     主表格用 flex:1 撐開，多出來的高度會平均分給每一列，格子跟著變高。 */
+  .sheet{font-family:"標楷體","DFKai-SB","BiauKai",serif;color:#000;
+         width:192mm;max-width:100%;height:276mm;box-sizing:border-box;
+         display:flex;flex-direction:column;}
   .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;}
-  .sheet td,.sheet th{border:1px solid #000;padding:1px 4px;font-size:10.5px;line-height:1.35;vertical-align:middle;}
+  .sheet table.main{flex:1 1 auto;}
+  .sheet td,.sheet th{border:1px solid #000;padding:1px 5px;font-size:13px;line-height:1.3;vertical-align:middle;}
   .sheet .lab{text-align:center;}
-  .sheet .val{text-align:center;font-size:10.5px;word-break:break-all;}
-  .sheet .ttl{text-align:center;font-size:16px;font-weight:700;letter-spacing:3px;}
+  .sheet .val{text-align:center;font-size:13px;word-break:break-all;}
+  .sheet .ttl{text-align:center;font-size:22px;font-weight:700;letter-spacing:4px;}
   .sheet .lft{text-align:left;}
 </style>
 </head>
@@ -630,7 +634,7 @@ function sheetHtml(recs, cols){
   const pickRow = (label, list, field, otherField) =>
     list.map((name, idx) =>
       '<tr>' + (idx === 0 ? '<td class="lab" rowspan="' + list.length + '">' + label + '</td>' : '')
-      + '<td class="lab" style="font-size:10px;">' + (name === '其他' ? '其他：' : name) + '</td>'
+      + '<td class="lab" style="font-size:12px;">' + (name === '其他' ? '其他：' : name) + '</td>'
       + Array.from({length: cols}, (_, i) => {
           if(!recs[i] || recs[i][field] !== name) return '<td class="val"></td>';
           const extra = otherField && recs[i][otherField] ? '　' + cell(recs[i][otherField]) : '';
@@ -651,7 +655,7 @@ function sheetHtml(recs, cols){
       it.subs.forEach((s, idx) => {
         body += '<tr>'
           + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + esc(it.t) + '</td>' : '')
-          + '<td class="lab" style="font-size:10.5px;">' + esc(s[1]) + '</td>'
+          + '<td class="lab" style="font-size:12px;">' + esc(s[1]) + '</td>'
           + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, s[0]) + '</td>').join('')
           + '</tr>';
       });
@@ -659,27 +663,27 @@ function sheetHtml(recs, cols){
   });
 
   return '<div class="sheet">'
-   + '<div style="position:relative;height:30px;margin-bottom:2px;">'
-   + '<img src="' + LOGO + '" style="position:absolute;left:0;top:0;height:26px;">'
-   + '<div class="ttl" style="padding-top:4px;">貨櫃檢查表</div></div>'
+   + '<div style="position:relative;height:38px;margin-bottom:3px;flex:0 0 auto;">'
+   + '<img src="' + LOGO + '" style="position:absolute;left:0;top:0;height:34px;">'
+   + '<div class="ttl" style="padding-top:5px;">貨櫃檢查表</div></div>'
    // 抬頭照紙本是「日期／車號／檢查人」三格，跟下面的欄位格數無關，
    // 所以獨立一張表，不然一筆一張時 檢查人 那格會被壓成一條直的。
-   + '<table style="margin-bottom:-1px;"><colgroup><col style="width:45%"><col style="width:30%"><col style="width:25%"></colgroup>'
-   + '<tr><td class="lft">日期：' + toROC(head.inspect_date) + '</td>'
+   + '<table style="margin-bottom:-1px;flex:0 0 auto;"><colgroup><col style="width:45%"><col style="width:30%"><col style="width:25%"></colgroup>'
+   + '<tr><td class="lft" style="font-size:13.5px;">日期：' + toROC(head.inspect_date) + '</td>'
    +     '<td class="lft">車號：' + cell(head.plate) + '</td>'
    +     '<td class="lft">檢查人：' + cell(head.inspector) + '</td></tr></table>'
-   + '<table>' + colgroup
+   + '<table class="main">' + colgroup
    + '<tr><td class="lab"' + span2 + '>板架號碼與尺寸</td>'
-   +   Array.from({length: cols}, (_, i) => '<td class="val">'
-         + (recs[i] ? cell([recs[i].trailer_no, recs[i].trailer_size].filter(Boolean).join('　')) : '')
+   +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
+         + (recs[i] ? cell([recs[i].trailer_no, recs[i].trailer_size].filter(Boolean).join(' ')) : '')
          + '</td>').join('') + '</tr>'
    + valRow('貨　　主', 'shipper')
    + valRow('起 運 地', 'origin')
    + valRow('目 的 地', 'destination')
    + valRow('貨櫃櫃號', 'container_no')
-   + '<tr><td class="lab" rowspan="2"' + '>封條號碼</td><td class="lab" style="font-size:10.5px;">1</td>'
+   + '<tr><td class="lab" rowspan="2"' + '>封條號碼</td><td class="lab" style="font-size:12px;">1</td>'
    +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no1') + '</td>').join('') + '</tr>'
-   + '<tr><td class="lab" style="font-size:10.5px;">2</td>'
+   + '<tr><td class="lab" style="font-size:12px;">2</td>'
    +   Array.from({length: cols}, (_, i) => '<td class="val">' + g(i, 'seal_no2') + '</td>').join('') + '</tr>'
    + pickRow('貨櫃種類', KINDS, 'container_kind')
    + pickRow('貨櫃規格', SPECS, 'container_spec', 'spec_other')
@@ -688,15 +692,15 @@ function sheetHtml(recs, cols){
    + body
    + '<tr><td class="lft"' + span2 + '>12.其他問題，請簡單描述</td>'
    +   Array.from({length: cols}, (_, i) =>
-         '<td class="lft" style="font-size:9.5px;">' + (recs[i] ? cell(recs[i].other_note) : '') + '</td>').join('')
+         '<td class="lft" style="font-size:11.5px;">' + (recs[i] ? cell(recs[i].other_note) : '') + '</td>').join('')
    +   '</tr>'
    + '</table>'
-   + '<div style="font-size:9.5px;margin-top:2px;">註：檢查結果正常者打V，異常者打X，不適用者寫N，異常請立即回報。</div>'
-   + '<div style="display:flex;justify-content:space-between;font-size:11.5px;margin-top:14px;">'
-   +   '<span>運務領班：' + cell(head.foreman) + '<span style="display:inline-block;width:110px;border-bottom:1px solid #000;">&#160;</span></span>'
-   +   '<span>調度人員：' + cell(head.dispatcher) + '<span style="display:inline-block;width:110px;border-bottom:1px solid #000;">&#160;</span></span>'
+   + '<div style="font-size:11.5px;margin-top:3px;flex:0 0 auto;">註：檢查結果正常者打V，異常者打X，不適用者寫N，異常請立即回報。</div>'
+   + '<div style="display:flex;justify-content:space-between;font-size:14px;margin-top:12px;flex:0 0 auto;">'
+   +   '<span>運務領班：' + cell(head.foreman) + '<span style="display:inline-block;width:150px;border-bottom:1px solid #000;">&#160;</span></span>'
+   +   '<span>調度人員：' + cell(head.dispatcher) + '<span style="display:inline-block;width:150px;border-bottom:1px solid #000;">&#160;</span></span>'
    + '</div>'
-   + '<div style="font-size:9.5px;text-align:right;margin-top:6px;">表單編號 :DGTT-P012-R05-03</div>'
+   + '<div style="font-size:10.5px;text-align:right;margin-top:5px;flex:0 0 auto;">表單編號 :DGTT-P012-R05-03</div>'
    + '</div>';
 }
 // 一律照紙本的 4 個結果欄出圖，只是填幾欄看那一張有幾個櫃。
