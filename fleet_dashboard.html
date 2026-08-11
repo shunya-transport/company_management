@@ -250,22 +250,31 @@
             box-sizing:border-box;background:#fff;}
   .mr-sheet .mr-head{position:relative;height:44px;}
   .mr-sheet .mr-head img{position:absolute;left:0;top:2px;height:34px;}
-  .mr-sheet .mr-head .ttl{text-align:center;font-size:26px;font-weight:700;letter-spacing:8px;line-height:44px;}
+  .mr-sheet .mr-head .ttl{text-align:center;font-size:29px;font-weight:700;letter-spacing:9px;line-height:44px;}
   .mr-sheet table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;
                   margin:0!important;box-shadow:none!important;}
-  .mr-sheet td,.mr-sheet th{border:1px solid #000!important;padding:3px 5px!important;
-                            font-size:13px!important;line-height:1.5!important;vertical-align:middle!important;
+  .mr-sheet td,.mr-sheet th{border:1px solid #000!important;padding:3px 6px!important;
+                            font-size:15px!important;line-height:1.6!important;vertical-align:middle!important;
                             background:#fff!important;color:#000!important;letter-spacing:0!important;
                             font-weight:400!important;white-space:normal!important;text-align:left!important;}
-  .mr-sheet td.sec{text-align:center!important;font-weight:700!important;font-size:15px!important;letter-spacing:6px!important;}
-  .mr-sheet td.lb,.mr-sheet td.lb2{text-align:center!important;font-weight:700!important;}
-  /* 撐到接近紙本一整頁：A4 直式扣掉上下邊界約 1054px，這樣排下來約 1030px */
-  .mr-sheet tr.sig td{height:118px;vertical-align:top!important;}
-  .mr-sheet .note{font-size:11px;line-height:1.4;}
-  .mr-sheet .fill{font-weight:700;}
-  .mr-sheet .wrap{min-height:56px;word-break:break-all;}
-  .mr-sheet .mr-tail{font-size:12px;line-height:1.75;margin-top:6px;}
-  .mr-sheet .mr-foot{text-align:right;font-size:11.5px;margin-top:2px;}
+  .mr-sheet td.sec{text-align:center!important;font-weight:700!important;font-size:17px!important;letter-spacing:6px!important;}
+  /* 左欄標題字略小一點，「完成公里數（時數）」才不會被擠成兩行 */
+  .mr-sheet td.lb{text-align:center!important;font-weight:700!important;
+                  font-size:14px!important;letter-spacing:-0.5px!important;}
+  /* 「完成公里數（時數）」字比較多，再小一點才不會被擠成兩行 */
+  .mr-sheet td.lbs{font-size:12.5px!important;letter-spacing:-1px!important;}
+  .mr-sheet td.lb2{text-align:center!important;font-weight:700!important;}
+  /* 撐到接近紙本一整頁：A4 直式扣掉上下邊界約 1054px */
+  .mr-sheet tr.sig td{height:80px;vertical-align:top!important;}
+  .mr-sheet .note{font-size:12px!important;line-height:1.45;}
+  .mr-sheet .fill{font-weight:700;font-size:16px;}
+  /* 金額、維修原因說明、實際保修內容這三格的字再大一級 */
+  .mr-sheet .big{font-size:18px!important;font-weight:700;}
+  .mr-sheet .wrap{min-height:46px;word-break:break-all;font-size:18px;font-weight:700;line-height:1.5;}
+  /* 執行人員：跟申請人同一個人，直接印上去，還是留位置給他簽 */
+  .mr-sheet td.sigfill{text-align:center!important;font-size:16px;font-weight:700;padding-top:12px!important;}
+  .mr-sheet .mr-tail{font-size:13px;line-height:1.7;margin-top:8px;}
+  .mr-sheet .mr-foot{text-align:right;font-size:12.5px;margin-top:2px;}
 </style>
 </head>
 <body>
@@ -8270,7 +8279,7 @@ function mrSheetHtml(r){
     <tr><td class="lb">類　　別</td><td colspan="6">${MR_KINDS.map(k => mrBox(k, k === kind)).join('　')}　${mrBox('其他：', !!kindOther)}${f(kindOther)}</td></tr>
     <tr><td class="lb">保修名稱</td><td colspan="6">${MR_JOBS.map(j => mrBox(j, j === job)).join('　')}　${mrBox('其他：', !!jobOther)}${f(jobOther)}</td></tr>
     <tr><td class="lb">外部供應商名稱</td><td colspan="6">${f(r.vendor_name || '')}</td></tr>
-    <tr><td class="lb">預計保修金額</td><td colspan="6">NT ${f(cost)}
+    <tr><td class="lb">預計保修金額</td><td colspan="6"><span class="big">NT ${esc(cost)}</span>
       <div class="note">※若維修報價超過3萬需事先通知設備主管並由總經理簽核：通知設備主管時間：　　　年　　　月　　　日　　　時　　　分</div></td></tr>
     <tr><td class="lb">維修原因說明</td><td colspan="6"><div class="wrap">${esc(desc)}</div>
       <div class="note">□其他：　　　　　　　　　　　　　＊若需跟廠商請款申請單位知會：□財務部</div></td></tr>
@@ -8280,14 +8289,15 @@ function mrSheetHtml(r){
   </table>
   <table style="margin-top:6px!important;">${G2}
     <tr><td class="sec" colspan="6">驗收作業</td></tr>
-    <tr><td class="lb">完成公里數（時數）</td><td colspan="3">${f(mile)}</td><td class="lb" colspan="2">實際維修原因</td></tr>
+    <tr><td class="lb lbs">完成公里數（時數）</td><td colspan="3">${f(mile)}</td><td class="lb" colspan="2">實際維修原因</td></tr>
     <tr><td class="lb">實際保修內容</td>
         <td colspan="3"><div class="wrap">${esc(parts || desc)}</div>${r.invoice_no ? '<div class="note">發票號碼：' + esc(r.invoice_no) + '</div>' : ''}
           <div class="note">※執行人員明瞭保修狀況，需提供設備管理部確實之明細。</div></td>
         <td colspan="2">□自然損壞　□人為因素，需知會行政管理部：　　　　　<br>□其他：</td></tr>
     <tr><td class="lb">結案日期</td><td colspan="5">${f(cd.y)} 年 ${f(cd.mo)} 月 ${f(cd.d)} 日</td></tr>
     <tr><td class="lb2" colspan="2">財務主管</td><td class="lb2">設備主管</td><td class="lb2" colspan="2">運務主管</td><td class="lb2">執行人員</td></tr>
-    <tr class="sig"><td colspan="2"><span class="note">※單一項系列維修金額超過8萬以上需簽核。</span></td><td></td><td colspan="2"></td><td></td></tr>
+    <tr class="sig"><td colspan="2"><span class="note">※單一項系列維修金額超過8萬以上需簽核。</span></td><td></td><td colspan="2"></td>
+        <td class="sigfill">${esc(maintApplicantLabel(r) || '')}</td></tr>
   </table>
   <div class="mr-tail">
     <div>設備收單日:　　　　年　　　　月　　　　日</div>
@@ -8296,6 +8306,25 @@ function mrSheetHtml(r){
   </div>
   <div class="mr-foot">表單編號：DGTT-P012-R07-01</div>
 </div>`;
+}
+// A4 直式扣掉上下邊界後的可用高度（96dpi 下 279mm ≈ 1054px），留一點餘裕
+const MR_PAGE_H = 1040;
+const MR_SHEET_W = 188;   // mm，跟 .mr-sheet 的寬度一致
+// 內容長的紀錄會多折幾行而撐破一頁。列印前先量，超過就整張等比縮。
+function mrFit(area){
+  area.querySelectorAll('.mr-sheet').forEach(sh => {
+    sh.style.width = MR_SHEET_W + 'mm';
+    sh.style.zoom = ''; sh.style.transform = ''; sh.style.height = '';
+    const h = sh.getBoundingClientRect().height;
+    if(h > MR_PAGE_H){
+      const k = Math.max(0.6, MR_PAGE_H / h);
+      // 用 zoom 不用 transform：transform 不影響排版，元素還是佔原本的高度，
+      // 會多擠出一頁、表尾也會被切掉。zoom 會真的重排，高度就跟著縮。
+      // 寬度先放大 1/k，zoom 回來之後剛好還是 188mm，不會變成窄窄一條。
+      sh.style.width = (MR_SHEET_W / k) + 'mm';
+      sh.style.zoom = k;
+    }
+  });
 }
 function mrPrint(rows){
   rows = (rows || []).filter(Boolean);
@@ -8306,8 +8335,12 @@ function mrPrint(rows){
   // @page 寫在這裡而不是全域，印完清掉就不會影響其他表單的紙張設定
   area.innerHTML = '<style>@media print{ @page{ size:A4 portrait; margin:10mm 10mm 8mm 12mm; } }</style>'
                  + rows.map(mrSheetHtml).join('');
+  // #mrPrintRoot 平常是 display:none，量出來會是 0。先挪到畫面外顯示，量完再收回去。
+  area.style.cssText = 'display:block;position:fixed;left:-20000px;top:0;width:240mm;background:#fff;';
+  mrFit(area);
+  area.style.cssText = '';
   document.documentElement.classList.add('mr-printing');
-  const fin = () => { document.documentElement.classList.remove('mr-printing'); area.innerHTML = ''; };
+  const fin = () => { document.documentElement.classList.remove('mr-printing'); area.style.cssText = ''; area.innerHTML = ''; };
   setTimeout(() => { window.print(); setTimeout(fin, 1200); }, 150);
 }
 function mrPrintOne(id){
