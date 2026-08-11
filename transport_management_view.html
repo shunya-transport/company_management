@@ -231,6 +231,41 @@
     #printArea{position:absolute;left:0;top:0;width:100%;padding:40px;}
     .no-print{display:none !important;}
   }
+  /* ===== 設備保養維修單（DGTT-P012-R07-01）列印版面 =====
+     容器直接掛在 <body> 底下，不放在任何分頁面板裡。
+     面板 display:none 的時候裡面的東西不會被排版，只切 visibility 蓋不掉，印出來是白紙。 */
+  #mrPrintRoot{display:none;}
+  @media print{
+    html.mr-printing body{background:#fff!important;background-image:none!important;}
+    html.mr-printing body > *{display:none!important;}
+    html.mr-printing body > #mrPrintRoot{display:block!important;visibility:visible!important;
+      position:static!important;margin:0!important;padding:0!important;background:#fff!important;}
+    html.mr-printing #mrPrintRoot *{visibility:visible!important;}
+    .mr-sheet{page-break-after:always;page-break-inside:avoid;}
+    .mr-sheet:last-child{page-break-after:auto;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+  /* 儀表板本身的 table/td 樣式會蓋進來，所以關鍵屬性一律 !important */
+  .mr-sheet{font-family:'標楷體','DFKai-SB','BiauKai',serif;color:#000;width:188mm;max-width:100%;
+            box-sizing:border-box;background:#fff;}
+  .mr-sheet .mr-head{position:relative;height:44px;}
+  .mr-sheet .mr-head img{position:absolute;left:0;top:2px;height:34px;}
+  .mr-sheet .mr-head .ttl{text-align:center;font-size:26px;font-weight:700;letter-spacing:8px;line-height:44px;}
+  .mr-sheet table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;
+                  margin:0!important;box-shadow:none!important;}
+  .mr-sheet td,.mr-sheet th{border:1px solid #000!important;padding:3px 5px!important;
+                            font-size:13px!important;line-height:1.5!important;vertical-align:middle!important;
+                            background:#fff!important;color:#000!important;letter-spacing:0!important;
+                            font-weight:400!important;white-space:normal!important;text-align:left!important;}
+  .mr-sheet td.sec{text-align:center!important;font-weight:700!important;font-size:15px!important;letter-spacing:6px!important;}
+  .mr-sheet td.lb,.mr-sheet td.lb2{text-align:center!important;font-weight:700!important;}
+  /* 撐到接近紙本一整頁：A4 直式扣掉上下邊界約 1054px，這樣排下來約 1030px */
+  .mr-sheet tr.sig td{height:118px;vertical-align:top!important;}
+  .mr-sheet .note{font-size:11px;line-height:1.4;}
+  .mr-sheet .fill{font-weight:700;}
+  .mr-sheet .wrap{min-height:56px;word-break:break-all;}
+  .mr-sheet .mr-tail{font-size:12px;line-height:1.75;margin-top:6px;}
+  .mr-sheet .mr-foot{text-align:right;font-size:11.5px;margin-top:2px;}
   /* ===== 貨櫃檢查表列印版面（跟司機頁同一份） =====
      192mm＝A4 寬 210mm 扣掉左右各 9mm；276mm＝高 297mm 扣掉上下各 9mm 再留餘裕。
      儀表板本身的 td/th 樣式會蓋進來，所以這裡的關鍵屬性一律加 !important。 */
@@ -1086,6 +1121,7 @@
         </select>
         <button class="btn ghost" id="mh_clear" style="padding:8px 14px;font-size:13px;">清除條件</button>
         <button class="btn ghost" id="mh_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+        <button class="btn ghost" id="mh_print" style="padding:8px 14px;font-size:13px;">列印維修單</button>
       </div>
       <div id="mh_summary" class="muted" style="margin-bottom:8px;"></div>
       <div class="table-scroll">
@@ -7853,6 +7889,12 @@ function bindMaintHistoryTools(){
       renderMaintHistoryTable();
     });
   }
+  const prt = document.getElementById('mh_print');
+  if(prt && !prt.dataset.bound){
+    prt.dataset.bound = '1';
+    // 印目前篩選出來的全部（不受畫面只顯示 200 筆的限制），一筆一頁
+    prt.addEventListener('click', () => mrPrint(MH_ROWS));
+  }
   const csv = document.getElementById('mh_csv');
   if(csv && !csv.dataset.bound){
     csv.dataset.bound = '1';
@@ -7892,11 +7934,128 @@ function maintHistoryCsv(){
       r.cost == null ? '' : r.cost, r.invoice_no || '', maintStatusOf(r)
     ]));
 }
+// ===== 設備保養維修單（表單編號 DGTT-P012-R07-01）=====
+// 已經 key 進系統的維修保養紀錄可以照紙本格式重印出來。欄寬取自紙本 docx，一筆一頁。
+const MR_AREAS = ['桃園','新竹','台中','台南','高雄'];
+const MR_KINDS = ['車輛','尾車','堆高機','手推車','油壓推車','框架'];
+const MR_JOBS  = ['小保養','中保養','大保養','檢測/添加','維修','定期打油','第一輪軸保養','第二輪軸保養','第三輪軸保養'];
+function mrBox(label, on){ return (on ? '☑' : '□') + esc(label); }
+// 全資料庫顯示民國年，維修單也一樣
+function mrRoc(d){
+  const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? {y:String(Number(m[1]) - 1911), mo:String(Number(m[2])), d:String(Number(m[3]))}
+           : {y:'　　　', mo:'　　', d:'　　'};
+}
+function mrVehicle(r){
+  const p = String(r.plate || '').trim().toUpperCase();
+  return p ? ((STATE.vehicles || []).find(v => String(v.plate || '').trim().toUpperCase() === p) || null) : null;
+}
+// 類別：先看保養標準（板架／貨櫃架＝框架、堆高機＝堆高機），再退回車種
+function mrKindOf(v){
+  const mm = String((v && v.maintenance_model) || ''), vt = String((v && v.vehicle_type) || '');
+  if(mm.indexOf('堆高機') >= 0 || vt.indexOf('堆高機') >= 0) return '堆高機';
+  if(mm.indexOf('板架') >= 0 || mm.indexOf('貨櫃架') >= 0 || vt.indexOf('貨櫃架') >= 0) return '框架';
+  if(vt.indexOf('半拖車') >= 0) return '尾車';
+  if(mm.indexOf('吊掛機') >= 0 || vt.indexOf('起重機') >= 0 || vt.indexOf('夾櫃機') >= 0) return vt || mm;
+  return v ? '車輛' : '';
+}
+// 保修名稱：新增時「小保養／大保養」會被併成「定期保養」並在內容前面加前綴，這裡拆回來。
+// 併過之後分不出小／中／大的（純「定期保養」沒有前綴）就整排留空白，讓人手勾，不亂猜。
+function mrJobOf(r){
+  const d = String(r.description || '');
+  const pre = ['小保養','中保養','大保養'].find(j => d.indexOf(j + '：') === 0);
+  if(pre) return pre;
+  if(d.indexOf('打油') >= 0) return '定期打油';
+  const t = String(r.maintenance_type || '');
+  if(t === '臨時維修') return '維修';
+  if(t === '定期保養') return '';
+  return t;
+}
+function mrSheetHtml(r){
+  const v = mrVehicle(r);
+  const area = String((v && v.base_location) || '');
+  const kind = mrKindOf(v);
+  const kindOther = (kind && MR_KINDS.indexOf(kind) < 0) ? kind : '';
+  const job = mrJobOf(r);
+  const jobOther = (job && MR_JOBS.indexOf(job) < 0) ? job : '';
+  const ad = mrRoc(r.maintenance_date);
+  const done = maintStatusOf(r) === MAINT_ST_DONE;
+  const cd = done ? ad : {y:'　　　', mo:'　　', d:'　　'};   // 還在待補的沒有結案日
+  const cost = (r.cost == null || r.cost === '') ? '' : Number(r.cost).toLocaleString();
+  const mile = (r.mileage_at_service == null || r.mileage_at_service === '') ? ''
+             : Number(r.mileage_at_service).toLocaleString() + ' km';
+  const desc = String(r.description || '').replace(/^(小保養|中保養|大保養)：/, '').trim();
+  const parts = String(r.parts_replaced || '').trim();
+  const g = ws => '<colgroup>' + ws.map(w => `<col style="width:${w}%">`).join('') + '</colgroup>';
+  const G1 = g([21.86, 7.68, 21.54, 10.45, 10.78, 4.93, 22.76]);
+  const G2 = g([18.39, 14.11, 22.5, 12.75, 9.75, 22.5]);
+  const f = t => `<span class="fill">${esc(t)}</span>`;
+  return `
+<div class="mr-sheet">
+  <div class="mr-head"><img src="${SLIP_LOGO}" alt="DGTT"><div class="ttl">設備保養維修單</div></div>
+  <table>${G1}
+    <tr><td class="sec" colspan="7">申請作業</td></tr>
+    <tr><td class="lb">編　　號</td><td colspan="6">${mrBox('車號：', !!r.plate)}${f(r.plate || '')}　□其它設備：　　　　　　　　　□無編號</td></tr>
+    <tr><td class="lb">區　　域</td><td colspan="6">${MR_AREAS.map(a => mrBox(a, a === area)).join('　')}</td></tr>
+    <tr><td class="lb">申請日期</td><td colspan="3">${f(ad.y)} 年 ${f(ad.mo)} 月 ${f(ad.d)} 日</td>
+        <td class="lb">申請人</td><td colspan="2">${f(maintApplicantLabel(r) || '')}</td></tr>
+    <tr><td class="lb">類　　別</td><td colspan="6">${MR_KINDS.map(k => mrBox(k, k === kind)).join('　')}　${mrBox('其他：', !!kindOther)}${f(kindOther)}</td></tr>
+    <tr><td class="lb">保修名稱</td><td colspan="6">${MR_JOBS.map(j => mrBox(j, j === job)).join('　')}　${mrBox('其他：', !!jobOther)}${f(jobOther)}</td></tr>
+    <tr><td class="lb">外部供應商名稱</td><td colspan="6">${f(r.vendor_name || '')}</td></tr>
+    <tr><td class="lb">預計保修金額</td><td colspan="6">NT ${f(cost)}
+      <div class="note">※若維修報價超過3萬需事先通知設備主管並由總經理簽核：通知設備主管時間：　　　年　　　月　　　日　　　時　　　分</div></td></tr>
+    <tr><td class="lb">維修原因說明</td><td colspan="6"><div class="wrap">${esc(desc)}</div>
+      <div class="note">□其他：　　　　　　　　　　　　　＊若需跟廠商請款申請單位知會：□財務部</div></td></tr>
+    <tr><td class="lb2" colspan="2">總經理</td><td class="lb2">設備主管</td><td class="lb2" colspan="3">調度管理部</td><td class="lb2">運務管理者</td></tr>
+    <tr class="sig"><td colspan="2"><span class="note">※維修報價未達3萬不需簽核此欄。</span></td><td></td>
+        <td colspan="3"><span class="note">※車場設施不需通知調度人員。</span></td><td></td></tr>
+  </table>
+  <table style="margin-top:6px!important;">${G2}
+    <tr><td class="sec" colspan="6">驗收作業</td></tr>
+    <tr><td class="lb">完成公里數（時數）</td><td colspan="3">${f(mile)}</td><td class="lb" colspan="2">實際維修原因</td></tr>
+    <tr><td class="lb">實際保修內容</td>
+        <td colspan="3"><div class="wrap">${esc(parts || desc)}</div>${r.invoice_no ? '<div class="note">發票號碼：' + esc(r.invoice_no) + '</div>' : ''}
+          <div class="note">※執行人員明瞭保修狀況，需提供設備管理部確實之明細。</div></td>
+        <td colspan="2">□自然損壞　□人為因素，需知會行政管理部：　　　　　<br>□其他：</td></tr>
+    <tr><td class="lb">結案日期</td><td colspan="5">${f(cd.y)} 年 ${f(cd.mo)} 月 ${f(cd.d)} 日</td></tr>
+    <tr><td class="lb2" colspan="2">財務主管</td><td class="lb2">設備主管</td><td class="lb2" colspan="2">運務主管</td><td class="lb2">執行人員</td></tr>
+    <tr class="sig"><td colspan="2"><span class="note">※單一項系列維修金額超過8萬以上需簽核。</span></td><td></td><td colspan="2"></td><td></td></tr>
+  </table>
+  <div class="mr-tail">
+    <div>設備收單日:　　　　年　　　　月　　　　日</div>
+    <div>註1.此「設備保養維修單」需檢附相關單據佐證並簽名驗收。</div>
+    <div>註2.驗收作業後單一項系列維修金額超過8萬以上需簽核至財務主管。</div>
+  </div>
+  <div class="mr-foot">表單編號：DGTT-P012-R07-01</div>
+</div>`;
+}
+function mrPrint(rows){
+  rows = (rows || []).filter(Boolean);
+  if(!rows.length){ alert('沒有可以列印的維修單。'); return; }
+  if(rows.length > 40 && !confirm('這次會印出 ' + rows.length + ' 張維修單（一筆一頁）。\n\n確定要繼續嗎？')) return;
+  let area = document.getElementById('mrPrintRoot');
+  if(!area){ area = document.createElement('div'); area.id = 'mrPrintRoot'; document.body.appendChild(area); }
+  // @page 寫在這裡而不是全域，印完清掉就不會影響其他表單的紙張設定
+  area.innerHTML = '<style>@media print{ @page{ size:A4 portrait; margin:10mm 10mm 8mm 12mm; } }</style>'
+                 + rows.map(mrSheetHtml).join('');
+  document.documentElement.classList.add('mr-printing');
+  const fin = () => { document.documentElement.classList.remove('mr-printing'); area.innerHTML = ''; };
+  setTimeout(() => { window.print(); setTimeout(fin, 1200); }, 150);
+}
+function mrPrintOne(id){
+  const r = (STATE.maintRecords || []).find(x => String(x.id) === String(id));
+  if(!r){ alert('找不到這一筆維修保養記錄。'); return; }
+  mrPrint([r]);
+}
 function maintEditButtons(r, scope, editing){
   return editing
     ? `<button class="name-link" data-save-maint="${esc(r.id)}" data-maint-scope="${scope}">存檔</button> <button class="del-btn" data-cancel-maint="${esc(r.id)}">取消</button>`
-    : `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button> <button class="name-link" data-open-maint="${esc(r.id)}">修改</button>`
-      + (scope === 'p' ? ` <button class="del-btn" data-del-maint="${esc(r.id)}">刪除</button>` : '');
+    // 歷史記錄不放「補登」——要改內容一律走「修改」視窗；那邊多一顆「印」重印維修單。
+    // 待補維修費用清單維持原樣（補登／修改／刪除），那是就地補金額發票用的。
+    : (scope === 'p' ? `<button class="name-link" data-edit-maint="${esc(r.id)}">補登</button> ` : '')
+      + `<button class="name-link" data-open-maint="${esc(r.id)}">修改</button>`
+      + (scope === 'p' ? ` <button class="del-btn" data-del-maint="${esc(r.id)}">刪除</button>`
+                       : ` <button class="name-link" data-print-maint="${esc(r.id)}">印</button>`);
 }
 // 維修申請人：這次維修／保養是誰提出來的。
 // 人離職以後名字還是要查得到，所以 id 與姓名兩個都存（跟打油的回報人同一套做法）。
@@ -8144,6 +8303,9 @@ function renderMaintPendingTable(){
   }).join('') || `<tr><td colspan="10" class="empty">${kw ? '沒有符合條件的紀錄' : '目前沒有等待補金額或發票的維修紀錄'}</td></tr>`;
 }
 async function maintBodyClick(e){
+  // 重印設備保養維修單
+  const _prId = e.target.getAttribute('data-print-maint');
+  if(_prId){ mrPrintOne(_prId); return; }
   // 待補清單就地刪除（重複登錄的那種）。走跟修改視窗同一套刪除流程。
   const delId = e.target.getAttribute('data-del-maint');
   if(delId){
