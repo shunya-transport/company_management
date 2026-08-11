@@ -778,13 +778,24 @@
         <label>狀態
           <select id="lf_status"><option value="租賃中">租賃中</option><option value="已歸還">已歸還</option></select>
         </label>
+        <label>調度方式
+          <select id="lf_dispatch">
+            <option value="承租方自調">承租方自調（車在對方那裡）</option>
+            <option value="本公司調度">本公司調度（車在我們手上，租金照算）</option>
+          </select>
+        </label>
         <label>備註<input id="lf_notes" placeholder="選填"></label>
       </div>
       <button class="btn" id="lf_add">新增租賃紀錄</button>
     </div>
     <div class="card">
       <h2>自用板架目前位置<span class="count-badge" id="selfuse_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">未出租、公司自行調度使用的板架。按「修改」可以一起改<b>使用業主</b>與<b>目前位置</b>。使用業主是指這台板架現在掛給哪一家貨主在跑，不是出租，所以不會進租賃清單。</div>
+      <div class="muted" style="margin-bottom:10px;">
+        由公司自行調度的板架，包含<b>沒有租約的</b>，以及<b>有租約但車在我們手上、由我們排車的</b>（租賃清單裡標成「本公司調度」那些）。<br>
+        <b>租約</b>＝這台每個月的租金算誰的，來自租賃清單，這裡改不動。
+        <b>使用業主</b>＝今天這台實際在拉誰的貨，按「修改」隨時可以改。<br>
+        所以「租約：大根／使用業主：華立」＝租金照算大根，但這一趟拉的是華立的貨，兩件事分開記，不會互相蓋掉。
+      </div>
       <div class="toolbar">
         <input id="selfuse_search" placeholder="搜尋車號">
         <select id="selfuse_company_filter"><option value="all">全部公司別</option></select>
@@ -800,7 +811,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
           <tbody id="selfUseTrailerBody"></tbody>
         </table>
       </div>
@@ -821,7 +832,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>類型</th><th>承租方</th><th style="width:180px;">目前位置</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th style="width:80px;">備註</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>類型</th><th>承租方</th><th>調度</th><th style="width:180px;">目前位置</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th style="width:80px;">備註</th><th></th></tr></thead>
           <tbody id="leaseTableBody"></tbody>
         </table>
       </div>
@@ -3875,10 +3886,16 @@ function renderLeaseTable(){
     const locAction = isEditing
       ? `<button class="name-link" data-save-lease-location="${l.id}">儲存</button> <button class="del-btn" data-cancel-lease-location="${l.id}">取消</button>`
       : `<button class="name-link" data-edit-lease-location="${l.id}">修改位置</button>`;
+    // 調度方式：車在對方那裡（承租方自調）還是在我們手上（本公司調度，但租金照算）
+    const _self = String(l.dispatch_mode || '') === '本公司調度';
+    const dispCell = `<span class="pill ${_self ? 'amber' : 'green'}">${_self ? '本公司調度' : '承租方自調'}</span>`
+      + `<br><button class="name-link" data-toggle-dispatch="${l.id}" style="font-size:11.5px;">`
+      + `${_self ? '改回承租方自調' : '改為本公司調度'}</button>`;
     return `<tr>
       <td>${esc(l.plate)}</td>
       <td>${esc(l.vtype||'')}</td>
       <td>${esc(l.lessee_name)}</td>
+      <td>${dispCell}</td>
       <td>${locCell}<br>${locAction}</td>
       <td>${esc(l.inspection_expiry||'—')}</td>
       <td>${esc(grace||'—')}</td>
@@ -3888,7 +3905,7 @@ function renderLeaseTable(){
     </tr>`;
   }).join('') || '';
   if(rows.length===0){
-    document.getElementById('leaseTableBody').innerHTML = `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
+    document.getElementById('leaseTableBody').innerHTML = `<tr><td colspan="10" class="empty">沒有符合條件的紀錄</td></tr>`;
   }
 }
 
@@ -3897,7 +3914,15 @@ let editingOvertimeSettlementId = null;
 let editingLocationId = null;
 let selfUseCompanyFilterInit = false;
 function renderSelfUseTrailers(){
-  const leasedPlates = new Set(STATE.leases.filter(l => l.status==='租賃中').map(l => l.plate));
+  // 租出去但仍由我們調度的（dispatch_mode='本公司調度'）也要出現在自用板架，
+  // 因為車在我們手上、逐日要登記使用業主與位置。租約照舊算在承租方頭上。
+  const leasedPlates = new Set(STATE.leases
+    .filter(l => l.status === '租賃中' && String(l.dispatch_mode || '') !== '本公司調度')
+    .map(l => l.plate));
+  const selfDispatchLease = {};
+  STATE.leases.forEach(l => {
+    if(l.status === '租賃中' && String(l.dispatch_mode || '') === '本公司調度') selfDispatchLease[l.plate] = l;
+  });
   let rows = STATE.vehicles.filter(v => v.vehicle_category==='板架' && !isRetiredVehicle(v) && !leasedPlates.has(v.plate));
   if(!selfUseCompanyFilterInit){
     const companies = [...new Set(rows.map(v=>v.company_name).filter(Boolean))].sort();
@@ -3933,6 +3958,11 @@ function renderSelfUseTrailers(){
     const partyCell = isEditing
       ? `<input type="text" id="party_input_${v.id}" list="selfUsePartyList" value="${esc(v.used_by_party||'')}" style="width:130px;">`
       : esc(v.used_by_party||'—未填');
+    // 租約欄唯讀：租金算誰的由租賃清單決定，這裡只顯示
+    const _lz = selfDispatchLease[v.plate];
+    const leaseCell = _lz
+      ? `<span class="pill amber" title="這台仍在租約中，租金照算，只是由我們調度">租 ${esc(_lz.lessee_name || '')}・仍計租</span>`
+      : `<span class="muted">無租約</span>`;
     const actionCell = isEditing
       ? `<button class="name-link" data-save-location="${v.id}">儲存</button> <button class="del-btn" data-cancel-location="${v.id}">取消</button>`
       : `<button class="name-link" data-edit-location="${v.id}">修改</button>`;
@@ -3944,6 +3974,7 @@ function renderSelfUseTrailers(){
       <td>${esc(v.plate)}</td>
       <td>${esc(v.vehicle_type||'')}</td>
       <td>${esc(v.company_name||'')}</td>
+      <td>${leaseCell}</td>
       <td>${partyCell}</td>
       <td>${locCell}</td>
       <td class="muted">${esc((v.location_updated_at||'').slice(0,16).replace('T',' '))}</td>
@@ -3952,7 +3983,7 @@ function renderSelfUseTrailers(){
       <td>${statusPill}</td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="10" class="empty">目前沒有自用板架</td></tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">目前沒有自用板架</td></tr>`;
   // 使用業主的輸入建議：已經填過的值 ＋ 租賃清單的承租方
   const _pl = document.getElementById('selfUsePartyList');
   if(_pl){
@@ -11101,6 +11132,7 @@ document.getElementById('lf_add').addEventListener('click', async () => {
     inspection_expiry: document.getElementById('lf_exp').value || null,
     lessee_id: lesseeId, lessee_name: lesseeName,
     status: document.getElementById('lf_status').value,
+    dispatch_mode: (document.getElementById('lf_dispatch') || {}).value || '承租方自調',
     notes: document.getElementById('lf_notes').value.trim()
   });
   await saveState('trailer_leases', STATE.leases, true);
@@ -11113,6 +11145,22 @@ document.getElementById('lf_add').addEventListener('click', async () => {
     refreshTrailerSizeList();
   }
   ['lf_plate','lf_vtype','lf_exp','lf_notes'].forEach(id=>document.getElementById(id).value='');
+  renderAll();
+});
+
+// 切換「承租方自調 / 本公司調度」。只動調度方式，承租方與租金完全不變。
+document.getElementById('leaseTableBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-toggle-dispatch]');
+  if(!btn) return;
+  const l = STATE.leases.find(x => String(x.id) === btn.getAttribute('data-toggle-dispatch'));
+  if(!l) return;
+  const toSelf = String(l.dispatch_mode || '') !== '本公司調度';
+  if(!confirm(l.plate + ' 改成「' + (toSelf ? '本公司調度' : '承租方自調') + '」？\n\n'
+    + '承租方（' + (l.lessee_name || '') + '）與租金不會變，'
+    + (toSelf ? '只是這台會同時出現在「自用板架」，可以逐日登記使用業主與位置。'
+              : '改回去之後就不會出現在自用板架了。'))) return;
+  l.dispatch_mode = toSelf ? '本公司調度' : '承租方自調';
+  await saveState('trailer_leases', STATE.leases, true);
   renderAll();
 });
 
