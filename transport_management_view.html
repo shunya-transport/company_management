@@ -255,6 +255,17 @@
     .ci-sheet:last-child{page-break-after:auto;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
+  /* 貨櫃檢查表專用的列印容器。直接掛在 <body> 底下，不放在任何分頁面板裡。
+     原因：#printArea 在 <div class="panel"> 內，面板沒被選到時是 display:none，
+     而全域列印樣式只切 visibility，蓋不掉 display:none，
+     結果 .ci-sheet 的固定高度完全不生效（印出來是空白或只佔上半頁）。 */
+  #ciPrintRoot{display:none;}
+  @media print{
+    html.ci-printing body > *{display:none!important;}
+    html.ci-printing body > #ciPrintRoot{display:block!important;visibility:visible!important;
+      position:static!important;margin:0!important;padding:0!important;background:#fff!important;}
+    html.ci-printing #ciPrintRoot *{visibility:visible!important;}
+  }
 /* ===== 唯讀版：隱藏車輛管理/車輛維護/外訓証照的新增、編輯、刪除功能 ===== */
 #fleet .card:has(#vf_add),
 #fleet .card:has(#vi_add),
@@ -4854,14 +4865,25 @@ function ciPrint(rows){
       String(x.container_no || '').localeCompare(String(y.container_no || '')));
     for(let i = 0; i < g.length; i += CI_PRINT_COLS) sheets.push(g.slice(i, i + CI_PRINT_COLS));
   });
-  const area = document.getElementById('printArea');
+  // 不要用 #printArea：它在分頁面板裡，面板 display:none 的時候整張表不會被排版，
+  // 高度撐不開，印出來只佔上面一小塊甚至整頁空白。這裡自己在 body 底下開一個。
+  let area = document.getElementById('ciPrintRoot');
+  if(!area){
+    area = document.createElement('div');
+    area.id = 'ciPrintRoot';
+    document.body.appendChild(area);
+  }
   // @page 寫在這裡而不是全域，印完清掉就不會影響其他表單的紙張設定
   area.innerHTML = '<style>@media print{ @page{ size:A4 portrait; margin:9mm; } }</style>'
                  + sheets.map(g => ciSheetHtml(g, CI_PRINT_COLS)).join('');
-  area.classList.add('ci-print');
+  document.documentElement.classList.add('ci-printing');
+  const _ciDone = () => {
+    document.documentElement.classList.remove('ci-printing');
+    area.innerHTML = '';
+  };
   setTimeout(() => {
     window.print();
-    setTimeout(() => { area.innerHTML = ''; area.classList.remove('ci-print'); }, 1200);
+    setTimeout(_ciDone, 1200);
   }, 150);
 }
 function ciPrintOne(id){
