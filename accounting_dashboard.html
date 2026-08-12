@@ -471,7 +471,7 @@
 <div id="report" class="panel">
   <div class="card no-print">
     <h2>收支表</h2>
-    <div class="muted" style="margin-bottom:12px;">格式沿用原本 Excel 的「現金收支表」：直的是科目、橫的是帳戶，只統計已收付的帳。<strong>表上的金額都是稅前金額</strong>——營業稅、匯費那些沒有掛科目的列不會算進來，跟原本的 Excel 一樣。</div>
+    <div class="muted" style="margin-bottom:12px;">格式與口徑都比照原本 Excel 的「現金收支表」：直的是科目、橫的是帳戶，<strong>以發生日歸月、含掛帳中</strong>，金額是<strong>稅前</strong>（營業稅、匯費那些沒掛科目的列不算進來）。</div>
     <div class="toolbar">
       <label class="muted">起 <input id="rp_from" type="date"></label>
       <label class="muted">訖 <input id="rp_to" type="date"></label>
@@ -479,15 +479,8 @@
       <button class="btn ghost" id="rp_thismonth">本月</button>
       <button class="btn ghost" id="rp_lastmonth">上個月</button>
       <button class="btn ghost" id="rp_thisyear">今年</button>
-      <select id="rp_datebasis" title="舊 Excel 的收支表是以發生日為基準">
-        <option value="settle">日期基準：實際收付日</option>
-        <option value="entry">日期基準：發生日（同舊 Excel）</option>
-      </select>
-      <select id="rp_include" title="發生日基準通常要含掛帳中，才等於「這個月做的生意」">
-        <option value="settled">只算已收付</option>
-        <option value="all">含掛帳中（未收付也算）</option>
-      </select>
-      <button class="btn ghost" id="rp_like_excel" title="一鍵切成舊 Excel 的口徑：發生日 ＋ 含掛帳中">比照舊 Excel</button>
+      <span class="muted" style="padding:4px 10px;border:1px solid var(--line);border-radius:6px;white-space:nowrap;"
+            title="口徑已鎖定，與舊 Excel 收支表一致，不提供切換">口徑：發生日 ＋ 含掛帳中（同舊 Excel）</span>
       <label class="muted"><input type="checkbox" id="rp_hidezero" checked style="vertical-align:middle;"> 隱藏沒有金額的科目</label>
       <button class="btn ghost" id="rp_export">匯出 CSV</button>
       <button class="btn ghost" id="rp_print">列印／存 PDF</button>
@@ -1640,13 +1633,12 @@ function buildReport(){
   const to = document.getElementById('rp_to').value || monthEnd();
   const hideZero = document.getElementById('rp_hidezero').checked;
   const accounts = STATE.accounts.filter(a => a.active !== false);
-  // 日期基準與範圍可以切換：舊 Excel 是「發生日 ＋ 含掛帳中」，系統原本是「收付日 ＋ 只算已收付」。
-  const basis = ((document.getElementById('rp_datebasis')||{}).value) || 'settle';
-  const inc   = ((document.getElementById('rp_include')||{}).value)   || 'settled';
-  const dateOf = e => basis === 'entry' ? e.entry_date : (e.settle_date || e.entry_date);
+  // ★ 口徑鎖死成舊 Excel 的做法：以【發生日】歸月、【含掛帳中】（開了票就算這個月的生意，
+  //   不管錢是這個月還是下個月才進來）。主管確認過就是這樣算，所以不留切換，免得有人切走。
+  const basis = 'entry', inc = 'all';
+  const dateOf = e => e.entry_date;
   const rows = STATE.entries.filter(e => {
     if(e.status === '已作廢') return false;              // 作廢的一律不算
-    if(inc === 'settled' && e.status !== '已收付') return false;
     const d = dateOf(e);
     return d && d >= from && d <= to;
   });
@@ -1655,11 +1647,16 @@ function buildReport(){
   // 「有填科目代號、但科目表裡查不到」是另一回事 —— 那是資料有問題，不是刻意不掛科目。
   // 以前這兩種混在一起講，金額對不起來時完全看不出是哪一種。
   let badSubCnt = 0, badSubAmt = 0; const badSubCodes = {};
-  let inAmt = 0, outAmt = 0;        // 這段期間已收付的收入／支出總額，拿來跟表上的核對
+  let inAmt = 0, outAmt = 0;        // 這段期間的收入／支出總額，拿來跟表上的核對
+  // 未計入的那些列【同時有收入也有支出】，要分方向記，
+  // 不然核對式子把它們當成同一邊去加減，明明是平的也會跳警告。
+  let skipIn = 0, skipOut = 0;
   rows.forEach(e => {
-    if(e.direction === '收入') inAmt += num(e.amount); else outAmt += num(e.amount);
+    const _isIn = e.direction === '收入';
+    if(_isIn) inAmt += num(e.amount); else outAmt += num(e.amount);
     const s = subByCode(e.subject_code);
     if(!s){
+      if(_isIn) skipIn += num(e.amount); else skipOut += num(e.amount);
       if(e.subject_code != null && String(e.subject_code) !== ''){
         badSubCnt++; badSubAmt += num(e.amount);
         badSubCodes[e.subject_code] = (badSubCodes[e.subject_code] || 0) + 1;
@@ -1730,46 +1727,38 @@ function buildReport(){
   out.push({type:'net', label:'收支淨額', vals:incAll.map((v,i) => v - expAll[i]), all:incSum - expSum});
   return {out, accounts, from, to, noSubCnt, noSubAmt,
           badSubCnt, badSubAmt, badSubCodes, inAmt, outAmt, rowCnt: rows.length,
-          basis, inc};
+          skipIn, skipOut, basis, inc};
 }
 function renderReport(){
   const {out, accounts, noSubCnt, noSubAmt, badSubCnt, badSubAmt, badSubCodes,
-         inAmt, outAmt, rowCnt, basis, inc} = buildReport();
-  // 口徑寫進抬頭，列印出去也看得到，事後才不會搞不清楚這張表是怎麼算的
-  const _basisTxt = (basis === 'entry' ? '發生日' : '實際收付日')
-                  + '　' + (inc === 'all' ? '含掛帳中' : '只算已收付');
+         inAmt, outAmt, rowCnt, skipIn, skipOut} = buildReport();
+  // 口徑寫進抬頭，列印出去也看得到
   const _t = document.getElementById('rp_title');
-  if(_t) _t.textContent = _t.textContent.replace(/（.*）$/, '') + '（' + _basisTxt + '）';
+  if(_t) _t.textContent = _t.textContent.replace(/（.*）$/, '') + '（發生日　含掛帳中）';
   const note = document.getElementById('rp_note');
   if(note){
     // 表上真正被計入的收入／支出（從「收入總額／支出總額」那兩列取）
     const _rowIn  = (out.find(r => r.type === 'sum' && r.label === '收入總額') || {}).all || 0;
     const _rowOut = (out.find(r => r.type === 'sum' && r.label === '支出總額') || {}).all || 0;
-    const _skipCnt = noSubCnt + badSubCnt, _skipAmt = noSubAmt + badSubAmt;
+    const _skipCnt = noSubCnt + badSubCnt;
     const _hideZero = document.getElementById('rp_hidezero').checked;
     const _bad = Object.keys(badSubCodes || {});
     note.innerHTML =
-      '本表的金額都是<strong>稅前金額</strong>。目前口徑：<strong>'
-      + (inc === 'all' ? '含掛帳中（未收付也算）' : '只算已收付')
-      + '</strong>，用<strong>' + (basis === 'entry' ? '發生日' : '實際收付日（沒填的用發生日）')
-      + '</strong>歸月。'
-      + (basis === 'entry' && inc === 'settled'
-          ? '<br><span style="color:#9C6B00;">提醒：發生日基準通常要搭配「含掛帳中」才等於舊 Excel 的做法，'
-            + '現在只算已收付，這個月開票但還沒收到錢的都不會出現。</span>'
-          : '')
-      + `<br>這段期間${inc === 'all' ? '（含掛帳中）' : '已收付'}共 <strong>${rowCnt}</strong> 筆：收入 <strong>${money(inAmt)}</strong>、支出 <strong>${money(outAmt)}</strong>。`
-      + `表上計入 <strong>${rowCnt - _skipCnt}</strong> 筆（收入 ${money(_rowIn)}、支出 ${money(_rowOut)}）。`
-      + (noSubCnt
-          ? `<br>其中 <strong>${noSubCnt}</strong> 筆沒有掛科目（營業稅、匯費那些）共 <strong>${money(noSubAmt)}</strong> 元，照原本記帳系統的做法不列入本表，但已經算進帳戶餘額。`
-          : '<br>這段期間沒有未掛科目的列。')
+      `稅前金額，以<strong>發生日</strong>歸月、<strong>含掛帳中</strong>（同舊 Excel）。`
+      + `這段期間共 <strong>${rowCnt}</strong> 筆：收入 ${money(inAmt)}、支出 ${money(outAmt)}；`
+      + `表上計入 <strong>${rowCnt - _skipCnt}</strong> 筆（收入 ${money(_rowIn)}、支出 ${money(_rowOut)}）`
+      + (_skipCnt
+          ? `，未計入 <strong>${_skipCnt}</strong> 筆（收入 ${money(skipIn)}、支出 ${money(skipOut)}）——營業稅、匯費那些沒掛科目的，跟舊 Excel 一樣不列入本表，但已經算進帳戶餘額。`
+          : '。')
       + (badSubCnt
-          ? `<br><span style="color:#b3261e;font-weight:700;">⚠ 有 ${badSubCnt} 筆的科目代號在科目表裡查不到（代號 ${_bad.join('、')}），共 ${money(badSubAmt)} 元，這些完全沒有被算進本表。請到「帳戶與科目」把這些代號補上，或把那幾筆改成正確的科目。</span>`
+          ? `<br><span style="color:#b3261e;font-weight:700;">⚠ 有 ${badSubCnt} 筆的科目代號在科目表裡查不到（代號 ${_bad.join('、')}），共 ${money(badSubAmt)} 元，完全沒被算進本表。請到「帳戶與科目」補上代號，或把那幾筆改成正確的科目。</span>`
           : '')
-      + (Math.abs((inAmt - outAmt) - (_rowIn - _rowOut) - (noSubAmt + badSubAmt)) > 1
+      // 核對：表上淨額 ＋ 未計入淨額 應該要等於期間淨額。未計入的要【分方向】算，不然明明是平的也會誤報。
+      + (Math.abs((inAmt - outAmt) - (_rowIn - _rowOut) - (skipIn - skipOut)) > 1
           ? '<br><span style="color:#b3261e;font-weight:700;">⚠ 表上金額與期間總額對不起來，請把這一行截圖給我看。</span>'
           : '')
       + (_hideZero
-          ? '<br><span class="muted">目前勾了「隱藏沒有金額的科目」，當期金額為 0 的科目（例如折讓）不會出現在表上。要看完整科目請把它取消勾選。</span>'
+          ? '<br><span class="muted">勾了「隱藏沒有金額的科目」，當期為 0 的科目（例如折讓）不會出現。</span>'
           : '');
   }
   const span = accounts.length + 3;
@@ -2117,16 +2106,6 @@ function bindEvents(){
 
   document.getElementById('rp_run').addEventListener('click', renderReport);
   document.getElementById('rp_hidezero').addEventListener('change', renderReport);
-  ['rp_datebasis','rp_include'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('change', renderReport);
-  });
-  { const _le = document.getElementById('rp_like_excel');
-    if(_le) _le.addEventListener('click', () => {
-      document.getElementById('rp_datebasis').value = 'entry';
-      document.getElementById('rp_include').value   = 'all';
-      renderReport();
-    }); }
   document.getElementById('rp_thismonth').addEventListener('click', () => { document.getElementById('rp_from').value = monthStart(); document.getElementById('rp_to').value = monthEnd(); renderReport(); });
   document.getElementById('rp_lastmonth').addEventListener('click', () => {
     const d = new Date(); const p = new Date(d.getFullYear(), d.getMonth()-1, 1);
@@ -2142,7 +2121,7 @@ function bindEvents(){
     const head = ['科目代號','科目'].concat(accounts.map(a => a.name)).concat(['合計']);
     const rows = out.filter(r => r.type !== 'head' && r.type !== 'group')
       .map(r => [r.code || '', r.name || r.label].concat(r.vals.map(v => v)).concat([r.all]));
-    csvDownload(`收支表_${from}_${to}.csv`, head, rows);
+    csvDownload(`收支表_發生日含掛帳中_${from}_${to}.csv`, head, rows);
   });
 
   document.getElementById('st_acc_save').addEventListener('click', saveAccounts);
