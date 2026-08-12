@@ -724,6 +724,25 @@ async function sbSelect(path){
   if(!res.ok) throw new Error(await res.text());
   return res.json();
 }
+// ★ Supabase／PostgREST 一次最多回 1000 筆，寫 &limit=20000 也沒用（伺服器端會砍）。
+//   記帳主檔、零用金明細這種上千筆的表一定要用這個分頁版，
+//   不然只會拿到最前面 1000 筆 —— 舊月份整段不見，收支表金額當然對不起來，
+//   整個科目的傳票都在 1000 筆之外時，那個科目還會從報表上消失。
+async function sbSelectAll(path){
+  const PAGE = 1000;
+  let all = [], offset = 0;
+  while(true){
+    const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: {'Range-Unit':'items', 'Range': `${offset}-${offset + PAGE - 1}`}
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const rows = await res.json();
+    all = all.concat(rows || []);
+    if(!rows || rows.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
 async function sbInsert(table, row){
   const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:{'Prefer':'return=representation'}, body: JSON.stringify(row)
@@ -749,7 +768,9 @@ async function loadAll(){
   try{
     STATE.accounts = await sbSelect('acc_accounts?select=*&order=sort_order.asc,account_id.asc');
     STATE.subjects = await sbSelect('acc_subjects?select=*&order=code.asc');
-    STATE.entries  = await sbSelect('acc_entries?select=*&order=entry_date.desc,entry_id.desc');
+    // 一定要用 sbSelectAll：這張表早就超過 1000 筆，用 sbSelect 只看得到最新的 1000 筆。
+    // 分頁一定要有穩定的排序（entry_id 是主鍵），不然每一頁的順序不保證一致，會漏抓或重複。
+    STATE.entries  = await sbSelectAll('acc_entries?select=*&order=entry_id.asc');
   }catch(e){
     LOAD_FAILED.push('acc');
     document.getElementById('storageWarning').style.display = 'block';
@@ -765,7 +786,7 @@ async function loadAll(){
   const _pbIds = (STATE.pettyBooks || []).map(b => b.book_id).filter(v => v != null);
   if(_pbIds.length){
     try{
-      STATE.pettyEntries = await sbSelect('petty_entries?select=book_id,entry_date,direction,subject_name,amount,status,payee,memo,weigh_fee,advance_type,vehicle_plate,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=entry_date.asc&limit=20000');
+      STATE.pettyEntries = await sbSelectAll('petty_entries?select=pe_id,book_id,entry_date,direction,subject_name,amount,status,payee,memo,weigh_fee,advance_type,vehicle_plate,settle_batch,settle_date&book_id=in.(' + _pbIds.join(',') + ')&order=pe_id.asc');
     }catch(e){ STATE.pettyEntries = []; }
   }
 }
@@ -1613,9 +1634,22 @@ function buildReport(){
   const rows = STATE.entries.filter(e => e.status === '已收付' && (e.settle_date||e.entry_date) >= from && (e.settle_date||e.entry_date) <= to);
   const cell = {};   // code -> accountId -> 金額
   let noSubCnt = 0, noSubAmt = 0;   // 營業稅、匯費那些沒掛科目的列：不列入本表，但要講出來
+  // 「有填科目代號、但科目表裡查不到」是另一回事 —— 那是資料有問題，不是刻意不掛科目。
+  // 以前這兩種混在一起講，金額對不起來時完全看不出是哪一種。
+  let badSubCnt = 0, badSubAmt = 0; const badSubCodes = {};
+  let inAmt = 0, outAmt = 0;        // 這段期間已收付的收入／支出總額，拿來跟表上的核對
   rows.forEach(e => {
+    if(e.direction === '收入') inAmt += num(e.amount); else outAmt += num(e.amount);
     const s = subByCode(e.subject_code);
-    if(!s){ noSubCnt++; noSubAmt += num(e.amount); return; }
+    if(!s){
+      if(e.subject_code != null && String(e.subject_code) !== ''){
+        badSubCnt++; badSubAmt += num(e.amount);
+        badSubCodes[e.subject_code] = (badSubCodes[e.subject_code] || 0) + 1;
+      }else{
+        noSubCnt++; noSubAmt += num(e.amount);
+      }
+      return;
+    }
     const sign = (e.direction === s.default_type) ? 1 : -1;
     cell[s.code] = cell[s.code] || {};
     cell[s.code][e.account_id] = (cell[s.code][e.account_id] || 0) + sign * num(e.amount);
@@ -1676,15 +1710,37 @@ function buildReport(){
   out.push({type:'sum', label:'收入總額', vals:incAll, all:incSum});
   out.push({type:'sum', label:'支出總額', vals:expAll, all:expSum});
   out.push({type:'net', label:'收支淨額', vals:incAll.map((v,i) => v - expAll[i]), all:incSum - expSum});
-  return {out, accounts, from, to, noSubCnt, noSubAmt};
+  return {out, accounts, from, to, noSubCnt, noSubAmt,
+          badSubCnt, badSubAmt, badSubCodes, inAmt, outAmt, rowCnt: rows.length};
 }
 function renderReport(){
-  const {out, accounts, noSubCnt, noSubAmt} = buildReport();
+  const {out, accounts, noSubCnt, noSubAmt, badSubCnt, badSubAmt, badSubCodes,
+         inAmt, outAmt, rowCnt} = buildReport();
   const note = document.getElementById('rp_note');
-  if(note) note.innerHTML = '本表的金額都是<strong>稅前金額</strong>。'
-    + (noSubCnt
-        ? `這段期間另外有 <strong>${noSubCnt}</strong> 筆沒有掛科目的列（營業稅、匯費那些）共 <strong>${money(noSubAmt)}</strong> 元，照原本記帳系統的做法不列入本表，但已經算進帳戶餘額。`
-        : '這段期間沒有未掛科目的列。');
+  if(note){
+    // 表上真正被計入的收入／支出（從「收入總額／支出總額」那兩列取）
+    const _rowIn  = (out.find(r => r.type === 'sum' && r.label === '收入總額') || {}).all || 0;
+    const _rowOut = (out.find(r => r.type === 'sum' && r.label === '支出總額') || {}).all || 0;
+    const _skipCnt = noSubCnt + badSubCnt, _skipAmt = noSubAmt + badSubAmt;
+    const _hideZero = document.getElementById('rp_hidezero').checked;
+    const _bad = Object.keys(badSubCodes || {});
+    note.innerHTML =
+      '本表的金額都是<strong>稅前金額</strong>，只統計<strong>已收付</strong>的帳，用<strong>實際收付日</strong>歸月（沒填收付日的用發生日）。'
+      + `<br>這段期間已收付共 <strong>${rowCnt}</strong> 筆：收入 <strong>${money(inAmt)}</strong>、支出 <strong>${money(outAmt)}</strong>。`
+      + `表上計入 <strong>${rowCnt - _skipCnt}</strong> 筆（收入 ${money(_rowIn)}、支出 ${money(_rowOut)}）。`
+      + (noSubCnt
+          ? `<br>其中 <strong>${noSubCnt}</strong> 筆沒有掛科目（營業稅、匯費那些）共 <strong>${money(noSubAmt)}</strong> 元，照原本記帳系統的做法不列入本表，但已經算進帳戶餘額。`
+          : '<br>這段期間沒有未掛科目的列。')
+      + (badSubCnt
+          ? `<br><span style="color:#b3261e;font-weight:700;">⚠ 有 ${badSubCnt} 筆的科目代號在科目表裡查不到（代號 ${_bad.join('、')}），共 ${money(badSubAmt)} 元，這些完全沒有被算進本表。請到「帳戶與科目」把這些代號補上，或把那幾筆改成正確的科目。</span>`
+          : '')
+      + (Math.abs((inAmt - outAmt) - (_rowIn - _rowOut) - (noSubAmt + badSubAmt)) > 1
+          ? '<br><span style="color:#b3261e;font-weight:700;">⚠ 表上金額與期間總額對不起來，請把這一行截圖給我看。</span>'
+          : '')
+      + (_hideZero
+          ? '<br><span class="muted">目前勾了「隱藏沒有金額的科目」，當期金額為 0 的科目（例如折讓）不會出現在表上。要看完整科目請把它取消勾選。</span>'
+          : '');
+  }
   const span = accounts.length + 3;
   document.getElementById('rp_body').innerHTML = out.map(r => {
     if(r.type === 'head') return `<tr style="background:linear-gradient(90deg,#f2ece4,#fbfaf8);"><td colspan="${span}" style="font-weight:700;color:var(--navy-900);letter-spacing:.05em;">${esc(r.label)}</td></tr>`;
