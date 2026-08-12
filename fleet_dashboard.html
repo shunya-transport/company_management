@@ -782,6 +782,7 @@
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
           <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出/繳銷車輛
         </label>
+        <button class="btn ghost" id="vi_export90" style="padding:8px 14px;font-size:13px;">匯出 90 天內到期</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -1121,7 +1122,8 @@
           <tbody id="maintHistoryBody"></tbody>
         </table>
       </div>
-      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或類型篩選縮小範圍。<b id="mh_window_note"></b></div>
+      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或類型篩選縮小範圍。<b id="mh_window_note"></b>
+        <button class="btn ghost" id="mh_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
 
     <div class="card">
@@ -1377,7 +1379,8 @@
           <tbody id="trainingLogBody"></tbody>
         </table>
       </div>
-      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b></div>
+      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b>
+        <button class="btn ghost" id="tl_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
   </div>
 
@@ -2017,7 +2020,8 @@
 
     <div class="card">
       <h2>每日工時明細（唯讀）<span class="count-badge" id="wh_in_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">每日工時不需要在這裡逐筆輸入，這些資料是由每月的工時控管檔匯入後直接進資料庫的，本表只提供查詢核對。要手動維護的只有上面的「輸入月度工時里程」。<b id="wh_window_note"></b></div>
+      <div class="muted" style="margin-bottom:10px;">每日工時不需要在這裡逐筆輸入，這些資料是由每月的工時控管檔匯入後直接進資料庫的，本表只提供查詢核對。要手動維護的只有上面的「輸入月度工時里程」。<b id="wh_window_note"></b>
+        <button class="btn ghost" id="wh_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
       <div class="toolbar no-print">
         <input id="wh_in_search" placeholder="搜尋司機姓名">
         <select id="wh_in_period"><option value="all">全部月份</option></select>
@@ -3143,9 +3147,37 @@ const LOAD_WINDOW = {
   training_log:    'training_date',
   maint_records:   'maintenance_date'
 };
+// 已經按過「載入全部歷年」的表，就不再套用兩年範圍。
+// ★ 這個集合會同時影響 safeGet 與 saveState 的比對範圍 —— 一定要兩邊一致：
+//   載入了全部卻只解除讀取端，使用者刪掉一筆兩年前的資料會刪不掉（畫面沒了、重整又回來）。
+const LOAD_FULL = new Set();
 function loadWindowFilter(key){
+  if(LOAD_FULL.has(key)) return '';
   const col = LOAD_WINDOW[key];
   return col ? `&${col}=gte.${loadWindowFrom()}` : '';
+}
+// 把某一張表的全部歷年抓下來，取代目前只有兩年的那一份
+async function loadFullHistory(key, stateProp, btn){
+  const map = TABLE_MAP[key];
+  if(!map){ alert('找不到資料表設定：' + key); return; }
+  if(LOAD_FULL.has(key)) return;
+  const label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '載入中…'; }
+  try{
+    LOAD_FULL.add(key);
+    const rows = await supaFetchAll(`${map.table}?select=*&order=${map.pk}.asc`);
+    const arr = STATE[stateProp];
+    arr.length = 0;
+    (rows || []).forEach(r => arr.push(Object.assign({}, r, { id: r[map.pk] })));
+    await enrichDenormalizedFields();   // 車號、廠商名稱這些要重新補回來
+    rememberGood(key, arr);
+    renderAll();
+    if(btn){ btn.textContent = '已載入全部歷年（共 ' + arr.length + ' 筆）'; }
+  }catch(e){
+    LOAD_FULL.delete(key);              // 失敗就把範圍放回去，避免存檔時誤刪
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+    alert('載入歷年資料失敗，這次沒有變更任何資料。\n\n' + (e && e.message ? e.message : e));
+  }
 }
 function loadWindowLabel(){
   const y = new Date().getFullYear();
@@ -5328,6 +5360,44 @@ function tsLineAmount(c){
   return Math.round(q * p * 100) / 100;
 }
 function tsTotal(){ return tsDraft.charges.reduce((s, c) => s + tsLineAmount(c), 0); }
+// 輪胎作業單直接轉成一張「設備保養維修單」拿去印。
+// 不寫進 maintenance_records —— 費用已經記在作業單上，再寫一筆會重複計帳。
+function tireOrderToMaintRecord(o){
+  const tires   = (STATE.tireOrderTires || []).filter(t => String(t.order_id) === String(o.id));
+  const charges = (STATE.tireOrderCharges || []).filter(c => String(c.order_id) === String(o.id));
+  const onList  = tires.filter(t => t.on_brand || t.on_serial || t.on_code)
+                       .map(t => `${t.position}${t.on_brand ? ' ' + t.on_brand : ''}`);
+  const offList = tires.filter(t => t.off_brand || t.off_serial)
+                       .map(t => `${t.position}${t.off_brand ? ' ' + t.off_brand : ''}`);
+  const desc = ['輪胎更換／保養'
+      + (o.order_no ? '（作業單 ' + o.order_no + '）' : ''),
+    onList.length  ? '裝上：' + onList.join('、')  : '',
+    offList.length ? '拆下：' + offList.join('、') : '',
+    o.location ? '施作地點：' + o.location : '',
+    o.notes || ''].filter(Boolean).join('　');
+  const parts = charges.map(c =>
+      `${c.item_name || ''}${c.spec ? '(' + c.spec + ')' : ''}${c.qty ? ' ×' + c.qty : ''}`)
+    .filter(x => x.trim()).join('、');
+  return {
+    id: 'TS' + o.id,
+    plate: o.plate || o.trailer_plate || '',
+    maintenance_date: o.service_date,
+    maintenance_type: '臨時維修',
+    description: desc,
+    parts_replaced: parts || onList.join('、'),
+    cost: (o.total_amount == null || o.total_amount === '') ? null : Number(o.total_amount),
+    invoice_no: '',
+    vendor_name: o.vendor_name || '',
+    mileage_at_service: (o.mileage == null || o.mileage === '') ? null : Number(o.mileage),
+    requested_by_name: o.customer_name || '',
+    status: (o.total_amount == null || o.total_amount === '') ? MAINT_ST_PENDING : MAINT_ST_DONE
+  };
+}
+function tirePrintMaintSlip(orderId){
+  const o = (STATE.tireOrders || []).find(x => String(x.id) === String(orderId));
+  if(!o){ alert('找不到這一張作業單。'); return; }
+  mrPrint([tireOrderToMaintRecord(o)]);
+}
 function renderTireOrderHistory(){
   const body = document.getElementById('tsHistBody');
   if(!body) return;
@@ -5345,6 +5415,13 @@ function renderTireOrderHistory(){
     const c0 = document.getElementById('ts_hist_count'); if(c0) c0.textContent = '';
     return;
   }
+  if(!body.dataset.printBound){
+    body.dataset.printBound = '1';
+    body.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-ts-print]');
+      if(b) tirePrintMaintSlip(b.getAttribute('data-ts-print'));
+    });
+  }
   const rows = (STATE.tireOrders || []).slice()
     .sort((a,b) => String(b.service_date||'').localeCompare(String(a.service_date||'')));
   const cnt = document.getElementById('ts_hist_count');
@@ -5361,7 +5438,8 @@ function renderTireOrderHistory(){
       <td>${n} 條</td>
       <td>${o.total_amount ? '$'+esc(Number(o.total_amount).toLocaleString()) : '—'}</td>
       <td class="muted">${esc(o.notes||'')}</td>
-      <td><button class="del-btn" data-ts-odel="${esc(o.id)}">刪除</button></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-ts-print="${esc(o.id)}">印維修單</button>
+        <button class="del-btn" data-ts-odel="${esc(o.id)}">刪除</button></td>
     </tr>`;
   }).join('') || '<tr><td colspan="10" class="empty">尚無作業單</td></tr>';
 }
@@ -5521,6 +5599,46 @@ function insRenewedTo(i, latest){
   return (top && top > d) ? top : '';
 }
 
+// 90 天內到期（含已經逾期的）的保險清單。保險一年一約、日期不變只有年份會改，
+// 所以順便算出「建議新到期日＝原到期日＋1 年」，續保時直接照著填。
+// 已經續保過的舊紀錄、已報廢／賣出／繳銷的車輛都不列。
+function insDue90Rows(){
+  const latest = insLatestByKey();
+  return (STATE.vehicleInsurance || [])
+    .filter(i => {
+      if(!i.expiry_date) return false;
+      if(insRenewedTo(i, latest)) return false;
+      const v = STATE.vehicles.find(x => x.plate === i.plate);
+      if(v && isRetiredVehicle(v)) return false;
+      return daysUntil(i.expiry_date) <= 90;
+    })
+    .slice()
+    .sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)));
+}
+function insPlusOneYear(d){
+  const s = String(d || '').slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? (Number(m[1]) + 1) + '-' + m[2] + '-' + m[3] : '';
+}
+function exportInsuranceDue90(){
+  const rows = insDue90Rows();
+  if(!rows.length){ alert('目前沒有 90 天內到期的保險。'); return; }
+  const lines = csvLines(
+    ['車號','噸數','行號','保險公司','保險種類','保險範圍','到期日','剩餘天數','狀態','建議新到期日'],
+    rows.map(i => {
+      const v = STATE.vehicles.find(x => x.plate === i.plate);
+      const dd = daysUntil(i.expiry_date);
+      return [i.plate || '', v ? (v.load_capacity || '') : '', v ? (v.company_name || '') : '',
+              i.insurance_company || '', i.insurance_type || '', i.coverage_item || '',
+              String(i.expiry_date).slice(0, 10), dd,
+              dd < 0 ? ('已逾期 ' + (-dd) + ' 天') : (dd <= 30 ? '30天內' : (dd <= 60 ? '60天內' : '90天內')),
+              insPlusOneYear(i.expiry_date)];
+    }));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + lines], {type:'text/csv;charset=utf-8'}));
+  a.download = '車輛保險90天內到期_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
 function renderViTable(){
   const q = document.getElementById('vi_search').value.trim();
   const typeF = document.getElementById('vi_type_filter').value;
@@ -5545,7 +5663,9 @@ function renderViTable(){
     }
     return vehicleInsuranceStatus(i)===statusF;
   });
-  document.getElementById('vi_count').textContent = `共 ${rows.length} 筆`;
+  const _due90 = insDue90Rows().length;
+  document.getElementById('vi_count').textContent =
+    `共 ${rows.length} 筆` + (_due90 ? `／90天內到期 ${_due90} 筆` : '');
   document.getElementById('viTableBody').innerHTML = rows.map(i => {
     const v = STATE.vehicles.find(x => x.plate === i.plate);
     const s = vehicleInsuranceStatus(i);
@@ -10618,6 +10738,15 @@ function renderAll(){
     const el = document.getElementById(id);
     if(el) el.textContent = '　' + loadWindowLabel();
   });
+  [['tl_load_all','training_log','trainingLog'],
+   ['mh_load_all','maint_records','maintRecords'],
+   ['wh_load_all','work_hour_daily','workHourDaily']].forEach(([bid, key, prop]) => {
+    const b = document.getElementById(bid);
+    if(b && !b.dataset.bound){
+      b.dataset.bound = '1';
+      b.addEventListener('click', () => loadFullHistory(key, prop, b));
+    }
+  });
   renderDatalists();
   attachVendorPickers();
   bindMaintHistoryTools();
@@ -11001,6 +11130,8 @@ document.getElementById('vi_insurer').addEventListener('change', (e) => {
     }
   }
 });
+{ const _e90 = document.getElementById('vi_export90');
+  if(_e90) _e90.addEventListener('click', exportInsuranceDue90); }
 document.getElementById('vi_search').addEventListener('input', renderViTable);
 document.getElementById('vi_type_filter').addEventListener('change', renderViTable);
 document.getElementById('vi_status_filter').addEventListener('change', renderViTable);
@@ -13827,11 +13958,14 @@ document.getElementById('ts_save').addEventListener('click', async () => {
   });
 
   let installed = 0;
+  let _printAfter = false;
   try{
     // 作業單三張表先存，確定雲端真的收下了，才動輪胎位置圖
     await saveState('tire_service_orders', STATE.tireOrders, true);
     await saveState('tire_service_tires', STATE.tireOrderTires, true);
     await saveState('tire_service_charges', STATE.tireOrderCharges, true);
+    // 存進雲端了才問，避免存檔失敗卻先印出一張不存在的單
+    _printAfter = confirm('作業單已存檔。\n\n要現在列印「設備保養維修單」嗎？\n（之後也可以在下方作業單歷史按「印維修單」）');
 
     // 「裝上」的輪胎同步寫進輪胎位置圖：同一輪位原本使用中的那條標成已更換，歷史留著
     const mile = mileageRaw === '' ? null : parseInt(mileageRaw);
@@ -13872,6 +14006,7 @@ document.getElementById('ts_save').addEventListener('click', async () => {
   });
   renderAll();
   alert('作業單已存檔。' + (installed ? '\n\n其中 ' + installed + ' 條「裝上」的輪胎已經更新到輪胎位置圖。' : ''));
+  if(_printAfter) tirePrintMaintSlip(oid);
 });
 
 document.getElementById('tire_add').addEventListener('click', async () => {
