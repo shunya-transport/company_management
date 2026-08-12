@@ -13324,7 +13324,15 @@ document.getElementById('form_print').addEventListener('click', () => {
   }
   printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>列印表單</title>
     <style>
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;margin:0;padding:20px;}
+      /* ★ 這個視窗只拿來列印，所以完全照紙張排版：
+         body 不能留 padding。血壓／酒測是 A4 橫式，扣掉 8mm 邊界只剩 1062px，
+         表格本來就是照這個寬度排的，左右再各吃 20px 就會溢出成兩頁。 */
+      @page{ size:A4; margin:12mm; }
+      html,body{margin:0;padding:0;background:#fff;}
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;}
+      /* 畫面預覽用的外框（灰邊、圓角、內距、max-width）不要跟到紙上 */
+      body > div{max-width:none!important;padding:0!important;border:0!important;
+                 border-radius:0!important;margin:0!important;background:#fff!important;box-shadow:none!important;}
       table{border-collapse:collapse;}
     
   /* 請假總表:縮小為一目了然 */
