@@ -417,7 +417,8 @@
     <h2>代墊費用明細</h2>
     <div class="muted">勾選要結清的那幾筆 → 填結清日 → 按<strong>「批次結清」</strong>，會同時下載一張匯款清單 CSV（一位司機一列的金額，下面附各類別小計）。
       結清過的那一列會顯示結清的月／日。當場就用零用金付掉的，記進去就直接算結清，不會出現在這裡等你處理。
-      <strong>不同類別可以一起勾、一起結清</strong>，一次匯一筆給司機就好。</div>
+      <strong>不同類別可以一起勾、一起結清</strong>，一次匯一筆給司機就好。
+      這幾筆其實是當場用零用金付掉的？勾起來按<strong>「改成零用金付掉」</strong>，就不會再列進要匯的錢；標錯了那一列有「改回待匯款」。</div>
     <div class="toolbar">
       <label>起<input type="date" id="wg_from"></label>
       <label>迄<input type="date" id="wg_to"></label>
@@ -440,6 +441,7 @@
       <span style="flex:1;"></span>
       <label>結清日<input type="date" id="wg_paydate" style="width:150px;"></label>
       <button class="btn primary" id="wg_settle">批次結清</button>
+      <button class="btn" id="wg_cash">改成零用金付掉</button>
       <span id="wg_msg" style="font-size:12px;color:#b3261e;"></span>
     </div>
     <div class="table-scroll">
@@ -1170,6 +1172,7 @@ function renderWeigh(){
       '<td>' + settle + '</td>' +
       '<td><button class="btn ghost tiny" data-edit="' + e.pe_id + '">修改</button>' +
         (inBatch ? ' <button class="btn ghost tiny" data-unsettle="' + esc(e.settle_batch) + '">取消</button>' : '') +
+        (isCashPaid(e) ? ' <button class="btn ghost tiny" data-uncash="' + e.pe_id + '">改回待匯款</button>' : '') +
       '</td></tr>';
   }).join('') : '<tr><td colspan="11" class="muted">'
     + (wgOpenOnly() ? '這個區間沒有還沒結清的代墊費用。（把上面的「只看還沒結清的」取消勾選，就看得到結清過的）'
@@ -1182,8 +1185,8 @@ function wgSelTxt(){
   const sel = wgRows().filter(e => WG_SEL[e.pe_id] && !isSettled(e));
   const t = sel.reduce((s,e) => s + weighAmt(e), 0);
   $('wg_seltxt').textContent = sel.length
-    ? '已勾 ' + sel.length + ' 筆，合計 NT$ ' + fmt(t) + '　→ 按「批次結清」'
-    : '勾選要結清的那幾筆（表頭那一格可以全選）。';
+    ? '已勾 ' + sel.length + ' 筆，合計 NT$ ' + fmt(t) + '　→ 要匯款給司機按「批次結清」；當場零用金付掉的按「改成零用金付掉」'
+    : '勾選要處理的那幾筆（表頭那一格可以全選）。';
 }
 // 匯款清單 CSV：每位司機一列的金額（給主管照著匯），下面附這一批的明細
 function wgDownloadBatch(batch){
@@ -1261,17 +1264,18 @@ function wqMemo(r){
 // 所以這裡只是把下拉「預設」選好，選錯隨時可以在畫面上改，不是硬性限制；
 // 以後多了一位要匯款的司機，把名字加進這個陣列就好。
 const WG_TRANSFER_DRIVERS = ['張誌元'];
-// 這位司機以前都是怎麼給錢的：過半是「零用金付訖」就預設不用匯款。
-// 沒有歷史紀錄的人就照上面那份名單決定，名單裡的預設要匯款，其餘預設零用金付掉。
+// 這位司機的錢是「當場零用金付掉」還是「要匯款還他」：只看上面那份名單，不猜。
+// ★ 115/08/06 改掉舊做法。舊版還會去翻這個人過去的紀錄、看哪一種佔多數來猜，
+//   結果吳景芳、李文源這種只要有一兩筆舊帳是用真的匯款批號結清的，就被猜成「要匯款」，
+//   新記的錢明明是當場用零用金付掉的，卻一直躺在會計那邊的「代墊費用待付」等主管匯錢。
+//   使用者的規則本來就很單純——要匯款的只有名單上那幾位——照名單走就好。
+//   萬一真的標錯了，下面明細每一列都有出口可以改回來，不會像以前那樣卡死。
 function wqDriverCashDefault(name){
   if(!name) return false;
-  const rows = STATE.entries.filter(e =>
-    isWeighEntry(e) && e.status !== '已作廢' && String(e.payee || '').trim() === name);
-  if(!rows.length) return WG_TRANSFER_DRIVERS.indexOf(name) < 0;
-  return rows.filter(isCashPaid).length * 2 > rows.length;
+  return WG_TRANSFER_DRIVERS.indexOf(name) < 0;
 }
 // 這位司機的錢是「他自己先墊、公司事後匯款還他」還是「當場零用金付掉」，
-// 由 wqDriverCashDefault() 依他過去的紀錄自動決定，畫面上不再讓人選，只提示一行字。
+// 由上面那份名單決定，畫面上不再讓人選，只提示一行字。標錯了到下面明細那一列改。
 function wqSyncHint(){
   const el = $('wq_hint'); if(!el) return;
   const drv = wqCurDriver();
@@ -1698,6 +1702,8 @@ function renderAll(){
 }
 
 // ---------- 編輯視窗 ----------
+// 開修改視窗時的原始金額／代墊金額，存檔與連動時要用
+let EM_OLD_AMOUNT = null, EM_OLD_WEIGH = null;
 function openEdit(id){
   const e = STATE.entries.find(x => x.pe_id === id); if(!e) return;
   EDIT_ID = id;
@@ -1705,6 +1711,9 @@ function openEdit(id){
   $('em_dir').value = e.direction;
   fillEditSubjects(e.direction, e.subject_name);
   $('em_amount').value = e.amount; $('em_payee').value = e.payee || '';
+  // 記住原值：金額改小的時候要判斷「這筆本來是不是整筆代墊」
+  EM_OLD_AMOUNT = num(e.amount);
+  EM_OLD_WEIGH  = (e.weigh_fee == null || e.weigh_fee === '') ? null : num(e.weigh_fee);
   if($('em_weigh'))   $('em_weigh').value   = (e.weigh_fee == null || e.weigh_fee === '') ? '' : e.weigh_fee;
   if($('em_station')) $('em_station').value = e.weigh_station || '';
   if($('em_wdate'))   $('em_wdate').value   = String(e.weigh_date || '').slice(0,10);
@@ -1806,6 +1815,19 @@ function wire(){
     const b = ev.target.closest('[data-edit]'); if(b) openEdit(parseInt(b.dataset.edit, 10));
   });
   $('em_dir').onchange = () => fillEditSubjects($('em_dir').value, null);
+  // 整筆都是代墊的紀錄（代墊金額＝金額，代墊費用登錄記出來的都是這種），
+  // 金額改掉時代墊金額自動跟著改，不用手動改兩次，也不會再跳「代墊比金額大」。
+  if($('em_amount') && $('em_weigh')){
+    $('em_amount').oninput = () => {
+      const nw = num($('em_amount').value);
+      const cur = $('em_weigh').value === '' ? null : num($('em_weigh').value);
+      if(cur != null && EM_OLD_AMOUNT != null && EM_OLD_WEIGH != null
+         && Math.abs(cur - EM_OLD_WEIGH) < 0.001
+         && Math.abs(EM_OLD_WEIGH - EM_OLD_AMOUNT) < 0.001){
+        $('em_weigh').value = nw > 0 ? nw : '';
+      }
+    };
+  }
   $('em_cancel').onclick = () => { $('editModal').classList.remove('show'); EDIT_ID = null; };
   $('em_save').onclick = async () => {
     const msg = $('em_msg');
@@ -1814,7 +1836,18 @@ function wire(){
       if(amt <= 0) throw new Error('金額要大於 0');
       const emwf = num($('em_weigh') ? $('em_weigh').value : 0);
       if(emwf < 0) throw new Error('代墊金額不能是負數');
-      if(emwf > amt) throw new Error('代墊 ' + fmt(emwf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大，請檢查');
+      if(emwf > amt) throw new Error('代墊 ' + fmt(emwf) + ' 比這一筆的金額 ' + fmt(amt) + ' 還大。\n'
+        + '整筆都是司機代墊的話，把代墊金額也改成 ' + fmt(amt) + ' 就可以了。');
+      // 把代墊金額清掉＝這筆不再算代墊，會從「代墊費用明細」消失（資料還在，只是換一個清單）。
+      // 之前有使用者以為紀錄不見了，所以這裡一定要先講清楚。
+      if($('em_weigh') && EM_OLD_WEIGH != null && EM_OLD_WEIGH > 0 && emwf === 0){
+        if(!confirm('您把「代墊金額」清空了。\n\n'
+          + '這筆就不再算是司機代墊，會從「代墊費用明細」那一頁消失，月底也不會被列進匯款清單。\n'
+          + '（紀錄本身不會被刪掉，金額 ' + fmt(amt) + ' 還是留在零用金明細裡。）\n\n'
+          + '如果只是要改金額，請把代墊金額也一起改成新的金額，不要清空。\n\n確定要清空嗎？')) {
+          msg.textContent = '已取消，沒有存檔。'; return;
+        }
+      }
       msg.textContent = '存檔中…';
       const patch = {
         entry_date: $('em_date').value, direction: $('em_dir').value, subject_name: $('em_subject').value,
@@ -2002,6 +2035,65 @@ function wire(){
         msg.textContent = '已結清 ' + saved.length + ' 筆 NT$ ' + fmt(tot) + '（' + toROC(day) + '），匯款清單已下載。';
       }catch(e){ msg.style.color = '#b3261e'; msg.textContent = '失敗：' + e.message; }
     };
+    // 「改成零用金付掉」＝這幾筆其實是當場用零用金的現金付掉的，公司不用再匯錢給司機。
+    // 用 WG_CASH_TAG 佔住 settle_batch，跟真的匯款批號（1150805-1 那種）分得開，
+    // 會計總覽的「代墊費用待付」看的就是這一格，標完那邊就不會再列出來。
+    // 結清日照每一筆自己的發生日填（錢就是那天離開抽屜的），所以依日期分組更新。
+    if($('wg_cash')) $('wg_cash').onclick = async () => {
+      const msg = $('wg_msg');
+      try{
+        msg.style.color = '#b3261e';
+        const sel = wgRows().filter(e => WG_SEL[e.pe_id] && !isSettled(e));
+        if(!sel.length) throw new Error('請先勾選要改的紀錄');
+        const tot = sel.reduce((s,e) => s + weighAmt(e), 0);
+        const names = {}; sel.forEach(e => { names[weighDriver(e).name] = 1; });
+        if(!confirm('要把勾選的 ' + sel.length + ' 筆標成「零用金付掉」嗎？\n\n'
+          + '司機：' + Object.keys(names).join('、') + '\n'
+          + '金額：NT$ ' + fmt(tot) + '\n\n'
+          + '意思是這些錢當場就從零用金的現金付掉了，公司不用再匯款給司機，\n'
+          + '會計那邊的「代墊費用待付」也就不會再列出來。\n'
+          + '（金額完全不會被改動，標錯了那一列還有「改回待匯款」可以按。）')) return;
+        msg.textContent = '處理中…';
+        const byDay = {};
+        sel.forEach(e => { const d = String(e.entry_date).slice(0,10); (byDay[d] = byDay[d] || []).push(e.pe_id); });
+        const days = Object.keys(byDay);
+        let n = 0;
+        for(let i = 0; i < days.length; i++){
+          const saved = await sbUpdateIn('petty_entries', 'pe_id', byDay[days[i]],
+            { settle_batch:WG_CASH_TAG, settle_date:days[i] });
+          saved.forEach(x => { const k = STATE.entries.findIndex(y => y.pe_id === x.pe_id); if(k >= 0) STATE.entries[k] = x; });
+          n += saved.length;
+        }
+        if(n !== sel.length) throw new Error('雲端只回了 ' + n + ' 筆、勾了 ' + sel.length + ' 筆，怕標到一半就停下來了，請重新整理再看一次。');
+        WG_SEL = {};
+        renderAll();
+        msg.style.color = '#3F7D44';
+        msg.textContent = '已把 ' + n + ' 筆 NT$ ' + fmt(tot) + ' 標成零用金付掉，不用匯款了。';
+      }catch(e){ msg.style.color = '#b3261e'; msg.textContent = '失敗：' + e.message; }
+    };
+    // 明細列的「改回待匯款」＝標成零用金付掉是標錯的，把這一筆放回等結清。
+    // 只有零用金付訖那種列才有這顆；有真批號的那些請按旁邊的「取消」整批放回去。
+    document.body.addEventListener('click', async ev => {
+      const uc = ev.target.closest('[data-uncash]');
+      if(!uc) return;
+      const msg = $('wg_msg');
+      try{
+        msg.style.color = '#b3261e';
+        const id = parseInt(uc.dataset.uncash, 10);
+        const e0 = STATE.entries.filter(x => x.pe_id === id)[0];
+        if(!e0) throw new Error('找不到這一筆');
+        if(!confirm('要把這一筆改回「還沒結清」嗎？\n\n'
+          + toROC(e0.entry_date) + '　' + weighDriver(e0).name + '　NT$ ' + fmt(weighAmt(e0)) + '\n\n'
+          + '改回去以後它會重新出現在待匯款清單，也會回到會計那邊的「代墊費用待付」。金額不會被改動。')) return;
+        msg.textContent = '處理中…';
+        const saved = await sbUpdate('petty_entries', 'pe_id', id, { settle_batch:null, settle_date:null });
+        const k = STATE.entries.findIndex(x => x.pe_id === id);
+        if(k >= 0) STATE.entries[k] = saved;
+        renderAll();
+        msg.style.color = '#3F7D44';
+        msg.textContent = '已改回還沒結清，這一筆會重新列入待匯款。';
+      }catch(e){ msg.style.color = '#b3261e'; msg.textContent = '失敗：' + e.message; }
+    });
     // 明細列的「取消」＝把那一整批放回還沒結清（金額完全不動）
     document.body.addEventListener('click', async ev => {
       const un = ev.target.closest('[data-unsettle]');
