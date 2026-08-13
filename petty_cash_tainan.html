@@ -813,12 +813,17 @@ function calcBalance(bid, upToISO){
   return v;
 }
 // 依日期、再依 pe_id 排序（同一天照建檔順序）
-function sortedEntries(bid){
-  return ledgerEntries(bid).slice().sort((a,b) => {
+function sortedBy(list){
+  return list.slice().sort((a,b) => {
     const d = String(a.entry_date).localeCompare(String(b.entry_date));
     return d !== 0 ? d : (a.pe_id - b.pe_id);
   });
 }
+// 現金日記帳用：排除「司機先墊、月底匯款」的代墊（那些錢沒離開抽屜）
+function sortedEntries(bid){ return sortedBy(ledgerEntries(bid)); }
+// 代墊模組用：全部都要。這一區就是專門在看要匯給司機多少錢的，
+// 排除掉的話整張明細會空掉 —— 這是上一版真的踩到的坑。
+function sortedAllEntries(bid){ return sortedBy(bookEntries(bid)); }
 // 每一筆算出當下餘額
 function withRunning(bid){
   const bk = STATE.books.find(b => b.book_id === (bid || (CUR_BOOK && CUR_BOOK.book_id)));
@@ -1105,7 +1110,7 @@ function wgRange(){
 }
 function wgRowsAll(){
   const r = wgRange();
-  return sortedEntries().filter(e => {
+  return sortedAllEntries().filter(e => {
     if(!isWeighEntry(e)) return false;
     if(e.status === '已作廢') return false;
     const d = String(e.entry_date).slice(0,10);
