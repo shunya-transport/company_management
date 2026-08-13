@@ -780,6 +780,22 @@ function bookEntries(bid){
   const id = bid || (CUR_BOOK && CUR_BOOK.book_id);
   return STATE.entries.filter(e => e.book_id === id);
 }
+// ★ 司機先掏錢、公司月底匯款還他的代墊（目前只有張誌元的磅費是這一種）。
+//   這些錢【從來沒有離開零用金抽屜】，所以不能算進餘額，也不該出現在現金日記帳，
+//   不然餘額會被少算，跟抽屜裡的現金對不起來。
+//   它們只活在「代墊費用明細 → 批次結清」那一區，要匯多少錢照樣看得到。
+//   當場用抽屜現金付掉的（其他司機，標記成「零用金付訖」）不算在內，照樣扣。
+function isBankAdvance(e){
+  return weighAmt(e) > 0 && !isCashPaid(e);
+}
+// 現金日記帳看得到的：把上面那種匯款代墊排除掉
+function ledgerEntries(bid){
+  return bookEntries(bid).filter(e => !isBankAdvance(e));
+}
+// 被排除掉的（拿來在畫面上講清楚，免得以為數字跑掉了）
+function bankAdvanceOf(bid){
+  return bookEntries(bid).filter(e => isBankAdvance(e) && e.status !== '已作廢');
+}
 function bookSubjects(dir, bid){
   const id = bid || (CUR_BOOK && CUR_BOOK.book_id);
   return STATE.subjects.filter(s => s.book_id === id && (!dir || s.direction === dir))
@@ -789,7 +805,7 @@ function calcBalance(bid, upToISO){
   const bk = STATE.books.find(b => b.book_id === (bid || (CUR_BOOK && CUR_BOOK.book_id)));
   if(!bk) return 0;
   let v = num(bk.opening_balance);
-  bookEntries(bk.book_id).forEach(e => {
+  ledgerEntries(bk.book_id).forEach(e => {
     if(e.status === '已作廢') return;
     if(upToISO && String(e.entry_date) > upToISO) return;
     v += (e.direction === '收入' ? num(e.amount) : -num(e.amount));
@@ -798,7 +814,7 @@ function calcBalance(bid, upToISO){
 }
 // 依日期、再依 pe_id 排序（同一天照建檔順序）
 function sortedEntries(bid){
-  return bookEntries(bid).slice().sort((a,b) => {
+  return ledgerEntries(bid).slice().sort((a,b) => {
     const d = String(a.entry_date).localeCompare(String(b.entry_date));
     return d !== 0 ? d : (a.pe_id - b.pe_id);
   });
@@ -954,11 +970,17 @@ function renderBalanceCard(){
   const bk = CUR_BOOK;
   let note = bk ? ('期初 ' + fmt(bk.opening_balance) + '（' + toROC(bk.opening_date) + '起）') : '';
   if(bk && bk.target_balance) note += ' ・ 定額 ' + fmt(bk.target_balance);
-  const pend = bookEntries().filter(e => e.status === '待補單據').length;
+  const pend = ledgerEntries().filter(e => e.status === '待補單據').length;
   if(pend) note += ' ・ 待補單據 ' + pend + ' 筆';
+  // 匯款代墊被排除在餘額外，數字要講出來，不然會以為餘額算錯
+  const _adv = bankAdvanceOf();
+  if(_adv.length){
+    note += ' ・ 不含匯款代墊 ' + _adv.length + ' 筆／NT$ '
+          + fmt(_adv.reduce((s, e) => s + num(e.amount), 0)) + '（月底匯款，沒動到抽屜的錢）';
+  }
   $('pcBalanceNote').textContent = note;
   const m = thisMonth();
-  const rows = bookEntries().filter(e => String(e.entry_date).slice(0,7) === m && e.status !== '已作廢');
+  const rows = ledgerEntries().filter(e => String(e.entry_date).slice(0,7) === m && e.status !== '已作廢');
   $('pcMonthOut').textContent = fmt(rows.filter(e => e.direction === '支出').reduce((s,e) => s + num(e.amount), 0));
   $('pcMonthIn').textContent  = fmt(rows.filter(e => e.direction === '收入').reduce((s,e) => s + num(e.amount), 0));
   $('pcMonthCnt').textContent = rows.length;
@@ -1406,7 +1428,7 @@ function cpRange(){
 }
 function cpRows(bid){
   const r = cpRange();
-  return bookEntries(bid).filter(e => e.status !== '已作廢' &&
+  return ledgerEntries(bid).filter(e => e.status !== '已作廢' &&
     String(e.entry_date) >= r.from && String(e.entry_date) <= r.to);
 }
 function cpSum(bid, dir){
@@ -1451,8 +1473,8 @@ function renderCompare(){
     const inc  = cpSum(b.book_id, '收入');
     const exp  = cpSum(b.book_id, '支出');
     const rows = cpRows(b.book_id);
-    const pend = bookEntries(b.book_id).filter(e => e.status === '待補單據').length;
-    const last = bookEntries(b.book_id).filter(e => e.status !== '已作廢')
+    const pend = ledgerEntries(b.book_id).filter(e => e.status === '待補單據').length;
+    const last = ledgerEntries(b.book_id).filter(e => e.status !== '已作廢')
                    .map(e => String(e.entry_date)).sort().pop();
     if(b.book_type === '代管') custBal += bal; else { ownBal += bal; ownExp += exp; }
     cnt += rows.length; pendAll += pend;
@@ -1622,7 +1644,7 @@ function renderRefill(){
   const bal = calcBalance();
   const t = CUR_BOOK && CUR_BOOK.target_balance ? num(CUR_BOOK.target_balance) : 0;
   $('rf_gap').textContent = t ? (t - bal > 0 ? 'NT$ ' + fmt(t - bal) : '已達定額') : '（未設定定額）';
-  const list = bookEntries().filter(e => e.direction === '收入').sort((a,b) => String(b.entry_date).localeCompare(String(a.entry_date)));
+  const list = ledgerEntries().filter(e => e.direction === '收入').sort((a,b) => String(b.entry_date).localeCompare(String(a.entry_date)));
   $('rfBody').innerHTML = list.length ? list.map(e =>
     '<tr' + (e.status === '已作廢' ? ' style="opacity:.5;"' : '') + '><td>' + toROC(e.entry_date) + '</td><td>' + esc(e.subject_name) + '</td><td>' + esc(e.memo) +
     (e.auto_balance ? ' <span class="pill gray">自動平衡</span>' : '') + '</td><td class="num">' + fmt(e.amount) + '</td>' +
