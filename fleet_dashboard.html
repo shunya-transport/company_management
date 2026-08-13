@@ -1732,6 +1732,46 @@
     </div>
 
     <div class="card">
+      <h2>內外訓項目維護<span class="count-badge" id="tt_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        這裡新增的項目，「新增受訓紀錄」的下拉會立刻跟著出現。
+        外訓的<b>效期年限</b>是用來自動推算下次覆驗日的（發證日＋N年－1天），沒填就不會自動帶。
+        改名不影響任何一筆既有紀錄；已經有人用過的項目不能刪。
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+        <div>
+          <h3 style="font-size:14px;margin:0 0 8px;">外訓（證照）項目</h3>
+          <div class="toolbar">
+            <input id="tt_ext_new" placeholder="新項目名稱" style="min-width:150px;">
+            <input id="tt_ext_years" type="number" min="0" step="1" placeholder="效期年" style="width:80px;">
+            <input id="tt_ext_note" placeholder="效期說明（例：依主管機關規定）" style="min-width:150px;">
+            <button class="btn" id="tt_ext_add">新增外訓項目</button>
+          </div>
+          <div class="table-scroll" style="max-height:340px;">
+            <table>
+              <thead><tr><th>項目</th><th style="width:110px;">效期</th><th style="width:70px;">已使用</th><th style="width:150px;"></th></tr></thead>
+              <tbody id="ttExtBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:14px;margin:0 0 8px;">內訓項目</h3>
+          <div class="toolbar">
+            <input id="tt_int_new" placeholder="新項目名稱" style="min-width:200px;">
+            <button class="btn" id="tt_int_add">新增內訓項目</button>
+          </div>
+          <div class="table-scroll" style="max-height:340px;">
+            <table>
+              <thead><tr><th>項目</th><th style="width:70px;">已使用</th><th style="width:110px;"></th></tr></thead>
+              <tbody id="ttIntBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="tt_msg" class="muted" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
       <h2>部門與職稱維護<span class="count-badge" id="org_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
         這裡新增的部門與職稱，「新增人員」的下拉選單會立刻跟著出現。
@@ -3665,6 +3705,7 @@ async function loadState(){
   STATE.refYards = SEED.ref_yards || [];
   STATE.refCompanies = SEED.companies_full || [];
   await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
+  await ttLoadTypes();         // 內外訓項目：改成讀雲端，撈不到才沿用 SEED
   STATE.adminRewards = await safeGet('admin_rewards', SEED.admin_rewards || [], true);
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
@@ -4175,6 +4216,204 @@ function orgWarn(bad){
       + 'departments / positions / companies 建好才會出現在選單。');
 }
 
+// ===== 內外訓項目維護（行政資料分頁，倒數第二張卡） =====
+// 這兩張表原本是從 SEED 讀的（寫死在檔案裡），改成開頁時去雲端撈一次；
+// 撈失敗就沿用 SEED，寧可顯示舊的也不要把下拉弄成空的。
+const TT_DEF = {
+  ext: {table:'training_types',          idCol:'type_id', nameCol:'type_name',
+        label:'外訓項目', stateKey:'trainingTypes',         body:'ttExtBody'},
+  int: {table:'internal_training_types', idCol:'type_id', nameCol:'type_name',
+        label:'內訓項目', stateKey:'internalTrainingTypes', body:'ttIntBody'}
+};
+async function ttLoadTypes(){
+  for(const k of ['ext', 'int']){
+    const d = TT_DEF[k];
+    try{
+      const rows = await supaFetch(d.table + '?select=*&order=' + d.idCol + '.asc');
+      if(rows && rows.length){
+        STATE[d.stateKey] = rows.map(r => Object.assign({}, r, {
+          id: r[d.idCol], name: r[d.nameCol]
+        }));
+      }
+    }catch(e){ /* 撈不到就沿用 SEED */ }
+  }
+}
+// 這個項目已經被幾筆紀錄用到 —— 外訓看證照紀錄，內訓看內訓紀錄（內訓存的是名稱）
+function ttUseCount(kind, row){
+  if(kind === 'ext'){
+    const key = trainingTypeKey(row.id);
+    return (STATE.trainings || []).filter(t => trainingTypeKey(t.type_id) === key).length;
+  }
+  const nm = String(row.name || '').trim();
+  return (STATE.internalTrainings || []).filter(t => String(t.type_name || '').trim() === nm).length;
+}
+function ttMsg(t, bad){
+  const el = document.getElementById('tt_msg');
+  if(el){ el.textContent = t || ''; el.style.color = bad ? 'var(--red)' : ''; }
+}
+function ttValidityTxt(r){
+  if(r.validity_years) return r.validity_years + ' 年';
+  return r.validity_note ? esc(r.validity_note) : '<span class="muted">—</span>';
+}
+function renderTtTables(){
+  const cnt = document.getElementById('tt_count');
+  if(cnt) cnt.textContent = `外訓 ${(STATE.trainingTypes||[]).length}　內訓 ${(STATE.internalTrainingTypes||[]).length}`;
+  ['ext','int'].forEach(kind => {
+    const d = TT_DEF[kind];
+    const body = document.getElementById(d.body);
+    if(!body) return;
+    const rows = (STATE[d.stateKey] || []).slice()
+      .sort((a,b) => String(a.name||'').localeCompare(String(b.name||'')));
+    body.innerHTML = rows.map(r => {
+      const n = ttUseCount(kind, r);
+      return `<tr><td>${esc(r.name||'')}</td>`
+        + (kind === 'ext' ? `<td class="muted">${ttValidityTxt(r)}</td>` : '')
+        + `<td>${n ? n + ' 筆' : '<span class="muted">—</span>'}</td>`
+        + `<td style="white-space:nowrap;">`
+        + `<button class="name-link" data-tt-ren="${kind}:${esc(r.id)}">改名</button> `
+        + (kind === 'ext' ? `<button class="name-link" data-tt-val="${esc(r.id)}">改效期</button> ` : '')
+        + (n ? `<span class="muted" title="已經有 ${n} 筆紀錄在用，不能刪">刪除</span>`
+             : `<button class="del-btn" data-tt-del="${kind}:${esc(r.id)}">刪除</button>`)
+        + `</td></tr>`;
+    }).join('') || `<tr><td colspan="${kind === 'ext' ? 4 : 3}" class="empty">還沒有資料</td></tr>`;
+  });
+}
+async function ttReload(){
+  await ttLoadTypes();
+  renderTtTables();
+  try{ renderTrainingSelects(); }catch(e){ /* 沒有這個函式就跳過 */ }
+  renderAll();
+}
+async function ttAdd(kind){
+  const d = TT_DEF[kind];
+  const inp = document.getElementById(kind === 'ext' ? 'tt_ext_new' : 'tt_int_new');
+  const name = (inp ? inp.value : '').trim();
+  if(!name){ alert('請先填' + d.label + '名稱。'); return; }
+  if((STATE[d.stateKey] || []).some(r => String(r.name||'').trim() === name)){
+    alert('「' + name + '」已經在清單裡了。'); return;
+  }
+  const rec = {}; rec[d.nameCol] = name;
+  if(kind === 'ext'){
+    const y = (document.getElementById('tt_ext_years')||{}).value;
+    const nt = ((document.getElementById('tt_ext_note')||{}).value || '').trim();
+    rec.validity_years = (String(y||'').trim() === '') ? null : parseInt(y, 10);
+    rec.validity_note = nt || (rec.validity_years ? rec.validity_years + '年' : null);
+  }
+  const post = obj => supaFetch(d.table, {
+    method:'POST', headers:{'Prefer':'return=representation'}, body: JSON.stringify(obj)
+  });
+  try{
+    try{
+      await post(rec);
+    }catch(err){
+      // 主鍵不是自動編號的表，要自己給編號再送一次
+      const msg = String((err && err.message) || '');
+      if(msg.indexOf('null value') < 0 && msg.indexOf('23502') < 0) throw err;
+      rec[d.idCol] = (STATE[d.stateKey] || []).reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1;
+      await post(rec);
+    }
+    ['tt_ext_new','tt_ext_years','tt_ext_note','tt_int_new'].forEach(id => {
+      const el = document.getElementById(id); if(el && (kind === 'ext') === (id !== 'tt_int_new')) el.value = '';
+    });
+    await ttReload();
+    ttMsg('已新增' + d.label + '「' + name + '」。');
+  }catch(err){
+    ttMsg('新增失敗：' + ((err && err.message) || err), true);
+    alert('新增' + d.label + '失敗，沒有存進去。\n\n' + ((err && err.message) || err));
+  }
+}
+async function ttPatch(kind, id, body, okMsg){
+  const d = TT_DEF[kind];
+  try{
+    await supaFetch(`${d.table}?${d.idCol}=eq.${encodeURIComponent(id)}`,
+      {method:'PATCH', body: JSON.stringify(body)});
+    await ttReload();
+    ttMsg(okMsg);
+  }catch(err){
+    ttMsg('存檔失敗：' + ((err && err.message) || err), true);
+    alert('沒有存進去。\n\n' + ((err && err.message) || err));
+  }
+}
+async function ttRename(kind, id){
+  const d = TT_DEF[kind];
+  const cur = (STATE[d.stateKey] || []).find(r => String(r.id) === String(id));
+  if(!cur) return;
+  const old = String(cur.name || '');
+  const v = prompt('把' + d.label + '「' + old + '」改成：', old);
+  if(v === null) return;
+  const nn = String(v).trim();
+  if(!nn || nn === old) return;
+  if((STATE[d.stateKey] || []).some(r => String(r.name||'').trim() === nn && String(r.id) !== String(id))){
+    alert('「' + nn + '」已經在清單裡了。'); return;
+  }
+  const body = {}; body[d.nameCol] = nn;
+  // 內訓紀錄存的是「名稱」不是編號，改名要連紀錄一起改，不然那些紀錄會對不到項目
+  if(kind === 'int'){
+    (STATE.internalTrainings || []).forEach(t => {
+      if(String(t.type_name || '').trim() === old) t.type_name = nn;
+    });
+  }
+  await ttPatch(kind, id, body, '已改名為「' + nn + '」。');
+}
+async function ttEditValidity(id){
+  const cur = (STATE.trainingTypes || []).find(r => String(r.id) === String(id));
+  if(!cur) return;
+  const y = prompt('「' + cur.name + '」的效期幾年？\n（留空代表沒有固定年限，例如依主管機關規定）',
+                   cur.validity_years == null ? '' : String(cur.validity_years));
+  if(y === null) return;
+  const yy = String(y).trim();
+  const years = yy === '' ? null : parseInt(yy, 10);
+  if(yy !== '' && (isNaN(years) || years < 0)){ alert('請填數字，例如 3。'); return; }
+  const nt = prompt('效期說明（印在清單上的文字）：',
+                    cur.validity_note || (years ? years + '年' : ''));
+  if(nt === null) return;
+  await ttPatch('ext', id, {validity_years: years, validity_note: String(nt).trim() || null},
+                '已更新「' + cur.name + '」的效期。');
+}
+async function ttDelete(kind, id){
+  const d = TT_DEF[kind];
+  const cur = (STATE[d.stateKey] || []).find(r => String(r.id) === String(id));
+  if(!cur) return;
+  const n = ttUseCount(kind, cur);
+  if(n){
+    alert('「' + cur.name + '」已經有 ' + n + ' 筆紀錄在用，不能刪除。\n\n'
+        + '要停用的話建議改名加註「(停用)」，既有紀錄才查得到。');
+    return;
+  }
+  if(!confirm('確定要刪除' + d.label + '「' + cur.name + '」嗎？')) return;
+  try{
+    await supaFetch(`${d.table}?${d.idCol}=eq.${encodeURIComponent(id)}`, {method:'DELETE'});
+    await ttReload();
+    ttMsg('已刪除' + d.label + '「' + cur.name + '」。');
+  }catch(err){
+    ttMsg('刪除失敗：' + ((err && err.message) || err), true);
+    alert('刪除失敗，這個項目可能還被其他資料引用。\n\n' + ((err && err.message) || err));
+  }
+}
+{
+  const _ea = document.getElementById('tt_ext_add');
+  if(_ea) _ea.addEventListener('click', () => ttAdd('ext'));
+  const _ia = document.getElementById('tt_int_add');
+  if(_ia) _ia.addEventListener('click', () => ttAdd('int'));
+  ['ttExtBody','ttIntBody'].forEach(bid => {
+    const b = document.getElementById(bid);
+    if(!b) return;
+    b.addEventListener('click', async (ev) => {
+      const ren = ev.target.closest('[data-tt-ren]');
+      if(ren){ const p = ren.getAttribute('data-tt-ren').split(':'); await ttRename(p[0], p[1]); return; }
+      const val = ev.target.closest('[data-tt-val]');
+      if(val){ await ttEditValidity(val.getAttribute('data-tt-val')); return; }
+      const del = ev.target.closest('[data-tt-del]');
+      if(del){ const p = del.getAttribute('data-tt-del').split(':'); await ttDelete(p[0], p[1]); }
+    });
+  });
+  ['tt_int_new','tt_ext_new'].forEach(iid => {
+    const el = document.getElementById(iid);
+    if(el) el.addEventListener('keydown', e => {
+      if(e.key === 'Enter') ttAdd(iid === 'tt_int_new' ? 'int' : 'ext');
+    });
+  });
+}
 // ===== 部門與職稱維護（行政資料分頁最下方） =====
 // 新增人員的下拉是讀 departments／positions 來的，以前要新增類別只能去 Supabase 後台改，
 // 現在在畫面上就能維護。人員身上記的是編號，所以改名不會動到任何人。
@@ -11074,6 +11313,7 @@ function renderLeaveStatTable(){
 
 function renderAll(){
   renderOrgTables();
+  renderTtTables();
   renderOverview();
   renderBookingCard();
   renderDueReminders();
