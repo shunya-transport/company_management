@@ -1191,7 +1191,7 @@
     <label>輪胎行<input id="ts_vendor" list="vendorList" autocomplete="off" placeholder="例：東昇(鉅昌)輪胎企業有限公司"></label>
     <label>單號<input id="ts_no" placeholder="例：B250780"></label>
     <label>日期<input id="ts_date" type="date"></label>
-    <label>客戶名稱<input id="ts_customer" placeholder="例：順亞"></label>
+    <label>申請人<input id="ts_customer" placeholder="例：張誌元"></label>
     <label>車牌（車頭）<select id="ts_plate"></select></label>
     <label>板架車號<select id="ts_trailer"></select></label>
     <label>保／櫃號<input id="ts_container" placeholder="選填"></label>
@@ -1200,6 +1200,8 @@
     <label>地點<input id="ts_location" placeholder="選填"></label>
     <label>時段<select id="ts_daynight"><option value="日間">日間</option><option value="夜間或例假日">夜間或例假日</option></select></label>
     <label>電話<input id="ts_phone" placeholder="選填"></label>
+    <label>發票號碼<input id="ts_invoice" placeholder="後補，可留空"></label>
+    <label>發票金額<input id="ts_invoice_amt" type="number" step="1" placeholder="後補，可留空"></label>
   </div>
 
   <div id="tsNotReady" class="muted" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--red-bg);color:var(--red);font-weight:600;"></div>
@@ -1240,13 +1242,21 @@
     <label style="grid-column:span 2;">備註<input id="ts_notes" placeholder="選填"></label>
   </div>
   <button class="btn" id="ts_save" style="margin-top:10px;">儲存作業單</button>
+  <button class="btn ghost" id="ts_cancel_edit" style="margin-top:10px;display:none;">取消修改</button>
+  <span id="ts_edit_hint" class="muted" style="margin-left:10px;font-weight:600;color:var(--accent-dark);"></span>
 </div>
 
 <div class="card">
   <h2>輪胎作業單歷史<span class="count-badge" id="ts_hist_count"></span></h2>
+  <div class="toolbar" style="margin-bottom:10px;">
+    <label class="muted">搜尋 <input id="ts_hs_q" placeholder="車號／板架號／單號／輪胎行／櫃號／發票號碼" style="min-width:260px;"></label>
+    <label class="muted">日期 <input id="ts_hs_from" type="date"></label>
+    <label class="muted">～ <input id="ts_hs_to" type="date"></label>
+    <button class="btn ghost" id="ts_hs_clear">清除</button>
+  </div>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>日期</th><th>單號</th><th>輪胎行</th><th>車牌</th><th>板架</th><th>公里數</th><th>輪胎</th><th>金額</th><th>備註</th><th></th></tr></thead>
+      <thead><tr><th>日期</th><th>單號</th><th>輪胎行</th><th>車牌</th><th>板架</th><th>公里數</th><th>輪胎</th><th>金額</th><th>發票號碼</th><th>備註</th><th></th></tr></thead>
       <tbody id="tsHistBody"></tbody>
     </table>
   </div>
@@ -5385,13 +5395,61 @@ function tireOrderToMaintRecord(o){
     maintenance_type: '臨時維修',
     description: desc,
     parts_replaced: parts || onList.join('、'),
-    cost: (o.total_amount == null || o.total_amount === '') ? null : Number(o.total_amount),
-    invoice_no: '',
+    cost: tsOrderAmount(o),
+    invoice_no: o.invoice_no || '',
     vendor_name: o.vendor_name || '',
     mileage_at_service: (o.mileage == null || o.mileage === '') ? null : Number(o.mileage),
     requested_by_name: o.customer_name || '',
-    status: (o.total_amount == null || o.total_amount === '') ? MAINT_ST_PENDING : MAINT_ST_DONE
+    status: tsOrderAmount(o) == null ? MAINT_ST_PENDING : MAINT_ST_DONE
   };
+}
+// 發票是後補的：有補發票金額就以發票為準，還沒補就先用作業單上的修護內容合計。
+function tsOrderAmount(o){
+  if(o.invoice_amount != null && o.invoice_amount !== '') return Number(o.invoice_amount);
+  if(o.total_amount   != null && o.total_amount   !== '') return Number(o.total_amount);
+  return null;
+}
+// 正在修改哪一張單；null 代表現在是新增
+let TS_EDIT_ID = null;
+function tsSetEditUI(){
+  const b = document.getElementById('ts_save');
+  if(b) b.textContent = TS_EDIT_ID == null ? '儲存作業單' : '儲存修改';
+  const c = document.getElementById('ts_cancel_edit');
+  if(c) c.style.display = TS_EDIT_ID == null ? 'none' : '';
+  const h = document.getElementById('ts_edit_hint');
+  if(h) h.textContent = TS_EDIT_ID == null ? ''
+      : '修改中：第 ' + TS_EDIT_ID + ' 張作業單（存檔時不會再動輪胎位置圖）';
+}
+function tsResetForm(){
+  TS_EDIT_ID = null;
+  tsDraft = { tires: [], charges: [] };
+  ['ts_no','ts_container','ts_mileage','ts_time','ts_notes','ts_invoice','ts_invoice_amt']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  renderTsTires(); renderTsCharges(); renderTireOrderPicker(); tsSetEditUI();
+}
+// 把一張舊單整個載回表單。發票後補、金額打錯、輪胎胎號填錯都用這個改。
+function tsLoadOrder(orderId){
+  const o = (STATE.tireOrders || []).find(x => String(x.id) === String(orderId));
+  if(!o){ alert('找不到這一張作業單。'); return; }
+  TS_EDIT_ID = o.id;
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = (v == null ? '' : v); };
+  set('ts_no', o.order_no); set('ts_vendor', o.vendor_name); set('ts_date', o.service_date);
+  set('ts_customer', o.customer_name); set('ts_container', o.container_no);
+  set('ts_mileage', o.mileage); set('ts_time', o.arrive_time); set('ts_location', o.location);
+  set('ts_phone', o.phone); set('ts_notes', o.notes);
+  set('ts_invoice', o.invoice_no); set('ts_invoice_amt', o.invoice_amount);
+  const dn = document.getElementById('ts_daynight'); if(dn) dn.value = o.day_night || '日間';
+  const ph = document.getElementById('ts_plate');   if(ph) ph.value = o.plate || '';
+  const tr = document.getElementById('ts_trailer'); if(tr) tr.value = o.trailer_plate || '';
+  tsDraft = {
+    tires:   (STATE.tireOrderTires   || []).filter(t => String(t.order_id) === String(o.id))
+                                           .map(t => Object.assign({}, t)),
+    charges: (STATE.tireOrderCharges || []).filter(c => String(c.order_id) === String(o.id))
+                                           .map(c => Object.assign({}, c))
+  };
+  renderTsTires(); renderTsCharges(); renderTireOrderPicker(); tsSetEditUI();
+  const top = document.getElementById('ts_no');
+  if(top && top.scrollIntoView) top.scrollIntoView({behavior:'smooth', block:'center'});
 }
 function tirePrintMaintSlip(orderId){
   const o = (STATE.tireOrders || []).find(x => String(x.id) === String(orderId));
@@ -5411,7 +5469,7 @@ function renderTireOrderHistory(){
       : '';
   }
   if(notReady.length){
-    body.innerHTML = '<tr><td colspan="10" class="empty">資料表還沒建立，請先執行 SQL #71</td></tr>';
+    body.innerHTML = '<tr><td colspan="11" class="empty">資料表還沒建立，請先執行 SQL #71</td></tr>';
     const c0 = document.getElementById('ts_hist_count'); if(c0) c0.textContent = '';
     return;
   }
@@ -5419,13 +5477,32 @@ function renderTireOrderHistory(){
     body.dataset.printBound = '1';
     body.addEventListener('click', ev => {
       const b = ev.target.closest('[data-ts-print]');
-      if(b) tirePrintMaintSlip(b.getAttribute('data-ts-print'));
+      if(b){ tirePrintMaintSlip(b.getAttribute('data-ts-print')); return; }
+      const ed = ev.target.closest('[data-ts-edit]');
+      if(ed) tsLoadOrder(ed.getAttribute('data-ts-edit'));
     });
   }
-  const rows = (STATE.tireOrders || []).slice()
-    .sort((a,b) => String(b.service_date||'').localeCompare(String(a.service_date||'')));
+  // 搜尋：車號、板架號、單號、輪胎行、櫃號、申請人、發票號碼都吃；再加日期區間。
+  const _q  = String(((document.getElementById('ts_hs_q')||{}).value) || '').trim().toUpperCase();
+  const _f  = ((document.getElementById('ts_hs_from')||{}).value) || '';
+  const _t2 = ((document.getElementById('ts_hs_to')||{}).value)   || '';
+  const _all = (STATE.tireOrders || []);
+  const rows = _all.slice().filter(o => {
+    const d = String(o.service_date || '');
+    if(_f && d < _f) return false;
+    if(_t2 && d > _t2) return false;
+    if(_q){
+      const hay = [o.plate, o.trailer_plate, o.order_no, o.vendor_name,
+                   o.container_no, o.customer_name, o.invoice_no]
+        .map(x => String(x == null ? '' : x).toUpperCase()).join(' ');
+      if(hay.indexOf(_q) < 0) return false;
+    }
+    return true;
+  }).sort((a,b) => String(b.service_date||'').localeCompare(String(a.service_date||'')));
   const cnt = document.getElementById('ts_hist_count');
-  if(cnt) cnt.textContent = rows.length ? `共 ${rows.length} 張` : '';
+  if(cnt) cnt.textContent = !_all.length ? ''
+      : (rows.length === _all.length ? `共 ${rows.length} 張`
+                                     : `符合 ${rows.length} 張／共 ${_all.length} 張`);
   body.innerHTML = rows.map(o => {
     const n = (STATE.tireOrderTires || []).filter(t => String(t.order_id) === String(o.id)).length;
     return `<tr>
@@ -5436,12 +5513,16 @@ function renderTireOrderHistory(){
       <td>${esc(o.trailer_plate||'')}</td>
       <td>${o.mileage ? esc(Number(o.mileage).toLocaleString()) : '—'}</td>
       <td>${n} 條</td>
-      <td>${o.total_amount ? '$'+esc(Number(o.total_amount).toLocaleString()) : '—'}</td>
+      <td>${tsOrderAmount(o) == null ? '—' : '$'+esc(Number(tsOrderAmount(o)).toLocaleString())}
+          ${(o.invoice_amount != null && o.invoice_amount !== '') ? '<div class="muted" style="font-size:10px;">依發票</div>' : ''}</td>
+      <td>${o.invoice_no ? esc(o.invoice_no) : '<span class="muted">未補</span>'}</td>
       <td class="muted">${esc(o.notes||'')}</td>
-      <td style="white-space:nowrap;"><button class="name-link" data-ts-print="${esc(o.id)}">印維修單</button>
+      <td style="white-space:nowrap;"><button class="name-link" data-ts-edit="${esc(o.id)}">修改</button>
+        <button class="name-link" data-ts-print="${esc(o.id)}">印維修單</button>
         <button class="del-btn" data-ts-odel="${esc(o.id)}">刪除</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="10" class="empty">尚無作業單</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="empty">'
+      + ((_q || _f || _t2) ? '找不到符合條件的作業單' : '尚無作業單') + '</td></tr>';
 }
 function renderTireSelects(){
   const opt = (list) => list.map(v => `<option value="${esc(v.plate)}">${esc(v.plate)}</option>`).join('');
@@ -13855,6 +13936,22 @@ document.getElementById('tsPicker').addEventListener('click', (e) => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', () => { renderTireOrderPicker(); renderTsTires(); });
 });
+['ts_hs_q','ts_hs_from','ts_hs_to'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', renderTireOrderHistory);
+});
+{ const _c = document.getElementById('ts_hs_clear');
+  if(_c) _c.addEventListener('click', () => {
+    ['ts_hs_q','ts_hs_from','ts_hs_to'].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = '';
+    });
+    renderTireOrderHistory();
+  }); }
+{ const _x = document.getElementById('ts_cancel_edit');
+  if(_x) _x.addEventListener('click', () => {
+    if(!confirm('取消修改？剛才在表單上改的內容不會存。')) return;
+    tsResetForm();
+  }); }
 document.getElementById('ts_tire_add').addEventListener('click', () => {
   tsDraft.tires.push(tsBlankTire('')); renderTsTires(); renderTireOrderPicker();
 });
@@ -13928,8 +14025,11 @@ document.getElementById('ts_save').addEventListener('click', async () => {
     records: STATE.tireRecords.map(r => Object.assign({}, r))
   };
   const mileageRaw = document.getElementById('ts_mileage').value;
-  const oid = nextId(STATE.tireOrders);
-  STATE.tireOrders.push({
+  const invAmtRaw = document.getElementById('ts_invoice_amt').value.trim();
+  const editing = TS_EDIT_ID != null;
+  const oid = editing ? TS_EDIT_ID : nextId(STATE.tireOrders);
+  const _old = editing ? STATE.tireOrders.find(x => String(x.id) === String(oid)) : null;
+  const _rec = {
     id: oid,
     order_no: document.getElementById('ts_no').value.trim(),
     vendor_name: document.getElementById('ts_vendor').value.trim(),
@@ -13944,12 +14044,24 @@ document.getElementById('ts_save').addEventListener('click', async () => {
     location: document.getElementById('ts_location').value.trim(),
     day_night: document.getElementById('ts_daynight').value,
     total_amount: tsTotal() || null,
+    invoice_no: document.getElementById('ts_invoice').value.trim(),
+    invoice_amount: invAmtRaw === '' ? null : Number(invAmtRaw),
     notes: document.getElementById('ts_notes').value.trim(),
-    created_at: new Date().toISOString()
-  });
+    created_at: (_old && _old.created_at) || new Date().toISOString()
+  };
+  if(editing){
+    STATE.tireOrders = STATE.tireOrders.map(x =>
+      String(x.id) === String(oid) ? Object.assign({}, x, _rec) : x);
+    // 修改時先把這張單原本的明細整批拿掉，再照畫面上現在的內容重寫一次
+    STATE.tireOrderTires   = STATE.tireOrderTires.filter(t => String(t.order_id) !== String(oid));
+    STATE.tireOrderCharges = STATE.tireOrderCharges.filter(c => String(c.order_id) !== String(oid));
+  }else{
+    STATE.tireOrders.push(_rec);
+  }
   let tid = nextId(STATE.tireOrderTires);
   lines.forEach(t => {
-    STATE.tireOrderTires.push(Object.assign({ id: tid++, order_id: oid }, t));
+    const _t = Object.assign({}, t); delete _t.id; delete _t.order_id;
+    STATE.tireOrderTires.push(Object.assign({ id: tid++, order_id: oid }, _t));
   });
   let cid = nextId(STATE.tireOrderCharges);
   tsDraft.charges.filter(c => (c.item_name||'').trim() || c.qty || c.unit_price).forEach(c => {
@@ -13967,9 +14079,10 @@ document.getElementById('ts_save').addEventListener('click', async () => {
     // 存進雲端了才問，避免存檔失敗卻先印出一張不存在的單
     _printAfter = confirm('作業單已存檔。\n\n要現在列印「設備保養維修單」嗎？\n（之後也可以在下方作業單歷史按「印維修單」）');
 
-    // 「裝上」的輪胎同步寫進輪胎位置圖：同一輪位原本使用中的那條標成已更換，歷史留著
+    // 「裝上」的輪胎同步寫進輪胎位置圖：同一輪位原本使用中的那條標成已更換，歷史留著。
+    // 修改舊單時【不同步】—— 這批當初存檔就寫進位置圖了，再寫一次同一輪位會多出重複的一條。
     const mile = mileageRaw === '' ? null : parseInt(mileageRaw);
-    lines.forEach(t => {
+    (editing ? [] : lines).forEach(t => {
       if(!(t.on_brand || t.on_serial || t.on_code)) return;   // 只有拆下、沒有裝上的不動位置圖
       const veh = String(t.position).charAt(0) === 'B' ? trail : head;
       if(!veh) return;
@@ -14000,12 +14113,10 @@ document.getElementById('ts_save').addEventListener('click', async () => {
     return;
   }
 
-  tsDraft = { tires: [], charges: [] };
-  ['ts_no','ts_container','ts_mileage','ts_time','ts_notes'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.value = '';
-  });
+  tsResetForm();
   renderAll();
-  alert('作業單已存檔。' + (installed ? '\n\n其中 ' + installed + ' 條「裝上」的輪胎已經更新到輪胎位置圖。' : ''));
+  alert((editing ? '作業單已更新。' : '作業單已存檔。')
+        + (installed ? '\n\n其中 ' + installed + ' 條「裝上」的輪胎已經更新到輪胎位置圖。' : ''));
   if(_printAfter) tirePrintMaintSlip(oid);
 });
 
