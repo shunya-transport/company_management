@@ -606,6 +606,35 @@ function renderResults(){
 
 // ---------- 列印：照紙本 DGTT-P012-R05-03 ----------
 function cell(v){ return esc(v == null ? '' : v); }
+// 印之前先量一次：內容比一張 A4 高就整張等比縮，保證不會被切成兩頁。
+// 量的時候要先讓容器看得見（平常是 display:none），不然量出來全是 0。
+// 用 zoom 不用 transform：transform 只是視覺縮放，元素還是佔原本的高度，一樣會溢出。
+const CI_W_MM = 192, CI_H_MM = 276;
+function ciFitSheets(root){
+  if(!root) return;
+  const prev = {d: root.style.display, p: root.style.position, l: root.style.left};
+  root.style.display = 'block';
+  root.style.position = 'absolute';
+  root.style.left = '-10000px';
+  root.querySelectorAll('.sheet, .ci-sheet').forEach(sh => {
+    sh.style.zoom = '';
+    sh.style.width = CI_W_MM + 'mm';
+    sh.style.height = CI_H_MM + 'mm';
+    const box = sh.getBoundingClientRect().height;      // 一張 A4 放得下多少
+    sh.style.height = 'auto';
+    const need = sh.getBoundingClientRect().height;     // 內容其實要多高
+    sh.style.height = CI_H_MM + 'mm';
+    if(box > 0 && need > box + 1){
+      const k = Math.max(0.55, box / need);
+      sh.style.zoom = k;
+      sh.style.width  = (CI_W_MM / k) + 'mm';           // 縮完還是要滿版 192mm
+      sh.style.height = (CI_H_MM / k) + 'mm';
+    }
+  });
+  root.style.display = prev.d;
+  root.style.position = prev.p;
+  root.style.left = prev.l;
+}
 function sheetHtml(recs, cols){
   const g = (i, f) => recs[i] ? cell(recs[i][f]) : '';
   const r = (i, k) => recs[i] ? cell(recs[i][k]) : '';
@@ -665,11 +694,11 @@ function sheetHtml(recs, cols){
          + (recs[i] ? cell([recs[i].trailer_no, recs[i].trailer_size].filter(Boolean).join(' ')) : '')
          + '</td>').join('') + '</tr>'
    // 工作平台／踏板：有勾印 V，沒勾留空白，跟紙本其他欄位同一個規則
-   + '<tr><td class="lab"' + span2 + '>工作平台／踏板</td>'
-   +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
+   + '<tr><td class="lab"' + span2 + ' style="font-size:11.5px;">工作平台／踏板</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:10.5px;">'
          + (recs[i]
-             ? ('平台 ' + (recs[i].has_work_platform ? 'V' : '　')
-                + '　踏板 ' + (recs[i].has_footstep ? 'V' : '　'))
+             ? ('平台 ' + (recs[i].has_work_platform ? '<b>V</b>' : '　')
+                + '　踏板 ' + (recs[i].has_footstep ? '<b>V</b>' : '　'))
              : '')
          + '</td>').join('') + '</tr>'
    + valRow('貨　　主', 'shipper')
@@ -721,6 +750,7 @@ function doPrint(){
     picked.forEach(r => sheets.push([r]));
   }
   $('printArea').innerHTML = sheets.map(g => sheetHtml(g, PRINT_COLS)).join('');
+  ciFitSheets($('printArea'));
   toast('選了 ' + picked.length + ' 筆，印成 ' + sheets.length + ' 張');
   setTimeout(() => window.print(), 150);
 }
