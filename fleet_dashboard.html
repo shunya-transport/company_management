@@ -943,6 +943,10 @@
           <option value="normal">正常</option>
           <option value="unset">尚未登錄</option>
         </select>
+        <button class="btn" id="grease_status_export_due"
+                title="一次匯出已逾期、30天內到期、60天內到期，每一列都標分類">匯出到期清單</button>
+        <button class="btn ghost" id="grease_status_export"
+                title="依畫面上現在的搜尋與狀態篩選匯出">匯出目前清單</button>
       </div>
       <div class="table-scroll" style="max-height:420px;">
         <table>
@@ -9636,16 +9640,72 @@ function greaseStatusPassFilter(r, filter){
   }
   return true;
 }
-function renderGreaseStatusTable(){
-  const body = document.getElementById('greaseStatusBody');
-  if(!body) return;
+// ---- 板架打油：匯出（已逾期／30天內／60天內） ----
+// 分類是照「剩幾天」切的，不是照 scheduleDueStatus 的紅黃綠，
+// 因為它的 amber 是 30 天內，60 天內那一段會落在 green 裡。
+function greaseDueCategory(d){
+  if(!d) return '';
+  if(d.status === 'red') return '已逾期';
+  if(d.dd != null && d.dd >= 0  && d.dd <= 30) return '30天內到期';
+  if(d.dd != null && d.dd >  30 && d.dd <= 60) return '60天內到期';
+  return '';
+}
+function greaseStatusVisibleRows(){
   const kw = ((document.getElementById('grease_status_search')||{}).value || '').trim().toUpperCase();
   const filter = (document.getElementById('grease_status_filter')||{}).value || 'all';
-  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄'};
-  const rows = greaseEligibleVehicles().map(greaseRowFor)
+  return greaseEligibleVehicles().map(greaseRowFor)
     .filter(r => !kw || String(r.plate||'').toUpperCase().includes(kw))
     .filter(r => greaseStatusPassFilter(r, filter))
     .sort((a,b)=> (a.d.sortKey - b.d.sortKey) || String(a.plate||'').localeCompare(String(b.plate||'')));
+}
+const GREASE_CSV_HEAD = ['分類','車號','車型','保養標準','週期(月)',
+                         '上次打油','上次打油(民國)','下次到期','下次到期(民國)','剩餘天數','剩餘'];
+function greaseCsvRow(r, cat){
+  const dash = v => (v == null || v === '—') ? '' : String(v);
+  return [cat, r.plate || '', r.vtype || '', r.model || '', r.months || '',
+          dash(r.d.last), rocText(dash(r.d.last)),
+          dash(r.d.next), rocText(dash(r.d.next)),
+          r.d.dd == null ? '' : r.d.dd, r.d.remain || ''];
+}
+function greaseCsvDownload(name, rows){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csvLines(GREASE_CSV_HEAD, rows)],
+                                        {type:'text/csv;charset=utf-8'}));
+  a.download = name + '_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function exportGreaseDue(){
+  const all = greaseEligibleVehicles().map(greaseRowFor);
+  const ORDER = ['已逾期', '30天內到期', '60天內到期'];
+  const picked = all.map(r => ({r: r, cat: greaseDueCategory(r.d)}))
+    .filter(x => x.cat)
+    .sort((a,b) => (ORDER.indexOf(a.cat) - ORDER.indexOf(b.cat))
+                || (a.r.d.sortKey - b.r.d.sortKey)
+                || String(a.r.plate||'').localeCompare(String(b.r.plate||'')));
+  if(!picked.length){ alert('目前沒有已逾期、也沒有 60 天內到期的板架。'); return; }
+  greaseCsvDownload('板架打油到期清單', picked.map(x => greaseCsvRow(x.r, x.cat)));
+  const n = c => picked.filter(x => x.cat === c).length;
+  // 「尚未登錄」算不出到期日，不能混進到期清單，但一定要講出來，
+  // 不然看起來就像那幾台沒事，其實是連基準日都還沒有。
+  const unset = all.filter(r => r.d.status === 'gray').length;
+  alert('已匯出 ' + picked.length + ' 台：\n'
+      + '已逾期 ' + n('已逾期') + ' 台、30天內到期 ' + n('30天內到期')
+      + ' 台、60天內到期 ' + n('60天內到期') + ' 台。'
+      + (unset ? '\n\n另有 ' + unset + ' 台是「尚未登錄」，算不出到期日所以沒有列入，'
+               + '要先在上方登錄第一次打油日期。' : ''));
+}
+function exportGreaseCurrent(){
+  const rows = greaseStatusVisibleRows();
+  if(!rows.length){ alert('目前清單沒有資料可以匯出。'); return; }
+  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄'};
+  greaseCsvDownload('板架打油狀態',
+    rows.map(r => greaseCsvRow(r, greaseDueCategory(r.d) || label[r.d.status] || '')));
+}
+function renderGreaseStatusTable(){
+  const body = document.getElementById('greaseStatusBody');
+  if(!body) return;
+  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄'};
+  const rows = greaseStatusVisibleRows();
   const cEl = document.getElementById('grease_status_count'); if(cEl) cEl.textContent = `${rows.length} 台`;
   body.innerHTML = rows.length ? rows.map(r => `<tr>`+
       `<td>${esc(r.plate)}</td><td class="muted">${esc(r.vtype)}</td><td class="muted">${esc(r.model)}</td>`+
@@ -9804,6 +9864,10 @@ function syncGreaseSchedule(v){
 ['grease_pending_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreasePendingTable); });
 ['grease_status_search'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderGreaseStatusTable); });
 ['grease_status_filter'].forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('change', renderGreaseStatusTable); });
+{ const _d = document.getElementById('grease_status_export_due');
+  if(_d) _d.addEventListener('click', exportGreaseDue); }
+{ const _c = document.getElementById('grease_status_export');
+  if(_c) _c.addEventListener('click', exportGreaseCurrent); }
 const _grAddBtn = document.getElementById('gr_add');
 if(_grAddBtn) _grAddBtn.addEventListener('click', async () => {
   const plate = (document.getElementById('gr_plate').value || '').trim();
