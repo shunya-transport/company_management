@@ -129,6 +129,8 @@
   .pill.green{background:var(--green-bg);color:var(--green);}
   .pill.gray{background:var(--gray-bg);color:var(--gray);}
   .pill.hold{background:var(--gray-bg);color:var(--gray);border:1px dashed var(--gray);}
+  /* 備註只佔一行，太長用「…」收掉，滑鼠移上去看全文 —— 一列折成三行整張表就很難掃 */
+  .note-1line{max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
   select,input{
     font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
@@ -849,8 +851,13 @@
       <div class="toolbar">
         <input id="selfuse_search" placeholder="搜尋車號">
         <select id="selfuse_company_filter"><option value="all">全部公司別</option></select>
+        <select id="selfuse_hold_filter" title="調度狀態：可不可以派這台">
+          <option value="all">全部（可派車＋暫停）</option>
+          <option value="ok">只看可派車</option>
+          <option value="hold">只看暫停使用</option>
+        </select>
         <select id="selfuse_filter">
-          <option value="all">全部狀態</option>
+          <option value="all">全部驗車狀態</option>
           <option value="overdue">已逾期</option>
           <option value="soon">30天內到期</option>
           <option value="soon60">60天內到期</option>
@@ -861,7 +868,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>狀態</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>調度狀態</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>驗車狀態</th><th></th></tr></thead>
           <tbody id="selfUseTrailerBody"></tbody>
         </table>
       </div>
@@ -4221,6 +4228,34 @@ function renderLeaseTable(){
 let currentResignEmpId = null;
 let editingOvertimeSettlementId = null;
 let editingLocationId = null;
+// ---- 板架「暫停使用」：純調度標記，不影響在役與各種到期提醒 ----
+const HOLD_ON = '暫停使用';
+const HOLD_REASONS = ['維修中', '待驗車', '輪胎待換', '事故待處理', '客戶留置', '停用中'];
+function isOnHold(v){ return String((v && v.dispatch_hold) || '') === HOLD_ON; }
+function holdPill(v){
+  if(!isOnHold(v)) return '<span class="pill green">可派車</span>';
+  const why = String(v.dispatch_hold_reason || '').trim();
+  const since = String(v.dispatch_hold_since || '').slice(0, 10);
+  return '<span class="pill red">' + HOLD_ON + '</span>'
+       + (why ? '<div class="muted" style="font-size:10.5px;">' + esc(why) + '</div>' : '')
+       + (since ? '<div class="muted" style="font-size:10.5px;">' + esc(since) + ' 起</div>' : '');
+}
+async function toggleHold(id){
+  const v = STATE.vehicles.find(x => String(x.id) === String(id));
+  if(!v) return;
+  if(isOnHold(v)){
+    if(!confirm(v.plate + ' 要改回「可派車」嗎？')) return;
+    v.dispatch_hold = null; v.dispatch_hold_reason = null; v.dispatch_hold_since = null;
+  }else{
+    const why = prompt(v.plate + ' 暫停使用的原因？\n（例如：' + HOLD_REASONS.join('、') + '；可留空）', '');
+    if(why === null) return;                     // 按取消就不動
+    v.dispatch_hold = HOLD_ON;
+    v.dispatch_hold_reason = String(why).trim() || null;
+    v.dispatch_hold_since = todayISO();
+  }
+  await saveState('roster_vehicles', STATE.vehicles, true);
+  renderAll();
+}
 let selfUseCompanyFilterInit = false;
 function renderSelfUseTrailers(){
   // 租出去但仍由我們調度的（dispatch_mode='本公司調度'）也要出現在自用板架，
@@ -4241,9 +4276,13 @@ function renderSelfUseTrailers(){
   const q = (document.getElementById('selfuse_search') ? document.getElementById('selfuse_search').value : '').trim();
   const companyFilter = document.getElementById('selfuse_company_filter') ? document.getElementById('selfuse_company_filter').value : 'all';
   const statusFilter = document.getElementById('selfuse_filter') ? document.getElementById('selfuse_filter').value : 'all';
+  const holdFilter = document.getElementById('selfuse_hold_filter')
+      ? document.getElementById('selfuse_hold_filter').value : 'all';
   rows = rows.filter(v => {
     if(q && !(v.plate||'').includes(q)) return false;
     if(companyFilter!=='all' && v.company_name!==companyFilter) return false;
+    if(holdFilter === 'hold' && !isOnHold(v)) return false;
+    if(holdFilter === 'ok'   &&  isOnHold(v)) return false;
     if(statusFilter!=='all'){
       const ds = vehicleDocStatus(v.id, '驗車');
       const code = ds ? ds.status : 'gray';
@@ -4257,7 +4296,11 @@ function renderSelfUseTrailers(){
     }
     return true;
   });
-  document.getElementById('selfuse_count').textContent = `共 ${rows.length} 台`;
+  // 暫停幾台要算「全部自用板架」，不是算篩選後的，不然切到「只看可派車」會顯示暫停 0 台
+  const _holdN = STATE.vehicles.filter(v =>
+      v.vehicle_category === '板架' && !isRetiredVehicle(v) && !leasedPlates.has(v.plate) && isOnHold(v)).length;
+  document.getElementById('selfuse_count').textContent =
+    `共 ${rows.length} 台` + (_holdN ? `／暫停使用 ${_holdN} 台` : '');
   document.getElementById('selfUseTrailerBody').innerHTML = rows.map(v => {
     const isEditing = String(editingLocationId) === String(v.id);
     const locCell = isEditing
@@ -4279,8 +4322,9 @@ function renderSelfUseTrailers(){
     const inspectionExpiry = docStatus ? docStatus.expiry : '—';
     const grace = docStatus ? docStatus.grace : null;
     const statusPill = docStatus ? `<span class="pill ${docStatus.status}">${statusLabel(grace,30)}</span>` : `<span class="pill gray">未設定</span>`;
-    return `<tr>
+    return `<tr${isOnHold(v) ? ' style="background:var(--red-bg);"' : ''}>
       <td>${esc(v.plate)}</td>
+      <td>${holdPill(v)}<div><button class="name-link" data-hold="${v.id}">${isOnHold(v) ? '改回可派車' : '設為暫停'}</button></div></td>
       <td>${esc(v.vehicle_type||'')}</td>
       <td>${esc(v.company_name||'')}</td>
       <td>${leaseCell}</td>
@@ -4292,7 +4336,7 @@ function renderSelfUseTrailers(){
       <td>${statusPill}</td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="11" class="empty">目前沒有自用板架</td></tr>`;
+  }).join('') || `<tr><td colspan="12" class="empty">目前沒有自用板架</td></tr>`;
   // 使用業主的輸入建議：已經填過的值 ＋ 租賃清單的承租方
   const _pl = document.getElementById('selfUsePartyList');
   if(_pl){
@@ -9827,7 +9871,7 @@ function renderGreaseRecords(){
       `<td>${months ? months + ' 個月' : '—'}</td><td class="muted">${esc(next)}</td>`+
       `<td>${esc(greaseReporterLabel(r))}</td>`+ cells +
       `<td><span class="pill ${pending ? 'amber' : 'green'}">${esc(greaseStatusOf(r))}</span></td>`+
-      `<td class="muted">${esc(r.notes||'')}</td>`+
+      `<td class="muted"><div class="note-1line" title="${esc(r.notes||'')}">${esc(r.notes||'')}</div></td>`+
       `<td>${greaseEditButtons(r, 'r', editing)} <button class="del-btn" data-del-grease="${esc(r.id)}">刪除</button></td>`+
     `</tr>`;
   }).join('') : '<tr><td colspan="11" class="muted">目前沒有打油紀錄</td></tr>';
@@ -10937,6 +10981,8 @@ document.getElementById('ebkTableBody').addEventListener('click', function(ev){
   ebkSave(parseInt(b.dataset.id, 10));
 });
 
+{ const _hf = document.getElementById('selfuse_hold_filter');
+  if(_hf) _hf.addEventListener('change', renderSelfUseTrailers); }
 document.getElementById('lease_filter').addEventListener('change', renderLeaseTable);
 document.getElementById('lease_search').addEventListener('input', renderLeaseTable);
 document.getElementById('lease_lessee_filter').addEventListener('change', renderLeaseTable);
@@ -12111,6 +12157,8 @@ document.getElementById('selfUseTrailerBody').addEventListener('keydown', async 
   }
 });
 document.getElementById('selfUseTrailerBody').addEventListener('click', async (e) => {
+  const holdBtn = e.target.closest('[data-hold]');
+  if(holdBtn){ await toggleHold(holdBtn.getAttribute('data-hold')); return; }
   const editBtn = e.target.closest('[data-edit-location]');
   const saveBtn = e.target.closest('[data-save-location]');
   const cancelBtn = e.target.closest('[data-cancel-location]');
