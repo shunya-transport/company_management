@@ -1201,6 +1201,7 @@
           <select id="tire_position"></select>
         </label>
         <label>品牌<input id="tire_brand" placeholder="例：米其林"></label>
+        <label>溝深<input id="tire_depth" type="number" step="0.1" min="0" placeholder="mm，選填"></label>
         <label>安裝日期<input id="tire_date" type="date"></label>
         <label>安裝里程<input id="tire_mileage" type="number"></label>
         <label>備註<input id="tire_notes" placeholder="選填"></label>
@@ -5586,14 +5587,30 @@ function tireLayoutFor(category){ return TIRE_LAYOUT[category] || TIRE_LAYOUT['�
 function tireAxleGridHtml(vehicle, opts){
   const o = opts || {};
   const lay = tireLayoutFor(vehicle ? vehicle.vehicle_category : '車輛');
+  const depthTxt = v => (v == null || String(v).trim() === '') ? '' : ('溝深 ' + String(v).trim());
   const cell = (pos) => {
     if(!pos) return '<div class="tire-cell blank"></div>';
     const t = vehicle ? currentTireAt(vehicle.id, pos) : null;
     const st = t ? tireAgeStatus(t.install_date) : 'gray';
-    const picked = o.picked && o.picked.indexOf(pos) >= 0 ? ' picked' : '';
-    const body = t ? `${esc(t.brand||'—')}<br>${esc((t.install_date||'').slice(5))}` : '尚無紀錄';
-    return `<div class="tire-cell ${st}${picked}" ${o.pickable ? `data-tire-pos="${esc(pos)}"` : ''}
-      title="${esc(pos)}　${esc(tirePosLabel(pos))}"><div class="pos">${esc(pos.slice(1))}</div><div class="who">${body}</div></div>`;
+    const isPicked = !!(o.picked && o.picked.indexOf(pos) >= 0);
+    // 這次作業單已經填的那一列 —— 還沒存檔，tire_records 裡當然找不到，
+    // 但一定要顯示出來，不然點了輪位、明細也填了，圖上還是寫「尚無紀錄」。
+    const dr = isPicked && o.draft ? o.draft.find(x => x.position === pos) : null;
+    const oldTxt = t
+      ? [esc(t.brand || '—'), esc(depthTxt(t.tread_depth)), esc((t.install_date||'').slice(5))]
+          .filter(Boolean).join('<br>')
+      : '尚無紀錄';
+    const newTxt = dr
+      ? ['<b>本次</b>',
+         esc(dr.on_brand || dr.off_brand || ''),
+         esc(depthTxt((dr.on_depth == null || dr.on_depth === '') ? dr.off_depth : dr.on_depth))]
+          .filter(Boolean).join('<br>')
+      : '';
+    const body = dr ? newTxt : oldTxt;
+    const tip = pos + '　' + tirePosLabel(pos)
+      + (dr && t ? '　／原本：' + (t.brand || '') + ' ' + depthTxt(t.tread_depth) : '');
+    return `<div class="tire-cell ${st}${isPicked ? ' picked' : ''}" ${o.pickable ? `data-tire-pos="${esc(pos)}"` : ''}
+      title="${esc(tip)}"><div class="pos">${esc(pos.slice(1))}</div><div class="who">${body}</div></div>`;
   };
   const rows = lay.rows.map(r =>
     `<div class="axle-row">${cell(r[0])}${cell(r[1])}<div class="axle-spine"></div>${cell(r[2])}${cell(r[3])}</div>`).join('');
@@ -5624,9 +5641,10 @@ function renderTireOrderPicker(){
     box.innerHTML = '<div class="empty">先選車牌或板架車號，位置圖就會出來，點一下要處理的輪位。</div>';
     return;
   }
-  box.innerHTML = (head ? tireAxleGridHtml(head, {pickable:true, picked}) : '')
+  const draft = tsDraft.tires;
+  box.innerHTML = (head ? tireAxleGridHtml(head, {pickable:true, picked, draft}) : '')
     + (head && trail ? '<div style="height:12px;"></div>' : '')
-    + (trail ? tireAxleGridHtml(trail, {pickable:true, picked}) : '')
+    + (trail ? tireAxleGridHtml(trail, {pickable:true, picked, draft}) : '')
     + '<div class="muted" style="text-align:center;margin-top:10px;">點一下輪位＝加一列明細，再點一下＝把那一列拿掉。</div>';
 }
 function tsBlankTire(pos){
@@ -13955,7 +13973,10 @@ document.getElementById('ts_charge_add').addEventListener('click', () => {
 });
 document.getElementById('tsTireBody').addEventListener('input', (e) => {
   const i = e.target.getAttribute('data-ts-t'); if(i === null) return;
-  tsDraft.tires[Number(i)][e.target.getAttribute('data-k')] = e.target.value;
+  const k = e.target.getAttribute('data-k');
+  tsDraft.tires[Number(i)][k] = e.target.value;
+  // 廠牌、溝深一邊打，位置圖那一格就跟著更新（只重畫圖，不重畫明細，游標不會被吃掉）
+  if(k === 'on_brand' || k === 'on_depth' || k === 'off_brand' || k === 'off_depth') renderTireOrderPicker();
 });
 document.getElementById('tsTireBody').addEventListener('change', (e) => {
   if(e.target.getAttribute('data-k') !== 'position') return;
@@ -14086,9 +14107,11 @@ document.getElementById('ts_save').addEventListener('click', async () => {
           r.status = '已更換'; r.replaced_date = date;
         }
       });
+      const _depth = parseFloat(t.on_depth);
       STATE.tireRecords.push({
         id: nextId(STATE.tireRecords), vehicle_id: veh.id, position: t.position,
         brand: t.on_brand || '', install_date: date, mileage_at_install: mile,
+        tread_depth: isNaN(_depth) ? null : _depth,
         status: '使用中', replaced_date: null,
         notes: [t.on_code, t.on_serial ? '胎號 ' + t.on_serial : '', t.on_week ? '製造 ' + t.on_week : '']
                .filter(Boolean).join('／')
@@ -14127,16 +14150,19 @@ document.getElementById('tire_add').addEventListener('click', async () => {
       t.replaced_date = date;
     }
   });
+  const _td = parseFloat((document.getElementById('tire_depth')||{}).value);
   STATE.tireRecords.push({
     id: nextId(STATE.tireRecords), vehicle_id: v.id, position,
     brand: document.getElementById('tire_brand').value.trim(),
+    tread_depth: isNaN(_td) ? null : _td,
     install_date: date,
     mileage_at_install: document.getElementById('tire_mileage').value ? parseInt(document.getElementById('tire_mileage').value) : null,
     status: '使用中', replaced_date: null,
     notes: document.getElementById('tire_notes').value.trim()
   });
   await saveState('tire_records', STATE.tireRecords, true);
-  ['tire_brand','tire_date','tire_mileage','tire_notes'].forEach(id=>document.getElementById(id).value='');
+  ['tire_brand','tire_depth','tire_date','tire_mileage','tire_notes']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   renderAll();
 });
 
