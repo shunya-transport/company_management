@@ -5029,6 +5029,14 @@ function ciSheetHtml(recs, cols){
    +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
          + (recs[i] ? ciCell([recs[i].trailer_no, recs[i].trailer_size].filter(Boolean).join(' ')) : '')
          + '</td>').join('') + '</tr>'
+   // 工作平台／踏板：有勾印 V，沒勾留空白，跟紙本其他欄位同一個規則
+   + '<tr><td class="lab"' + span2 + '>工作平台／踏板</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
+         + (recs[i]
+             ? ('平台 ' + (recs[i].has_work_platform ? 'V' : '　')
+                + '　踏板 ' + (recs[i].has_footstep ? 'V' : '　'))
+             : '')
+         + '</td>').join('') + '</tr>'
    + valRow('貨　　主', 'shipper')
    + valRow('起 運 地', 'origin')
    + valRow('目 的 地', 'destination')
@@ -5178,6 +5186,12 @@ function ciOpenEdit(id){
         <input id="cie_other_note" value="${esc(r.other_note || '')}"></label>
       <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:400;">
         <input id="cie_reported" type="checkbox" style="width:18px;height:18px;"${r.reported ? ' checked' : ''}>已回報運務領班／調度</label>
+      <div style="display:flex;gap:24px;margin-top:8px;">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+          <input id="cie_platform" type="checkbox" style="width:18px;height:18px;"${r.has_work_platform ? ' checked' : ''}>工作平台</label>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+          <input id="cie_footstep" type="checkbox" style="width:18px;height:18px;"${r.has_footstep ? ' checked' : ''}>踏板</label>
+      </div>
     </div>
     <button class="btn" id="ciEditSave">儲存</button>
     <button class="btn ghost" id="ciEditCancel">取消</button>
@@ -5214,6 +5228,8 @@ async function ciSaveEdit(){
   });
   r.other_note = document.getElementById('cie_other_note').value.trim() || null;
   r.reported = !!document.getElementById('cie_reported').checked;
+  r.has_work_platform = !!document.getElementById('cie_platform').checked;
+  r.has_footstep      = !!document.getElementById('cie_footstep').checked;
   r.abnormal = CI_ALL_KEYS.some(k => r[k] === 'X');
   try{
     await saveState('container_inspections', STATE.containerInspections, true);

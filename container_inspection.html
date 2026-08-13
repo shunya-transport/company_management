@@ -52,6 +52,11 @@
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-600);box-shadow:0 0 0 3px rgba(201,154,86,.16);}
   textarea{min-height:78px;resize:vertical;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;}
+  /* 板架尺寸不用佔滿整排，跟工作平台、踏板兩個勾選放同一排 */
+  .grid3{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:0 10px;align-items:start;}
+  .chkbox{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:400;
+          color:var(--text-1);margin:0;min-height:42px;}
+  .chkbox input{width:22px;height:22px;flex:0 0 22px;}
   .pickrow{display:flex;flex-wrap:wrap;gap:7px;}
   .pick{
     appearance:none;border:1px solid var(--border-strong);background:#fff;color:var(--text-2);
@@ -163,8 +168,20 @@
       <div><label>車號</label><input id="f_plate" list="dl_plate" placeholder="例：KLB-6818" autocomplete="off"></div>
       <div><label>板架號碼</label><input id="f_trailer" list="dl_trailer" placeholder="例：31-H9" autocomplete="off"></div>
     </div>
-    <label>板架尺寸<span class="muted" style="font-weight:400;">（選了板架會自動帶，可以自己改）</span></label>
-    <input id="f_tsize" list="dl_tsize" placeholder="例：40呎" autocomplete="off">
+    <div class="grid3">
+      <div>
+        <label>板架尺寸<span class="muted" style="font-weight:400;">（會自動帶）</span></label>
+        <input id="f_tsize" list="dl_tsize" placeholder="例：40呎" autocomplete="off">
+      </div>
+      <div>
+        <label>工作平台</label>
+        <label class="chkbox"><input id="f_platform" type="checkbox">有</label>
+      </div>
+      <div>
+        <label>踏板</label>
+        <label class="chkbox"><input id="f_footstep" type="checkbox">有</label>
+      </div>
+    </div>
     <label>貨主</label><input id="f_shipper" list="dl_shipper" placeholder="例：台塑" autocomplete="off">
     <div class="grid2">
       <div><label>起運地</label><input id="f_origin" list="dl_place" placeholder="例：台中港" autocomplete="off"></div>
@@ -462,6 +479,8 @@ function collect(){
     inspector:    $('f_inspector').value.trim(),
     trailer_no:   $('f_trailer').value.trim(),
     trailer_size: $('f_tsize').value.trim() || null,
+    has_work_platform: $('f_platform').checked,
+    has_footstep:      $('f_footstep').checked,
     shipper:      $('f_shipper').value.trim(),
     origin:       $('f_origin').value.trim(),
     destination:  $('f_dest').value.trim(),
@@ -644,6 +663,14 @@ function sheetHtml(recs, cols){
    + '<tr><td class="lab"' + span2 + '>板架號碼與尺寸</td>'
    +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
          + (recs[i] ? cell([recs[i].trailer_no, recs[i].trailer_size].filter(Boolean).join(' ')) : '')
+         + '</td>').join('') + '</tr>'
+   // 工作平台／踏板：有勾印 V，沒勾留空白，跟紙本其他欄位同一個規則
+   + '<tr><td class="lab"' + span2 + '>工作平台／踏板</td>'
+   +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:11.5px;">'
+         + (recs[i]
+             ? ('平台 ' + (recs[i].has_work_platform ? 'V' : '　')
+                + '　踏板 ' + (recs[i].has_footstep ? 'V' : '　'))
+             : '')
          + '</td>').join('') + '</tr>'
    + valRow('貨　　主', 'shipper')
    + valRow('起 運 地', 'origin')
