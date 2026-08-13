@@ -705,6 +705,10 @@ var BOOK_LOCK = '台南零用金'; // BUILD:BOOK_LOCK
 // 編輯視窗的代墊欄位、餘額卡的「本月代墊」全部從 DOM 拿掉。
 // ★ 資料庫欄位一格都不動，台南那幾筆舊的 weigh_fee 還在，只是這一頁不顯示也不寫它。
 var WEIGH_TAB = false; // BUILD:WEIGH_TAB
+// 「撥補／入零用金」這個分頁要不要留。使用者 115/08/13：「大致上用不到」，所以關掉。
+// 關掉只是不顯示那一頁，撥補照樣可以在「記一筆」切到收入、科目選「入零用金」記，
+// 差別是不會自動在會計系統開「調撥轉出」的傳票。要開回來把這裡改成 true 就好。
+var REFILL_TAB = false;
 
 const STATE = { books: [], subjects: [], entries: [], accounts: [], drivers: [], vehicles: [] };
 let CUR_BOOK = null;      // 目前帳本物件
@@ -780,15 +784,31 @@ function bookEntries(bid){
   const id = bid || (CUR_BOOK && CUR_BOOK.book_id);
   return STATE.entries.filter(e => e.book_id === id);
 }
-// ★ 司機先掏錢、公司月底匯款還他的代墊（目前只有張誌元的磅費是這一種）。
-//   這些錢【從來沒有離開零用金抽屜】，所以不能算進餘額，也不該出現在現金日記帳，
-//   不然餘額會被少算，跟抽屜裡的現金對不起來。
-//   它們只活在「代墊費用明細 → 批次結清」那一區，要匯多少錢照樣看得到。
-//   當場用抽屜現金付掉的（其他司機，標記成「零用金付訖」）不算在內，照樣扣。
-function isBankAdvance(e){
-  return weighAmt(e) > 0 && !isCashPaid(e);
+// ★ 代墊到底扣不扣零用金，只看一件事：【這筆錢是從哪裡出去的】。
+//     空白      還沒還司機，錢還在他那裡        → 不扣
+//     批號      銀行匯款還他（1150805-1 那種）  → 不扣，錢從銀行出的
+//     零用金付訖 當場用抽屜的現金付掉            → 要扣
+//     舊帳已結  舊資料，當年是從抽屜出去的      → 要扣
+//
+//   使用者 115/08/13：「張誌元的零用金確定是不會進任何一個零用金帳，會由公司匯款」。
+//   所以不能寫成「結清了就扣」—— 那樣按下批次結清（銀行匯的錢）會把抽屜餘額扣掉。
+//   目前已結清的 4,870 全部是「舊帳已結」，所以這一版算出來一樣是 40,104，
+//   但以後真的按批次結清就不會再動到零用金了。
+//
+//   還沒還給司機的錢要看多少，到「代墊費用明細」那一區，那邊照樣看得到全部。
+function advSettleKind(e){
+  const b = String((e && e.settle_batch) || '').trim();
+  if(!b) return 'open';                 // 還沒結清
+  if(b === WG_CASH_TAG) return 'cash';  // 當場抽屜付掉
+  if(b === WG_OLD_TAG)  return 'old';   // 舊帳，當年從抽屜出的
+  return 'transfer';                    // 批號＝銀行匯款
 }
-// 現金日記帳看得到的：把上面那種匯款代墊排除掉
+function isBankAdvance(e){
+  if(weighAmt(e) <= 0) return false;
+  const k = advSettleKind(e);
+  return k === 'open' || k === 'transfer';   // 這兩種錢都沒從抽屜出去
+}
+// 現金日記帳看得到的：把「還沒結清的代墊」排除掉（那筆錢還沒出抽屜）
 function ledgerEntries(bid){
   return bookEntries(bid).filter(e => !isBankAdvance(e));
 }
@@ -819,7 +839,7 @@ function sortedBy(list){
     return d !== 0 ? d : (a.pe_id - b.pe_id);
   });
 }
-// 現金日記帳用：排除「司機先墊、月底匯款」的代墊（那些錢沒離開抽屜）
+// 現金日記帳用：排除「還沒結清的代墊」（錢還在司機那裡，還沒從抽屜還出去）
 function sortedEntries(bid){ return sortedBy(ledgerEntries(bid)); }
 // 代墊模組用：全部都要。這一區就是專門在看要匯給司機多少錢的，
 // 排除掉的話整張明細會空掉 —— 這是上一版真的踩到的坑。
@@ -977,11 +997,12 @@ function renderBalanceCard(){
   if(bk && bk.target_balance) note += ' ・ 定額 ' + fmt(bk.target_balance);
   const pend = ledgerEntries().filter(e => e.status === '待補單據').length;
   if(pend) note += ' ・ 待補單據 ' + pend + ' 筆';
-  // 匯款代墊被排除在餘額外，數字要講出來，不然會以為餘額算錯
+  // 還沒還給司機的代墊被排除在餘額外，數字要講出來，不然會以為餘額算錯
   const _adv = bankAdvanceOf();
   if(_adv.length){
-    note += ' ・ 不含匯款代墊 ' + _adv.length + ' 筆／NT$ '
-          + fmt(_adv.reduce((s, e) => s + num(e.amount), 0)) + '（月底匯款，沒動到抽屜的錢）';
+    note += ' ・ 不含代墊 ' + _adv.length + ' 筆／NT$ '
+          + fmt(_adv.reduce((s, e) => s + num(e.amount), 0))
+          + '（還沒還司機、或公司匯款還的，都沒動到抽屜）';
   }
   $('pcBalanceNote').textContent = note;
   const m = thisMonth();
@@ -1635,6 +1656,7 @@ async function nextVoucher(dateISO){
 
 // ---------- 撥補 ----------
 function renderRefill(){
+  if(!$('rf_subject')) return;          // 分頁被拿掉了就不用畫
   const isOwn = CUR_BOOK && CUR_BOOK.book_type === '自有';
   $('rf_subject').innerHTML = bookSubjects('收入').filter(s => s.is_active !== false)
     .map(s => '<option>' + esc(s.subject_name) + '</option>').join('');
@@ -2200,7 +2222,9 @@ function wire(){
       csvLines(['#','日期','科目','摘要','收入','支出','餘額','領款人','狀態'], rows));
   };
 
-  $('rf_add').onclick = async () => {
+  // 撥補分頁可能已經被 dropRefillUI() 拿掉了，元素不在就不要綁，
+  // 不然 wire() 會斷在這一行，後面所有按鈕都綁不到。
+  if($('rf_add')) $('rf_add').onclick = async () => {
     const msg = $('rf_msg');
     try{
       if(!CUR_BOOK) throw new Error('請先選帳本');
@@ -2353,6 +2377,13 @@ function dropWeighUI(){
   applyDirUI(curDir());
 }
 
+// 把「撥補／入零用金」整個分頁從畫面上拿掉（導覽鈕＋面板）
+function dropRefillUI(){
+  const nav = document.querySelector('.sidebar nav button[data-tab="refill"]');
+  if(nav) nav.remove();
+  const pane = $('refill'); if(pane) pane.remove();
+}
+
 // 鎖定單一帳本的版本：把帳本切換、跨帳本比較、新增帳本這些藏起來
 function lockUI(){
   const card = $('bookPickCard'); if(card) card.style.display = 'none';
@@ -2383,8 +2414,9 @@ async function init(){
   }
   if(BOOK_LOCK) lockUI();
   if(!WEIGH_TAB) dropWeighUI();   // 台南：代墊都用零用金當場付掉，不獨立記
+  if(!REFILL_TAB) dropRefillUI(); // 撥補分頁用不到
   $('pc_date').value = todayISO();
-  $('rf_date').value = todayISO();
+  if($('rf_date')) $('rf_date').value = todayISO();
   $('mo_month').value = thisMonth();
   if($('wg_from')){ $('wg_from').value = thisMonth() + '-01'; $('wg_to').value = todayISO(); }
   if($('wg_paydate')) $('wg_paydate').value = todayISO();
