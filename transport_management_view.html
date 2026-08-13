@@ -286,6 +286,8 @@
   .ci-sheet table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;
                   margin:0!important;box-shadow:none!important;}
   .ci-sheet table.main{flex:1 1 auto;}
+  /* 欄高平均：不指定高度的話，多出來的高度會依每一列原本的高度按比例分，
+     標題折兩行的那幾列就特別高。每一列都給同一個高度，多的就平均分。 */
   .ci-sheet td,.ci-sheet th{border:1px solid #000!important;padding:1px 5px!important;
                             font-size:13px!important;line-height:1.3!important;vertical-align:middle!important;
                             background:#fff!important;color:#000!important;letter-spacing:0!important;
@@ -4975,6 +4977,64 @@ function ciCell(v){ return esc(v == null ? '' : v); }
 // 量的時候要先讓容器看得見（平常是 display:none），不然量出來全是 0。
 // 用 zoom 不用 transform：transform 只是視覺縮放，元素還是佔原本的高度，一樣會溢出。
 const CI_W_MM = 192, CI_H_MM = 276;
+// 列印用的勾選方框：有勾的框裡是 V，沒勾的是空框。
+// 一律畫框，這樣「沒勾」跟「這一格根本沒填」看得出差別。
+function ciBox(on){
+  return '<span style="display:inline-block;width:11px;height:11px;line-height:10px;'
+       + 'border:1px solid #000;text-align:center;font-size:9px;font-weight:700;'
+       + 'vertical-align:middle;margin:0 2px;">' + (on ? 'V' : '&#160;') + '</span>';
+}
+// 欄高平均。
+// 主表格是 flex:1 撐滿整張，瀏覽器把多出來的高度「依每一列原本多高按比例」分下去，
+// 所以標題折兩行的那幾列特別高、單行的特別矮。在 CSS 的 tr 上寫 height 只是最小高度，
+// 改不了這個比例，所以這裡自己算：內容真的塞不下的那幾列留著，其餘平分剩下的高度。
+function ciEvenRows(sh){
+  const tb = sh.querySelector('table.main');
+  if(!tb) return;
+  const trs = Array.prototype.slice.call(tb.querySelectorAll('tr'));
+  if(!trs.length) return;
+  // 先把上一次調過的還原，不然連印兩次會越縮越小
+  trs.forEach(tr => { tr.style.height = ''; });
+  Array.prototype.forEach.call(tb.querySelectorAll('td[data-ci-fs]'), td => {
+    td.style.removeProperty('font-size'); td.removeAttribute('data-ci-fs');
+  });
+  const avail = tb.getBoundingClientRect().height;      // flex 撐開後主表格有多高
+  if(!(avail > 0)) return;
+  // 量「內容至少要多高」：先不讓 flex 撐，量完再放回去
+  const flex0 = tb.style.flex;
+  tb.style.flex = '0 0 auto';
+  const nat = trs.map(tr => tr.getBoundingClientRect().height);
+  const base = Math.min.apply(null, nat);              // 單行的高度＝目標高度
+  // 比單行高的那幾列，是標題太長折成兩行造成的（第3、10、11 項那種）。
+  // 只把那一列的字縮小到排得下為止，其他列完全不動，整張看起來才會齊。
+  trs.forEach((tr, i) => {
+    if(nat[i] <= base + 1) return;
+    const cells = Array.prototype.filter.call(tr.querySelectorAll('td'),
+                                              td => (td.rowSpan || 1) === 1);
+    if(!cells.length) return;
+    for(let fs = 12.5; fs >= 9; fs -= 0.5){
+      // 儀表板那一份的 td 字級是 !important，所以這裡也要用 important 才蓋得過去
+      cells.forEach(td => {
+        td.style.setProperty('font-size', fs + 'px', 'important');
+        td.setAttribute('data-ci-fs', '1');
+      });
+      if(tr.getBoundingClientRect().height <= base + 1) break;
+    }
+    nat[i] = tr.getBoundingClientRect().height;
+  });
+  tb.style.flex = flex0;
+  // 幾輪之後就收斂：真的還是塞不下的越多，剩下的每一列能分到的就越少
+  let h = avail / trs.length;
+  for(let pass = 0; pass < 4; pass++){
+    let over = 0, rest = 0;
+    nat.forEach(x => { if(x > h) over += x; else rest++; });
+    if(!rest) break;
+    const nh = (avail - over) / rest;
+    if(!(nh > 0) || Math.abs(nh - h) < 0.5){ h = nh > 0 ? nh : h; break; }
+    h = nh;
+  }
+  if(h > 8) trs.forEach((tr, i) => { if(nat[i] <= h) tr.style.height = h.toFixed(2) + 'px'; });
+}
 function ciFitSheets(root){
   if(!root) return;
   const prev = {d: root.style.display, p: root.style.position, l: root.style.left};
@@ -4985,6 +5045,7 @@ function ciFitSheets(root){
     sh.style.zoom = '';
     sh.style.width = CI_W_MM + 'mm';
     sh.style.height = CI_H_MM + 'mm';
+    ciEvenRows(sh);                                     // 先把欄高弄平均，再量總高
     const box = sh.getBoundingClientRect().height;      // 一張 A4 放得下多少
     sh.style.height = 'auto';
     const need = sh.getBoundingClientRect().height;     // 內容其實要多高
@@ -5061,9 +5122,10 @@ function ciSheetHtml(recs, cols){
    // 工作平台／踏板：有勾印 V，沒勾留空白，跟紙本其他欄位同一個規則
    + '<tr><td class="lab"' + span2 + ' style="font-size:11.5px;">工作平台／踏板</td>'
    +   Array.from({length: cols}, (_, i) => '<td class="val" style="font-size:10.5px;">'
+         // 方框用 CSS 畫，不用 ☑：標楷體不一定有那個字，印出來會變空白
          + (recs[i]
-             ? ('平台 ' + (recs[i].has_work_platform ? '<b>V</b>' : '　')
-                + '　踏板 ' + (recs[i].has_footstep ? '<b>V</b>' : '　'))
+             ? ('平台' + ciBox(recs[i].has_work_platform)
+                + '　踏板' + ciBox(recs[i].has_footstep))
              : '')
          + '</td>').join('') + '</tr>'
    + valRow('貨　　主', 'shipper')
