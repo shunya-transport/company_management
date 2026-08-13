@@ -376,6 +376,7 @@
       <button data-tab="mileage">車輛里程統計</button>
       <button data-tab="workhour">工時統計</button>
       <button data-tab="contacts">通訊錄</button>
+      <button data-tab="forms">表單生成</button>
     </nav>
     <div class="sidebar-motto">
       <strong>安全 準時 用心</strong>
@@ -2170,6 +2171,67 @@
         </table>
       </div>
       <button class="btn ghost no-print" id="wh_export_vio" style="margin-top:10px;">匯出 CSV</button>
+    </div>
+  </div>
+
+  <div id="forms" class="panel">
+    <div class="card no-print">
+      <h2>表單生成</h2>
+      <div class="muted" style="margin-bottom:10px;">
+        照「設備的管理」那份表的欄位排好，選好條件按產生，就可以匯出 CSV 或直接列印。
+        資料是從系統現有的紀錄算出來的：司機取工時檔裡這台車最近一次出勤的駕駛，
+        換照日期取車輛證件的「行照」到期日，保養相關取保養排程。
+      </div>
+      <div class="toolbar">
+        <select id="fg_company"><option value="all">全部所屬單位</option></select>
+        <select id="fg_region"><option value="all">全部區域</option></select>
+        <select id="fg_cat">
+          <option value="車輛">只看車頭</option>
+          <option value="all">車頭＋板架</option>
+          <option value="板架">只看板架</option>
+        </select>
+        <label class="muted"><input type="checkbox" id="fg_active" checked style="vertical-align:middle;"> 只看在役</label>
+        <button class="btn" id="fg_run">產生</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>（一）車輛保養計畫與執行結果<span class="count-badge" id="fg1_count"></span></h2>
+      <div class="toolbar no-print">
+        <button class="btn ghost" id="fg1_csv">匯出 CSV</button>
+        <button class="btn ghost" id="fg1_print">列印／存 PDF</button>
+      </div>
+      <div class="table-scroll" style="max-height:560px;">
+        <table style="min-width:1280px;">
+          <thead><tr>
+            <th>車號</th><th>所屬單位</th><th>司機</th><th>出廠年月</th><th>廠牌</th>
+            <th class="num">重量(噸)</th><th>驗車日期</th><th>保險到期日</th><th>換照日期</th>
+            <th class="num">保養週期里程</th><th class="num">現在里程</th><th class="num">剩餘里程</th>
+            <th class="num">保養里程</th><th>保養時間</th>
+          </tr></thead>
+          <tbody id="fg1Body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>（二）維修保養紀錄<span class="count-badge" id="fg2_count"></span></h2>
+      <div class="toolbar no-print">
+        <label class="muted">日期 <input id="fg2_from" type="date"></label>
+        <label class="muted">～ <input id="fg2_to" type="date"></label>
+        <select id="fg2_type"><option value="all">全部保修分類</option></select>
+        <button class="btn ghost" id="fg2_csv">匯出 CSV</button>
+        <button class="btn ghost" id="fg2_print">列印／存 PDF</button>
+      </div>
+      <div class="table-scroll" style="max-height:560px;">
+        <table style="min-width:1280px;">
+          <thead><tr>
+            <th>車號</th><th>區域</th><th>公司行號</th><th>廠牌</th><th class="num">噸數</th><th>車種</th>
+            <th>出廠年月</th><th>完成日期</th><th>保修分類</th><th>廠商(全名)</th><th>駕駛人員</th><th>備註</th>
+          </tr></thead>
+          <tbody id="fg2Body"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -4945,6 +5007,183 @@ async function saveTrailerSizeInline(el){
   }catch(e){ /* saveState 失敗時已經有還原機制與提示，這裡不再重複跳窗 */ }
 }
 
+// ===================== 表單生成 =====================
+// 兩張表的欄位照使用者那份「設備的管理」Excel 排。
+// 全部從現有資料算出來，不新增欄位、不寫回資料庫。
+function fgNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function fgYearMonth(v){
+  // 出廠年月：優先用購入日，沒有就用出廠年份
+  const d = String((v && v.purchase_date) || '').slice(0, 7);
+  if(d.length === 7) return d.replace('-', '/');
+  return v && v.year ? String(v.year) : '';
+}
+// 司機：工時檔裡這台車最近一次出勤登記的駕駛。工時檔只載入最近兩年，夠用了。
+let FG_DRIVER = null;
+function fgDriverMap(){
+  if(FG_DRIVER) return FG_DRIVER;
+  const best = {};
+  (STATE.workHourDaily || []).forEach(w => {
+    const p = String(w.plate || '').trim();
+    if(!p || !w.driver_name) return;
+    const d = String(w.work_date || '');
+    if(!best[p] || d > best[p].d) best[p] = { d: d, name: w.driver_name };
+  });
+  FG_DRIVER = {};
+  Object.keys(best).forEach(p => { FG_DRIVER[p] = best[p].name; });
+  return FG_DRIVER;
+}
+function fgDriverOf(plate){ return fgDriverMap()[String(plate || '').trim()] || ''; }
+function fgDocExpiry(vid, type){
+  const list = (STATE.vehicleDocuments || [])
+    .filter(d => d.vehicle_id === vid && d.doc_type === type && d.expiry_date)
+    .map(d => String(d.expiry_date).slice(0, 10)).sort();
+  return list.length ? list[list.length - 1] : '';
+}
+// 保險到期日：這台車所有保單裡「最早到期」的那一張，先到期的先提醒
+function fgInsExpiry(plate){
+  const list = (STATE.vehicleInsurance || [])
+    .filter(i => i.plate === plate && i.expiry_date)
+    .map(i => String(i.expiry_date).slice(0, 10)).sort();
+  return list.length ? list[0] : '';
+}
+function fgLastMileage(plate){
+  const list = (STATE.mileageLogs || []).filter(m => m.plate === plate && m.mileage != null)
+    .slice().sort((a, b) => String(b.log_date || '').localeCompare(String(a.log_date || '')));
+  return list.length ? fgNum(list[0].mileage) : null;
+}
+function fgSchedule(v, type){
+  return (STATE.maintSchedules || []).find(s => s.maintenance_type === type &&
+    (s.vehicle_id === v.id || s.plate === v.plate)) || null;
+}
+function fgVehicles(){
+  const comp = (document.getElementById('fg_company') || {}).value || 'all';
+  const reg  = (document.getElementById('fg_region')  || {}).value || 'all';
+  const cat  = (document.getElementById('fg_cat')     || {}).value || '車輛';
+  const act  = (document.getElementById('fg_active')  || {}).checked;
+  return (STATE.vehicles || []).filter(v => {
+    if(cat !== 'all' && v.vehicle_category !== cat) return false;
+    if(act && (v.status !== '在役' || isRetiredVehicle(v))) return false;
+    if(comp !== 'all' && String(v.company_name || '') !== comp) return false;
+    if(reg  !== 'all' && String(v.base_location || '') !== reg) return false;
+    return true;
+  }).sort((a, b) => String(a.plate || '').localeCompare(String(b.plate || '')));
+}
+const FG1_HEAD = ['車號','所屬單位','司機','出廠年月','廠牌','重量(噸)','驗車日期','保險到期日','換照日期',
+                  '保養週期里程','現在里程','剩餘里程','保養里程','保養時間'];
+function fg1Rows(){
+  return fgVehicles().map(v => {
+    const s = fgSchedule(v, '小保養');
+    const cyc = s ? fgNum(s.frequency_km) : null;
+    const last = s && s.last_service_mileage != null ? fgNum(s.last_service_mileage) : null;
+    const now = fgLastMileage(v.plate);
+    const left = (cyc && last != null && now != null) ? (last + cyc - now) : null;
+    return [
+      v.plate || '', v.company_name || '', fgDriverOf(v.plate), fgYearMonth(v), v.brand || '',
+      v.load_capacity == null ? '' : v.load_capacity,
+      fgDocExpiry(v.id, '驗車'), fgInsExpiry(v.plate), fgDocExpiry(v.id, '行照'),
+      cyc || '', now == null ? '' : now, left == null ? '' : left,
+      last == null ? '' : last,
+      s && s.last_service_date ? String(s.last_service_date).slice(0, 10) : ''
+    ];
+  });
+}
+const FG2_HEAD = ['車號','區域','公司行號','廠牌','噸數','車種','出廠年月','完成日期','保修分類','廠商(全名)','駕駛人員','備註'];
+function fg2Rows(){
+  const keep = {};
+  fgVehicles().forEach(v => { keep[v.plate] = v; });
+  const f = (document.getElementById('fg2_from') || {}).value || '';
+  const t = (document.getElementById('fg2_to')   || {}).value || '';
+  const ty = (document.getElementById('fg2_type') || {}).value || 'all';
+  return (STATE.maintRecords || []).filter(r => {
+    if(!keep[r.plate]) return false;
+    const d = String(r.maintenance_date || '').slice(0, 10);
+    if(f && d < f) return false;
+    if(t && d > t) return false;
+    if(ty !== 'all' && String(r.maintenance_type || '') !== ty) return false;
+    return true;
+  }).sort((a, b) => String(b.maintenance_date || '').localeCompare(String(a.maintenance_date || '')))
+    .map(r => {
+      const v = keep[r.plate];
+      return [
+        r.plate || '', v.base_location || '', v.company_name || '', v.brand || '',
+        v.load_capacity == null ? '' : v.load_capacity, v.vehicle_type || '',
+        fgYearMonth(v), String(r.maintenance_date || '').slice(0, 10),
+        r.maintenance_type || '', r.vendor_name || '', fgDriverOf(r.plate),
+        [r.description, r.parts_replaced].filter(Boolean).join('／')
+      ];
+    });
+}
+function fgTable(bodyId, cntId, head, rows, unit){
+  const body = document.getElementById(bodyId);
+  if(!body) return;
+  const cnt = document.getElementById(cntId);
+  if(cnt) cnt.textContent = rows.length ? rows.length + ' ' + unit : '';
+  body.innerHTML = rows.length ? rows.map(r => '<tr>' + r.map((c, i) =>
+      '<td' + (typeof c === 'number' ? ' class="km-num"' : '') + '>' + esc(c === null ? '' : c) + '</td>'
+    ).join('') + '</tr>').join('')
+    : '<tr><td colspan="' + head.length + '" class="empty">沒有符合條件的資料，先按上面的「產生」。</td></tr>';
+}
+function renderForms(){
+  if(!document.getElementById('fg1Body')) return;
+  FG_DRIVER = null;                       // 每次重算，避免用到舊的對照
+  fgTable('fg1Body', 'fg1_count', FG1_HEAD, fg1Rows(), '台');
+  fgTable('fg2Body', 'fg2_count', FG2_HEAD, fg2Rows(), '筆');
+}
+function fgFillSelects(){
+  const set = (id, list, label) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const cur = el.value;
+    el.innerHTML = '<option value="all">' + label + '</option>'
+      + list.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
+    if(cur) el.value = cur;
+  };
+  set('fg_company', [...new Set((STATE.vehicles||[]).map(v => v.company_name).filter(Boolean))].sort(), '全部所屬單位');
+  set('fg_region',  [...new Set((STATE.vehicles||[]).map(v => v.base_location).filter(Boolean))].sort(), '全部區域');
+  set('fg2_type',   [...new Set((STATE.maintRecords||[]).map(r => r.maintenance_type).filter(Boolean))].sort(), '全部保修分類');
+}
+function fgCsv(name, head, rows){
+  if(!rows.length){ alert('目前沒有資料可以匯出。'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8'}));
+  a.download = name + '_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+// 列印用另開一個視窗，版面自己帶，不會被儀表板的樣式干擾。A4 橫式。
+function fgPrint(title, head, rows){
+  if(!rows.length){ alert('目前沒有資料可以列印。'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ alert('瀏覽器擋掉了新視窗，請允許彈出視窗後再試一次。'); return; }
+  const th = head.map(h => '<th>' + esc(h) + '</th>').join('');
+  const tb = rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c === null ? '' : c) + '</td>').join('') + '</tr>').join('');
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title) + '</title><style>'
+    + '@page{size:A4 landscape;margin:8mm;}'
+    + 'body{font-family:"微軟正黑體","Microsoft JhengHei",sans-serif;margin:0;color:#000;}'
+    + 'h2{font-size:15px;margin:0 0 6px;}'
+    + '.sub{font-size:10px;color:#555;margin:0 0 8px;}'
+    + 'table{width:100%;border-collapse:collapse;table-layout:auto;}'
+    + 'th,td{border:1px solid #000;padding:2px 4px;font-size:9.5px;line-height:1.25;white-space:nowrap;}'
+    + 'th{background:#eee;}'
+    + 'tr{page-break-inside:avoid;}'
+    + 'thead{display:table-header-group;}'
+    + '</style></head><body><h2>' + esc(title) + '</h2>'
+    + '<div class="sub">列印日期：' + todayISO() + '　共 ' + rows.length + ' 筆</div>'
+    + '<table><thead><tr>' + th + '</tr></thead><tbody>' + tb + '</tbody></table>'
+    + '</body></html>');
+  w.document.close();
+  setTimeout(() => { w.focus(); w.print(); }, 300);
+}
+{
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  on('fg_run', 'click', () => { fgFillSelects(); renderForms(); });
+  ['fg_company','fg_region','fg_cat','fg2_type'].forEach(id => on(id, 'change', renderForms));
+  on('fg_active', 'change', renderForms);
+  ['fg2_from','fg2_to'].forEach(id => on(id, 'change', renderForms));
+  on('fg1_csv', 'click', () => fgCsv('車輛保養計畫與執行結果', FG1_HEAD, fg1Rows()));
+  on('fg2_csv', 'click', () => fgCsv('維修保養紀錄', FG2_HEAD, fg2Rows()));
+  on('fg1_print', 'click', () => fgPrint('車輛保養計畫與執行結果', FG1_HEAD, fg1Rows()));
+  on('fg2_print', 'click', () => fgPrint('維修保養紀錄', FG2_HEAD, fg2Rows()));
+}
 // ===================== 貨櫃檢查表列印 =====================
 // 版面跟司機頁 container_inspection.html 完全一樣（程式是從那一支抽出來的），
 // 差別只在這裡是唯讀：只能印，不能改司機填的內容。
@@ -10735,6 +10974,8 @@ function renderLeaveStatTable(){
 }
 
 function renderAll(){
+  renderForms();
+  fgFillSelects();
   renderOverview();
   renderBookingCard();
   renderDueReminders();
