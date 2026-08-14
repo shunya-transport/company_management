@@ -613,6 +613,7 @@
         <label>廠牌<input id="vf_brand" placeholder="例：VOLVO"></label>
         <label>型號<input id="vf_model" placeholder="選填"></label>
         <label>出廠年份<input id="vf_year" type="number" placeholder="例：2020"></label>
+        <label>出廠年月<input id="vf_mfg" type="date" title="行照上就有，通常只到月，日填 1 號就好"></label>
         <label>車身號碼<input id="vf_chassis" placeholder="選填"></label>
         <label>引擎號碼<input id="vf_engine" placeholder="選填"></label>
         <label>載重量(噸)<input id="vf_load" type="number" placeholder="選填"></label>
@@ -5755,6 +5756,7 @@ function renderVehicleModalView(v){
       <dt>引擎號碼</dt><dd>${esc(v.engine_no||'—')}</dd>
       <dt>載重量</dt><dd>${v.load_capacity ? esc(v.load_capacity)+' 噸' : '—'}</dd>
       ${v.vehicle_category === '板架' ? `<dt>板架尺寸</dt><dd>${v.trailer_size ? esc(v.trailer_size) : '<span class="pill amber">尚未填寫</span>'}</dd>` : ''}
+      <dt>出廠年月</dt><dd>${esc(mfgROC(v.manufacture_date)||'—')}</dd>
       <dt>購買日期</dt><dd>${esc(v.purchase_date||'—')}</dd>
       <dt>公司別</dt><dd>${esc(v.company_name||'—')}</dd>
       <dt>發車地</dt><dd>${esc(v.base_location||'—')}</dd>
@@ -5837,6 +5839,7 @@ function renderVehicleModalEdit(v){
       <label>引擎號碼<input id="ve_engine" value="${esc(v.engine_no||'')}"></label>
       <label>載重量(噸)<input id="ve_load" type="number" value="${esc(v.load_capacity||'')}"></label>
       <label>板架尺寸<input id="ve_trailer_size" list="trailerSizeList" value="${esc(v.trailer_size||'')}" placeholder="板架才填，例：40呎"></label>
+      <label>出廠年月<input id="ve_mfg" type="date" value="${esc(v.manufacture_date||'')}" title="行照上就有，通常只到月，日填 1 號就好"></label>
       <label>購買日期<input id="ve_purchase" type="date" value="${esc(v.purchase_date||'')}"></label>
       <label>公司別<input id="ve_company" value="${esc(v.company_name||'')}" list="companyList2"></label>
       <label>發車地<input id="ve_base" value="${esc(v.base_location||'')}"></label>
@@ -5889,6 +5892,7 @@ function renderVehicleModalEdit(v){
     v.load_capacity = document.getElementById('ve_load').value || null;
     v.trailer_size = document.getElementById('ve_trailer_size').value.trim() || null;
     v.purchase_date = document.getElementById('ve_purchase').value || null;
+    v.manufacture_date = document.getElementById('ve_mfg').value || null;
     v.company_name = document.getElementById('ve_company').value.trim();
     v.base_location = document.getElementById('ve_base').value.trim();
     const _wasRetiredBefore = isRetiredVehicle(v);
@@ -7406,6 +7410,15 @@ function renderExtraFields(){
 }
 function extraVal(id){ const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
+// 出廠年月顯示用：資料存的是 2010-10-01，畫面上只要「99/10」。
+// 日一律是 1 號沒有意義，不顯示。
+function mfgROC(d){
+  const s = String(d || '').slice(0, 7);
+  if(s.length !== 7) return '';
+  const y = parseInt(s.slice(0, 4), 10);
+  if(!(y > 1911)) return '';
+  return (y - 1911) + '/' + s.slice(5, 7);
+}
 function toROCDate(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr+'T00:00:00');
@@ -14182,6 +14195,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
     engine_no: document.getElementById('vf_engine').value.trim(),
     load_capacity: document.getElementById('vf_load').value || null,
     purchase_date: document.getElementById('vf_purchase').value || null,
+    manufacture_date: document.getElementById('vf_mfg').value || null,
     fuel_card_no: document.getElementById('vf_fuel_card').value.trim(),
     etc_tag_no: document.getElementById('vf_etc').value.trim(),
     company_name: document.getElementById('vf_company').value.trim(),
@@ -14189,7 +14203,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
     status: document.getElementById('vf_status').value
   });
   await saveState('roster_vehicles', STATE.vehicles, true);
-  ['vf_plate','vf_type','vf_brand','vf_model','vf_year','vf_chassis','vf_engine','vf_load','vf_purchase','vf_fuel_card','vf_etc','vf_company','vf_base'].forEach(id=>document.getElementById(id).value='');
+  ['vf_plate','vf_type','vf_brand','vf_model','vf_year','vf_mfg','vf_chassis','vf_engine','vf_load','vf_purchase','vf_fuel_card','vf_etc','vf_company','vf_base'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
 

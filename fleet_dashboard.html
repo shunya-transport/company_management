@@ -5529,7 +5529,7 @@ function renderVehicleModalView(v){
       <dt>引擎號碼</dt><dd>${esc(v.engine_no||'—')}</dd>
       <dt>載重量</dt><dd>${v.load_capacity ? esc(v.load_capacity)+' 噸' : '—'}</dd>
       ${v.vehicle_category === '板架' ? `<dt>板架尺寸</dt><dd>${v.trailer_size ? esc(v.trailer_size) : '<span class="pill amber">尚未填寫</span>'}</dd>` : ''}
-      <dt>出廠年月</dt><dd>${esc(v.manufacture_date||'—')}</dd>
+      <dt>出廠年月</dt><dd>${esc(mfgROC(v.manufacture_date)||'—')}</dd>
       <dt>購買日期</dt><dd>${esc(v.purchase_date||'—')}</dd>
       <dt>公司別</dt><dd>${esc(v.company_name||'—')}</dd>
       <dt>發車地</dt><dd>${esc(v.base_location||'—')}</dd>
@@ -7703,6 +7703,15 @@ function renderExtraFields(){
 }
 function extraVal(id){ const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
+// 出廠年月顯示用：資料存的是 2010-10-01，畫面上只要「99/10」。
+// 日一律是 1 號沒有意義，不顯示。
+function mfgROC(d){
+  const s = String(d || '').slice(0, 7);
+  if(s.length !== 7) return '';
+  const y = parseInt(s.slice(0, 4), 10);
+  if(!(y > 1911)) return '';
+  return (y - 1911) + '/' + s.slice(5, 7);
+}
 function toROCDate(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr+'T00:00:00');
