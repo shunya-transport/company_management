@@ -612,7 +612,6 @@
         <label>車型<input id="vf_type" placeholder="例：營業大貨車"></label>
         <label>廠牌<input id="vf_brand" placeholder="例：VOLVO"></label>
         <label>型號<input id="vf_model" placeholder="選填"></label>
-        <label>出廠年份<input id="vf_year" type="number" placeholder="例：2020"></label>
         <label>出廠年月<input id="vf_mfg" type="date" title="行照上就有，通常只到月，日填 1 號就好"></label>
         <label>車身號碼<input id="vf_chassis" placeholder="選填"></label>
         <label>引擎號碼<input id="vf_engine" placeholder="選填"></label>
@@ -5751,12 +5750,11 @@ function renderVehicleModalView(v){
     <dl class="detail-grid">
       <dt>類別/車型</dt><dd>${esc(v.vehicle_category||'—')} / ${esc(v.vehicle_type||'—')}</dd>
       <dt>廠牌/型號</dt><dd>${esc(v.brand||'—')} / ${esc(v.model||'—')}</dd>
-      <dt>出廠年份</dt><dd>${esc(v.year||'—')}</dd>
+      <dt>出廠年月</dt><dd>${esc(mfgROC(v.manufacture_date)||'—')}</dd>
       <dt>車身號碼</dt><dd>${esc(v.chassis_no||'—')}</dd>
       <dt>引擎號碼</dt><dd>${esc(v.engine_no||'—')}</dd>
       <dt>載重量</dt><dd>${v.load_capacity ? esc(v.load_capacity)+' 噸' : '—'}</dd>
       ${v.vehicle_category === '板架' ? `<dt>板架尺寸</dt><dd>${v.trailer_size ? esc(v.trailer_size) : '<span class="pill amber">尚未填寫</span>'}</dd>` : ''}
-      <dt>出廠年月</dt><dd>${esc(mfgROC(v.manufacture_date)||'—')}</dd>
       <dt>購買日期</dt><dd>${esc(v.purchase_date||'—')}</dd>
       <dt>公司別</dt><dd>${esc(v.company_name||'—')}</dd>
       <dt>發車地</dt><dd>${esc(v.base_location||'—')}</dd>
@@ -5834,12 +5832,11 @@ function renderVehicleModalEdit(v){
       <label>車型<input id="ve_type" value="${esc(v.vehicle_type||'')}"></label>
       <label>廠牌<input id="ve_brand" value="${esc(v.brand||'')}"></label>
       <label>型號<input id="ve_model" value="${esc(v.model||'')}"></label>
-      <label>出廠年份<input id="ve_year" type="number" value="${esc(v.year||'')}"></label>
+      <label>出廠年月<input id="ve_mfg" type="date" value="${esc(v.manufacture_date||'')}" title="行照上就有，通常只到月，日填 1 號就好"></label>
       <label>車身號碼<input id="ve_chassis" value="${esc(v.chassis_no||'')}"></label>
       <label>引擎號碼<input id="ve_engine" value="${esc(v.engine_no||'')}"></label>
       <label>載重量(噸)<input id="ve_load" type="number" value="${esc(v.load_capacity||'')}"></label>
       <label>板架尺寸<input id="ve_trailer_size" list="trailerSizeList" value="${esc(v.trailer_size||'')}" placeholder="板架才填，例：40呎"></label>
-      <label>出廠年月<input id="ve_mfg" type="date" value="${esc(v.manufacture_date||'')}" title="行照上就有，通常只到月，日填 1 號就好"></label>
       <label>購買日期<input id="ve_purchase" type="date" value="${esc(v.purchase_date||'')}"></label>
       <label>公司別<input id="ve_company" value="${esc(v.company_name||'')}" list="companyList2"></label>
       <label>發車地<input id="ve_base" value="${esc(v.base_location||'')}"></label>
@@ -5886,7 +5883,8 @@ function renderVehicleModalEdit(v){
     v.vehicle_type = document.getElementById('ve_type').value.trim();
     v.brand = document.getElementById('ve_brand').value.trim();
     v.model = document.getElementById('ve_model').value.trim();
-    v.year = document.getElementById('ve_year').value || null;
+    // 出廠年份不再單獨輸入，從出廠年月自動帶（維修保養、表單生成還在讀 year）
+    v.year = parseInt((document.getElementById('ve_mfg').value || '').slice(0, 4), 10) || null;
     v.chassis_no = document.getElementById('ve_chassis').value.trim();
     v.engine_no = document.getElementById('ve_engine').value.trim();
     v.load_capacity = document.getElementById('ve_load').value || null;
@@ -14190,7 +14188,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
     vehicle_type: document.getElementById('vf_type').value.trim(),
     brand: document.getElementById('vf_brand').value.trim(),
     model: document.getElementById('vf_model').value.trim(),
-    year: document.getElementById('vf_year').value || null,
+    year: parseInt((document.getElementById('vf_mfg').value || '').slice(0, 4), 10) || null,
     chassis_no: document.getElementById('vf_chassis').value.trim(),
     engine_no: document.getElementById('vf_engine').value.trim(),
     load_capacity: document.getElementById('vf_load').value || null,
@@ -14203,7 +14201,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
     status: document.getElementById('vf_status').value
   });
   await saveState('roster_vehicles', STATE.vehicles, true);
-  ['vf_plate','vf_type','vf_brand','vf_model','vf_year','vf_mfg','vf_chassis','vf_engine','vf_load','vf_purchase','vf_fuel_card','vf_etc','vf_company','vf_base'].forEach(id=>document.getElementById(id).value='');
+  ['vf_plate','vf_type','vf_brand','vf_model','vf_mfg','vf_chassis','vf_engine','vf_load','vf_purchase','vf_fuel_card','vf_etc','vf_company','vf_base'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
 
