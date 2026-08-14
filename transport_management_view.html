@@ -1168,31 +1168,6 @@
         <button class="btn ghost" id="mh_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
 
-    <div class="card">
-      <h2>車輛保養清單<span class="count-badge" id="maint_due_count"></span></h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>保養標準車型</th><th>項目</th><th>狀態</th><th>說明</th></tr></thead>
-          <tbody id="maintDueBody"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
-      <h2>板架打油到期提醒<span class="count-badge" id="maint_grease_count"></span></h2>
-      <div class="toolbar"><select id="maint_grease_filter">
-        <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
-        <option value="soon30">30天內</option><option value="soon60">60天內</option><option value="soon90">90天內</option>
-      </select></div>
-      <div id="maintGreaseAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>輪軸保養到期提醒<span class="count-badge" id="maint_axle_count"></span></h2>
-      <div class="toolbar"><select id="maint_axle_filter">
-        <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
-        <option value="soon30">30天內</option><option value="soon60">60天內</option><option value="soon90">90天內</option>
-      </select></div>
-      <div id="maintAxleAlerts"></div>
-    </div>
 
     <div class="card">
       <h2>新增/更換輪胎</h2>
@@ -1304,6 +1279,32 @@
     </table>
   </div>
 </div>
+
+    <div class="card">
+      <h2>車輛保養清單<span class="count-badge" id="maint_due_count"></span></h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>車號</th><th>保養標準車型</th><th>項目</th><th>狀態</th><th>說明</th></tr></thead>
+          <tbody id="maintDueBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>板架打油到期提醒<span class="count-badge" id="maint_grease_count"></span></h2>
+      <div class="toolbar"><select id="maint_grease_filter">
+        <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
+        <option value="soon30">30天內</option><option value="soon60">60天內</option><option value="soon90">90天內</option>
+      </select></div>
+      <div id="maintGreaseAlerts"></div>
+    </div>
+    <div class="card">
+      <h2>輪軸保養到期提醒<span class="count-badge" id="maint_axle_count"></span></h2>
+      <div class="toolbar"><select id="maint_axle_filter">
+        <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
+        <option value="soon30">30天內</option><option value="soon60">60天內</option><option value="soon90">90天內</option>
+      </select></div>
+      <div id="maintAxleAlerts"></div>
+    </div>
 
     <div class="card">
       <h2>輪軸保養紀錄</h2>
