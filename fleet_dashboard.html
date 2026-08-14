@@ -4139,7 +4139,9 @@ function renderNewStaffChecklist(){
 }
 
 function renderDatalists(){
-  const companies = [...new Set([...STATE.employees.map(e=>e.company_name), ...STATE.vehicles.map(v=>v.company_name)].filter(Boolean))];
+  // 只列 companies 表裡有的：對不到編號的名字選了也存不進去，不要出現在清單裡
+  const companies = orgNames('company').length ? orgNames('company')
+    : [...new Set([...STATE.employees.map(e=>e.company_name), ...STATE.vehicles.map(v=>v.company_name)].filter(Boolean))];
   document.getElementById('companyList2').innerHTML = companies.map(c=>`<option value="${esc(c)}">`).join('');
   const plateListEl = document.getElementById('plateList');
   if(plateListEl){
@@ -4560,6 +4562,25 @@ async function orgDelete(kind, id){
     });
   });
 }
+// 車輛的公司別跟人員一樣：資料庫存的是 company_id，畫面上顯示的是 join 出來的
+// company_name，而 company_name 在 COMPUTED_FIELDS 裡存檔前一定會被濾掉。
+// 只寫名稱等於什麼都沒存，一定要換算成編號寫回 company_id。
+// 對不到編號時回傳那個名字，交給呼叫的人擋下來，不要靜靜存成空白。
+function applyVehicleCompany(v, name){
+  const n = String(name == null ? '' : name).trim();
+  if(!n){ v.company_name = null; v.company_id = null; return null; }
+  const id = REF_NAME2ID.company[n];
+  if(id == null) return n;
+  v.company_name = n;
+  v.company_id = id;
+  return null;
+}
+function vehicleCompanyWarn(n){
+  alert('「' + n + '」不在系統的公司別清單裡，找不到對應的編號，這次沒有存檔。\n\n'
+      + '請直接從欄位的下拉清單選現有的公司；真的要新增公司，\n'
+      + '要先在資料庫的 companies 建好才會出現在清單裡。');
+}
+
 function renderNewStaffSelects(){
   const deptSel = document.getElementById('sf_dept');
   // 只列對照得到編號的名稱，避免選了存不進去
@@ -5652,6 +5673,9 @@ function renderVehicleModalEdit(v){
   document.getElementById('vehicleModalCancelBtn').addEventListener('click', () => renderVehicleModalView(v));
 
   async function doSaveVehicle(){
+    // 公司別要換算成 company_id 才存得住，對不到就先擋下來，不要動到其他欄位
+    const _badCo = applyVehicleCompany(v, document.getElementById('ve_company').value);
+    if(_badCo){ vehicleCompanyWarn(_badCo); return; }
     v.vehicle_category = document.getElementById('ve_category').value;
     v.vehicle_type = document.getElementById('ve_type').value.trim();
     v.brand = document.getElementById('ve_brand').value.trim();
@@ -5664,7 +5688,6 @@ function renderVehicleModalEdit(v){
     v.trailer_size = document.getElementById('ve_trailer_size').value.trim() || null;
     v.purchase_date = document.getElementById('ve_purchase').value || null;
     v.manufacture_date = document.getElementById('ve_mfg').value || null;
-    v.company_name = document.getElementById('ve_company').value.trim();
     v.base_location = document.getElementById('ve_base').value.trim();
     const _wasRetiredBefore = isRetiredVehicle(v);
     v.status = document.getElementById('ve_status').value;
@@ -14354,6 +14377,10 @@ document.getElementById('vf_add').addEventListener('click', async () => {
     base_location: document.getElementById('vf_base').value.trim(),
     status: document.getElementById('vf_status').value
   });
+  // 公司別要換算成 company_id 才存得住，對不到就把剛加的那台收回去
+  const _newV = STATE.vehicles[STATE.vehicles.length - 1];
+  const _badCo = applyVehicleCompany(_newV, document.getElementById('vf_company').value);
+  if(_badCo){ STATE.vehicles.pop(); vehicleCompanyWarn(_badCo); return; }
   await saveState('roster_vehicles', STATE.vehicles, true);
   ['vf_plate','vf_type','vf_brand','vf_model','vf_mfg','vf_chassis','vf_engine','vf_load','vf_purchase','vf_fuel_card','vf_etc','vf_company','vf_base'].forEach(id=>document.getElementById(id).value='');
   renderAll();
