@@ -5019,10 +5019,19 @@ async function saveTrailerSizeInline(el){
 // 全部從現有資料算出來，不新增欄位、不寫回資料庫。
 function fgNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function fgYearMonth(v){
-  // 出廠年月：優先用購入日，沒有就用出廠年份
+  // 出廠年月的來源，照準確度排：
+  //   1. 備註裡「出廠年月 2004.07」——115/07/29 依行照補的那批，月份只存在這裡
+  //   2. year 欄（只有年份，沒有月）
+  //   3. 購入日（目前資料庫裡 150 台全部是空的，留著以後填了會用到）
+  // 正式欄位最準（SQL #112 建的），其次才是備註裡補的那批
+  const md = String((v && v.manufacture_date) || '').slice(0, 7);
+  if(md.length === 7) return md.replace('-', '/');
+  const m = String((v && v.notes) || '').match(/出廠年月\s*(\d{4})[.\-\/年]\s*(\d{1,2})/);
+  if(m) return m[1] + '/' + ('0' + m[2]).slice(-2);
+  if(v && v.year) return String(v.year);
   const d = String((v && v.purchase_date) || '').slice(0, 7);
   if(d.length === 7) return d.replace('-', '/');
-  return v && v.year ? String(v.year) : '';
+  return '';
 }
 // 司機：工時檔裡這台車最近一次出勤登記的駕駛。工時檔只載入最近兩年，夠用了。
 let FG_DRIVER = null;
