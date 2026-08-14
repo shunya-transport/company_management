@@ -1261,7 +1261,7 @@
 <div class="card">
   <h2>輪胎作業單歷史<span class="count-badge" id="ts_hist_count"></span></h2>
   <div class="toolbar" style="margin-bottom:10px;">
-    <label class="muted">搜尋 <input id="ts_hs_q" placeholder="車號／板架號／單號／輪胎行／櫃號／發票號碼" style="min-width:260px;"></label>
+    <label class="muted">搜尋 <input id="ts_hs_q" placeholder="車號／板架號／單號／廠商／櫃號／發票號碼／內容" style="min-width:280px;"></label>
     <label class="muted">日期 <input id="ts_hs_from" type="date"></label>
     <label class="muted">～ <input id="ts_hs_to" type="date"></label>
     <button class="btn ghost" id="ts_hs_clear">清除</button>
@@ -5951,6 +5951,15 @@ function tirePrintMaintSlip(orderId){
   if(!o){ alert('找不到這一張作業單。'); return; }
   mrPrint([tireOrderToMaintRecord(o)]);
 }
+// 車輛維護裡「跟輪胎有關」的維修單：內容或更換零件寫到這些字就算。
+// 刻意不收「輪軸」——那是另一套保養，混進來會看不懂。
+const TIRE_WORD_RE = /輪胎|換胎|新胎|補胎|胎皮|外胎|內胎|鋼圈/;
+function tireLikeMaintRecords(){
+  return (STATE.maintRecords || []).filter(r => {
+    const t = String(r.description || '') + ' ' + String(r.parts_replaced || '');
+    return TIRE_WORD_RE.test(t);
+  });
+}
 function renderTireOrderHistory(){
   const body = document.getElementById('tsHistBody');
   if(!body) return;
@@ -5974,31 +5983,73 @@ function renderTireOrderHistory(){
       const b = ev.target.closest('[data-ts-print]');
       if(b){ tirePrintMaintSlip(b.getAttribute('data-ts-print')); return; }
       const ed = ev.target.closest('[data-ts-edit]');
-      if(ed) tsLoadOrder(ed.getAttribute('data-ts-edit'));
+      if(ed){ tsLoadOrder(ed.getAttribute('data-ts-edit')); return; }
+      // 從車輛維護併進來的維修單：走維修紀錄那一套的修改與列印
+      const om = ev.target.closest('[data-open-maint]');
+      if(om){ openMaintEditModal(om.getAttribute('data-open-maint')); return; }
+      const pm = ev.target.closest('[data-print-maint]');
+      if(pm) mrPrintOne(pm.getAttribute('data-print-maint'));
     });
   }
   // 搜尋：車號、板架號、單號、輪胎行、櫃號、申請人、發票號碼都吃；再加日期區間。
   const _q  = String(((document.getElementById('ts_hs_q')||{}).value) || '').trim().toUpperCase();
   const _f  = ((document.getElementById('ts_hs_from')||{}).value) || '';
   const _t2 = ((document.getElementById('ts_hs_to')||{}).value)   || '';
-  const _all = (STATE.tireOrders || []);
+  // 車輛維護裡只要是輪胎相關的維修單，也一起併進這張表看（標成「維修單」）。
+  // 只是一起顯示，資料還是那一筆維修紀錄，不會變成兩筆。
+  const _mrs = tireLikeMaintRecords().map(r => ({
+    _mr: r,
+    id: 'MR' + r.id,
+    service_date: String(r.maintenance_date || '').slice(0, 10),
+    order_no: r.invoice_no || '',
+    vendor_name: r.vendor_name || '',
+    plate: r.plate || '',
+    trailer_plate: '',
+    mileage: r.mileage_at_service,
+    invoice_no: r.invoice_no || '',
+    invoice_amount: null,
+    total_amount: r.cost,
+    notes: [r.description, r.parts_replaced].filter(Boolean).join('／'),
+    customer_name: r.requested_by_name || '',
+    container_no: ''
+  }));
+  const _all = (STATE.tireOrders || []).concat(_mrs);
   const rows = _all.slice().filter(o => {
     const d = String(o.service_date || '');
     if(_f && d < _f) return false;
     if(_t2 && d > _t2) return false;
     if(_q){
       const hay = [o.plate, o.trailer_plate, o.order_no, o.vendor_name,
-                   o.container_no, o.customer_name, o.invoice_no]
+                   o.container_no, o.customer_name, o.invoice_no, o.notes]
         .map(x => String(x == null ? '' : x).toUpperCase()).join(' ');
       if(hay.indexOf(_q) < 0) return false;
     }
     return true;
   }).sort((a,b) => String(b.service_date||'').localeCompare(String(a.service_date||'')));
   const cnt = document.getElementById('ts_hist_count');
+  const _nTs = rows.filter(o => !o._mr).length, _nMr = rows.length - _nTs;
   if(cnt) cnt.textContent = !_all.length ? ''
-      : (rows.length === _all.length ? `共 ${rows.length} 張`
-                                     : `符合 ${rows.length} 張／共 ${_all.length} 張`);
+      : `共 ${rows.length} 筆（作業單 ${_nTs}　維修單 ${_nMr}）`
+        + (rows.length === _all.length ? '' : `／全部 ${_all.length}`);
   body.innerHTML = rows.map(o => {
+    // 從車輛維護併進來的那幾筆：沒有輪胎明細，改與印都走維修紀錄那一套
+    if(o._mr){
+      const r = o._mr;
+      return `<tr style="background:rgba(120,140,170,.06);">
+      <td>${esc(o.service_date)}</td>
+      <td><span class="pill gray" title="這一筆是「車輛維護」裡的維修單，因為內容有輪胎相關字眼才併進來一起看">維修單</span></td>
+      <td>${esc(o.vendor_name)}</td>
+      <td>${esc(o.plate)}</td>
+      <td></td>
+      <td>${o.mileage ? esc(Number(o.mileage).toLocaleString()) : '—'}</td>
+      <td class="muted">—</td>
+      <td>${(r.cost == null || r.cost === '') ? '—' : '$' + esc(Number(r.cost).toLocaleString())}</td>
+      <td>${r.invoice_no ? esc(r.invoice_no) : '<span class="muted">未補</span>'}</td>
+      <td class="muted"><div class="note-1line" title="${esc(o.notes)}">${esc(o.notes)}</div></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-open-maint="${esc(r.id)}">修改</button>
+        <button class="name-link" data-print-maint="${esc(r.id)}">印</button></td>
+    </tr>`;
+    }
     const n = (STATE.tireOrderTires || []).filter(t => String(t.order_id) === String(o.id)).length;
     return `<tr>
       <td>${esc(o.service_date||'')}</td>
