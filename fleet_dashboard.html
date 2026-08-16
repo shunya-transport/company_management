@@ -2319,6 +2319,26 @@
         </table>
       </div>
     </div>
+    <div class="card">
+      <h2>配備類型維護<span class="count-badge" id="eqt_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        這裡就是「新增庫存品項」「人員管理 → 物品」「車輛配備」三個下拉共用的那份清單。
+        改名只是換顯示的字，領用紀錄記的是編號，不會影響任何一筆；已經有人在用的不能刪。
+        類別選「儀器設備」的品項會跑到上面的儀器清單去個別追蹤序號與校驗日，一般消耗品不要選它。
+      </div>
+      <div class="toolbar">
+        <input id="eqt_new" placeholder="新配備名稱，例：防塵口罩" style="min-width:200px;">
+        <select id="eqt_cat"></select>
+        <button class="btn" id="eqt_add">新增配備類型</button>
+      </div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table>
+          <thead><tr><th>配備名稱</th><th style="width:120px;">類別</th><th style="width:180px;">使用中</th><th style="width:190px;"></th></tr></thead>
+          <tbody id="eqtBody"></tbody>
+        </table>
+      </div>
+      <div id="eqt_msg" class="muted" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <div id="forms" class="panel">
@@ -3671,7 +3691,7 @@ async function loadState(){
   STATE.vehicleDocuments = await safeGet('vehicle_documents', SEED.vehicle_documents || [], true);
   STATE.maintenanceStandards = SEED.maintenance_standards || [];
   STATE.vehicleInsurance = await safeGet('vehicle_insurance', SEED.vehicle_insurance || [], true);
-  STATE.equipmentTypes = SEED.equipment_types || [];
+  STATE.equipmentTypes = await loadEquipTypes();
   STATE.employeeEquipment = await safeGet('employee_equipment', [], true);
   STATE.tireRecords = await safeGet('tire_records', [], true);
   STATE.tireOrders = await safeGet('tire_service_orders', [], true);
@@ -4580,6 +4600,191 @@ function vehicleCompanyWarn(n){
   alert('「' + n + '」不在系統的公司別清單裡，找不到對應的編號，這次沒有存檔。\n\n'
       + '請直接從欄位的下拉清單選現有的公司；真的要新增公司，\n'
       + '要先在資料庫的 companies 建好才會出現在清單裡。');
+}
+
+// ===== 配備類型維護（配備管理分頁最下方） =====
+// equipment_types 是三個下拉共用的清單：新增庫存品項、人員領用物品、車輛配備。
+// 以前只從內建備援資料載入、畫面上也沒得新增，要加一種配備只能去後台改表。
+const EQT_CAT_BASE = ['識別證件','鑰匙門禁','防護用具','通訊設備','制服類','鞋類',
+                     '車輛安全配備','儀器設備','其他'];
+// 真的去雲端讀；讀不到（表不存在、沒權限）才退回內建清單，不要讓整頁掛掉
+async function loadEquipTypes(){
+  try{
+    const rows = await supaFetch('equipment_types?select=*&order=type_id.asc');
+    if(rows && rows.length) return rows.map(r => ({...r, id: r.type_id}));
+  }catch(e){ console.error('equipment_types 讀取失敗，改用內建清單', e); }
+  return (SEED.equipment_types || []).map(t => ({...t, type_id: t.id}));
+}
+function eqtCategories(){
+  const cur = (STATE.equipmentTypes || []).map(t => String(t.category || '').trim()).filter(Boolean);
+  return [...new Set([...EQT_CAT_BASE, ...cur])];
+}
+// 這個類型被用在幾個地方：人員領用、車輛配備、庫存品項。有任何一筆就不給刪。
+function eqtUseCount(id){
+  const s = String(id);
+  const emp   = (STATE.employeeEquipment || []).filter(x => String(x.type_id) === s).length;
+  const veh   = (STATE.vehicleEquipment  || []).filter(x => String(x.type_id) === s).length;
+  const stock = (STATE.stockItems        || []).filter(x => String(x.type_id) === s).length;
+  return {emp, veh, stock, total: emp + veh + stock};
+}
+function eqtMsg(t, bad){
+  const el = document.getElementById('eqt_msg');
+  if(el){ el.textContent = t || ''; el.style.color = bad ? 'var(--red)' : ''; }
+}
+function renderEquipTypeCard(){
+  const body = document.getElementById('eqtBody');
+  if(!body) return;
+  const rows = (STATE.equipmentTypes || []).slice().sort((a, b) =>
+    String(a.category || '').localeCompare(String(b.category || ''))
+    || String(a.name || '').localeCompare(String(b.name || '')));
+  const cnt = document.getElementById('eqt_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 種`;
+  const sel = document.getElementById('eqt_cat');
+  if(sel && !sel.dataset.filled){
+    sel.innerHTML = eqtCategories().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    sel.value = '其他';
+    sel.dataset.filled = '1';
+  }
+  body.innerHTML = rows.map(t => {
+    const id = t.type_id != null ? t.type_id : t.id;
+    const u = eqtUseCount(id);
+    const used = [u.emp ? '人員 ' + u.emp : '', u.veh ? '車輛 ' + u.veh : '', u.stock ? '庫存品項 ' + u.stock : '']
+                 .filter(Boolean).join('　') || '<span class="muted">—</span>';
+    return `<tr><td>${esc(t.name || '')}</td>`
+      + `<td class="muted">${esc(t.category || '')}</td>`
+      + `<td>${used}</td>`
+      + `<td style="white-space:nowrap;">`
+      + `<button class="name-link" data-eqt-ren="${esc(id)}">改名</button> `
+      + `<button class="name-link" data-eqt-cat="${esc(id)}">改類別</button> `
+      + (u.total ? `<span class="muted" title="還有 ${u.total} 筆在用，不能刪">刪除</span>`
+                 : `<button class="del-btn" data-eqt-del="${esc(id)}">刪除</button>`)
+      + `</td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="empty">還沒有資料</td></tr>';
+}
+// 改完要整份重讀，三個下拉才會跟著更新
+async function eqtReload(){
+  STATE.equipmentTypes = await loadEquipTypes();
+  renderAll();
+}
+function eqtRow(id){
+  return (STATE.equipmentTypes || []).find(t =>
+    String(t.type_id != null ? t.type_id : t.id) === String(id));
+}
+async function eqtPost(obj){
+  return supaFetch('equipment_types', {
+    method: 'POST', headers: {'Prefer': 'return=representation'}, body: JSON.stringify(obj)
+  });
+}
+async function eqtAdd(){
+  const inp = document.getElementById('eqt_new');
+  const name = (inp ? inp.value : '').trim();
+  if(!name){ alert('請先填配備名稱。'); return; }
+  if((STATE.equipmentTypes || []).some(t => String(t.name || '').trim() === name)){
+    alert('「' + name + '」已經在清單裡了。'); return;
+  }
+  const cat = (document.getElementById('eqt_cat') || {}).value || '其他';
+  if(cat === '儀器設備' &&
+     !confirm('類別選了「儀器設備」。\n\n這一類的品項會跑到「儀器清單」去個別追蹤序號與校驗日，'
+            + '不會用一般的數量庫存管理。\n\n確定「' + name + '」是這種儀器嗎？')) return;
+  try{
+    const rec = {name, category: cat};
+    try{
+      await eqtPost(rec);
+    }catch(err){
+      // 主鍵不是自動編號的資料庫，要自己給編號再送一次
+      const msg = String((err && err.message) || '');
+      if(msg.indexOf('null value') < 0 && msg.indexOf('23502') < 0) throw err;
+      const maxId = (STATE.equipmentTypes || []).reduce(
+        (m, t) => Math.max(m, Number(t.type_id != null ? t.type_id : t.id) || 0), 0);
+      await eqtPost({...rec, type_id: maxId + 1});
+    }
+    if(inp) inp.value = '';
+    await eqtReload();
+    eqtMsg('已新增配備類型「' + name + '」，三個下拉都可以選了。');
+  }catch(err){
+    eqtMsg('新增失敗：' + ((err && err.message) || err), true);
+    alert('新增配備類型失敗，沒有存進去。\n\n' + ((err && err.message) || err));
+  }
+}
+async function eqtPatch(id, body, okText){
+  try{
+    await supaFetch('equipment_types?type_id=eq.' + encodeURIComponent(id),
+      {method: 'PATCH', body: JSON.stringify(body)});
+    await eqtReload();
+    eqtMsg(okText);
+  }catch(err){
+    eqtMsg('修改失敗：' + ((err && err.message) || err), true);
+    alert('修改失敗，沒有存進去。\n\n' + ((err && err.message) || err));
+  }
+}
+async function eqtRename(id){
+  const cur = eqtRow(id);
+  if(!cur) return;
+  const old = String(cur.name || '');
+  const name = prompt('把配備「' + old + '」改成：', old);
+  if(name === null) return;
+  const nn = String(name).trim();
+  if(!nn || nn === old) return;
+  if((STATE.equipmentTypes || []).some(t =>
+      String(t.name || '').trim() === nn &&
+      String(t.type_id != null ? t.type_id : t.id) !== String(id))){
+    alert('「' + nn + '」已經在清單裡了。'); return;
+  }
+  const u = eqtUseCount(id);
+  await eqtPatch(id, {name: nn},
+    '已改名為「' + nn + '」' + (u.total ? ('，' + u.total + ' 筆既有紀錄會一起更新顯示。') : '。'));
+}
+async function eqtChangeCat(id){
+  const cur = eqtRow(id);
+  if(!cur) return;
+  const list = eqtCategories();
+  const old = String(cur.category || '');
+  const cat = prompt('「' + cur.name + '」的類別要改成？\n\n可以用的類別：\n' + list.join('、'), old);
+  if(cat === null) return;
+  const cc = String(cat).trim();
+  if(!cc || cc === old) return;
+  if(list.indexOf(cc) < 0 &&
+     !confirm('「' + cc + '」是一個全新的類別，確定要用嗎？')) return;
+  if(cc === '儀器設備' &&
+     !confirm('改成「儀器設備」之後，這個品項會跑到「儀器清單」去個別追蹤序號與校驗日。\n\n確定嗎？')) return;
+  await eqtPatch(id, {category: cc}, '已把「' + cur.name + '」改成「' + cc + '」。');
+}
+async function eqtDelete(id){
+  const cur = eqtRow(id);
+  if(!cur) return;
+  const u = eqtUseCount(id);
+  if(u.total){
+    alert('「' + cur.name + '」還有紀錄在用，不能刪除。\n\n'
+        + (u.emp   ? '　人員領用　' + u.emp   + ' 筆\n' : '')
+        + (u.veh   ? '　車輛配備　' + u.veh   + ' 筆\n' : '')
+        + (u.stock ? '　庫存品項　' + u.stock + ' 筆\n' : '')
+        + '\n請先處理掉那些紀錄，再回來刪。');
+    return;
+  }
+  if(!confirm('確定要刪除配備類型「' + cur.name + '」嗎？')) return;
+  try{
+    await supaFetch('equipment_types?type_id=eq.' + encodeURIComponent(id), {method: 'DELETE'});
+    await eqtReload();
+    eqtMsg('已刪除配備類型「' + cur.name + '」。');
+  }catch(err){
+    eqtMsg('刪除失敗：' + ((err && err.message) || err), true);
+    alert('刪除失敗。這個配備可能還被其他資料引用。\n\n' + ((err && err.message) || err));
+  }
+}
+{
+  const _a = document.getElementById('eqt_add');
+  if(_a) _a.addEventListener('click', eqtAdd);
+  const _n = document.getElementById('eqt_new');
+  if(_n) _n.addEventListener('keydown', e => { if(e.key === 'Enter') eqtAdd(); });
+  const _b = document.getElementById('eqtBody');
+  if(_b) _b.addEventListener('click', async (ev) => {
+    const ren = ev.target.closest('[data-eqt-ren]');
+    if(ren){ await eqtRename(ren.getAttribute('data-eqt-ren')); return; }
+    const cat = ev.target.closest('[data-eqt-cat]');
+    if(cat){ await eqtChangeCat(cat.getAttribute('data-eqt-cat')); return; }
+    const del = ev.target.closest('[data-eqt-del]');
+    if(del){ await eqtDelete(del.getAttribute('data-eqt-del')); }
+  });
 }
 
 function renderNewStaffSelects(){
@@ -11399,6 +11604,7 @@ function renderLeaveStatTable(){
 
 function renderAll(){
   renderOrgTables();
+  renderEquipTypeCard();
   renderTtTables();
   renderOverview();
   renderBookingCard();
