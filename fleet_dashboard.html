@@ -2347,9 +2347,8 @@
       <div class="form-grid">
         <label>表單類型
           <select id="form_type">
-            <option value="equipment_list">物品領用清單</option>
             <option value="pension_contribution">勞健保提撥計算表</option>
-            <option value="personal_leave">個人請假清單</option>
+            <option value="insured_amount">投保金額總表（全部人員）</option>
             <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
             <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
             <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
@@ -7918,10 +7917,9 @@ const EXTRA_FIELDS = {
     {id:'ex_ms_scope', label:'人員範圍', type:'select', opts:['直接人員','全部在職']},
     {id:'ex_ms_rows', label:'總列數（空白＝15）', type:'number', placeholder:'例：15'}
   ],
-  personal_leave: [
-    {id:'ex_leave_mode', label:'顯示方式', type:'select', opts:['依月','依年']},
-    {id:'ex_leave_month', label:'月份（顯示方式選"依月"時使用）', type:'month'},
-    {id:'ex_leave_year', label:'年份（顯示方式選"依年"時使用，例：2026）', type:'number', placeholder:'例：2026'}
+  insured_amount: [
+    {id:'ex_ins_period', label:'期間（民國年月，空白＝最新一期）', type:'text', placeholder:'例：115/08'},
+    {id:'ex_ins_scope', label:'人員範圍', type:'select', opts:['該期全部','僅在職人員']}
   ]
 };
 function renderExtraFields(){
@@ -8468,7 +8466,7 @@ function generateForm(){
   const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
   const e = list.find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet'];
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount'];
   const MS_TYPES = ['bp_sheet','alcohol_sheet'];
   if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
@@ -8622,6 +8620,80 @@ function generateForm(){
         ※本表金額取自公司內部勞健保登錄系統之最近一期實際投保紀錄，僅供公司內部參考；正式數據請以勞保局、健保署核定資料為準。
       </p>`;
 
+  }else if(type === 'insured_amount'){
+    const { key, rows } = insuredAmountRows();
+    const period = insuredPeriodLabel(key);
+    const money = v => (Math.round(Number(v) || 0)).toLocaleString('en-US');
+    const sum = (list, k) => list.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+    const TH  = 'padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;';
+    const TD  = 'padding:5px 8px;border:1px solid #ccc;';
+    const TDR = TD + 'text-align:right;';
+    const TDC = TD + 'text-align:center;';
+    const byCompany = {};
+    rows.forEach(r => {
+      const c = r.company_name || '未設定行號';
+      (byCompany[c] = byCompany[c] || []).push(r);
+    });
+    const bodyRows = Object.keys(byCompany).sort().map(c => {
+      const list = byCompany[c];
+      const header = `<tr style="background:#EEF3F1;font-weight:700;">
+          <td style="${TD}" colspan="13">${esc(c)}　（${list.length} 人）</td>
+        </tr>`;
+      const members = list.map((r, i) => `<tr>
+          <td style="${TDC}">${i + 1}</td>
+          <td style="${TD}">${esc(r.name || '')}</td>
+          <td style="${TDC}">${esc(r.employee_no || '')}</td>
+          <td style="${TDC}">${esc(r.region || '')}</td>
+          <td style="${TD}">${esc(r.dept_name || '')}</td>
+          <td style="${TD}">${esc(r.position_name || '')}</td>
+          <td style="${TDC}">${esc(r.account_type || '')}</td>
+          <td style="${TDC}">${esc(rocSlash(r.insured_date))}</td>
+          ${INS_AMT_COLS.map(x => `<td style="${TDR}">${money(r[x.k])}</td>`).join('')}
+          <td style="${TDC}">${r.dependents_count == null ? '' : esc(r.dependents_count)}</td>
+        </tr>`).join('');
+      const subtotal = `<tr style="font-weight:700;background:#fafafa;">
+          <td style="${TD}" colspan="8">${esc(c)} 小計（${list.length} 人）</td>
+          ${INS_AMT_COLS.map(x => `<td style="${TDR}">${money(sum(list, x.k))}</td>`).join('')}
+          <td style="${TDC}"></td>
+        </tr>`;
+      return header + members + subtotal;
+    }).join('');
+
+    bodyHtml = `
+      <h2 style="text-align:center;letter-spacing:6px;">投保金額總表</h2>
+      <p style="text-align:center;color:#666;font-size:12px;margin:4px 0 16px;">
+        全體人員 ・ 依行號分組 ・ 資料期間：${esc(period)}
+        ${extraVal('ex_ins_scope') === '僅在職人員' ? '・僅列在職人員' : ''}
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr>
+            <th style="${TH}">序號</th>
+            <th style="${TH}">姓名</th>
+            <th style="${TH}">工號</th>
+            <th style="${TH}">區域</th>
+            <th style="${TH}">部門</th>
+            <th style="${TH}">職稱</th>
+            <th style="${TH}">分帳</th>
+            <th style="${TH}">加保日期</th>
+            ${INS_AMT_COLS.map(x => `<th style="${TH}">${x.t}</th>`).join('')}
+            <th style="${TH}">眷口數</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows || `<tr><td style="${TDC}" colspan="13">這一期查不到投保紀錄</td></tr>`}</tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:#f0f0f0;">
+            <td style="${TD}" colspan="8">全公司合計（${rows.length} 人）</td>
+            ${INS_AMT_COLS.map(x => `<td style="${TDR}">${money(sum(rows, x.k))}</td>`).join('')}
+            <td style="${TDC}"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <p style="font-size:11px;color:#999;margin-top:20px;">
+        ※ 金額取自公司內部勞健保登錄系統該期的實際投保紀錄，僅供公司內部參考；正式數據請以勞保局、健保署核定資料為準。<br>
+        ※ 期間留白時自動抓最新一期。可選的期間：${esc(insuredPeriods().slice(0, 6).map(insuredPeriodLabel).join('、'))}${insuredPeriods().length > 6 ? ' …' : ''}
+      </p>`;
+
   }else if(type === 'personal_leave'){
     const mode = extraVal('ex_leave_mode') || '依月';
     const monthVal = extraVal('ex_leave_month');
@@ -8750,6 +8822,83 @@ function pensionContributionCsv(){
     n(t(r => r.latest.employer_health)), n(t(r => r.latest.employer_pension)), n(t(r => r.total)),
     n(t(r => r.latest.personal_labor)), n(t(r => r.latest.personal_health)), n(t(r => r.personal)), n(t(r => r.all))]);
   return csvLines(head, rows);
+}
+
+// ===== 投保金額總表 =====
+// 資料來源跟「勞健保提撥計算表」同一份：勞健保月報 insurance_monthly_records。
+// 兩張表用同一份資料，數字才不會各說各話。
+function insuredPeriods(){
+  const s = new Set((STATE.insuranceMonthly || [])
+    .map(r => (Number(r.year_roc) || 0) * 100 + (Number(r.month) || 0))
+    .filter(k => k > 0));
+  return [...s].sort((a, b) => b - a);
+}
+function insuredPeriodLabel(key){
+  if(!key) return '（查無資料）';
+  return '民國 ' + Math.floor(key / 100) + ' 年 ' + (key % 100) + ' 月';
+}
+// 期間欄位打 115/08、11508、115-8 都通；留白就用最新一期
+function insuredWantedPeriod(){
+  const raw = (extraVal('ex_ins_period') || '').replace(/[^0-9]/g, '');
+  if(raw.length >= 4){
+    const y = parseInt(raw.slice(0, 3), 10);
+    const m = parseInt(raw.slice(3), 10);
+    if(y > 0 && m >= 1 && m <= 12) return y * 100 + m;
+  }
+  return insuredPeriods()[0] || 0;
+}
+function insuredAmountRows(){
+  const key = insuredWantedPeriod();
+  const scope = extraVal('ex_ins_scope') || '該期全部';
+  const onDuty = (STATE.employees || []).filter(x => x.status === '在職');
+  const onDutyIds = new Set(onDuty.map(x => String(x.id)));
+  const onDutyNames = new Set(onDuty.map(x => String(x.name || '').trim()).filter(Boolean));
+  let rows = (STATE.insuranceMonthly || [])
+    .filter(r => ((Number(r.year_roc) || 0) * 100 + (Number(r.month) || 0)) === key);
+  if(scope === '僅在職人員'){
+    // 離職同仁的舊紀錄會一直留在月報裡，所以要用員工編號或姓名對回在職名單
+    rows = rows.filter(r => (r.employee_id != null && onDutyIds.has(String(r.employee_id)))
+                            || onDutyNames.has(String(r.name || '').trim()));
+  }
+  rows = rows.slice().sort((a, b) =>
+       String(a.company_name || '').localeCompare(String(b.company_name || ''))
+    || String(a.region || '').localeCompare(String(b.region || ''))
+    || String(a.employee_no || '').localeCompare(String(b.employee_no || ''))
+    || String(a.name || '').localeCompare(String(b.name || '')));
+  return { key, rows };
+}
+const INS_AMT_COLS = [
+  {k: 'labor_insured_amount',   t: '勞保投保額'},
+  {k: 'injury_insured_amount',  t: '職災投保額'},
+  {k: 'pension_insured_amount', t: '勞退提繳額'},
+  {k: 'health_insured_amount',  t: '健保投保額'}
+];
+function insuredAmountCsv(){
+  const { key, rows } = insuredAmountRows();
+  const head = ['期間', '行號', '區域', '序號', '姓名', '工號', '部門', '職稱', '分帳', '加保日期']
+    .concat(INS_AMT_COLS.map(c => c.t), ['眷口數']);
+  const period = insuredPeriodLabel(key);
+  const num = v => String(Math.round(Number(v) || 0));
+  const byCompany = {};
+  rows.forEach(r => {
+    const c = r.company_name || '未設定行號';
+    (byCompany[c] = byCompany[c] || []).push(r);
+  });
+  const out = [];
+  const sum = (list, k) => list.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  Object.keys(byCompany).sort().forEach(c => {
+    const list = byCompany[c];
+    list.forEach((r, i) => out.push([
+      period, c, r.region || '', String(i + 1), r.name || '', r.employee_no || '',
+      r.dept_name || '', r.position_name || '', r.account_type || '',
+      rocSlash(r.insured_date)
+    ].concat(INS_AMT_COLS.map(x => num(r[x.k])), [r.dependents_count == null ? '' : String(r.dependents_count)])));
+    out.push([period, c + ' 小計', '', String(list.length) + ' 人', '', '', '', '', '', '']
+      .concat(INS_AMT_COLS.map(x => num(sum(list, x.k))), ['']));
+  });
+  out.push([period, '全公司合計', '', String(rows.length) + ' 人', '', '', '', '', '', '']
+    .concat(INS_AMT_COLS.map(x => num(sum(rows, x.k))), ['']));
+  return csvLines(head, out);
 }
 
 // ===== 僱主險（團保）人員名冊 =====
@@ -14593,6 +14742,7 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
     stocktake_vehicle: {name:'車用物品盤點表', fn: () => stocktakeCsv('vehicle')},
     stocktake_staff:   {name:'人員物品盤點表', fn: () => stocktakeCsv('staff')},
     pension_contribution: {name:'勞健保提撥計算表', fn: pensionContributionCsv},
+    insured_amount:       {name:'投保金額總表',     fn: insuredAmountCsv},
   };
   const b = CSV_BUILDERS[type];
   if(!b) return;
