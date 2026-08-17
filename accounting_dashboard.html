@@ -2200,10 +2200,35 @@ function bindEvents(){
   });
 }
 
+// ---------- 會計系統的獨立權限 ----------
+// acc_accounts／acc_subjects／acc_entries 三張表在資料庫端開了 RLS（SQL #115），
+// 只有 acc_allowed_users 名單裡的帳號讀寫得到。共用帳號連查都查不到。
+// 這個函式只是為了讓沒權限的人看到一句人話，而不是一片空白的畫面。
+async function isAccUser(){
+  try{
+    const rows = await sbSelect('acc_allowed_users?select=email&limit=1');
+    return Array.isArray(rows) && rows.length > 0;
+  }catch(e){
+    // 名單表還不存在（SQL #115 還沒跑）就先不擋，避免所有人都被關在門外。
+    // 真正的防線在 RLS，不是這一段。
+    if(String((e && e.message) || '').indexOf('42P01') >= 0) return true;
+    return false;
+  }
+}
+
 // ---------- 啟動 ----------
 (async function init(){
-  await ensureLogin();
-  CURRENT_USER = (document.getElementById('login_email').value || '').trim();
+  while(true){
+    await ensureLogin();
+    CURRENT_USER = (document.getElementById('login_email').value || '').trim();
+    if(await isAccUser()) break;
+    // 沒權限：退回登入畫面，講清楚原因，不要讓人以為是系統壞了
+    AUTH_TOKEN = null; REFRESH_TOKEN = null;
+    const pw = document.getElementById('login_pw'); if(pw) pw.value = '';
+    const ov = document.getElementById('loginOverlay'); if(ov) ov.style.display = 'flex';
+    const msg = document.getElementById('login_msg');
+    if(msg) msg.innerHTML = '這組帳號沒有會計系統的權限。<br>會計系統是獨立的一組帳號密碼，請找管理者開通。';
+  }
   await loadAll();
   fillSubjectSelect(document.getElementById('ne_subject'));
   fillAccountSelect(document.getElementById('ne_account'), '（先不指定）');
