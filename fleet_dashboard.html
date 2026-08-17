@@ -2349,6 +2349,8 @@
           <select id="form_type">
             <option value="pension_contribution">勞健保提撥計算表</option>
             <option value="insured_amount">投保金額總表（全部人員）</option>
+            <option value="ppe_signoff">物品使用登記表（PPE／個人保管品，運025-A1）</option>
+            <option value="ppe_matrix">各車隊基本領用量對照表</option>
             <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
             <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
             <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
@@ -7920,11 +7922,21 @@ const EXTRA_FIELDS = {
   insured_amount: [
     {id:'ex_ins_period', label:'期間（民國年月，空白＝最新一期）', type:'text', placeholder:'例：115/08'},
     {id:'ex_ins_scope', label:'人員範圍', type:'select', opts:['該期全部','僅在職人員']}
+  ],
+  ppe_matrix: [],
+  ppe_signoff: [
+    {id:'ex_ppe_team', label:'車隊', type:'select', opts:[]},
+    {id:'ex_ppe_name', label:'姓名（自己填，新人還沒建檔也可以）', type:'text', placeholder:'例：林志鴻'},
+    {id:'ex_ppe_region', label:'區域', type:'text', placeholder:'例：台南'},
+    {id:'ex_ppe_page', label:'頁數（選填）', type:'text', placeholder:'例：1/1'},
+    {id:'ex_ppe_rows', label:'總列數（空白＝26）', type:'number', placeholder:'例：26'}
   ]
 };
 function renderExtraFields(){
   const type = document.getElementById('form_type').value;
   const fields = EXTRA_FIELDS[type] || [];
+  // 車隊清單是算出來的（基本領用量九隊＋三份 Word 範本），不寫死在上面
+  fields.forEach(f => { if(f.id === 'ex_ppe_team') f.opts = ppeTeamOptions(); });
   document.getElementById('form_extra').innerHTML = fields.map(f => {
     if(f.type === 'select'){
       return `<label>${f.label}<select id="${f.id}">${f.opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select></label>`;
@@ -8466,7 +8478,7 @@ function generateForm(){
   const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
   const e = list.find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount'];
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff'];
   const MS_TYPES = ['bp_sheet','alcohol_sheet'];
   if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
@@ -8694,6 +8706,105 @@ function generateForm(){
         ※ 期間留白時自動抓最新一期。可選的期間：${esc(insuredPeriods().slice(0, 6).map(insuredPeriodLabel).join('、'))}${insuredPeriods().length > 6 ? ' …' : ''}
       </p>`;
 
+  }else if(type === 'ppe_matrix'){
+    const TH  = 'padding:5px 4px;border:1px solid #333;background:#f2f2f2;text-align:center;font-weight:700;';
+    const TD  = 'padding:4px 6px;border:1px solid #333;';
+    const TDC = TD + 'text-align:center;';
+    const head = PPE_TEAMS.map(t =>
+      `<th style="${TH}font-size:11px;">${esc(t).split('').join('<br>')}</th>`).join('');
+    const body = PPE_MATRIX.map((r, i) => `<tr>
+        <td style="${TDC}">${i + 1}</td>
+        <td style="${TD}">${esc(r[0])}</td>
+        <td style="${TDC}">${esc(PPE_UNIT[r[0]] || '')}</td>
+        ${r[1].map(v => `<td style="${TDC}">${v ? v : ''}</td>`).join('')}
+        <td style="${TDC}"></td>
+      </tr>`).join('');
+    bodyHtml = `
+      <h2 style="text-align:center;letter-spacing:6px;margin-bottom:4px;">各車隊基本領用量</h2>
+      <p style="text-align:center;color:#666;font-size:12px;margin:0 0 14px;">
+        PPE／個人保管品 ・ 空白代表該車隊不配發</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+          <tr>
+            <th style="${TH}" rowspan="2">NO.</th>
+            <th style="${TH}" rowspan="2">物品名稱</th>
+            <th style="${TH}" rowspan="2">單位</th>
+            <th style="${TH}" colspan="${PPE_TEAMS.length + 1}">各車隊基本領用量</th>
+          </tr>
+          <tr>${head}<th style="${TH}font-size:11px;">其<br>他</th></tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+      <p style="font-size:11px;color:#999;margin-top:16px;">
+        ※ 依運025 各車隊基本領用量表。新人報到請改用「物品使用登記表（PPE／個人保管品）」。
+      </p>`;
+
+  }else if(type === 'ppe_signoff'){
+    const team   = extraVal('ex_ppe_team') || ppeTeamOptions()[0];
+    const pname  = extraVal('ex_ppe_name');
+    const region = extraVal('ex_ppe_region');
+    const page   = extraVal('ex_ppe_page');
+    const want   = parseInt(extraVal('ex_ppe_rows'), 10);
+    const total  = (want > 0 ? want : 26);
+    const items  = ppeItemsForTeam(team);
+    const TH  = 'padding:4px 3px;border:1px solid #000;background:#f2f2f2;text-align:center;font-weight:700;';
+    const TD  = 'padding:4px 5px;border:1px solid #000;';
+    const TDC = TD + 'text-align:center;';
+    const line = '＿＿＿＿＿';
+    // 有帶入的品項預設勾「領用」，空白列三個都留空框讓現場自己勾
+    const rows = [];
+    for(let i = 0; i < total; i++){
+      const it = items[i];
+      const on = it ? '■' : '□';
+      rows.push(`<tr>
+        <td style="${TDC}">${i + 1}</td>
+        <td style="${TDC}"></td><td style="${TDC}">年</td>
+        <td style="${TDC}"></td><td style="${TDC}">月</td>
+        <td style="${TDC}"></td><td style="${TDC}">日</td>
+        <td style="${TD}">${it ? esc(it[0]) : ''}</td>
+        <td style="${TDC}">${it ? esc(PPE_UNIT[it[0]] || '') : ''}</td>
+        <td style="${TDC}font-size:10px;white-space:nowrap;">${on}領用 □繳回 □報廢繳回</td>
+        <td style="${TDC}">${it ? it[1] : ''}</td>
+        <td style="${TDC}"></td>
+        <td style="${TDC}"></td>
+      </tr>`);
+    }
+    bodyHtml = `
+      <div style="text-align:center;font-size:19px;font-weight:700;letter-spacing:2px;">物品使用登記表 -PPE&amp;個人保管品專用</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:10px 0 6px;font-size:13px;">
+        <div>姓 名 :　<b>${esc(pname) || line}</b>　　區 域 :　<b>${esc(region) || line}</b>　　頁數 :　${esc(page) || '＿＿'}</div>
+        <div style="font-size:12px;">車隊 : ${esc(team)}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead>
+          <tr>
+            <th style="${TH}" rowspan="2">流水號</th>
+            <th style="${TH}" colspan="6">日　期</th>
+            <th style="${TH}" rowspan="2">物品名稱</th>
+            <th style="${TH}" rowspan="2">物品單位</th>
+            <th style="${TH}" rowspan="2">狀　態</th>
+            <th style="${TH}" rowspan="2">數量</th>
+            <th style="${TH}" rowspan="2">使用人員<br>使用車輛</th>
+            <th style="${TH}" rowspan="2">簽收人</th>
+          </tr>
+          <tr>
+            <th style="${TH}"></th><th style="${TH}">年</th>
+            <th style="${TH}"></th><th style="${TH}">月</th>
+            <th style="${TH}"></th><th style="${TH}">日</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;line-height:1.6;">
+        <div>
+          限PPE及個人保管物品使用登記用。<br>
+          人員異動: 使用登記表隨人至異動車場,繼續保管使用。（系統帳勿動,切記!）<br>
+          人員離職: 依據倉庫帳開立個人領用清單,由區域領用帳清盤入庫,<br>
+          以上使用登記及繳回作業,依使用人員逐筆記錄
+        </div>
+        <div style="white-space:nowrap;align-self:flex-end;">表單編號 : 運025-A1</div>
+      </div>`;
+
   }else if(type === 'personal_leave'){
     const mode = extraVal('ex_leave_mode') || '依月';
     const monthVal = extraVal('ex_leave_month');
@@ -8899,6 +9010,70 @@ function insuredAmountCsv(){
   out.push([period, '全公司合計', '', String(rows.length) + ' 人', '', '', '', '', '', '']
     .concat(INS_AMT_COLS.map(x => num(sum(rows, x.k))), ['']));
   return csvLines(head, out);
+}
+
+// ===== PPE 領用（運025）=====
+// 資料來源：掃描件「各車隊基本領用量」（115/08/17）與三份 Word 範本 運025-A1。
+// 數字一律照原件抄，沒有推算。
+const PPE_TEAMS = ['液態槽車','鋼瓶','氫氣槽車','氦氣槽車','集合組',
+                   '貨櫃','特氣槽車','化學槽車','亞東氫氣槽車'];
+// 每一列：[物品名稱, 九個車隊的數量]。0 代表原件那一格是空白。
+const PPE_MATRIX = [
+  ['安全帽',        [1,1,1,1,1,1,1,1,1]],
+  ['護目鏡',        [1,1,1,1,1,1,1,1,1]],
+  ['面罩',          [1,0,0,0,0,0,0,1,1]],
+  ['面罩框',        [1,0,0,0,0,0,0,1,1]],
+  ['耳塞',          [1,0,1,1,0,0,0,0,1]],
+  ['一般制服',      [4,4,0,4,4,4,4,4,0]],
+  ['防焰衣',        [0,0,4,0,0,0,0,0,4]],
+  ['防焰褲',        [0,0,4,0,0,0,0,0,4]],
+  ['一般反光背心(黃)',[1,1,0,1,1,1,1,1,0]],
+  ['防焰背心(橘)',  [0,0,1,0,0,0,0,0,1]],
+  ['防滑手套',      [0,1,0,1,0,0,1,0,0]],
+  ['皮手套',        [0,0,1,0,1,0,0,0,0]],
+  ['防凍手套',      [1,0,0,0,0,0,0,0,1]],
+  ['棉紗手套',      [0,0,0,0,0,1,0,0,0]],
+  ['背負式安全帶',  [0,0,0,0,0,0,0,1,0]],
+  ['銅槌',          [1,0,0,0,0,0,0,0,0]],
+  ['防爆梅花板手',  [1,0,0,0,0,0,0,0,0]],
+  ['一般安全鞋',    [1,0,1,1,1,1,1,1,1]],
+  ['護甲安全鞋',    [0,1,0,0,0,0,0,0,0]]
+];
+// 三份 Word 範本原本就印好的清單（新人報到當次要領的，數量跟基本領用量不一樣）
+const PPE_PRESETS = {
+  '亞東氫氣（報到用）': [['安全帽',1],['護目鏡',1],['面罩',1],['面罩框',1],['耳塞',1],
+                        ['防焰衣',2],['防焰褲',2],['防焰背心(橘)',1],['防凍手套',1],['氫氣偵測器',1]],
+  '亞東液態（報到用）': [['安全帽',1],['護目鏡',1],['面罩',1],['面罩框',1],['耳塞',1],
+                        ['防焰衣',2],['防焰褲',2],['防焰背心',1],['防凍圍裙',1],['防凍手套',1],['氧氣偵測器',1]],
+  '鋼瓶貨櫃（報到用）': [['安全帽',1],['護目鏡',1],['防滑手套',1],['一般反光背心',1],['一般制服',2]]
+};
+// 單位：Word 範本有寫的照抄，範本沒有的用常識填（手套/鞋＝雙、槌與板手＝支、安全帶＝條）
+const PPE_UNIT = {
+  '安全帽':'組','護目鏡':'副','面罩':'個','面罩框':'個','耳塞':'副',
+  '一般制服':'件','防焰衣':'件','防焰褲':'件','防焰背心':'件','防焰背心(橘)':'件',
+  '一般反光背心':'件','一般反光背心(黃)':'件','防凍圍裙':'件',
+  '防滑手套':'雙','皮手套':'雙','防凍手套':'雙','棉紗手套':'雙',
+  '背負式安全帶':'條','銅槌':'支','防爆梅花板手':'支',
+  '一般安全鞋':'雙','護甲安全鞋':'雙','氧氣偵測器':'台','氫氣偵測器':'台'
+};
+function ppeTeamOptions(){
+  return PPE_TEAMS.map(t => t + '（基本領用量）').concat(Object.keys(PPE_PRESETS));
+}
+// 回傳 [[物品名稱, 數量], …]
+function ppeItemsForTeam(label){
+  if(PPE_PRESETS[label]) return PPE_PRESETS[label].map(x => x.slice());
+  const team = String(label || '').replace('（基本領用量）', '');
+  const i = PPE_TEAMS.indexOf(team);
+  if(i < 0) return [];
+  return PPE_MATRIX.filter(r => (r[1][i] || 0) > 0).map(r => [r[0], r[1][i]]);
+}
+function ppeMatrixCsv(){
+  const head = ['NO.', '物品名稱', '單位'].concat(PPE_TEAMS);
+  const rows = PPE_MATRIX.map((r, i) =>
+    [String(i + 1), r[0], PPE_UNIT[r[0]] || ''].concat(r[1].map(v => v ? String(v) : '')));
+  rows.push(['', '合計項數', ''].concat(
+    PPE_TEAMS.map((_, i) => String(PPE_MATRIX.filter(r => (r[1][i] || 0) > 0).length))));
+  return csvLines(head, rows);
 }
 
 // ===== 僱主險（團保）人員名冊 =====
@@ -14743,6 +14918,7 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
     stocktake_staff:   {name:'人員物品盤點表', fn: () => stocktakeCsv('staff')},
     pension_contribution: {name:'勞健保提撥計算表', fn: pensionContributionCsv},
     insured_amount:       {name:'投保金額總表',     fn: insuredAmountCsv},
+    ppe_matrix:           {name:'各車隊基本領用量',  fn: ppeMatrixCsv},
   };
   const b = CSV_BUILDERS[type];
   if(!b) return;
