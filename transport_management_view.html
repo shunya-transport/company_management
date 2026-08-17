@@ -129,6 +129,10 @@
   .pill.green{background:var(--green-bg);color:var(--green);}
   .pill.gray{background:var(--gray-bg);color:var(--gray);}
   .pill.hold{background:var(--gray-bg);color:var(--gray);border:1px dashed var(--gray);}
+  .pill.blue{background:#E9EFF7;color:#20406B;}
+  /* 設備報修看板：一列一單，點下去展開處理區；不能出車的整列標紅 */
+  .rp-row{border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:7px;background:#fff;}
+  .rp-row.danger{border-color:var(--red);background:var(--red-bg);}
   /* 備註只佔一行，太長用「…」收掉，滑鼠移上去看全文 —— 一列折成三行整張表就很難掃 */
   .note-1line{max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
@@ -372,6 +376,7 @@
       <button data-tab="maintenance">車輛維護</button>
       <button data-tab="leases">板架管理</button>
       <button data-tab="container">貨櫃運送</button>
+      <button data-tab="repair">設備報修</button>
       <button data-tab="trainings">外訓証照</button>
       <button data-tab="mileage">車輛里程統計</button>
       <button data-tab="workhour">工時統計</button>
@@ -402,6 +407,12 @@
         <button class="btn ghost" style="float:right;padding:4px 12px;font-size:12px;"
                 onclick="BOOKING_STATE='idle';renderBookingCard();">重新整理</button></h2>
       <div id="overviewBookings"><div class="empty">載入中…</div></div>
+    </div>
+    <div class="card">
+      <h2>設備報修<span class="count-badge" id="overview_repair_count"></span>
+        <button class="btn ghost" style="float:right;padding:4px 12px;font-size:12px;"
+                onclick="rpLoad();">重新整理</button></h2>
+      <div id="overviewRepair"><div class="empty">載入中…</div></div>
     </div>
     <div class="card">
       <h2>近期複訓上課<span class="count-badge" id="ov_rt_count"></span></h2>
@@ -2028,6 +2039,90 @@
     </div>
   </div>
 
+
+  <div id="repair" class="panel">
+    <div class="card">
+      <h2>不能出車 / 待處理看板<span class="count-badge" id="rp_board_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        司機從「設備報修」頁回報的單子。點任何一單可以展開處理。狀態改成「結案」或「不修理」就會移到最下面的歷史紀錄。
+      </div>
+      <div id="rpBoard"></div>
+    </div>
+
+    <div class="card" id="rpEditCard" style="display:none;">
+      <h2>報修單處理<span class="count-badge" id="rp_edit_no"></span></h2>
+      <div id="rpEditHead" class="muted" style="margin-bottom:10px;"></div>
+      <div class="form-grid">
+        <label>狀態
+          <select id="rp_status">
+            <option>待處理</option><option>已派修</option><option>維修中</option>
+            <option>已完成</option><option>結案</option><option>不修理</option>
+          </select>
+        </label>
+        <label>承辦人<input id="rp_handler" placeholder="選填"></label>
+        <label>維修廠商<input id="rp_vendor" list="vendorList" placeholder="選填" autocomplete="off"></label>
+        <label>預計完成日<input id="rp_eta" type="date"></label>
+      </div>
+      <label style="display:block;margin-top:10px;">處理情形
+        <textarea id="rp_note" rows="3" style="width:100%;" placeholder="做了什麼、廠商怎麼說、零件什麼時候到"></textarea>
+      </label>
+      <div id="rpCloseBox" style="display:none;margin-top:10px;padding:11px 12px;border:1px solid var(--border-strong);border-radius:10px;background:var(--gold-bg);">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin:0;">
+          <input id="rp_mk_maint" type="checkbox" style="width:18px;height:18px;" checked>結案時同時建立一筆維修保養紀錄
+        </label>
+        <div class="muted" style="margin-top:6px;">會帶入車號、結案日、廠商與故障內容，費用之後在「車輛維護」補。不想記的話取消勾選。</div>
+        <label style="margin-top:8px;">結案備註<input id="rp_close_note" placeholder="例：已更換總成，測試正常"></label>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn" id="rp_save">儲存</button>
+        <button class="btn ghost" id="rp_cancel" style="margin-left:8px;">關閉</button>
+        <span id="rp_msg" class="muted" style="margin-left:10px;"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>未結案清單<span class="count-badge" id="rp_open_count"></span></h2>
+      <div class="toolbar">
+        <input id="rp_q" placeholder="搜尋車號／品項／故障內容／回報人" style="min-width:260px;">
+        <select id="rp_f_status">
+          <option value="all">全部未結案</option>
+          <option>待處理</option><option>已派修</option><option>維修中</option><option>已完成</option>
+        </select>
+        <select id="rp_f_sev">
+          <option value="all">全部嚴重度</option>
+          <option>不能出車</option><option>需儘快處理</option><option>可續跑</option>
+        </select>
+        <label class="muted">日期 <input id="rp_from" type="date"></label>
+        <label class="muted">～ <input id="rp_to" type="date"></label>
+        <button class="btn ghost" id="rp_clear">清除</button>
+        <button class="btn ghost" id="rp_reload">重新整理</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>單號</th><th>回報日</th><th>車號</th><th>類別</th><th>品項</th><th>故障狀況</th>
+                     <th>嚴重度</th><th>狀態</th><th>回報人</th><th>承辦</th><th>預計完成</th><th></th></tr></thead>
+          <tbody id="rpOpenBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>歷史紀錄（已結案／不修理）<span class="count-badge" id="rp_hist_count"></span></h2>
+      <div class="toolbar">
+        <input id="rp_hq" placeholder="搜尋車號／品項／故障內容" style="min-width:260px;">
+        <button class="btn ghost" id="rp_hist_toggle">展開</button>
+      </div>
+      <div id="rpHistWrap" style="display:none;">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>單號</th><th>回報日</th><th>車號</th><th>品項</th><th>故障狀況</th>
+                       <th>狀態</th><th>結案日</th><th>廠商</th><th>結案備註</th><th></th></tr></thead>
+            <tbody id="rpHistBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
       <div id="contacts" class="panel">
         <div class="card">
@@ -3777,6 +3872,7 @@ async function loadState(){
   STATE.refYards = SEED.ref_yards || [];
   STATE.refCompanies = SEED.companies_full || [];
   await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
+  rpLoad();                     // 設備報修單（不 await，讀不到也不要卡住整頁）
   STATE.adminRewards = await safeGet('admin_rewards', SEED.admin_rewards || [], true);
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
@@ -4204,6 +4300,287 @@ function vehicleCompanyWarn(n){
   alert('「' + n + '」不在系統的公司別清單裡，找不到對應的編號，這次沒有存檔。\n\n'
       + '請直接從欄位的下拉清單選現有的公司；真的要新增公司，\n'
       + '要先在資料庫的 companies 建好才會出現在清單裡。');
+}
+
+// ===== 設備報修（SQL #116 的 equipment_repair_reports）=====
+// 司機在免登入的 equipment_repair.html 回報，這裡接單追蹤。
+// 直接用 REST 讀寫，不走 saveState —— saveState 會把「清單裡沒有的 id」當成使用者刪掉
+// 而整批砍掉，報修單隨時可能有司機正在新增，走那條路會誤刪。
+const RP_HIST_STATUS = ['結案', '不修理'];
+const RP_SEV_RANK = { '不能出車': 0, '需儘快處理': 1, '可續跑': 2 };
+let RP_ROWS = [], RP_SEL = null, RP_HIST_OPEN = false;
+
+async function rpLoad(){
+  try{
+    RP_ROWS = await supaFetch('equipment_repair_reports?select=*&order=report_id.desc') || [];
+  }catch(e){
+    RP_ROWS = [];
+    console.error('報修單讀取失敗', e);
+  }
+  renderRepair();
+  renderOverviewRepair();
+}
+function rpRow(id){ return RP_ROWS.find(r => String(r.report_id) === String(id)); }
+function rpIsHist(r){ return RP_HIST_STATUS.indexOf(r.status) >= 0; }
+function rpDays(r){
+  const d = new Date(String(r.report_date) + 'T00:00:00');
+  if(isNaN(d)) return 0;
+  return Math.floor((new Date(todayISO() + 'T00:00:00') - d) / 86400000);
+}
+function rpSevPill(s){
+  const cls = s === '不能出車' ? 'red' : (s === '需儘快處理' ? 'amber' : 'gray');
+  return `<span class="pill ${cls}">${esc(s || '')}</span>`;
+}
+function rpStatusPill(s){
+  const cls = s === '待處理' ? 'amber' : (s === '已完成' ? 'green'
+            : (RP_HIST_STATUS.indexOf(s) >= 0 ? 'gray' : 'blue'));
+  return `<span class="pill ${cls}">${esc(s || '')}</span>`;
+}
+function rpSorted(list){
+  return list.slice().sort((a, b) =>
+       (RP_SEV_RANK[a.severity] == null ? 9 : RP_SEV_RANK[a.severity])
+     - (RP_SEV_RANK[b.severity] == null ? 9 : RP_SEV_RANK[b.severity])
+     || String(a.report_date || '').localeCompare(String(b.report_date || ''))
+     || (a.report_id - b.report_id));
+}
+function rpOpenRows(){ return RP_ROWS.filter(r => !rpIsHist(r)); }
+
+function renderRepair(){
+  const open = rpOpenRows();
+  // ---- 看板 ----
+  const stop = rpSorted(open.filter(r => r.severity === '不能出車'));
+  const rest = rpSorted(open.filter(r => r.severity !== '不能出車'));
+  const cardOf = (r, danger) => `
+    <div class="rp-row${danger ? ' danger' : ''}" data-rp-open="${r.report_id}"
+         style="cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">
+        <b>${esc(r.plate_number)}</b>　${esc(r.item_name)}
+        <span class="muted">（${esc(r.category || '')}）</span>
+        <div class="muted note-1line" style="max-width:520px;">${esc(r.fault_desc || '')}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap;">
+        ${rpSevPill(r.severity)} ${rpStatusPill(r.status)}
+        <div class="muted" style="font-size:11.5px;margin-top:3px;">
+          ${esc(toROCDate(r.report_date) || r.report_date || '')}　已 ${rpDays(r)} 天
+        </div>
+      </div>
+    </div>`;
+  const board = document.getElementById('rpBoard');
+  if(board){
+    board.innerHTML =
+      (stop.length ? '<div class="muted" style="font-weight:700;color:var(--red);margin:2px 0 6px;">不能出車（' + stop.length + '）</div>'
+                     + stop.map(r => cardOf(r, true)).join('') : '')
+      + (rest.length ? '<div class="muted" style="font-weight:700;margin:10px 0 6px;">其餘待處理（' + rest.length + '）</div>'
+                     + rest.map(r => cardOf(r, false)).join('') : '')
+      + (open.length ? '' : '<div class="empty">目前沒有未結案的報修單</div>');
+  }
+  const bc = document.getElementById('rp_board_count');
+  if(bc) bc.textContent = open.length ? `共 ${open.length} 單${stop.length ? '　不能出車 ' + stop.length : ''}` : '';
+
+  // ---- 未結案清單 ----
+  const q = (document.getElementById('rp_q') || {}).value || '';
+  const fs = (document.getElementById('rp_f_status') || {}).value || 'all';
+  const fv = (document.getElementById('rp_f_sev') || {}).value || 'all';
+  const from = (document.getElementById('rp_from') || {}).value || '';
+  const to = (document.getElementById('rp_to') || {}).value || '';
+  let rows = rpSorted(open);
+  if(q){
+    const s = q.trim().toLowerCase();
+    rows = rows.filter(r => [r.report_no, r.plate_number, r.item_name, r.fault_desc, r.reporter_name, r.handler_name]
+      .some(x => String(x || '').toLowerCase().includes(s)));
+  }
+  if(fs !== 'all') rows = rows.filter(r => r.status === fs);
+  if(fv !== 'all') rows = rows.filter(r => r.severity === fv);
+  if(from) rows = rows.filter(r => String(r.report_date || '') >= from);
+  if(to)   rows = rows.filter(r => String(r.report_date || '') <= to);
+  const ob = document.getElementById('rpOpenBody');
+  if(ob){
+    ob.innerHTML = rows.map(r => `<tr>
+      <td class="muted">${esc(r.report_no || ('#' + r.report_id))}</td>
+      <td>${esc(toROCDate(r.report_date) || '')}</td>
+      <td><b>${esc(r.plate_number)}</b></td>
+      <td class="muted">${esc(r.category || '')}</td>
+      <td>${esc(r.item_name)}</td>
+      <td class="note-1line">${esc(r.fault_desc || '')}</td>
+      <td>${rpSevPill(r.severity)}</td>
+      <td>${rpStatusPill(r.status)}</td>
+      <td class="muted">${esc(r.reporter_name || '')}</td>
+      <td class="muted">${esc(r.handler_name || '')}</td>
+      <td class="muted">${esc(toROCDate(r.eta_date) || '')}</td>
+      <td><button class="name-link" data-rp-open="${r.report_id}">處理</button></td>
+    </tr>`).join('') || '<tr><td colspan="12" class="empty">沒有符合條件的報修單</td></tr>';
+  }
+  const oc = document.getElementById('rp_open_count');
+  if(oc) oc.textContent = `${rows.length} / 未結案 ${open.length}`;
+
+  // ---- 歷史 ----
+  const hq = ((document.getElementById('rp_hq') || {}).value || '').trim().toLowerCase();
+  let hist = RP_ROWS.filter(rpIsHist);
+  if(hq) hist = hist.filter(r => [r.report_no, r.plate_number, r.item_name, r.fault_desc, r.close_note]
+    .some(x => String(x || '').toLowerCase().includes(hq)));
+  const hc = document.getElementById('rp_hist_count');
+  if(hc) hc.textContent = `共 ${hist.length} 單`;
+  const hw = document.getElementById('rpHistWrap');
+  if(hw) hw.style.display = (RP_HIST_OPEN || hq) ? '' : 'none';
+  const hb = document.getElementById('rpHistBody');
+  if(hb && (RP_HIST_OPEN || hq)){
+    hb.innerHTML = hist.slice(0, 400).map(r => `<tr>
+      <td class="muted">${esc(r.report_no || ('#' + r.report_id))}</td>
+      <td>${esc(toROCDate(r.report_date) || '')}</td>
+      <td>${esc(r.plate_number)}</td>
+      <td>${esc(r.item_name)}</td>
+      <td class="note-1line">${esc(r.fault_desc || '')}</td>
+      <td>${rpStatusPill(r.status)}</td>
+      <td>${esc(toROCDate(r.closed_date) || '')}</td>
+      <td class="muted">${esc(r.vendor_name || '')}</td>
+      <td class="note-1line">${esc(r.close_note || '')}</td>
+      <td><button class="name-link" data-rp-open="${r.report_id}">查看</button></td>
+    </tr>`).join('') || '<tr><td colspan="10" class="empty">沒有符合條件的紀錄</td></tr>';
+  }
+}
+
+function rpSelect(id){
+  const r = rpRow(id);
+  if(!r) return;
+  RP_SEL = r.report_id;
+  const card = document.getElementById('rpEditCard');
+  if(card) card.style.display = '';
+  const no = document.getElementById('rp_edit_no');
+  if(no) no.textContent = r.report_no || ('#' + r.report_id);
+  const head = document.getElementById('rpEditHead');
+  if(head){
+    head.innerHTML = `<b>${esc(r.plate_number)}</b>　${esc(r.item_name)}（${esc(r.category || '')}）　`
+      + rpSevPill(r.severity) + `<br>回報：${esc(r.reporter_name || '—')}　`
+      + `${esc(toROCDate(r.report_date) || '')}　${esc(r.yard || '')}　已 ${rpDays(r)} 天`
+      + `<br>故障狀況：${esc(r.fault_desc || '')}`;
+  }
+  document.getElementById('rp_status').value  = r.status || '待處理';
+  document.getElementById('rp_handler').value = r.handler_name || '';
+  document.getElementById('rp_vendor').value  = r.vendor_name || '';
+  document.getElementById('rp_eta').value     = r.eta_date || '';
+  document.getElementById('rp_note').value    = r.handle_note || '';
+  document.getElementById('rp_close_note').value = r.close_note || '';
+  document.getElementById('rp_mk_maint').checked = !r.maintenance_record_id;
+  rpToggleCloseBox();
+  const m = document.getElementById('rp_msg'); if(m) m.textContent = '';
+  card.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function rpToggleCloseBox(){
+  const s = (document.getElementById('rp_status') || {}).value;
+  const box = document.getElementById('rpCloseBox');
+  if(box) box.style.display = (RP_HIST_STATUS.indexOf(s) >= 0) ? '' : 'none';
+}
+async function rpSave(){
+  const r = rpRow(RP_SEL);
+  if(!r) return;
+  const msg = document.getElementById('rp_msg');
+  const status = document.getElementById('rp_status').value;
+  const closing = RP_HIST_STATUS.indexOf(status) >= 0;
+  const vendorName = document.getElementById('rp_vendor').value.trim();
+  const patch = {
+    status,
+    handler_name: document.getElementById('rp_handler').value.trim() || null,
+    vendor_name:  vendorName || null,
+    vendor_id:    vendorName ? ((vendorByName(vendorName) || {}).id || null) : null,
+    eta_date:     document.getElementById('rp_eta').value || null,
+    handle_note:  document.getElementById('rp_note').value.trim() || null,
+    updated_at:   new Date().toISOString()
+  };
+  if(closing){
+    patch.closed_date = r.closed_date || todayISO();
+    patch.close_note  = document.getElementById('rp_close_note').value.trim() || null;
+  }else{
+    // 從結案改回處理中：把結案資訊清掉，不然歷史欄位會留著誤導人
+    patch.closed_date = null; patch.close_note = null;
+  }
+  try{
+    if(msg) msg.textContent = '儲存中…';
+    // 結案而且勾了要記帳，先把維修保養紀錄開好，再把單號寫回報修單
+    let _skipMaint = '';
+    if(closing && document.getElementById('rp_mk_maint').checked && !r.maintenance_record_id
+       && !plateToVehicleId(r.plate_number)){
+      // 司機是自己打的車號，對不到車輛清單。維修保養紀錄一定要有 vehicle_id，
+      // 硬存會被必填檢查擋下來連帶讓結案整個失敗，所以這裡跳過、講清楚就好。
+      _skipMaint = '（車號「' + r.plate_number + '」不在車輛清單裡，沒有一起建立維修保養紀錄，'
+                 + '請自行到「車輛維護」補一筆。）';
+    }
+    if(closing && document.getElementById('rp_mk_maint').checked && !r.maintenance_record_id && !_skipMaint){
+      const newId = nextId(STATE.maintRecords);
+      STATE.maintRecords.push({
+        id: newId, record_id: newId,
+        vehicle_id: plateToVehicleId(r.plate_number) || null,
+        plate: r.plate_number,
+        maintenance_type: '維修',
+        maintenance_date: patch.closed_date,
+        description: '設備報修 ' + (r.report_no || ('#' + r.report_id)) + '：'
+                     + r.item_name + '　' + (r.fault_desc || ''),
+        vendor_name: vendorName || null,
+        vendor_id: vendorName ? ((vendorByName(vendorName) || {}).id || null) : null,
+        requested_by_name: r.reporter_name || null,
+        status: '待補費用'
+      });
+      await saveState('maint_records', STATE.maintRecords, true);
+      patch.maintenance_record_id = newId;
+    }
+    await supaFetch('equipment_repair_reports?report_id=eq.' + encodeURIComponent(r.report_id),
+      { method:'PATCH', body: JSON.stringify(patch) });
+    Object.assign(r, patch);
+    renderRepair();
+    renderOverviewRepair();
+    if(msg) msg.textContent = closing
+      ? ('已結案，這一單移到最下面的歷史紀錄。'
+         + (patch.maintenance_record_id ? '維修保養紀錄也開好了，記得之後補費用。' : _skipMaint))
+      : '已儲存。';
+    if(closing){ document.getElementById('rpEditCard').style.display = 'none'; RP_SEL = null; }
+  }catch(e){
+    if(msg){ msg.textContent = '存檔失敗：' + ((e && e.message) || e); msg.style.color = 'var(--red)'; }
+    alert('報修單沒有存進去。\n\n' + ((e && e.message) || e));
+  }
+}
+// 總覽那張小卡：只報數字，細節請進分頁看
+function renderOverviewRepair(){
+  const el = document.getElementById('overviewRepair');
+  if(!el) return;
+  const open = rpOpenRows();
+  const stop = open.filter(r => r.severity === '不能出車');
+  const wait = open.filter(r => r.status === '待處理');
+  const cnt = document.getElementById('overview_repair_count');
+  if(cnt) cnt.textContent = open.length ? `未結案 ${open.length} 單` : '';
+  if(!open.length){ el.innerHTML = '<div class="empty">目前沒有未結案的報修單</div>'; return; }
+  el.innerHTML =
+    (stop.length ? `<div class="rp-row danger"><b>不能出車 ${stop.length} 台</b>　`
+        + stop.slice(0, 6).map(r => esc(r.plate_number) + ' ' + esc(r.item_name)).join('、')
+        + (stop.length > 6 ? ' …' : '') + '</div>' : '')
+    + `<div class="rp-row">待處理 ${wait.length} 單　處理中 ${open.length - wait.length} 單`
+    + `　<span class="muted">最久的一單已 ${Math.max.apply(null, open.map(rpDays))} 天</span></div>`;
+}
+{
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  ['rpBoard','rpOpenBody','rpHistBody'].forEach(bid => {
+    const b = document.getElementById(bid);
+    if(b) b.addEventListener('click', e => {
+      const t = e.target.closest('[data-rp-open]');
+      if(t) rpSelect(t.getAttribute('data-rp-open'));
+    });
+  });
+  on('rp_status', 'change', rpToggleCloseBox);
+  on('rp_save', 'click', rpSave);
+  on('rp_cancel', 'click', () => {
+    document.getElementById('rpEditCard').style.display = 'none'; RP_SEL = null;
+  });
+  ['rp_q','rp_f_status','rp_f_sev','rp_from','rp_to','rp_hq'].forEach(id => on(id, 'input', renderRepair));
+  ['rp_f_status','rp_f_sev'].forEach(id => on(id, 'change', renderRepair));
+  on('rp_clear', 'click', () => {
+    ['rp_q','rp_from','rp_to'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    ['rp_f_status','rp_f_sev'].forEach(id => { const el = document.getElementById(id); if(el) el.value = 'all'; });
+    renderRepair();
+  });
+  on('rp_reload', 'click', rpLoad);
+  on('rp_hist_toggle', 'click', () => {
+    RP_HIST_OPEN = !RP_HIST_OPEN;
+    document.getElementById('rp_hist_toggle').textContent = RP_HIST_OPEN ? '收合' : '展開';
+    renderRepair();
+  });
 }
 
 function renderNewStaffSelects(){

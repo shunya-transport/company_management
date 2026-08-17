@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b2c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>順亞運通 設備報修</title>
+<style>
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy-900:#0d1b2c; --navy-800:#152a43;
+    --gold-600:#c99a56; --gold-bg:#FBF5EC;
+    --ok:#1F5C3D; --ok-bg:#E8F3EC; --bad:#9B2226; --bad-bg:#FBEAEA;
+    --warn:#8A5A00; --warn-bg:#FDF3E0; --na:#5A6673; --na-bg:#EEF0F2;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text); font-size:16px; line-height:1.6;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    padding-bottom:96px;
+  }
+  header{
+    background:linear-gradient(105deg,var(--navy-900) 0%,var(--navy-800) 60%,#2d4a70 100%);
+    color:#fff; padding:calc(env(safe-area-inset-top) + 12px) 16px 12px; position:sticky; top:0; z-index:30;
+    box-shadow:0 2px 14px rgba(13,27,44,.22);
+  }
+  header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:1px;}
+  header .sub{font-size:11.5px;opacity:.72;margin-top:2px;}
+  nav{display:flex;gap:6px;margin-top:10px;}
+  nav button{
+    flex:1;appearance:none;border:none;border-radius:9px;padding:9px 0;font-size:14px;font-weight:600;
+    background:rgba(255,255,255,.14);color:#fff;cursor:pointer;
+  }
+  nav button.on{background:#fff;color:var(--navy-900);}
+  main{padding:14px 12px 0;max-width:760px;margin:0 auto;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;}
+  .card h2{margin:0 0 10px;font-size:15px;font-weight:700;color:var(--navy-900);
+    border-left:4px solid var(--gold-600);padding-left:9px;}
+  label{display:block;font-size:12.5px;color:var(--text-2);font-weight:600;margin:12px 0 4px;}
+  label:first-of-type{margin-top:0;}
+  input,select,textarea{
+    width:100%;font-size:16px;padding:11px 12px;border:1px solid var(--border-strong);
+    border-radius:10px;background:#fff;color:var(--text);font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-600);box-shadow:0 0 0 3px rgba(201,154,86,.16);}
+  textarea{min-height:92px;resize:vertical;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;}
+  .sevrow{display:flex;gap:8px;}
+  .sevrow button{
+    flex:1;appearance:none;border:1.5px solid var(--border-strong);background:#fff;color:var(--text-2);
+    border-radius:11px;padding:12px 4px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+  }
+  .sevrow button.on[data-sev="可續跑"]{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);}
+  .sevrow button.on[data-sev="需儘快處理"]{background:var(--warn-bg);border-color:var(--warn);color:var(--warn);}
+  .sevrow button.on[data-sev="不能出車"]{background:var(--bad-bg);border-color:var(--bad);color:var(--bad);}
+  .btn{
+    display:block;width:100%;appearance:none;border:none;border-radius:12px;padding:15px;
+    font-size:17px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;
+    background:linear-gradient(120deg,#9d6d2f,#7d5624);
+  }
+  .btn[disabled]{opacity:.55;}
+  .btn.ghost{background:#fff;color:var(--navy-900);border:1.5px solid var(--border-strong);}
+  .hint{font-size:12px;color:var(--text-3);margin-top:6px;line-height:1.5;}
+  .hide{display:none!important;}
+  #msg{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);
+    z-index:60;padding:13px 15px;border-radius:12px;font-size:14.5px;font-weight:600;
+    box-shadow:0 10px 32px rgba(0,0,0,.22);}
+  #msg.ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok);}
+  #msg.err{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad);}
+  .rep{border:1px solid var(--border);border-radius:12px;padding:11px 12px;margin-bottom:9px;background:#fff;}
+  .rep .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .rep .no{font-size:12px;color:var(--text-3);font-weight:600;}
+  .rep .ttl{font-size:15px;font-weight:700;margin:2px 0 4px;}
+  .rep .meta{font-size:12.5px;color:var(--text-2);}
+  .tag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+  .t-wait{background:var(--warn-bg);color:var(--warn);}
+  .t-doing{background:#E9EFF7;color:#20406B;}
+  .t-done{background:var(--ok-bg);color:var(--ok);}
+  .t-hist{background:var(--na-bg);color:var(--na);}
+  .t-bad{background:var(--bad-bg);color:var(--bad);}
+  .empty{text-align:center;color:var(--text-3);font-size:14px;padding:24px 0;}
+  .okbox{background:var(--ok-bg);border:1px solid var(--ok);color:var(--ok);border-radius:12px;
+    padding:14px;font-size:15px;font-weight:700;text-align:center;margin-bottom:12px;line-height:1.7;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>設備報修</h1>
+  <div class="sub">順亞運通　車輛／板架／配備故障回報</div>
+  <nav>
+    <button id="tab_new" class="on">我要報修</button>
+    <button id="tab_track">查進度</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ========== 報修 ========== -->
+  <section id="pane_new">
+    <div id="doneBox" class="hide"></div>
+
+    <div class="card">
+      <h2>基本資料</h2>
+      <div class="grid2">
+        <div>
+          <label>回報日期</label>
+          <input id="f_date" type="date">
+        </div>
+        <div>
+          <label>車場</label>
+          <select id="f_yard">
+            <option value="">請選擇</option>
+            <option>台中</option><option>新竹</option><option>台南</option>
+          </select>
+        </div>
+      </div>
+
+      <label>車號 <span style="color:var(--bad);">*</span></label>
+      <input id="f_plate" list="dl_plate" placeholder="車頭或板架號碼，例：KLB-6818" autocomplete="off">
+      <div class="hint">打前幾碼會跳出建議。找不到的車號也可以直接打，辦公室會再確認。</div>
+
+      <label>類別 <span style="color:var(--bad);">*</span></label>
+      <select id="f_cat">
+        <option>車輛設備</option>
+        <option>板架設備</option>
+        <option>車上配備</option>
+      </select>
+
+      <label>壞掉的東西 <span style="color:var(--bad);">*</span></label>
+      <input id="f_item" placeholder="例：冷氣、右後方向燈、滅火器" autocomplete="off">
+      <div class="hint">直接打壞掉的東西，寫得越具體越好（例如「右後方向燈」比「燈」清楚）。</div>
+    </div>
+
+    <div class="card">
+      <h2>故障狀況</h2>
+      <label>狀況說明 <span style="color:var(--bad);">*</span></label>
+      <textarea id="f_desc" placeholder="什麼時候開始、怎麼壞的、現在還能不能用。寫得越清楚，廠商越快處理。"></textarea>
+
+      <label>嚴重程度 <span style="color:var(--bad);">*</span></label>
+      <div class="sevrow" id="f_sev">
+        <button type="button" data-sev="可續跑">可續跑</button>
+        <button type="button" data-sev="需儘快處理" class="on">需儘快處理</button>
+        <button type="button" data-sev="不能出車">不能出車</button>
+      </div>
+      <div class="hint" id="sevHint">會影響排修順序。選「不能出車」調度會馬上看到。</div>
+
+      <label>回報人 <span style="color:var(--bad);">*</span></label>
+      <input id="f_by" placeholder="請打自己的名字" autocomplete="off">
+    </div>
+
+    <button class="btn" id="btn_save">送出報修單</button>
+    <div class="hint" style="text-align:center;margin:10px 0 20px;">
+      送出後會給你一個單號，之後在「查進度」用車號就查得到處理狀況。
+    </div>
+  </section>
+
+  <!-- ========== 查進度 ========== -->
+  <section id="pane_track" class="hide">
+    <div class="card">
+      <h2>查進度</h2>
+      <label>車號</label>
+      <input id="q_plate" list="dl_plate" placeholder="輸入車號後按查詢" autocomplete="off">
+      <label>顯示範圍</label>
+      <select id="q_scope">
+        <option value="open">處理中的（預設）</option>
+        <option value="all">全部，含已結案</option>
+      </select>
+      <div style="margin-top:12px;"><button class="btn ghost" id="btn_query">查詢</button></div>
+    </div>
+    <div id="qList"></div>
+  </section>
+</main>
+
+<div id="msg" class="hide"></div>
+<datalist id="dl_plate"></datalist>
+
+<script>
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+// ===== 這一頁不需要帳號密碼 =====
+// 司機開網頁就要能填，所以不做 Supabase Auth，只帶 publishable(anon) 金鑰。
+//
+// 【安全提醒，改這個檔案的人請先看完】
+//   1. 這裡只能放 publishable(anon) key。Supabase 後台那把最高權限金鑰
+//      （service role）永遠只放 GitHub Secrets，絕對不可以出現在任何 HTML／JS 裡面。
+//   2. 沒有登入 = 只要知道網址的人都能開、都能寫。所以這一頁
+//      【刻意不去讀 employees、customers 等含個資的表】。
+//      車號是從 vehicles 讀的（只取車牌，沒有個資）；回報人姓名一律由司機自己打，
+//      不從人員主檔帶出下拉，避免把在職名單攤在公開網頁上。
+//   3. 資料庫那邊 SQL #116 已經把 anon 限制成「可讀、可新增，
+//      只能改自己 7 天內而且還在待處理的單」，刪除完全不開放。
+const REST = SUPABASE_URL + '/rest/v1/';
+async function sb(path, options){
+  options = options || {};
+  const h = Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  }, options.headers || {});
+  return fetch(REST + path, Object.assign({}, options, { headers: h }));
+}
+async function sbSelect(table, qs){
+  const r = await sb(table + '?' + (qs || 'select=*'), { method:'GET' });
+  if(!r.ok) throw new Error(table + '　' + r.status + '　' + (await r.text()));
+  return r.json();
+}
+async function sbInsert(table, row){
+  const r = await sb(table, { method:'POST', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
+  if(!r.ok) throw new Error(await r.text());
+  const d = await r.json(); return Array.isArray(d) ? d[0] : d;
+}
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function todayISO(){ const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function toROC(iso){ if(!iso) return ''; const p = String(iso).slice(0,10).split('-'); if(p.length<3) return iso;
+  return (parseInt(p[0],10)-1911)+'/'+p[1]+'/'+p[2]; }
+let msgTimer = null;
+function toast(text, kind){
+  const el = $('msg'); el.textContent = text; el.className = kind === 'err' ? 'err' : 'ok';
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => el.className = 'hide', kind === 'err' ? 8000 : 3200);
+}
+
+// ---------- 車號 ----------
+let PLATES = [];
+async function loadPlates(){
+  try{
+    // 只取車牌與狀態，沒有任何個資
+    const rows = await sbSelect('vehicles', 'select=plate_number,status&order=plate_number.asc');
+    PLATES = (rows || []).filter(v => v.status === '在役').map(v => v.plate_number).filter(Boolean);
+    $('dl_plate').innerHTML = PLATES.map(p => '<option value="' + esc(p) + '">').join('');
+  }catch(e){
+    // 讀不到就讓司機自己打，不要因此整頁不能用
+    console.error('車號讀取失敗', e);
+  }
+}
+
+// ---------- 嚴重度 ----------
+let SEV = '需儘快處理';
+$('f_sev').addEventListener('click', e => {
+  const b = e.target.closest('[data-sev]');
+  if(!b) return;
+  SEV = b.getAttribute('data-sev');
+  [...$('f_sev').querySelectorAll('button')].forEach(x => x.classList.toggle('on', x === b));
+  $('sevHint').textContent = SEV === '不能出車'
+    ? '這一台會被排到調度看板最上面，並且標成紅色。'
+    : (SEV === '可續跑' ? '車子還能跑，會排在一般順位。' : '會影響排修順序。選「不能出車」調度會馬上看到。');
+});
+
+// ---------- 單號 ----------
+// RP + 民國年月日 + 兩碼流水，例 RP1150817-03。
+// 撞號的話（兩個人同時送出）由資料庫的 UNIQUE 擋下來，這裡自動換下一號重試。
+async function makeReportNo(dateISO){
+  const p = String(dateISO).split('-');
+  const stem = 'RP' + (parseInt(p[0],10) - 1911) + p[1] + p[2] + '-';
+  let n = 1;
+  try{
+    const same = await sbSelect('equipment_repair_reports',
+      'select=report_no&report_date=eq.' + encodeURIComponent(dateISO));
+    n = (same || []).length + 1;
+  }catch(e){ /* 查不到就從 1 開始，撞號時會自動往後 */ }
+  return { stem, n };
+}
+
+// ---------- 送出 ----------
+$('btn_save').addEventListener('click', async () => {
+  const date  = $('f_date').value || todayISO();
+  const plate = $('f_plate').value.trim();
+  const cat   = $('f_cat').value;
+  const item  = $('f_item').value.trim();
+  const desc  = $('f_desc').value.trim();
+  const by    = $('f_by').value.trim();
+  const yard  = $('f_yard').value;
+  if(!plate){ toast('請填車號', 'err'); $('f_plate').focus(); return; }
+  if(!item){ toast('請填壞掉的東西', 'err'); $('f_item').focus(); return; }
+  if(!desc){ toast('請寫一下故障狀況', 'err'); $('f_desc').focus(); return; }
+  if(!by){ toast('請打自己的名字，後續有問題才找得到人', 'err'); $('f_by').focus(); return; }
+
+  const btn = $('btn_save');
+  btn.disabled = true; btn.textContent = '送出中…';
+  try{
+    const { stem, n } = await makeReportNo(date);
+    let saved = null, last = null;
+    // 撞號就往後找，最多試 20 次
+    for(let i = 0; i < 20 && !saved; i++){
+      const no = stem + String(n + i).padStart(2, '0');
+      try{
+        saved = await sbInsert('equipment_repair_reports', {
+          report_no: no, report_date: date, plate_number: plate, category: cat,
+          item_name: item, fault_desc: desc, severity: SEV,
+          reporter_name: by, yard: yard || null, status: '待處理'
+        });
+      }catch(err){
+        last = err;
+        if(String(err.message || '').indexOf('duplicate key') < 0) throw err;
+      }
+    }
+    if(!saved) throw last || new Error('單號一直重複，請稍後再送一次');
+
+    $('doneBox').className = 'okbox';
+    $('doneBox').innerHTML = '報修單已送出<br>單號 ' + esc(saved.report_no)
+      + '<br><span style="font-weight:400;font-size:13px;">'
+      + esc(plate) + '　' + esc(item) + '　' + esc(SEV) + '</span>';
+    // 清成可以馬上填下一張的狀態，車場與回報人留著不用重打
+    ['f_plate','f_item','f_desc'].forEach(id => $(id).value = '');
+    toast('已送出：' + saved.report_no);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }catch(e){
+    toast('沒有送出去：' + (e && e.message ? e.message : e), 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = '送出報修單';
+  }
+});
+
+// ---------- 查進度 ----------
+const HIST = ['結案','不修理'];
+function statusTag(s){
+  if(s === '待處理') return '<span class="tag t-wait">待處理</span>';
+  if(s === '已派修' || s === '維修中') return '<span class="tag t-doing">' + esc(s) + '</span>';
+  if(s === '已完成') return '<span class="tag t-done">已完成</span>';
+  return '<span class="tag t-hist">' + esc(s) + '</span>';
+}
+$('btn_query').addEventListener('click', async () => {
+  const plate = $('q_plate').value.trim();
+  if(!plate){ toast('請先輸入車號', 'err'); return; }
+  const scope = $('q_scope').value;
+  $('qList').innerHTML = '<div class="empty">查詢中…</div>';
+  try{
+    const rows = await sbSelect('equipment_repair_reports',
+      'select=*&plate_number=eq.' + encodeURIComponent(plate) + '&order=report_date.desc,report_id.desc');
+    const list = (rows || []).filter(r => scope === 'all' || HIST.indexOf(r.status) < 0);
+    if(!list.length){
+      $('qList').innerHTML = '<div class="card"><div class="empty">'
+        + (scope === 'all' ? '這台車沒有報修紀錄。' : '這台車目前沒有處理中的報修單。') + '</div></div>';
+      return;
+    }
+    $('qList').innerHTML = list.map(r => `
+      <div class="rep">
+        <div class="top">
+          <div style="flex:1;">
+            <div class="no">${esc(r.report_no || ('#' + r.report_id))}　${esc(toROC(r.report_date))}</div>
+            <div class="ttl">${esc(r.item_name)}</div>
+          </div>
+          <div style="text-align:right;">
+            ${statusTag(r.status)}
+            ${r.severity === '不能出車' ? '<div style="margin-top:4px;"><span class="tag t-bad">不能出車</span></div>' : ''}
+          </div>
+        </div>
+        <div class="meta">${esc(r.fault_desc || '')}</div>
+        ${r.handle_note ? '<div class="meta" style="margin-top:5px;color:var(--navy-800);"><b>處理情形：</b>' + esc(r.handle_note) + '</div>' : ''}
+        ${r.eta_date ? '<div class="meta" style="margin-top:3px;">預計完成：' + esc(toROC(r.eta_date)) + '</div>' : ''}
+        ${r.vendor_name ? '<div class="meta">維修廠商：' + esc(r.vendor_name) + '</div>' : ''}
+        ${r.closed_date ? '<div class="meta" style="margin-top:3px;">結案日：' + esc(toROC(r.closed_date))
+            + (r.close_note ? '　' + esc(r.close_note) : '') + '</div>' : ''}
+      </div>`).join('');
+  }catch(e){
+    $('qList').innerHTML = '<div class="card"><div class="empty">查詢失敗：' + esc(e.message || e) + '</div></div>';
+  }
+});
+
+// ---------- 分頁 ----------
+function showPane(which){
+  $('pane_new').className   = which === 'new'   ? '' : 'hide';
+  $('pane_track').className = which === 'track' ? '' : 'hide';
+  $('tab_new').className    = which === 'new'   ? 'on' : '';
+  $('tab_track').className  = which === 'track' ? 'on' : '';
+}
+$('tab_new').addEventListener('click', () => showPane('new'));
+$('tab_track').addEventListener('click', () => showPane('track'));
+
+// ---------- 啟動 ----------
+(function init(){
+  $('f_date').value = todayISO();
+  loadPlates();
+})();
+</script>
+</body>
+</html>
