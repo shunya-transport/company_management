@@ -2498,10 +2498,14 @@
       <label>物品類型
         <select id="veq_type"></select>
       </label>
+      <label>庫存品項
+        <select id="veq_stock_item"></select>
+      </label>
       <label>細節（選填）<input id="veq_detail" placeholder="例：序號"></label>
       <label>數量<input id="veq_qty" type="number" value="1"></label>
       <label>領用日期<input id="veq_issue" type="date"></label>
     </div>
+    <div class="muted" id="veq_stock_hint" style="margin:-4px 0 10px;"></div>
     <button class="btn" id="vequipModalAdd">新增領用紀錄</button>
   </div>
 </div>
@@ -2575,7 +2579,7 @@
         <select id="eq_type"></select>
       </label>
       <label>庫存品項（若有追蹤庫存）
-        <select id="eq_stock_item"><option value="">不連結庫存</option></select>
+        <select id="eq_stock_item"><option value="">請選擇品項</option></select>
       </label>
       <label>細節（選填）<input id="eq_detail" placeholder="例：序號、尺寸"></label>
       <label>數量<input id="eq_qty" type="number" value="1"></label>
@@ -6945,7 +6949,8 @@ function updateEqStockItemOptions(){
       ? '制服要先在「配備管理 → 新增庫存品項」把 ' + sizeListLabel(typeId) + ' 各建一筆，才能登記領用。'
       : '此配備類型還沒有在「配備庫存」建立追蹤，這筆領用不會影響庫存數字。';
   }else{
-    sel.innerHTML = (uniform ? '<option value="">請選擇尺寸</option>' : '<option value="">不連結庫存</option>')
+    // 有建庫存品項就一定要選一個，不能再存成「不連結庫存」——那是庫存對不起來的主因
+    sel.innerHTML = (uniform ? '<option value="">請選擇尺寸</option>' : '<option value="">請選擇品項</option>')
       + matches.map(i => {
           const level = computeStockLevel(i.item_id);
           return `<option value="${i.item_id}">${esc(i.size||'（無尺寸）')} — 目前庫存 ${level}</option>`;
@@ -6973,7 +6978,7 @@ function renderVequipModalBody(){
     const type = STATE.equipmentTypes.find(t => t.id === x.type_id);
     const statusCls = x.status==='使用中' ? 'green' : x.status==='已歸還' ? 'gray' : 'red';
     return `<tr>
-      <td>${esc(type?type.name:'')}</td>
+      <td>${esc(type?type.name:'')}${x.stock_item_id?' 📦':''}</td>
       <td class="muted">${esc(x.item_detail||'')}</td>
       <td>${x.quantity??1}</td>
       <td>${esc(x.issue_date||'—')}</td>
@@ -7510,6 +7515,7 @@ function openVequipModal(vehicleId){
   currentVequipVehicleId = vehicleId;
   document.getElementById('vequipModalTitle').textContent = `車用物品管理 — ${v.plate}`;
   document.getElementById('veq_type').innerHTML = STATE.equipmentTypes.map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
+  updateVeqStockItemOptions();
   renderVequipModalBody();
   renderVequipMoves();
   document.getElementById('vequipModal').classList.add('show');
@@ -13458,18 +13464,67 @@ document.getElementById('vequipModalClose').addEventListener('click', closeVequi
 document.getElementById('vequipModal').addEventListener('click', (e) => {
   if(e.target.id === 'vequipModal') closeVequipModal();
 });
+// 車用配備的庫存品項下拉。規則跟個人領用一模一樣：
+// 這個配備有在管庫存就一定要選一個品項，掛上車才扣得到正確的那一筆。
+function updateVeqStockItemOptions(){
+  const sel = document.getElementById('veq_stock_item');
+  const hint = document.getElementById('veq_stock_hint');
+  const tsel = document.getElementById('veq_type');
+  if(!sel || !tsel) return;
+  const typeId = parseInt(tsel.value);
+  const matches = (STATE.stockItems || []).filter(i => i.type_id === typeId)
+    .slice().sort((a, b) => sizeRank(a.size, typeId) - sizeRank(b.size, typeId));
+  if(matches.length === 0){
+    sel.innerHTML = '<option value="">此配備尚未建立庫存品項</option>';
+    if(hint) hint.textContent = '此配備類型還沒有在「配備庫存」建立追蹤，這筆領用不會影響庫存數字。';
+  }else{
+    sel.innerHTML = '<option value="">請選擇品項</option>'
+      + matches.map(i => {
+          const level = computeStockLevel(i.item_id);
+          return `<option value="${i.item_id}">${esc(i.size || '（無尺寸）')} — 目前庫存 ${level}</option>`;
+        }).join('');
+    if(hint) hint.textContent = '這個配備有在管庫存，掛上車時會自動從庫存扣除，歸還時自動補回。';
+  }
+}
+function veqAddStockTx(itemId, kind, qty, date, note){
+  const tid = nextId((STATE.stockTransactions || []).map(t => ({id: t.transaction_id})));
+  STATE.stockTransactions.push({
+    id: tid, transaction_id: tid,
+    item_id: itemId, transaction_type: kind, quantity: qty,
+    transaction_date: date, notes: note
+  });
+}
+document.getElementById('veq_type').addEventListener('change', updateVeqStockItemOptions);
 document.getElementById('vequipModalAdd').addEventListener('click', async () => {
   const typeId = parseInt(document.getElementById('veq_type').value);
+  const _sel = document.getElementById('veq_stock_item');
+  const stockItemId = (_sel && _sel.value) ? parseInt(_sel.value) : null;
+  const qty = parseInt(document.getElementById('veq_qty').value) || 1;
+  // 有建庫存品項就一定要選，不然車上多了東西、庫存數字卻沒動，盤點就對不起來
+  if(!stockItemId && (STATE.stockItems || []).some(i => i.type_id === typeId)){
+    alert('這個配備有在「配備管理」建庫存品項，請選一個品項，掛上車時才會從庫存扣除。\n\n'
+        + '如果這一筆本來就不該動庫存，請先到「配備管理 → 品項庫存清單」確認。');
+    return;
+  }
+  const issueDate = document.getElementById('veq_issue').value || todayISO();
+  const newRecordId = nextId(STATE.vehicleEquipment);
   STATE.vehicleEquipment.push({
-    id: nextId(STATE.vehicleEquipment), vehicle_id: currentVequipVehicleId, type_id: typeId,
-    item_detail: document.getElementById('veq_detail').value.trim(),
-    quantity: parseInt(document.getElementById('veq_qty').value) || 1,
-    issue_date: document.getElementById('veq_issue').value || todayISO(),
+    id: newRecordId, vehicle_id: currentVequipVehicleId, type_id: typeId,
+    stock_item_id: stockItemId,
+    item_detail: document.getElementById('veq_detail').value.trim() || eqAutoDetail(typeId, stockItemId),
+    quantity: qty,
+    issue_date: issueDate,
     return_date: null, status: '使用中'
   });
+  if(stockItemId){
+    veqAddStockTx(stockItemId, '領用', qty, issueDate,
+      `車輛配備自動產生（車用領用紀錄 #${newRecordId}）`);
+    await saveState('stock_transactions', STATE.stockTransactions, true);
+  }
   await saveState('vehicle_equipment', STATE.vehicleEquipment, true);
   document.getElementById('veq_detail').value = '';
   renderVequipModalBody();
+  updateVeqStockItemOptions();
   renderAll();
 });
 document.getElementById('vequipModalBody').addEventListener('click', async (e) => {
@@ -13477,14 +13532,30 @@ document.getElementById('vequipModalBody').addEventListener('click', async (e) =
   const delId = e.target.getAttribute('data-del-vequip');
   if(returnId){
     const rec = STATE.vehicleEquipment.find(x => String(x.id) === returnId);
-    if(rec){ rec.status = '已歸還'; rec.return_date = todayISO(); }
+    if(rec){
+      rec.status = '已歸還'; rec.return_date = todayISO();
+      if(rec.stock_item_id){
+        veqAddStockTx(rec.stock_item_id, '退回', rec.quantity || 1, todayISO(),
+          `車輛歸還自動產生（車用領用紀錄 #${rec.id}）`);
+        await saveState('stock_transactions', STATE.stockTransactions, true);
+      }
+    }
     await saveState('vehicle_equipment', STATE.vehicleEquipment, true);
     renderVequipModalBody();
+    updateVeqStockItemOptions();
     renderAll();
   }else if(delId){
+    const rec = STATE.vehicleEquipment.find(x => String(x.id) === delId);
+    if(rec && rec.stock_item_id && rec.status === '使用中'){
+      if(!confirm('這筆車用配備有連結庫存而且還沒歸還，刪除後會自動補回庫存數量，確定要刪除嗎？')) return;
+      veqAddStockTx(rec.stock_item_id, '退回', rec.quantity || 1, todayISO(),
+        `刪除車用領用紀錄自動補回庫存（原紀錄 #${rec.id}）`);
+      await saveState('stock_transactions', STATE.stockTransactions, true);
+    }
     STATE.vehicleEquipment = STATE.vehicleEquipment.filter(x => String(x.id) !== delId);
     await saveState('vehicle_equipment', STATE.vehicleEquipment, true);
     renderVequipModalBody();
+    updateVeqStockItemOptions();
     renderAll();
   }
 });
@@ -13559,6 +13630,11 @@ document.getElementById('equipModalAdd').addEventListener('click', async () => {
   const qty = parseInt(document.getElementById('eq_qty').value) || 1;
   if(isUniformType(typeId) && !stockItemId){
     alert('制服要選尺寸（' + sizeListLabel(typeId) + '）才能登記領用，不然之後盤點和叫貨都對不出來。');
+    return;
+  }
+  // 制服以外的配備一樣：只要有建庫存品項就一定要選，不然庫存數字永遠對不起來
+  if(!stockItemId && (STATE.stockItems || []).some(i => i.type_id === typeId)){
+    alert('這個配備有在「配備管理」建庫存品項，請選一個品項，領用時才會從庫存扣除。');
     return;
   }
   const issueDate = document.getElementById('eq_issue').value || todayISO();
