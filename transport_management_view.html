@@ -2110,9 +2110,9 @@
       <h2>歷史紀錄（已結案／不修理）<span class="count-badge" id="rp_hist_count"></span></h2>
       <div class="toolbar">
         <input id="rp_hq" placeholder="搜尋車號／品項／故障內容" style="min-width:260px;">
-        <button class="btn ghost" id="rp_hist_toggle">展開</button>
+        <button class="btn ghost" id="rp_hist_toggle">收合</button>
       </div>
-      <div id="rpHistWrap" style="display:none;">
+      <div id="rpHistWrap">
         <div class="table-scroll">
           <table>
             <thead><tr><th>單號</th><th>回報日</th><th>車號</th><th>品項</th><th>故障狀況</th>
@@ -4308,7 +4308,8 @@ function vehicleCompanyWarn(n){
 // 而整批砍掉，報修單隨時可能有司機正在新增，走那條路會誤刪。
 const RP_HIST_STATUS = ['結案', '不修理'];
 const RP_SEV_RANK = { '不能出車': 0, '需儘快處理': 1, '可續跑': 2 };
-let RP_ROWS = [], RP_SEL = null, RP_HIST_OPEN = false;
+// 歷史區預設就是展開的 —— 結案後看不到單子會讓人以為存檔失敗
+let RP_ROWS = [], RP_SEL = null, RP_HIST_OPEN = true;
 
 async function rpLoad(){
   try{
