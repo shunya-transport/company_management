@@ -1638,7 +1638,7 @@
 
     <div class="card">
       <h2>公務機門號清單<span class="count-badge" id="cp_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">「電信商」與「備註」可以直接在表格裡改，打完按 Enter 或點到別的地方就會存回雲端。</div>
+      <div class="muted" style="margin-bottom:10px;">要改「電信商」或「備註」，按那一列的「改」，填完按「儲存」才會存回雲端（Enter＝儲存、Esc＝取消）。</div>
       <div class="toolbar">
         <select id="cp_status_filter">
           <option value="all">全部狀態</option>
@@ -9475,6 +9475,34 @@ function renderPhoneSelects(){
   }
 }
 
+// 哪一支門號正在改備註／電信商（null＝全部唯讀）。
+// 一次只開一列，避免整張表都是輸入框、有人滑過去就把字洗掉。
+let CP_EDIT_ID = null;
+
+async function cpSaveEdit(id){
+  const p = STATE.companyPhones.find(x => x.id === id);
+  if(!p){ CP_EDIT_ID = null; renderPhoneAll(); return; }
+  const cEl = document.getElementById('cp_edit_carrier');
+  const nEl = document.getElementById('cp_edit_notes');
+  if(!cEl || !nEl) return;
+  const beforeC = p.carrier, beforeN = p.notes;
+  const c = cEl.value.trim() || null;
+  const n = nEl.value.trim() || null;
+  if(String(beforeC||'') === String(c||'') && String(beforeN||'') === String(n||'')){
+    CP_EDIT_ID = null; renderPhoneAll(); return;   // 沒改東西就不用寫雲端
+  }
+  p.carrier = c; p.notes = n;
+  try{
+    await saveState('company_phones', STATE.companyPhones, true);
+  }catch(err){
+    p.carrier = beforeC; p.notes = beforeN;
+    CP_EDIT_ID = null; renderPhoneAll();
+    return;
+  }
+  CP_EDIT_ID = null;
+  renderPhoneAll();
+}
+
 function renderPhoneTable(){
   const body = document.getElementById('cpTableBody');
   if(!body) return;
@@ -9503,16 +9531,29 @@ function renderPhoneTable(){
       <td>${esc(r.e ? (r.e.position_name||'') : '')}</td>
       <td>${esc(r.p.issue_date||'')}</td>
       <td>${esc(r.p.return_date||'')}</td>
-      <td><input type="text" data-cp-field="carrier" data-cp-id="${r.p.id}"
-                 value="${esc(r.p.carrier||'')}" placeholder="選填"
+      ${r.p.id === CP_EDIT_ID ? `
+      <td><input type="text" id="cp_edit_carrier" value="${esc(r.p.carrier||'')}" placeholder="選填"
                  style="width:100%;font-size:12.5px;padding:4px 6px;"></td>
-      <td><input type="text" data-cp-field="notes" data-cp-id="${r.p.id}"
-                 value="${esc(r.p.notes||'')}" placeholder="點一下就能打字"
+      <td><input type="text" id="cp_edit_notes" value="${esc(r.p.notes||'')}" placeholder="選填"
                  style="width:100%;font-size:12.5px;padding:4px 6px;"></td>
-      <td><button class="btn ghost" data-del-phone="${r.p.id}">刪除</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn" data-cp-save="${r.p.id}">儲存</button>
+        <button class="btn ghost" data-cp-cancel="1">取消</button>
+      </td>` : `
+      <td>${esc(r.p.carrier||'')}</td>
+      <td>${esc(r.p.notes||'')}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn ghost" data-cp-edit="${r.p.id}">改</button>
+        <button class="btn ghost" data-del-phone="${r.p.id}">刪除</button>
+      </td>`}
     </tr>`).join('') || '<tr><td colspan="11" class="muted">沒有符合條件的門號</td></tr>';
   const cnt = document.getElementById('cp_count');
   if(cnt) cnt.textContent = rows.length + ' / ' + STATE.companyPhones.length;
+
+  if(CP_EDIT_ID != null){
+    const f = document.getElementById('cp_edit_notes');
+    if(f){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+  }
 
   // 提醒：同一組 PNP 碼掛在兩支以上門號，通常是資料輸入錯誤
   const byPnp = {};
@@ -14269,33 +14310,21 @@ if(document.getElementById('cp_disable')) document.getElementById('cp_disable').
   cpUpdate(p => { p.employee_id = null; p.status = '停用'; p.return_date = date; });
 });
 
-// 備註與電信商直接在清單上改：離開欄位（或按 Enter）就存。
-// 只動這一支門號的那一欄，其餘欄位原封不動；存失敗就把畫面還原成雲端的樣子，
-// 不要留下「看起來改成功、其實沒存」。
-if(document.getElementById('cpTableBody')) document.getElementById('cpTableBody').addEventListener('change', async (ev) => {
-  const box = ev.target.closest('[data-cp-field]');
-  if(!box) return;
-  const id = Number(box.getAttribute('data-cp-id'));
-  const field = box.getAttribute('data-cp-field');
-  const p = STATE.companyPhones.find(x => x.id === id);
-  if(!p) return;
-  const before = p[field];
-  const val = box.value.trim() || null;
-  if(String(before || '') === String(val || '')) return;
-  p[field] = val;
-  try{
-    await saveState('company_phones', STATE.companyPhones, true);
-  }catch(err){
-    p[field] = before;
-    renderPhoneAll();
-    return;
-  }
-  const cnt = document.getElementById('cp_count');
-  if(cnt) cnt.title = (field === 'notes' ? '備註' : '電信商') + '已存檔　' + (p.phone_no || '');
+// 備註與電信商：按「改」才會變成輸入框，按「儲存」才會寫回雲端。
+// 沒按儲存就離開（取消、去改別列、關掉頁面）＝什麼都沒動到。
+if(document.getElementById('cpTableBody')) document.getElementById('cpTableBody').addEventListener('click', async (ev) => {
+  const eb = ev.target.closest('[data-cp-edit]');
+  if(eb){ CP_EDIT_ID = Number(eb.getAttribute('data-cp-edit')); renderPhoneAll(); return; }
+  const cb = ev.target.closest('[data-cp-cancel]');
+  if(cb){ CP_EDIT_ID = null; renderPhoneAll(); return; }
+  const sb = ev.target.closest('[data-cp-save]');
+  if(sb){ await cpSaveEdit(Number(sb.getAttribute('data-cp-save'))); return; }
 });
-if(document.getElementById('cpTableBody')) document.getElementById('cpTableBody').addEventListener('keydown', (ev) => {
-  // 按 Enter 直接離開欄位，change 事件就會跟著觸發存檔
-  if(ev.key === 'Enter' && ev.target.closest('[data-cp-field]')) ev.target.blur();
+if(document.getElementById('cpTableBody')) document.getElementById('cpTableBody').addEventListener('keydown', async (ev) => {
+  if(CP_EDIT_ID == null) return;
+  if(!ev.target.closest('#cp_edit_carrier, #cp_edit_notes')) return;
+  if(ev.key === 'Enter'){ ev.preventDefault(); await cpSaveEdit(CP_EDIT_ID); }
+  else if(ev.key === 'Escape'){ ev.preventDefault(); CP_EDIT_ID = null; renderPhoneAll(); }
 });
 
 if(document.getElementById('cpTableBody')) document.getElementById('cpTableBody').addEventListener('click', async (ev) => {
