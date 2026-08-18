@@ -2272,7 +2272,7 @@
       <div class="toolbar"><input id="in_search" placeholder="搜尋財產編號/序號"></div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>財產編號</th><th>類型</th><th>廠牌型號</th><th>保管區域</th><th>目前領用人</th><th>狀態</th><th>下次校驗到期</th><th></th></tr></thead>
+          <thead><tr><th>財產編號</th><th>類型</th><th>廠牌型號</th><th>保管區域</th><th>目前領用人</th><th>領用日</th><th>狀態</th><th>下次校驗到期</th><th></th></tr></thead>
           <tbody id="instrumentsBody"></tbody>
         </table>
       </div>
@@ -2315,7 +2315,7 @@
       <div class="muted" style="margin-bottom:10px;">停用的儀器不會從資料庫刪除，校驗歷史也留著。修好了按「復用」就回到上面的儀器清單。</div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>財產編號</th><th>類型</th><th>廠牌型號</th><th>停用日</th><th>停用原因</th><th>停用前領用人</th><th>狀態</th><th></th></tr></thead>
+          <thead><tr><th>財產編號</th><th>類型</th><th>廠牌型號</th><th>停用日</th><th>停用原因</th><th>停用前領用人</th><th>領用日</th><th>狀態</th><th></th></tr></thead>
           <tbody id="instrumentsOffBody"></tbody>
         </table>
       </div>
@@ -5455,10 +5455,11 @@ function renderInstrumentsOffTable(){
       <td>${esc(i.disabled_date || '—')}</td>
       <td>${esc(i.disabled_reason || '')}</td>
       <td>${esc(holder ? holder.name : '')}</td>
+      <td>${esc(i.issue_date || '—')}</td>
       <td><span class="pill gray">${esc(i.status || '停用')}</span></td>
       <td><button class="name-link" data-on-instrument="${i.instrument_id}">復用</button> <button class="del-btn" data-del-instrument="${i.instrument_id}">刪除</button></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" class="empty">目前沒有停用的儀器</td></tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty">目前沒有停用的儀器</td></tr>`;
 }
 function renderInstrumentsTable(){
   const q = document.getElementById('in_search').value.trim();
@@ -5485,11 +5486,12 @@ function renderInstrumentsTable(){
       <td>${esc(i.brand_model||'')}</td>
       <td>${esc(i.storage_area||'')}</td>
       <td>${holderCell}<br>${holderAction}</td>
+      <td>${esc(i.current_holder_id ? (i.issue_date || '未填') : '—')}</td>
       <td>${esc(i.status)}</td>
       <td>${dueLabel}</td>
       <td><button class="name-link" data-off-instrument="${i.instrument_id}">停用</button> <button class="del-btn" data-del-instrument="${i.instrument_id}">刪除</button></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" class="empty">目前沒有在用的儀器</td></tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty">目前沒有在用的儀器</td></tr>`;
   renderInstrumentsOffTable();
 }
 
@@ -6905,7 +6907,7 @@ function renderEquipModalBody(){
       <td style="font-weight:600;">📟 ${esc(equipInstrumentTypeName(i))}</td>
       <td class="muted">${esc(equipInstrumentDetail(i))}</td>
       <td>1</td>
-      <td>—</td>
+      <td>${esc(i.issue_date||'—')}</td>
       <td><span class="pill green">使用中</span></td>
       <td><button class="name-link" data-return-instr="${i.instrument_id}" title="收回這台，領用人清空。正本在「配備管理 → 儀器設備」">歸還</button></td>
     </tr>`).join('');
@@ -7010,10 +7012,11 @@ async function eqAddAsset(typeId, issueDate){
   }else{
     const it = (STATE.instruments || []).find(x => String(x.instrument_id) === String(val));
     if(!it) return;
-    const bak = it.current_holder_id;
+    const bakH = it.current_holder_id, bakD = it.issue_date;
     it.current_holder_id = currentEquipEmpId;
+    it.issue_date = issueDate || todayISO();
     try{ await saveState('instruments', STATE.instruments, true); }
-    catch(err){ it.current_holder_id = bak; return; }
+    catch(err){ it.current_holder_id = bakH; it.issue_date = bakD; return; }
   }
   document.getElementById('eq_detail').value = '';
   renderEquipModalBody();
@@ -7037,10 +7040,11 @@ async function eqReturnInstrument(idStr){
   const it = (STATE.instruments || []).find(x => String(x.instrument_id) === String(idStr));
   if(!it) return;
   if(!confirm('要把「' + (it.asset_no || '') + '」收回公司備存嗎？\n領用人會清空，機台與校正紀錄都還在。')) return;
-  const bak = it.current_holder_id;
+  const bakH = it.current_holder_id, bakD = it.issue_date;
   it.current_holder_id = null;
+  it.issue_date = null;
   try{ await saveState('instruments', STATE.instruments, true); }
-  catch(err){ it.current_holder_id = bak; return; }
+  catch(err){ it.current_holder_id = bakH; it.issue_date = bakD; return; }
   renderEquipModalBody();
   updateEqStockItemOptions();
   renderAll();
@@ -8618,7 +8622,7 @@ function generateForm(){
     // 偵測器來自「配備管理 → 儀器設備」，一起列進領用清單
     const instrItems = equipInstrumentsOf(e.id).map(i => ({
       _typeName: equipInstrumentTypeName(i), item_detail: equipInstrumentDetail(i), quantity: 1,
-      issue_date: '', status: '使用中', return_date: null
+      issue_date: i.issue_date || '', status: '使用中', return_date: null
     }));
     const allItems = instrItems.concat(phoneItems, items);
     const rowsHtml = allItems.length ? allItems.map((x,i) => {
@@ -12428,6 +12432,7 @@ document.getElementById('in_add').addEventListener('click', async () => {
     next_calibration_due: null,
     calibration_vendor: document.getElementById('in_vendor').value.trim(),
     current_holder_id: document.getElementById('in_holder').value ? parseInt(document.getElementById('in_holder').value) : null,
+    issue_date: document.getElementById('in_holder').value ? todayISO() : null,
     notes: document.getElementById('in_notes').value.trim()
   });
   await saveState('instruments', STATE.instruments, true);
@@ -12474,9 +12479,14 @@ document.getElementById('instrumentsBody').addEventListener('click', async (e) =
     const inst = STATE.instruments.find(i => String(i.instrument_id) === saveHolderId);
     const sel = document.getElementById(`inst_holder_select_${saveHolderId}`);
     if(inst && sel){
+      const _prevHolder = inst.current_holder_id;
       inst.current_holder_id = sel.value ? parseInt(sel.value) : null;
       if(!inst.current_holder_id) inst.notes = '公司備存';
       else inst.notes = null;
+      // 換人（或第一次配發）就把領用日填今天；退回公司備存就清掉。
+      // 同一個人重存不動日期，不然按錯一下就把原本的領用日洗掉了。
+      if(!inst.current_holder_id) inst.issue_date = null;
+      else if(String(_prevHolder || '') !== String(inst.current_holder_id) || !inst.issue_date) inst.issue_date = todayISO();
       await saveState('instruments', STATE.instruments, true);
     }
     editingInstrumentHolderId = null;
@@ -13891,6 +13901,7 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
   (STATE.instruments || []).forEach(x => {
     if(x.current_holder_id === emp.id){
       x.current_holder_id = null;
+      x.issue_date = null;
       x.notes = ((x.notes ? x.notes + '；' : '') + '原領用人 ' + emp.name + '（' + resignDate + ' 離職繳回）');
       _touched.add('instruments');
     }
