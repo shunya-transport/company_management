@@ -471,7 +471,7 @@
           </select>
         </label>
         <label style="display:none;">投保金額<input id="ic_salary" type="number" placeholder="例：38200"></label>
-        <label>生效日期<input id="ic_date" type="date"></label>
+        <label>生效(異動)日期<input id="ic_date" type="date"></label>
         <label>親屬加保
           <select id="ic_has_dep">
             <option value="0">否</option>
@@ -489,7 +489,7 @@
       <div class="toolbar"><input id="ic_search" placeholder="搜尋姓名"></div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>公司別</th><th>異動類別</th><th>生效日期</th><th>親屬加保</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>公司別</th><th>異動類別</th><th>生效(異動)日期</th><th>親屬加保</th><th></th></tr></thead>
           <tbody id="icTableBody"></tbody>
         </table>
       </div>
@@ -2351,6 +2351,7 @@
             <option value="insured_amount">投保金額總表（全部人員）</option>
             <option value="ppe_signoff">物品使用登記表（PPE／個人保管品，運025-A1）</option>
             <option value="ppe_matrix">各車隊基本領用量對照表</option>
+            <option value="bank_roster">在職人員合作金庫帳號總表</option>
             <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
             <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
             <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
@@ -7723,7 +7724,7 @@ function renderStaffModalView(e){
 
     <div class="detail-section">
       <h4>勞健保異動紀錄</h4>
-      ${empInsurance.length ? `<table><thead><tr><th>異動別</th><th>生效日期</th><th>親屬加保</th></tr></thead><tbody>` +
+      ${empInsurance.length ? `<table><thead><tr><th>異動別</th><th>生效(異動)日期</th><th>親屬加保</th></tr></thead><tbody>` +
         empInsurance.map(i=>`<tr><td>${esc(i.change_type)}</td><td>${esc(i.effective_date||'—')}</td><td>${i.has_dependents ? `是（${i.dependents_count??0}人）` : '否'}</td></tr>`).join('') + `</tbody></table>`
         : '<div class="muted">無勞健保異動紀錄</div>'}
     </div>
@@ -7924,6 +7925,10 @@ const EXTRA_FIELDS = {
     {id:'ex_ins_scope', label:'人員範圍', type:'select', opts:['該期全部','僅在職人員']}
   ],
   ppe_matrix: [],
+  bank_roster: [
+    {id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'},
+    {id:'ex_bank_mask', label:'帳號顯示方式', type:'select', opts:['完整帳號','只顯示後四碼']}
+  ],
   ppe_signoff: [
     {id:'ex_ppe_team', label:'車隊', type:'select', opts:[]},
     {id:'ex_ppe_name', label:'姓名（自己填，新人還沒建檔也可以）', type:'text', placeholder:'例：林志鴻'},
@@ -8478,7 +8483,7 @@ function generateForm(){
   const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
   const e = list.find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff'];
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff','bank_roster'];
   const MS_TYPES = ['bp_sheet','alcohol_sheet'];
   if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
@@ -8704,6 +8709,66 @@ function generateForm(){
       <p style="font-size:11px;color:#999;margin-top:20px;">
         ※ 金額取自公司內部勞健保登錄系統該期的實際投保紀錄，僅供公司內部參考；正式數據請以勞保局、健保署核定資料為準。<br>
         ※ 期間留白時自動抓最新一期。可選的期間：${esc(insuredPeriods().slice(0, 6).map(insuredPeriodLabel).join('、'))}${insuredPeriods().length > 6 ? ' …' : ''}
+      </p>`;
+
+  }else if(type === 'bank_roster'){
+    const rows = bankRosterRows();
+    const stamp = extraVal('ex_roster_date') || todayISO();
+    const TH  = 'padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;';
+    const TD  = 'padding:5px 8px;border:1px solid #ccc;';
+    const TDC = TD + 'text-align:center;';
+    const byCompany = {};
+    rows.forEach(e => {
+      const c = e.company_name || '未設定行號';
+      (byCompany[c] = byCompany[c] || []).push(e);
+    });
+    const noAcct = rows.filter(e => !String(e.bank_account || '').trim()).length;
+    const body = Object.keys(byCompany).sort().map(c => {
+      const list = byCompany[c];
+      return `<tr style="background:#EEF3F1;font-weight:700;">
+          <td style="${TD}" colspan="10">${esc(c)}　（${list.length} 人）</td>
+        </tr>` + list.map((e, i) => `<tr>
+          <td style="${TDC}">${i + 1}</td>
+          <td style="${TDC}">${esc(e.employee_no || '')}</td>
+          <td style="${TD}">${esc(e.name || '')}</td>
+          <td style="${TD}">${esc(e.dept_name || '')}</td>
+          <td style="${TD}">${esc(e.position_name || '')}</td>
+          <td style="${TDC}">${esc(e.region || '')}</td>
+          <td style="${TD}">${esc(e.bank_name || '')}</td>
+          <td style="${TD}">${esc(e.bank_branch || '')}</td>
+          <td style="${TDC}">${esc(e.bank_code || '')}</td>
+          <td style="${TD}${e.bank_account ? 'font-family:monospace;letter-spacing:.5px;' : 'color:#B3261E;'}">
+            ${e.bank_account ? esc(bankShow(e)) : '（尚未建檔）'}</td>
+        </tr>`).join('');
+    }).join('');
+
+    bodyHtml = `
+      <h2 style="text-align:center;letter-spacing:6px;">在職人員合作金庫帳號總表</h2>
+      <p style="text-align:center;color:#666;font-size:12px;margin:4px 0 16px;">
+        在職 ${rows.length} 人 ・ 依行號分組 ・ 製表日期：${esc(toROCDate(stamp) || stamp)}
+        ${extraVal('ex_bank_mask') === '只顯示後四碼' ? '・帳號僅顯示後四碼' : ''}
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr>
+            <th style="${TH}">序號</th>
+            <th style="${TH}">員工編號</th>
+            <th style="${TH}">姓名</th>
+            <th style="${TH}">部門</th>
+            <th style="${TH}">職稱</th>
+            <th style="${TH}">區別</th>
+            <th style="${TH}">銀行</th>
+            <th style="${TH}">分行</th>
+            <th style="${TH}">機構代碼</th>
+            <th style="${TH}">帳號</th>
+          </tr>
+        </thead>
+        <tbody>${body || `<tr><td style="${TDC}" colspan="10">沒有在職人員</td></tr>`}</tbody>
+      </table>
+      <p style="font-size:11px;color:#999;margin-top:20px;">
+        ※ 本表含個人金融帳戶資料，列印本與匯出檔請比照薪資單管理，不要外流。<br>
+        ${noAcct ? '※ 有 <b>' + noAcct + '</b> 位在職同仁還沒有帳號資料，已在表上標紅，請補齊後再作為匯款依據。<br>' : ''}
+        ※ 資料來源：人員管理的合作金庫帳號欄位。要修改請到「人員管理 → 編輯人員」。
       </p>`;
 
   }else if(type === 'ppe_matrix'){
@@ -9074,6 +9139,42 @@ function ppeMatrixCsv(){
   rows.push(['', '合計項數', ''].concat(
     PPE_TEAMS.map((_, i) => String(PPE_MATRIX.filter(r => (r[1][i] || 0) > 0).length))));
   return csvLines(head, rows);
+}
+
+// ===== 在職人員合作金庫帳號總表 =====
+// 欄位是 SQL #83 建的，帳號由 supabase_bank_accounts.sql 匯入（全部合作金庫）。
+// 這是個人金融資料，印出來或匯出的檔案請比照薪資單管理。
+function bankRosterRows(){
+  return (STATE.employees || [])
+    .filter(e => e.status === '在職')
+    .slice()
+    .sort((a, b) => String(a.company_name || '').localeCompare(String(b.company_name || ''))
+                 || String(a.employee_no || '').localeCompare(String(b.employee_no || '')));
+}
+// 只顯示後四碼時，把數字遮起來但保留原本的分隔符號，看起來還是像帳號
+function bankMask(acct){
+  const s = String(acct == null ? '' : acct);
+  if(s.length <= 4) return s;
+  const tail = s.slice(-4);
+  return s.slice(0, -4).replace(/[0-9]/g, '＊') + tail;
+}
+function bankShow(e){
+  const a = String(e.bank_account || '').trim();
+  if(!a) return '';
+  return (extraVal('ex_bank_mask') === '只顯示後四碼') ? bankMask(a) : a;
+}
+function bankRosterCsv(){
+  const head = ['序號','行號','員工編號','姓名','部門','職稱','區別','銀行','分行','機構代碼','帳號'];
+  const rows = bankRosterRows();
+  const out = [];
+  let i = 0;
+  rows.forEach(e => {
+    i += 1;
+    out.push([String(i), e.company_name || '', e.employee_no || '', e.name || '',
+              e.dept_name || '', e.position_name || '', e.region || '',
+              e.bank_name || '', e.bank_branch || '', e.bank_code || '', bankShow(e)]);
+  });
+  return csvLines(head, out);
 }
 
 // ===== 僱主險（團保）人員名冊 =====
@@ -12289,7 +12390,7 @@ document.getElementById('ic_has_dep').addEventListener('change', (e) => {
 document.getElementById('ic_add').addEventListener('click', async () => {
   const empId = parseInt(document.getElementById('ic_emp').value);
   const date = document.getElementById('ic_date').value;
-  if(!empId || !date){ alert('請選擇人員並填寫生效日期'); return; }
+  if(!empId || !date){ alert('請選擇人員並填寫生效(異動)日期'); return; }
   const hasDep = document.getElementById('ic_has_dep').value === '1';
   STATE.insuranceChanges.push({
     id: nextId(STATE.insuranceChanges), employee_id: empId,
@@ -14919,6 +15020,7 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
     pension_contribution: {name:'勞健保提撥計算表', fn: pensionContributionCsv},
     insured_amount:       {name:'投保金額總表',     fn: insuredAmountCsv},
     ppe_matrix:           {name:'各車隊基本領用量',  fn: ppeMatrixCsv},
+    bank_roster:          {name:'在職人員合庫帳號總表', fn: bankRosterCsv},
   };
   const b = CSV_BUILDERS[type];
   if(!b) return;

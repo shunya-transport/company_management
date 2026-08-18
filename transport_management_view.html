@@ -549,7 +549,7 @@
           </select>
         </label>
         <label style="display:none;">投保金額<input id="ic_salary" type="number" placeholder="例：38200"></label>
-        <label>生效日期<input id="ic_date" type="date"></label>
+        <label>生效(異動)日期<input id="ic_date" type="date"></label>
         <label>親屬加保
           <select id="ic_has_dep">
             <option value="0">否</option>
@@ -567,7 +567,7 @@
       <div class="toolbar"><input id="ic_search" placeholder="搜尋姓名"></div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>公司別</th><th>異動類別</th><th>生效日期</th><th>親屬加保</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>公司別</th><th>異動類別</th><th>生效(異動)日期</th><th>親屬加保</th><th></th></tr></thead>
           <tbody id="icTableBody"></tbody>
         </table>
       </div>
@@ -7602,7 +7602,7 @@ function renderStaffModalView(e){
 
     <div class="detail-section">
       <h4>勞健保異動紀錄</h4>
-      ${empInsurance.length ? `<table><thead><tr><th>異動別</th><th>生效日期</th><th>親屬加保</th></tr></thead><tbody>` +
+      ${empInsurance.length ? `<table><thead><tr><th>異動別</th><th>生效(異動)日期</th><th>親屬加保</th></tr></thead><tbody>` +
         empInsurance.map(i=>`<tr><td>${esc(i.change_type)}</td><td>${esc(i.effective_date||'—')}</td><td>${i.has_dependents ? `是（${i.dependents_count??0}人）` : '否'}</td></tr>`).join('') + `</tbody></table>`
         : '<div class="muted">無勞健保異動紀錄</div>'}
     </div>
@@ -12005,7 +12005,7 @@ document.getElementById('ic_has_dep').addEventListener('change', (e) => {
 document.getElementById('ic_add').addEventListener('click', async () => {
   const empId = parseInt(document.getElementById('ic_emp').value);
   const date = document.getElementById('ic_date').value;
-  if(!empId || !date){ alert('請選擇人員並填寫生效日期'); return; }
+  if(!empId || !date){ alert('請選擇人員並填寫生效(異動)日期'); return; }
   const hasDep = document.getElementById('ic_has_dep').value === '1';
   STATE.insuranceChanges.push({
     id: nextId(STATE.insuranceChanges), employee_id: empId,
