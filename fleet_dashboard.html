@@ -2569,7 +2569,7 @@
   <div class="modal-box">
     <button class="modal-close" id="equipModalClose">✕</button>
     <h3 id="equipModalTitle">物品領用管理</h3>
-    <div class="muted" style="margin-bottom:10px;">底色標示的「📱 公務機」是從「行政資料 → 公務機」自動帶進來的，要配發或收回請到那邊操作，這裡不用重複登記。</div>
+    <div class="muted" style="margin-bottom:10px;">底色標示的「📱 公務機」「📟 偵測器」正本在「行政資料 → 公務機」與「配備管理 → 儀器設備」，在這裡領用或歸還會直接寫回那一筆，不會重複記一份。</div>
     <div class="table-scroll" style="max-height:220px;margin-bottom:16px;">
       <table>
         <thead><tr><th>品項</th><th>細節</th><th>數量</th><th>領用日</th><th>狀態</th><th></th></tr></thead>
@@ -2581,8 +2581,11 @@
       <label>物品類型
         <select id="eq_type"></select>
       </label>
-      <label>庫存品項（若有追蹤庫存）
+      <label id="eq_stock_wrap">庫存品項（若有追蹤庫存）
         <select id="eq_stock_item"><option value="">請選擇品項</option></select>
+      </label>
+      <label id="eq_asset_wrap" style="display:none;">指定機台／門號
+        <select id="eq_asset"></select>
       </label>
       <label>細節（選填）<input id="eq_detail" placeholder="例：序號、尺寸"></label>
       <label>數量<input id="eq_qty" type="number" value="1"></label>
@@ -6904,7 +6907,7 @@ function renderEquipModalBody(){
       <td>1</td>
       <td>—</td>
       <td><span class="pill green">使用中</span></td>
-      <td><span class="muted">於「配備管理 → 儀器設備」管理</span></td>
+      <td><button class="name-link" data-return-instr="${i.instrument_id}" title="收回這台，領用人清空。正本在「配備管理 → 儀器設備」">歸還</button></td>
     </tr>`).join('');
   const phoneHtml = equipPhonesOf(currentEquipEmpId).map(p => `<tr style="background:#F7F1E6;">
       <td style="font-weight:600;">📱 公務機</td>
@@ -6912,7 +6915,7 @@ function renderEquipModalBody(){
       <td>1</td>
       <td>${esc(p.issue_date||'—')}</td>
       <td><span class="pill green">使用中</span></td>
-      <td><span class="muted">於「行政資料 → 公務機」管理</span></td>
+      <td><button class="name-link" data-return-phone="${p.id}" title="收回這支門號，狀態改回待領用。正本在「行政資料 → 公務機」">歸還</button></td>
     </tr>`).join('');
   const itemHtml = rows.map(x => {
     const type = STATE.equipmentTypes.find(t => t.id === x.type_id);
@@ -6932,16 +6935,127 @@ function renderEquipModalBody(){
   document.getElementById('equipModalBody').innerHTML = (instrHtml + phoneHtml + itemHtml)
     || `<tr><td colspan="6" class="empty">尚無領用紀錄</td></tr>`;
 }
+// ===== 一台一號的東西：公務機、偵測器 =====
+// 這兩樣的正本不在 employee_equipment，而是 company_phones 與 instruments。
+// 在這裡領用時直接改正本那一筆，不另外開領用紀錄——同一支手機記兩筆，
+// 就是以前盤點對不起來的原因。
+function eqIsPhoneType(typeId){
+  const t = STATE.equipmentTypes.find(x => x.id === typeId);
+  return !!t && t.name === '公務機';
+}
+function eqIsInstrumentType(typeId){
+  return (STATE.instruments || []).some(i => i.type_id === typeId);
+}
+function eqFreePhones(){
+  return (STATE.companyPhones || [])
+    .filter(p => p.status !== '停用' && !p.employee_id)
+    .slice().sort((a,b) => String(a.phone_no||'').localeCompare(String(b.phone_no||'')));
+}
+function eqFreeInstruments(typeId){
+  return (STATE.instruments || [])
+    .filter(i => i.type_id === typeId && !isInstrumentOff(i) && !i.current_holder_id)
+    .slice().sort((a,b) => String(a.asset_no||'').localeCompare(String(b.asset_no||''), undefined, {numeric:true}));
+}
+
+// 切換「庫存品項」與「指定機台」兩種模式。回傳 true 代表這個類型走機台模式。
+function eqApplyAssetMode(typeId){
+  const stockWrap = document.getElementById('eq_stock_wrap');
+  const assetWrap = document.getElementById('eq_asset_wrap');
+  const assetSel  = document.getElementById('eq_asset');
+  const qty       = document.getElementById('eq_qty');
+  const hint      = document.getElementById('eq_stock_hint');
+  const isPhone = eqIsPhoneType(typeId);
+  const isInstr = eqIsInstrumentType(typeId);
+  if(!stockWrap || !assetWrap || !assetSel || !(isPhone || isInstr)){
+    if(assetWrap) assetWrap.style.display = 'none';
+    if(stockWrap) stockWrap.style.display = '';
+    if(qty) qty.disabled = false;
+    return false;
+  }
+  stockWrap.style.display = 'none';
+  assetWrap.style.display = '';
+  if(qty){ qty.value = 1; qty.disabled = true; }   // 一台一號，數量只能是 1
+  const free = isPhone ? eqFreePhones() : eqFreeInstruments(typeId);
+  if(!free.length){
+    assetSel.innerHTML = '<option value="">目前沒有可配發的' + (isPhone ? '門號' : '機台') + '</option>';
+    if(hint) hint.textContent = isPhone
+      ? '門號都已經配發出去了。要先收回別人的，請到「行政資料 → 公務機」。'
+      : '這個類型的機台都已經配發出去了。要新增機台請到「配備管理 → 儀器設備」建檔。';
+    return true;
+  }
+  assetSel.innerHTML = '<option value="">請選擇</option>' + (isPhone
+    ? free.map(p => `<option value="${p.id}">${esc(equipPhoneDetail(p))}</option>`).join('')
+    : free.map(i => `<option value="${i.instrument_id}">${esc(equipInstrumentDetail(i))}</option>`).join(''));
+  if(hint) hint.textContent = isPhone
+    ? '選好門號按「新增領用紀錄」，會直接寫回「行政資料 → 公務機」那一支的領用人與狀態。'
+    : '選好機台按「新增領用紀錄」，會直接寫回「配備管理 → 儀器設備」那一台的領用人（校正到期照舊在那邊追蹤）。';
+  return true;
+}
+
+async function eqAddAsset(typeId, issueDate){
+  const sel = document.getElementById('eq_asset');
+  const val = sel ? sel.value : '';
+  const isPhone = eqIsPhoneType(typeId);
+  if(!val){ alert(isPhone ? '請先選一支門號。' : '請先選一台機台。'); return; }
+  if(isPhone){
+    const p = (STATE.companyPhones || []).find(x => String(x.id) === String(val));
+    if(!p) return;
+    const dup = (STATE.companyPhones || []).find(x => x.employee_id === currentEquipEmpId && x.status === '使用中');
+    if(dup && !confirm('這個人名下已經有一支公務機（' + (dup.phone_no || '') + '）。\n還是要再配發「' + (p.phone_no || '') + '」嗎？')) return;
+    const bak = {employee_id:p.employee_id, status:p.status, issue_date:p.issue_date, return_date:p.return_date};
+    p.employee_id = currentEquipEmpId; p.status = '使用中';
+    p.issue_date = issueDate; p.return_date = null;
+    try{ await saveState('company_phones', STATE.companyPhones, true); }
+    catch(err){ Object.assign(p, bak); return; }
+  }else{
+    const it = (STATE.instruments || []).find(x => String(x.instrument_id) === String(val));
+    if(!it) return;
+    const bak = it.current_holder_id;
+    it.current_holder_id = currentEquipEmpId;
+    try{ await saveState('instruments', STATE.instruments, true); }
+    catch(err){ it.current_holder_id = bak; return; }
+  }
+  document.getElementById('eq_detail').value = '';
+  renderEquipModalBody();
+  updateEqStockItemOptions();
+  renderAll();
+}
+
+async function eqReturnPhone(idStr){
+  const p = (STATE.companyPhones || []).find(x => String(x.id) === String(idStr));
+  if(!p) return;
+  if(!confirm('要收回門號「' + (p.phone_no || '') + '」嗎？\n收回後狀態會變成「待領用」，可以再配給別人。')) return;
+  const bak = {employee_id:p.employee_id, status:p.status, return_date:p.return_date};
+  p.employee_id = null; p.status = '待領用'; p.return_date = todayISO();
+  try{ await saveState('company_phones', STATE.companyPhones, true); }
+  catch(err){ Object.assign(p, bak); return; }
+  renderEquipModalBody();
+  updateEqStockItemOptions();
+  renderAll();
+}
+async function eqReturnInstrument(idStr){
+  const it = (STATE.instruments || []).find(x => String(x.instrument_id) === String(idStr));
+  if(!it) return;
+  if(!confirm('要把「' + (it.asset_no || '') + '」收回公司備存嗎？\n領用人會清空，機台與校正紀錄都還在。')) return;
+  const bak = it.current_holder_id;
+  it.current_holder_id = null;
+  try{ await saveState('instruments', STATE.instruments, true); }
+  catch(err){ it.current_holder_id = bak; return; }
+  renderEquipModalBody();
+  updateEqStockItemOptions();
+  renderAll();
+}
+
 function renderEquipTypeSelect(){
-  // 公務機一律在「行政資料 → 公務機」登記門號，這裡不再開放領用，
-  // 不然同一支手機會有兩筆紀錄，盤點時對不起來
+  // 公務機與偵測器也留在清單裡，選到時會自動換成「指定機台」模式，
+  // 存的地方仍然是各自的正本表，不會多開一筆領用紀錄。
   document.getElementById('eq_type').innerHTML = STATE.equipmentTypes
-    .filter(t => t.name !== '公務機')
     .map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
   updateEqStockItemOptions();
 }
 function updateEqStockItemOptions(){
   const typeId = parseInt(document.getElementById('eq_type').value);
+  if(eqApplyAssetMode(typeId)) return;   // 公務機／偵測器走機台清單，不走庫存品項
   const uniform = isUniformType(typeId);
   const matches = STATE.stockItems.filter(i => i.type_id === typeId)
     .slice().sort((a,b) => sizeRank(a.size, typeId) - sizeRank(b.size, typeId));
@@ -14097,6 +14211,11 @@ document.getElementById('equipModal').addEventListener('click', (e) => {
 document.getElementById('eq_type').addEventListener('change', updateEqStockItemOptions);
 document.getElementById('equipModalAdd').addEventListener('click', async () => {
   const typeId = parseInt(document.getElementById('eq_type').value);
+  // 公務機與偵測器直接寫回正本，不在這裡開領用紀錄
+  if(eqIsPhoneType(typeId) || eqIsInstrumentType(typeId)){
+    await eqAddAsset(typeId, document.getElementById('eq_issue').value || todayISO());
+    return;
+  }
   const stockItemId = document.getElementById('eq_stock_item').value ? parseInt(document.getElementById('eq_stock_item').value) : null;
   const qty = parseInt(document.getElementById('eq_qty').value) || 1;
   if(isUniformType(typeId) && !stockItemId){
@@ -14148,6 +14267,10 @@ document.getElementById('equipModalBody').addEventListener('change', async (e) =
   renderAll();
 });
 document.getElementById('equipModalBody').addEventListener('click', async (e) => {
+  const rPhoneId = e.target.getAttribute('data-return-phone');
+  if(rPhoneId){ await eqReturnPhone(rPhoneId); return; }
+  const rInstrId = e.target.getAttribute('data-return-instr');
+  if(rInstrId){ await eqReturnInstrument(rInstrId); return; }
   const returnId = e.target.getAttribute('data-return-equip');
   const delId = e.target.getAttribute('data-del-equip');
   if(returnId){
