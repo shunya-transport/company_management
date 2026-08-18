@@ -982,37 +982,54 @@
     </div>
 
     <div class="card">
-      <h2>單據回收核對<span class="count-badge" id="dc_count"></span></h2>
+      <h2>單據回收核對　待核對<span class="count-badge" id="dc_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
-        司機在檢查表上勾了這一趟帶哪些單據，這裡負責記「有沒有收回來」。
-        收到就打勾，全部勾完自動變<b>已收齊</b>並從待辦清單消失；沒回來的在「缺什麼」寫清楚。
-        勾選會立刻存回雲端，不用另外按儲存。
+        每一趟都會進這裡，不管司機有沒有勾單據。收到什麼就勾什麼——七種都列出來，
+        標<b>★司機</b>的是他在檢查表上勾過的，只是參考，不限制你只能選那幾種。
+        司機勾了但這一趟其實用不到的，按名字旁邊的<b>免收</b>點掉，它會變灰色刪除線、不再算成缺件。
+        沒回來的在「缺什麼」寫清楚，處理完按<b>核對完成</b>，那一趟就會跳到下面的已核對。
+        勾選與備註都是立刻存回雲端，不用另外按儲存。
       </div>
       <div class="toolbar">
         <select id="dc_month"></select>
-        <select id="dc_status">
-          <option value="open">還沒收齊（預設）</option>
-          <option value="none">完全還沒核對</option>
-          <option value="part">缺件</option>
-          <option value="done">已收齊</option>
-          <option value="all">全部（含沒有單據的）</option>
-        </select>
         <input id="dc_q" placeholder="搜尋貨主／櫃號／司機／板架" style="min-width:220px;">
         <button class="btn ghost" id="dc_clear">清除</button>
-        <button class="btn ghost" id="dc_csv">匯出 CSV</button>
+        <button class="btn ghost" id="dc_csv">匯出待核對</button>
       </div>
       <div class="table-scroll" style="max-height:560px;">
-        <table class="lvot-table" style="table-layout:fixed;width:100%;min-width:1080px;">
+        <table class="lvot-table" style="table-layout:fixed;width:100%;min-width:1140px;">
           <colgroup>
-            <col style="width:8%"><col style="width:8%"><col style="width:12%"><col style="width:8%">
-            <col style="width:28%"><col style="width:16%"><col style="width:10%"><col style="width:10%">
+            <col style="width:7.5%"><col style="width:7.5%"><col style="width:11%"><col style="width:7.5%">
+            <col style="width:34%"><col style="width:17%"><col style="width:15.5%">
           </colgroup>
           <thead><tr><th>日期</th><th>貨主</th><th>櫃號</th><th>司機</th>
-                     <th>應收單據（收到就打勾）</th><th>缺什麼／備註</th><th>狀態</th><th>核對</th></tr></thead>
+                     <th>收到的單據（勾起來）</th><th>缺什麼／備註</th><th>操作</th></tr></thead>
           <tbody id="dcBody"></tbody>
         </table>
       </div>
       <div id="dc_msg" class="muted" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>已核對<span class="count-badge" id="dcd_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        核對完成的都在這裡，按「退回待核對」可以拉回上面重新處理。
+      </div>
+      <div class="toolbar">
+        <input id="dcd_q" placeholder="搜尋貨主／櫃號／司機／缺件備註" style="min-width:240px;">
+        <button class="btn ghost" id="dcd_csv">匯出已核對</button>
+      </div>
+      <div class="table-scroll" style="max-height:480px;">
+        <table class="lvot-table" style="table-layout:fixed;width:100%;min-width:1080px;">
+          <colgroup>
+            <col style="width:8%"><col style="width:8%"><col style="width:12%"><col style="width:8%">
+            <col style="width:24%"><col style="width:20%"><col style="width:11%"><col style="width:9%">
+          </colgroup>
+          <thead><tr><th>日期</th><th>貨主</th><th>櫃號</th><th>司機</th>
+                     <th>收到的單據</th><th>缺什麼／備註</th><th>核對</th><th>操作</th></tr></thead>
+          <tbody id="dcdBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="card">
@@ -6109,29 +6126,24 @@ function clLedgerCells(r){
           r.inspector || '', r.docs || '', r.other_note || ''];
 }
 // ===== 單據回收核對（SQL #118 的四個欄位）=====
-// docs＝司機勾的「這趟帶了什麼單據」，docs_returned＝辦公室收回來的。
-// 狀態一律現算，不存欄位 —— 存了就會有兩份真相，改一邊忘一邊就對不起來。
+// docs＝司機在檢查表勾的「這趟帶了什麼單據」，只當參考；
+// docs_returned＝辦公室實際收回來的，七種隨你選，不受 docs 限制。
+//
+// 「核對完了沒」看的是 docs_checked_date 有沒有值，不是「勾滿幾項」——
+// 一張單都沒有也是一種合法的核對結果，用數量判斷那種永遠結不了案，
+// 司機忘了勾的那幾趟也就永遠不會出現。
 function dcSplit(s){ return String(s == null ? '' : s).split(/[、,，]/).map(x => x.trim()).filter(Boolean); }
 function dcJoin(list){ return list.join('、'); }
-function dcNeed(r){ return dcSplit(r.docs); }
-function dcGot(r){
-  const need = dcNeed(r);
-  return dcSplit(r.docs_returned).filter(d => need.indexOf(d) >= 0);
-}
-// 未核對／缺件／已收齊／無單據
-function dcState(r){
-  const need = dcNeed(r);
-  if(!need.length) return 'na';
-  const got = dcGot(r);
-  if(!got.length) return 'none';
-  return got.length >= need.length ? 'done' : 'part';
-}
-function dcStatePill(r){
-  const s = dcState(r), got = dcGot(r).length, need = dcNeed(r).length;
-  if(s === 'na')   return '<span class="pill gray">無單據</span>';
-  if(s === 'done') return '<span class="pill green">已收齊</span>';
-  if(s === 'none') return `<span class="pill amber">未核對 0/${need}</span>`;
-  return `<span class="pill red">缺件 ${got}/${need}</span>`;
+// 七種單據照司機那一頁的順序，這裡是唯一一份定義
+const DC_DOCS = ['放行單', 'EIR', '簽單', 'ASN', '磅單', '還櫃單', '毒管單'];
+function dcDriver(r){ return dcSplit(r.docs); }          // 司機勾的，參考用
+function dcGot(r){ return dcSplit(r.docs_returned); }    // 實際收回來的
+function dcWaived(r){ return dcSplit(r.docs_waived); }   // 確定不用收的
+function dcIsDone(r){ return !!String(r.docs_checked_date || '').trim(); }
+// 司機勾了、沒收到、也沒說不用收 —— 這才是真的還在外面的單據
+function dcMissing(r){
+  const got = dcGot(r), wv = dcWaived(r);
+  return dcDriver(r).filter(d => got.indexOf(d) < 0 && wv.indexOf(d) < 0);
 }
 function dcRenderMonths(){
   const sel = document.getElementById('dc_month');
@@ -6143,53 +6155,102 @@ function dcRenderMonths(){
   if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
   else if(months.length) sel.value = months[0];
 }
+function dcNewest(a, b){
+  return String(b.inspect_date || '').localeCompare(String(a.inspect_date || ''))
+      || (b.inspection_id || 0) - (a.inspection_id || 0);
+}
+// 待核對：docs_checked_date 還沒填的每一趟，跟司機有沒有勾單據無關
 function dcRows(){
-  const m  = (document.getElementById('dc_month')  || {}).value || 'all';
-  const st = (document.getElementById('dc_status') || {}).value || 'open';
-  const q  = ((document.getElementById('dc_q')     || {}).value || '').trim().toUpperCase();
-  let rows = clRows();
+  const m = (document.getElementById('dc_month') || {}).value || 'all';
+  const q = ((document.getElementById('dc_q')    || {}).value || '').trim().toUpperCase();
+  let rows = clRows().filter(r => !dcIsDone(r));
   if(m !== 'all') rows = rows.filter(r => clRoc(r.inspect_date) === m);
   if(q) rows = rows.filter(r => [r.shipper, r.container_no, r.inspector, r.trailer_no]
     .some(v => String(v || '').toUpperCase().includes(q)));
-  if(st === 'open')      rows = rows.filter(r => ['none','part'].indexOf(dcState(r)) >= 0);
-  else if(st !== 'all')  rows = rows.filter(r => dcState(r) === st);
-  return rows.slice().sort((a, b) =>
-    String(b.inspect_date || '').localeCompare(String(a.inspect_date || ''))
-    || (b.inspection_id || 0) - (a.inspection_id || 0));
+  return rows.slice().sort(dcNewest);
+}
+function dcDoneRows(){
+  const q = ((document.getElementById('dcd_q') || {}).value || '').trim().toUpperCase();
+  let rows = clRows().filter(dcIsDone);
+  if(q) rows = rows.filter(r => [r.shipper, r.container_no, r.inspector, r.trailer_no, r.docs_note]
+    .some(v => String(v || '').toUpperCase().includes(q)));
+  return rows.slice().sort(dcNewest);
+}
+function dcDateCell(r){
+  return esc(toROCDate(r.inspect_date) || String(r.inspect_date || '').slice(0, 10));
 }
 function renderDocsCheck(){
   const body = document.getElementById('dcBody');
   if(!body) return;
   dcRenderMonths();
   const rows = dcRows();
-  const all  = clRows();
   const cEl = document.getElementById('dc_count');
   if(cEl){
-    const openN = all.filter(r => ['none','part'].indexOf(dcState(r)) >= 0).length;
-    cEl.textContent = `顯示 ${rows.length} 筆　還沒收齊 ${openN} 筆`;
+    const openN = clRows().filter(r => !dcIsDone(r)).length;
+    cEl.textContent = `顯示 ${rows.length} 筆　待核對共 ${openN} 筆`;
   }
   body.innerHTML = rows.map(r => {
-    const need = dcNeed(r), got = dcGot(r);
-    const boxes = need.length
-      ? need.map(d => `<label style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 3px 0;font-weight:400;white-space:nowrap;">`
-          + `<input type="checkbox" data-dc-doc="${r.inspection_id}|${esc(d)}" style="width:16px;height:16px;"`
-          + (got.indexOf(d) >= 0 ? ' checked' : '') + `>${esc(d)}</label>`).join('')
-        + `<button type="button" class="name-link" data-dc-all="${r.inspection_id}" style="margin-left:4px;">全收</button>`
-      : '<span class="muted">（司機沒有勾單據）</span>';
+    const drv = dcDriver(r), got = dcGot(r);
+    const wv = dcWaived(r);
+    const boxes = DC_DOCS.map(d => {
+      const byDriver = drv.indexOf(d) >= 0;
+      const isWv = wv.indexOf(d) >= 0;
+      return `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 9px 3px 0;white-space:nowrap;">`
+        + `<label style="display:inline-flex;align-items:center;gap:4px;margin:0;`
+        + `font-weight:${byDriver && !isWv ? '700' : '400'};`
+        + (isWv ? 'color:var(--gray);text-decoration:line-through;'
+                : (byDriver ? 'color:var(--accent-dark);' : '')) + `">`
+        + `<input type="checkbox" data-dc-doc="${r.inspection_id}|${esc(d)}" style="width:16px;height:16px;"`
+        + (got.indexOf(d) >= 0 ? ' checked' : '') + (isWv ? ' disabled' : '') + `>${esc(d)}`
+        + (byDriver ? '<span style="font-size:10px;">★司機</span>' : '') + `</label>`
+        + `<button type="button" class="name-link" data-dc-wv="${r.inspection_id}|${esc(d)}"`
+        + ` title="${isWv ? '改回要收' : '這一趟用不到，不用收'}"`
+        + ` style="font-size:10.5px;padding:0 2px;">${isWv ? '要收' : '免收'}</button></span>`;
+    }).join('')
+      + `<button type="button" class="name-link" data-dc-all="${r.inspection_id}" style="margin-left:2px;">全收</button>`
+      + (drv.length ? `　<button type="button" class="name-link" data-dc-drv="${r.inspection_id}">照司機勾的</button>` : '');
     return `<tr>
-      <td class="c-nw">${esc(toROCDate(r.inspect_date) || String(r.inspect_date || '').slice(0,10))}</td>
+      <td class="c-nw">${dcDateCell(r)}</td>
       <td class="c-name">${esc(r.shipper || '')}</td>
       <td class="c-nw">${esc(r.container_no || '')}</td>
       <td class="c-name">${esc(r.inspector || '')}</td>
       <td>${boxes}</td>
       <td><input type="text" data-dc-note="${r.inspection_id}" value="${esc(r.docs_note || '')}"
              placeholder="例：磅單留在櫃場，下週補" style="width:100%;font-size:12.5px;padding:4px 6px;"></td>
-      <td class="c-nw">${dcStatePill(r)}</td>
+      <td class="c-nw">
+        <button type="button" class="btn" data-dc-fin="${r.inspection_id}"
+                style="padding:4px 12px;font-size:12.5px;">核對完成</button>
+        <div class="muted" style="font-size:11px;margin-top:2px;">已收 ${got.length} 張${
+          wv.length ? '　免收 ' + wv.length : ''}${
+          dcMissing(r).length ? '<br><span style="color:var(--red);">還缺 ' + dcMissing(r).join('、') + '</span>' : ''}</div>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="empty">待核對清單是空的，全部都核對完了</td></tr>';
+  renderDocsDone();
+}
+function renderDocsDone(){
+  const body = document.getElementById('dcdBody');
+  if(!body) return;
+  const rows = dcDoneRows();
+  const cEl = document.getElementById('dcd_count');
+  if(cEl) cEl.textContent = `共 ${rows.length} 筆`;
+  body.innerHTML = rows.slice(0, 500).map(r => {
+    const got = dcGot(r);
+    return `<tr>
+      <td class="c-nw">${dcDateCell(r)}</td>
+      <td class="c-name">${esc(r.shipper || '')}</td>
+      <td class="c-nw">${esc(r.container_no || '')}</td>
+      <td class="c-name">${esc(r.inspector || '')}</td>
+      <td>${got.length ? esc(dcJoin(got)) : '<span class="pill gray">沒有單據</span>'}${
+        dcWaived(r).length ? '<div class="muted" style="font-size:11px;">免收：' + esc(dcJoin(dcWaived(r))) + '</div>' : ''}${
+        dcMissing(r).length ? '<div style="font-size:11px;color:var(--red);">還缺：' + esc(dcJoin(dcMissing(r))) + '</div>' : ''}</td>
+      <td class="c-note">${esc(r.docs_note || '')}</td>
       <td class="c-nw muted" style="font-size:11.5px;">
         ${esc(r.docs_checked_by || '')}${r.docs_checked_date ? '<br>' + esc(toROCDate(r.docs_checked_date) || '') : ''}
       </td>
+      <td class="c-nw"><button type="button" class="name-link" data-dc-undo="${r.inspection_id}">退回待核對</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的資料</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="empty">還沒有核對完成的紀錄</td></tr>';
 }
 function dcWho(){
   const el = document.getElementById('login_email');
@@ -6202,38 +6263,37 @@ function dcMsg(t, bad){
 }
 // 直接 PATCH 那一列。不走 saveState —— 司機隨時可能新增檢查表，
 // 整批 upsert 會把「清單裡沒有的」當成使用者刪掉而砍掉剛送出的那一筆。
-async function dcSave(id, patch){
+// 勾選與備註【不】動 docs_checked_date —— 一勾就跳走的話根本沒辦法慢慢核。
+// 只有按「核對完成」才寫核對人與核對日，那一趟才會移到下面。
+async function dcSave(id, patch, okText){
   const r = clRows().find(x => String(x.inspection_id) === String(id));
   if(!r) return;
-  const body = Object.assign({
-    docs_checked_by: dcWho() || r.docs_checked_by || null,
-    docs_checked_date: todayISO()
-  }, patch);
   try{
     dcMsg('儲存中…');
     await supaFetch('container_inspections?inspection_id=eq.' + encodeURIComponent(id),
-      { method:'PATCH', body: JSON.stringify(body) });
-    Object.assign(r, body);
+      { method:'PATCH', body: JSON.stringify(patch) });
+    Object.assign(r, patch);
     renderDocsCheck();
-    dcMsg('已存檔　' + (r.container_no || '') + '　' + (dcState(r) === 'done' ? '這一趟單據已收齊' : ''));
+    dcMsg(okText || ('已存檔　' + (r.container_no || '')));
   }catch(e){
     dcMsg('存檔失敗：' + ((e && e.message) || e), true);
     alert('單據核對沒有存進去。\n\n' + ((e && e.message) || e));
     renderDocsCheck();
   }
 }
-function docsCheckCsv(){
-  const head = ['日期','貨主','櫃號','司機','板架','應收單據','已收單據','還缺','缺什麼／備註','狀態','核對人','核對日'];
-  const label = { na:'無單據', none:'未核對', part:'缺件', done:'已收齊' };
-  return csvLines(head, dcRows().map(r => {
-    const need = dcNeed(r), got = dcGot(r);
+function dcCsvOf(rows){
+  const head = ['日期','貨主','櫃號','司機','板架','司機勾的','實際收到','免收','還缺',
+                '缺什麼／備註','核對人','核對日'];
+  return csvLines(head, rows.map(r => {
     return [String(r.inspect_date || '').slice(0,10), r.shipper || '', r.container_no || '',
             r.inspector || '', r.trailer_no || '',
-            dcJoin(need), dcJoin(got), dcJoin(need.filter(d => got.indexOf(d) < 0)),
-            r.docs_note || '', label[dcState(r)] || '',
-            r.docs_checked_by || '', String(r.docs_checked_date || '').slice(0,10)];
+            dcJoin(dcDriver(r)), dcJoin(dcGot(r)), dcJoin(dcWaived(r)), dcJoin(dcMissing(r)),
+            r.docs_note || '', r.docs_checked_by || '',
+            String(r.docs_checked_date || '').slice(0,10)];
   }));
 }
+function docsCheckCsv(){ return dcCsvOf(dcRows()); }
+function docsDoneCsv(){ return dcCsvOf(dcDoneRows()); }
 {
   const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
   const body = document.getElementById('dcBody');
@@ -6244,29 +6304,84 @@ function docsCheckCsv(){
         const [id, doc] = box.getAttribute('data-dc-doc').split('|');
         const r = clRows().find(x => String(x.inspection_id) === String(id));
         if(!r) return;
-        const need = dcNeed(r);
         const set = new Set(dcGot(r));
         if(box.checked) set.add(doc); else set.delete(doc);
-        // 照司機勾的順序排，不要每次存進去順序都不一樣
-        await dcSave(id, { docs_returned: dcJoin(need.filter(d => set.has(d))) });
+        // 一律照 DC_DOCS 的順序存，不要每次存進去順序都不一樣
+        const patch = { docs_returned: dcJoin(DC_DOCS.filter(d => set.has(d))) };
+        // 收到了就不可能同時是「不用收」，自動解除免收
+        if(box.checked && dcWaived(r).indexOf(doc) >= 0){
+          patch.docs_waived = dcJoin(dcWaived(r).filter(d => d !== doc));
+        }
+        await dcSave(id, patch);
         return;
       }
       const note = e.target.closest('[data-dc-note]');
       if(note) await dcSave(note.getAttribute('data-dc-note'), { docs_note: note.value.trim() || null });
     });
     body.addEventListener('click', async (e) => {
-      const b = e.target.closest('[data-dc-all]');
-      if(!b) return;
-      const id = b.getAttribute('data-dc-all');
-      const r = clRows().find(x => String(x.inspection_id) === String(id));
-      if(r) await dcSave(id, { docs_returned: dcJoin(dcNeed(r)) });
+      const wvb = e.target.closest('[data-dc-wv]');
+      if(wvb){
+        const [id, doc] = wvb.getAttribute('data-dc-wv').split('|');
+        const r = clRows().find(x => String(x.inspection_id) === String(id));
+        if(!r) return;
+        const set = new Set(dcWaived(r));
+        const turningOn = !set.has(doc);
+        if(turningOn) set.add(doc); else set.delete(doc);
+        const patch = { docs_waived: dcJoin(DC_DOCS.filter(d => set.has(d))) };
+        // 標成免收就不該同時算「已收到」
+        if(turningOn && dcGot(r).indexOf(doc) >= 0){
+          patch.docs_returned = dcJoin(dcGot(r).filter(d => d !== doc));
+        }
+        await dcSave(id, patch, turningOn ? ('「' + doc + '」標成免收，不會再算成缺件。')
+                                          : ('「' + doc + '」改回要收。'));
+        return;
+      }
+      const all = e.target.closest('[data-dc-all]');
+      if(all){ await dcSave(all.getAttribute('data-dc-all'), { docs_returned: dcJoin(DC_DOCS), docs_waived: null }); return; }
+      const drv = e.target.closest('[data-dc-drv]');
+      if(drv){
+        const id = drv.getAttribute('data-dc-drv');
+        const r = clRows().find(x => String(x.inspection_id) === String(id));
+        if(r) await dcSave(id, { docs_returned: dcJoin(DC_DOCS.filter(d => dcDriver(r).indexOf(d) >= 0)) });
+        return;
+      }
+      const fin = e.target.closest('[data-dc-fin]');
+      if(fin){
+        const id = fin.getAttribute('data-dc-fin');
+        const r = clRows().find(x => String(x.inspection_id) === String(id));
+        if(!r) return;
+        if(!dcGot(r).length && !dcWaived(r).length && !String(r.docs_note || '').trim()
+           && !confirm('這一趟一張單據都沒有勾，也沒寫備註。\n\n確定要標成核對完成嗎？')) return;
+        const _miss = dcMissing(r);
+        if(_miss.length && !String(r.docs_note || '').trim()
+           && !confirm('司機勾了但還沒收到：' + _miss.join('、')
+                     + '\n\n這幾張如果是確定不用收的，請按旁邊的「免收」；'
+                     + '如果是還在外面，建議在「缺什麼」寫一下。\n\n還是要直接核對完成嗎？')) return;
+        await dcSave(id, { docs_checked_by: dcWho() || r.docs_checked_by || null,
+                           docs_checked_date: todayISO() },
+                     '已核對完成，這一趟移到下面的「已核對」。');
+      }
     });
   }
-  ['dc_month','dc_status'].forEach(id => on(id, 'change', renderDocsCheck));
+  const dbody = document.getElementById('dcdBody');
+  if(dbody) dbody.addEventListener('click', async (e) => {
+    const u = e.target.closest('[data-dc-undo]');
+    if(u) await dcSave(u.getAttribute('data-dc-undo'),
+                       { docs_checked_date: null }, '已退回待核對。');
+  });
+  on('dcd_q', 'input', renderDocsDone);
+  on('dcd_csv', 'click', () => {
+    const blob = new Blob(['\ufeff' + docsDoneCsv()], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '單據已核對_' + todayISO().replace(/-/g,'') + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  on('dc_month', 'change', renderDocsCheck);
   on('dc_q', 'input', renderDocsCheck);
   on('dc_clear', 'click', () => {
     const q = document.getElementById('dc_q'); if(q) q.value = '';
-    const s = document.getElementById('dc_status'); if(s) s.value = 'open';
     renderDocsCheck();
   });
   on('dc_csv', 'click', () => {
