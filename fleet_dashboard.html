@@ -7740,7 +7740,7 @@ function renderStaffModalView(e){
   const empCerts = STATE.trainings.filter(t => t.employee_id === empId);
   const empInternal = STATE.internalTrainings.filter(t => t.employee_id === empId)
     .sort((a,b) => (b.training_date||'').localeCompare(a.training_date||''));
-  const empCards = STATE.accessCards.filter(c => c.employee_id === empId);
+  const empCards = STATE.accessCards.filter(c => c.employee_id === empId && !c.returned_date);
   const empInsurance = STATE.insuranceChanges.filter(i => i.employee_id === empId)
     .sort((a,b) => (b.effective_date||'').localeCompare(a.effective_date||''));
 
@@ -7911,7 +7911,7 @@ function renderStaffModalEdit(e){
     <button class="btn" id="staffModalSaveBtn">儲存</button>
     <button class="btn ghost" id="staffModalCancelBtn">取消</button>
   `;
-  const _curCard = STATE.accessCards.find(c => c.employee_id === e.id);
+  const _curCard = STATE.accessCards.find(c => c.employee_id === e.id && !c.returned_date);
   const _curGates = gatesSplit(_curCard ? _curCard.gates : '');
   // 舊資料有人是「已登錄血壓酒測機」但門禁卡沒開酒測系統，開啟時先幫他勾起來，
   // 存檔後兩邊才會一致，也不會被誤降成「未登錄」
@@ -13848,7 +13848,7 @@ function resignImpactOf(emp){
     equip:   cnt(STATE.employeeEquipment, x => x.employee_id === id && x.status === '使用中'),
     phone:   cnt(STATE.companyPhones,     x => x.employee_id === id && x.status !== '已歸還'),
     instr:   cnt(STATE.instruments,       x => x.current_holder_id === id),
-    card:    cnt(STATE.accessCards,       x => x.employee_id === id) + (String(emp.access_card_no || '').trim() ? 1 : 0),
+    card:    cnt(STATE.accessCards,       x => x.employee_id === id && !x.returned_date) + (String(emp.access_card_no || '').trim() ? 1 : 0),
     ext:     cnt(STATE.officeExtensions,  x => x.employee_id === id),
     check:   cnt(STATE.docChecklist,      x => x.employee_id === id),
     medical: cnt(STATE.medicalExamRecords, x => x.employee_id === id),
@@ -13865,14 +13865,14 @@ function renderResignImpact(emp){
   const back = [line('配備領用（使用中）', i.equip, '件'), line('公務機', i.phone, '支'),
                 line('儀器', i.instr, '台'), line('門禁卡', i.card, '張'), line('分機', i.ext, '線')]
                 .filter(Boolean).join('');
-  const gone = line('必繳文件檢核', i.check, '項');
-  const keep = [line('體檢紀錄', i.medical, '筆'), line('證照', i.lic, '張'),
+  const keep = [line('必繳文件檢核', i.check, '項'),
+                line('體檢紀錄', i.medical, '筆'), line('證照', i.lic, '張'),
                 line('請假紀錄', i.leave, '筆'), line('加班紀錄', i.ot, '筆')].filter(Boolean).join('');
   el.innerHTML = `
     <div style="font-size:12.5px;line-height:1.7;">
-      ${back ? `<div style="margin-bottom:8px;"><b>會收回（標記歸還，紀錄留著）</b><ul style="margin:2px 0 0;padding-left:20px;">${back}</ul></div>` : ''}
-      ${gone ? `<div style="margin-bottom:8px;color:var(--red);"><b>會清除</b><ul style="margin:2px 0 0;padding-left:20px;">${gone}</ul></div>` : ''}
+      ${back ? `<div style="margin-bottom:8px;"><b>會收回（標記歸還／繳回，紀錄留著）</b><ul style="margin:2px 0 0;padding-left:20px;">${back}</ul></div>` : ''}
       ${keep ? `<div class="muted"><b>完整保留</b><ul style="margin:2px 0 0;padding-left:20px;">${keep}</ul>投保異動、駕照、工時、訓練紀錄也都保留。</div>` : ''}
+      <div class="muted" style="margin-top:8px;">這個人以後復職的話，上面「完整保留」的資料會自動接回來；門禁卡因為實體已經收回，要重新發卡。</div>
     </div>`;
 }
 
@@ -13909,19 +13909,23 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
   (STATE.officeExtensions || []).forEach(x => {
     if(x.employee_id === emp.id){ x.employee_id = null; _touched.add('office_extensions'); }
   });
-  if((STATE.accessCards || []).some(x => x.employee_id === emp.id)){
-    STATE.accessCards = STATE.accessCards.filter(x => x.employee_id !== emp.id);
-    _touched.add('access_cards');
-  }
-  (STATE.accessCardRoster || []).forEach(x => {
-    if(x.employee_id === emp.id){ x.employee_id = null; _touched.add('access_card_roster'); }
+  // 門禁卡：卡片實體收回來，但整列【留著】——「誰用過這張卡、什麼時候繳回」
+  // 以後還要查得到。只填繳回日，清單就不會再顯示他還持有卡片。
+  // 舊版是直接把整列刪掉，復職時就再也接不回去了。
+  (STATE.accessCards || []).forEach(x => {
+    if(x.employee_id === emp.id && !x.returned_date){
+      x.returned_date = resignDate; _touched.add('access_cards');
+    }
   });
-  // 必繳文件檢核：人走了這份檢核就沒意義，前端一併移除
-  // （資料庫那邊也設了 ON DELETE CASCADE，兩邊一致）
-  if((STATE.docChecklist || []).some(x => x.employee_id === emp.id)){
-    STATE.docChecklist = STATE.docChecklist.filter(x => x.employee_id !== emp.id);
-    _touched.add('doc_checklist');
-  }
+  (STATE.accessCardRoster || []).forEach(x => {
+    if(x.employee_id === emp.id && !x.returned_date){
+      x.returned_date = resignDate; _touched.add('access_card_roster');
+    }
+  });
+  // 必繳文件檢核：【完全不動】。
+  // 「這個人當年繳過哪些文件」是事實，復職後還要用，離職不該把它抹掉。
+  // （舊版會整批刪除，加上資料庫的 ON DELETE CASCADE，復職後就變成 0/18。
+  //   SQL #133 已經把那條外鍵拿掉了。）
   emp.access_card_no = null;
 
   STATE.employees = STATE.employees.filter(x => String(x.id) !== currentResignEmpId);
@@ -13964,6 +13968,11 @@ document.getElementById('staffHistoryBody').addEventListener('click', async (e) 
   await saveState('roster_employees', STATE.employees, true);
   await saveState('roster_employees_history', STATE.employeesHistory, true);
   renderAll();
+  // 復職之後哪些東西自動回來、哪些要重辦，講清楚，免得以為系統漏掉
+  const _back = (STATE.docChecklist || []).filter(x => x.employee_id === emp.id).length;
+  alert(emp.name + ' 已復職（' + rehireDate + '）。\n\n'
+      + '自動接回來的：必繳文件檢核 ' + _back + ' 項、體檢、證照、駕照、請假、加班、工時、訓練紀錄。\n\n'
+      + '要重新辦的：門禁卡（實體已於離職時繳回）、公務機、配備領用、分機、勞健保加保。');
 });
 document.getElementById('staffModalClose').addEventListener('click', closeStaffModal);
 document.getElementById('checklistModalClose').addEventListener('click', closeChecklistModal);
