@@ -1550,7 +1550,7 @@
 
     <div class="card">
       <h2>特休天數清冊<span class="count-badge" id="leave_ledger_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">「特休總天數」優先採用請假系統當年度核定的天數（已含年資追溯、復職前累計年資等狀況，該列會標「○○年度核定」）；查不到核定值時才依目前實際年資對照勞基法級距表估算，該列會標「依年資估算」。「已用」一律從假單即時累計，所以會比巨集檔的統計新。補休以小時計，請假是以天登錄，換算時已對齊到 0.5 小時。</div>
+      <div class="muted" style="margin-bottom:10px;">「特休總天數」優先採用請假系統當年度核定的天數（已含年資追溯、復職前累計年資等狀況，該列會標「○○年度核定」）；查不到核定值時才依目前實際年資對照勞基法級距表估算，該列會標「依年資估算」。<strong>到職還沒滿 183 天（半年）的人一律顯示 0 天</strong>，並標出哪一天起才有——勞基法要滿 6 個月才有特休，巨集是先把當年度的 3 天列上去，但那要滿半年之後才能開始休。「已用」一律從假單即時累計，所以會比巨集檔的統計新。補休以小時計，請假是以天登錄，換算時已對齊到 0.5 小時。</div>
       <div class="toolbar"><input id="leave_search" placeholder="搜尋姓名"></div>
       <div class="table-scroll">
         <table>
@@ -11676,6 +11676,20 @@ function annualLeaveApprovedFor(emp, yearRoc){
            yard: hit.yard, dept: hit.dept_name, position: hit.position_name };
 }
 function rocYearOf(dateISO){ return Number(String(dateISO || todayISO()).slice(0, 4)) - 1911; }
+// 勞基法第38條：工作滿 6 個月才有特休。巨集規則第 3 條用的是「滿 183 天」，
+// 這裡照抄同一個天數，兩邊才會一致。回傳「哪一天起才有特休」。
+function leaveEligibleDate(hireISO){
+  if(!hireISO) return null;
+  const d = new Date(String(hireISO) + 'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + 183);
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function leaveNotYetEligible(hireISO){
+  const e = leaveEligibleDate(hireISO);
+  return !!(e && todayISO() < e);
+}
 function annualLeaveApproved(emp){ return annualLeaveApprovedFor(emp, rocYearOf(todayISO())); }
 function renderLeaveLedger(){
   const q = document.getElementById('leave_search').value.trim();
@@ -11684,7 +11698,12 @@ function renderLeaveLedger(){
   document.getElementById('leave_ledger_count').textContent = `共 ${rows.length} 人`;
   document.getElementById('leaveLedgerBody').innerHTML = rows.map(e => {
     const approved = annualLeaveApproved(e);
-    const days = approved ? approved.days : currentPeriodLeaveDays(e.hire_date);
+    // 巨集會把當年度的 3 天預先給出來，但還沒滿 183 天的人不能休，這裡擋掉。
+    // 到了那一天畫面會自己恢復成核定天數，不需要有人回來改資料。
+    const _eligDate = leaveEligibleDate(e.hire_date);
+    const _notYet = leaveNotYetEligible(e.hire_date);
+    let days = approved ? approved.days : currentPeriodLeaveDays(e.hire_date);
+    if(_notYet && days !== null) days = 0;
     const years = tenureYears(e.hire_date);
     const used = days===null ? null : annualLeaveUsed(e.id, e.hire_date);
     const remaining = days===null ? null : fmt2(days - used);
@@ -11698,6 +11717,7 @@ function renderLeaveLedger(){
       <td>${esc(e.hire_date||'—')}</td>
       <td>${years===null ? '—' : years.toFixed(1)+' 年'}${approved && approved.prior ? `<div class="muted" style="font-size:11px;">含追溯 ${esc(approved.prior)} 年</div>` : ''}</td>
       <td>${days===null ? '<span class="pill gray">無到職日資料</span>'
+            : _notYet ? `0 天<div class="muted" style="font-size:11px;">未滿半年，${esc(toROCDate(_eligDate))} 起才有</div>`
             : approved ? `${days} 天<div class="muted" style="font-size:11px;">${approved.year} 年度核定</div>`
                        : `${days} 天<div class="muted" style="font-size:11px;">依年資估算</div>`}</td>
       <td>${used===null ? '—' : used+' 天'}</td>
