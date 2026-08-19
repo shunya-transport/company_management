@@ -6137,6 +6137,16 @@ function dcJoin(list){ return list.join('、'); }
 // 七種單據照司機那一頁的順序，這裡是唯一一份定義
 const DC_DOCS = ['放行單', 'EIR', '簽單', 'ASN', '磅單', '還櫃單', '毒管單'];
 function dcDriver(r){ return dcSplit(r.docs); }          // 司機勾的，參考用
+// 這一趟實際會出現的單據：固定七種，加上司機自己在「其他單據」打的
+// （封條、押款單那種），以及曾經被勾成已收／免收的自訂項目。
+// 沒有這一份的話，自訂單據沒地方勾、也永遠標不掉，會一直掛在「還缺」。
+function dcDocsFor(r){
+  const extra = [];
+  [dcSplit(r.docs), dcSplit(r.docs_returned), dcSplit(r.docs_waived)].forEach(list => {
+    list.forEach(d => { if(DC_DOCS.indexOf(d) < 0 && extra.indexOf(d) < 0) extra.push(d); });
+  });
+  return DC_DOCS.concat(extra);
+}
 function dcGot(r){ return dcSplit(r.docs_returned); }    // 實際收回來的
 function dcWaived(r){ return dcSplit(r.docs_waived); }   // 確定不用收的
 function dcIsDone(r){ return !!String(r.docs_checked_date || '').trim(); }
@@ -6192,9 +6202,10 @@ function renderDocsCheck(){
   body.innerHTML = rows.map(r => {
     const drv = dcDriver(r), got = dcGot(r);
     const wv = dcWaived(r);
-    const boxes = DC_DOCS.map(d => {
+    const boxes = dcDocsFor(r).map(d => {
       const byDriver = drv.indexOf(d) >= 0;
       const isWv = wv.indexOf(d) >= 0;
+      const isCustom = DC_DOCS.indexOf(d) < 0;
       return `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 9px 3px 0;white-space:nowrap;">`
         + `<label style="display:inline-flex;align-items:center;gap:4px;margin:0;`
         + `font-weight:${byDriver && !isWv ? '700' : '400'};`
@@ -6202,12 +6213,15 @@ function renderDocsCheck(){
                 : (byDriver ? 'color:var(--accent-dark);' : '')) + `">`
         + `<input type="checkbox" data-dc-doc="${r.inspection_id}|${esc(d)}" style="width:16px;height:16px;"`
         + (got.indexOf(d) >= 0 ? ' checked' : '') + (isWv ? ' disabled' : '') + `>${esc(d)}`
-        + (byDriver ? '<span style="font-size:10px;">★司機</span>' : '') + `</label>`
+        + (byDriver ? '<span style="font-size:10px;">★司機</span>' : '')
+        + (isCustom ? '<span style="font-size:10px;color:var(--gray);">自訂</span>' : '') + `</label>`
         + `<button type="button" class="name-link" data-dc-wv="${r.inspection_id}|${esc(d)}"`
         + ` title="${isWv ? '改回要收' : '這一趟用不到，不用收'}"`
         + ` style="font-size:10.5px;padding:0 2px;">${isWv ? '要收' : '免收'}</button></span>`;
     }).join('')
       + `<button type="button" class="name-link" data-dc-all="${r.inspection_id}" style="margin-left:2px;">全收</button>`
+      + `　<button type="button" class="name-link" data-dc-none="${r.inspection_id}"
+             title="這一趟都不用收單據，全部標成免收">全免</button>`
       + (drv.length ? `　<button type="button" class="name-link" data-dc-drv="${r.inspection_id}">照司機勾的</button>` : '');
     return `<tr>
       <td class="c-nw">${dcDateCell(r)}</td>
@@ -6306,8 +6320,9 @@ function docsDoneCsv(){ return dcCsvOf(dcDoneRows()); }
         if(!r) return;
         const set = new Set(dcGot(r));
         if(box.checked) set.add(doc); else set.delete(doc);
-        // 一律照 DC_DOCS 的順序存，不要每次存進去順序都不一樣
-        const patch = { docs_returned: dcJoin(DC_DOCS.filter(d => set.has(d))) };
+        // 照這一趟的單據順序存（含自訂的），不要每次存進去順序都不一樣。
+        // 這裡若寫成 DC_DOCS，勾了「封條」按下去會被濾掉，等於白勾。
+        const patch = { docs_returned: dcJoin(dcDocsFor(r).filter(d => set.has(d))) };
         // 收到了就不可能同時是「不用收」，自動解除免收
         if(box.checked && dcWaived(r).indexOf(doc) >= 0){
           patch.docs_waived = dcJoin(dcWaived(r).filter(d => d !== doc));
@@ -6327,7 +6342,7 @@ function docsDoneCsv(){ return dcCsvOf(dcDoneRows()); }
         const set = new Set(dcWaived(r));
         const turningOn = !set.has(doc);
         if(turningOn) set.add(doc); else set.delete(doc);
-        const patch = { docs_waived: dcJoin(DC_DOCS.filter(d => set.has(d))) };
+        const patch = { docs_waived: dcJoin(dcDocsFor(r).filter(d => set.has(d))) };
         // 標成免收就不該同時算「已收到」
         if(turningOn && dcGot(r).indexOf(doc) >= 0){
           patch.docs_returned = dcJoin(dcGot(r).filter(d => d !== doc));
@@ -6337,12 +6352,29 @@ function docsDoneCsv(){ return dcCsvOf(dcDoneRows()); }
         return;
       }
       const all = e.target.closest('[data-dc-all]');
-      if(all){ await dcSave(all.getAttribute('data-dc-all'), { docs_returned: dcJoin(DC_DOCS), docs_waived: null }); return; }
+      if(all){
+        const id = all.getAttribute('data-dc-all');
+        const r = clRows().find(x => String(x.inspection_id) === String(id));
+        if(r) await dcSave(id, { docs_returned: dcJoin(dcDocsFor(r)), docs_waived: null });
+        return;
+      }
+      const none = e.target.closest('[data-dc-none]');
+      if(none){
+        const id = none.getAttribute('data-dc-none');
+        const r = clRows().find(x => String(x.inspection_id) === String(id));
+        if(!r) return;
+        if(!confirm('這一趟的單據要全部標成「免收」嗎？\n\n'
+                  + '（' + dcJoin(dcDocsFor(r)) + '）\n\n'
+                  + '標完之後就不會再算成缺件，已經勾的「已收」會一併取消。')) return;
+        await dcSave(id, { docs_waived: dcJoin(dcDocsFor(r)), docs_returned: null },
+                     '整趟標成免收，不會再算成缺件。');
+        return;
+      }
       const drv = e.target.closest('[data-dc-drv]');
       if(drv){
         const id = drv.getAttribute('data-dc-drv');
         const r = clRows().find(x => String(x.inspection_id) === String(id));
-        if(r) await dcSave(id, { docs_returned: dcJoin(DC_DOCS.filter(d => dcDriver(r).indexOf(d) >= 0)) });
+        if(r) await dcSave(id, { docs_returned: dcJoin(dcDocsFor(r).filter(d => dcDriver(r).indexOf(d) >= 0)) });
         return;
       }
       const fin = e.target.closest('[data-dc-fin]');
