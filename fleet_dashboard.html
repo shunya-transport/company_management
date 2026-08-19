@@ -15631,7 +15631,7 @@ document.getElementById('ts_save').addEventListener('click', async () => {
       spec: c.spec, qty: c.qty, unit_price: c.unit_price, amount: tsLineAmount(c) });
   });
 
-  let installed = 0, refreshed = 0;
+  let installed = 0, refreshed = 0, removed = 0;
   let _printAfter = false;
   try{
     // 作業單三張表先存，確定雲端真的收下了，才動輪胎位置圖
@@ -15662,6 +15662,7 @@ document.getElementById('ts_save').addEventListener('click', async () => {
         _same.mileage_at_install = mile;
         _same.tread_depth = isNaN(_depth) ? null : _depth;
         _same.notes = _notes;
+        if(_same.source_order_id == null) _same.source_order_id = oid;
         refreshed++;
         return;
       }
@@ -15675,11 +15676,40 @@ document.getElementById('ts_save').addEventListener('click', async () => {
         brand: t.on_brand || '', install_date: date, mileage_at_install: mile,
         tread_depth: isNaN(_depth) ? null : _depth,
         status: '使用中', replaced_date: null,
+        source_order_id: oid,
         notes: _notes
       });
       installed++;
     });
-    if(installed || refreshed) await saveState('tire_records', STATE.tireRecords, true);
+
+    // 這張單當初寫進位置圖、但現在明細裡已經沒有的那幾條（輪位改掉、或整列被刪），
+    // 要一起收乾淨，不然舊輪位會留下一條永遠不會消失的幽靈紀錄。
+    // 只認 source_order_id —— 這個欄位是後來才加的，舊資料一律留空，所以碰不到。
+    const _keepKey = new Set(lines
+      .filter(t => t.on_brand || t.on_serial || t.on_code)
+      .map(t => {
+        const vh = String(t.position).charAt(0) === 'B' ? trail : head;
+        return (vh ? vh.id : '?') + '|' + t.position;
+      }));
+    const _stray = STATE.tireRecords.filter(r =>
+      r.source_order_id != null && String(r.source_order_id) === String(oid)
+      && !_keepKey.has(r.vehicle_id + '|' + r.position));
+    if(_stray.length){
+      // 當初被這幾條頂掉的那些舊輪胎，放回「使用中」
+      _stray.forEach(s => {
+        STATE.tireRecords.forEach(r => {
+          if(r.id !== s.id && r.vehicle_id === s.vehicle_id && r.position === s.position
+             && r.status === '已更換' && r.replaced_date === s.install_date){
+            r.status = '使用中'; r.replaced_date = null;
+          }
+        });
+      });
+      const _strayIds = new Set(_stray.map(r => String(r.id)));
+      STATE.tireRecords = STATE.tireRecords.filter(r => !_strayIds.has(String(r.id)));
+      removed = _stray.length;
+    }
+
+    if(installed || refreshed || removed) await saveState('tire_records', STATE.tireRecords, true);
   }catch(err){
     STATE.tireOrders = backup.orders;
     STATE.tireOrderTires = backup.tires;
@@ -15697,7 +15727,8 @@ document.getElementById('ts_save').addEventListener('click', async () => {
   alert((editing ? '作業單已更新。' : '作業單已存檔。')
         + (installed ? '\n\n新增 ' + installed + ' 條輪胎到輪胎位置圖。' : '')
         + (refreshed ? '\n更新 ' + refreshed + ' 條位置圖上原有的輪胎內容。' : '')
-        + (!installed && !refreshed ? '\n\n這張單沒有「裝上」的輪胎，位置圖沒有變動。' : ''));
+        + (removed ? '\n移除 ' + removed + ' 條這張單原本寫進去、但明細裡已經沒有的輪胎。' : '')
+        + (!installed && !refreshed && !removed ? '\n\n這張單沒有「裝上」的輪胎，位置圖沒有變動。' : ''));
   if(_printAfter) tirePrintMaintSlip(oid);
 });
 
