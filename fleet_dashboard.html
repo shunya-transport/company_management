@@ -1844,7 +1844,7 @@
 
     <div class="card">
       <h2>加油量月統計</h2>
-      <div class="muted" style="margin-bottom:10px;">選一台車，看它每月的加油量／金額／油耗趨勢，可快速看出異常波動（較上月變化超過±20%會標色提醒）。油耗＝該月行駛公里 ÷ 該月加油公升數；行駛公里取「車輛里程統計」的當月公里（來源：行政系統「公里數登錄檔」），沒有里程資料的月份顯示「—」。</div>
+      <div class="muted" style="margin-bottom:10px;">選一台車，看它每月的加油量／金額／油耗趨勢，可快速看出異常波動（較上月變化超過±20%會標色提醒）。油耗＝該月行駛公里 ÷ 該月加油公升數；<strong>行駛公里是拿加油紀錄自己的月底油表相減算出來的</strong>，跟保養里程、車輛里程統計用的績效里程完全分開。上個月沒加油或油表沒填的月份顯示「—」。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>車號
           <select id="ff_stats_plate"></select>
@@ -2023,7 +2023,7 @@
 <div id="mileage" class="panel">
     <div class="card">
       <h2>登錄里程</h2>
-      <div class="muted" style="margin-bottom:10px;">每台車每月月底登錄一次。「里程表讀數」是儀表板上的累積數字，「當月行駛」是這個月實際跑的公里數。兩個只填一個也可以：只填讀數時，系統會用上個月的讀數幫你算出當月行駛；只填當月行駛時，系統會用上個月讀數加上去。</div>
+      <div class="muted" style="margin-bottom:10px;">每台車每月月底登錄一次，一律以薪資績效系統的<strong>績效檔</strong>為準（加油的油表不會寫進這裡）。「里程表讀數」是儀表板上的累積數字，「當月行駛」是這個月實際跑的公里數。兩個只填一個也可以：只填讀數時，系統會用上個月的讀數幫你算出當月行駛；只填當月行駛時，系統會用上個月讀數加上去。</div>
       <div class="form-grid">
         <label>車號<select id="ml_plate"></select></label>
         <label>登錄月份<input id="ml_month" type="month"></label>
@@ -2036,7 +2036,7 @@
 
     <div class="card">
       <h2>公里數統計表<span class="count-badge" id="ml_stat_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">格式比照行政系統的「公里數統計表」：一列一台車一個年度，1～12月欄位是當月實際行駛的公里數（資料來源：行政系統「公里數登錄檔」）。</div>
+      <div class="muted" style="margin-bottom:10px;">格式比照行政系統的「公里數統計表」：一列一台車一個年度，1～12月欄位是當月實際行駛的公里數（<strong>資料來源：薪資績效系統的績效檔</strong>，與加油油表無關）。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年份<select id="ml_year"></select></label>
         <label>車場<select id="ml_base"><option value="all">全部車場</option></select></label>
@@ -5952,8 +5952,13 @@ function renderVehicleModalEdit(v){
   });
 }
 
+// 里程一律只認薪資績效系統的績效檔。source 空白＝舊資料（當初也是績效檔匯入的），
+// 照常採用；只有明確標成「油耗推算」的才跳過。
+// 這樣保養里程與加油油表從此各走各的，油表有問題不會再污染保養提醒。
+function mlIsPerf(r){ return String((r && r.source) || '') !== '油耗推算'; }
+
 function getVehicleLatestMileage(plate){
-  const logs = STATE.mileageLogs.filter(m => m.plate === plate).sort((a,b)=>(b.log_date||'').localeCompare(a.log_date||''));
+  const logs = STATE.mileageLogs.filter(m => m.plate === plate && mlIsPerf(m)).sort((a,b)=>(b.log_date||'').localeCompare(a.log_date||''));
   if(logs.length) return logs[0].mileage;
   const v = STATE.vehicles.find(x => x.plate === plate);
   return v ? (v.current_mileage || null) : null;
@@ -6366,7 +6371,7 @@ function renderTireLayout(){
 // 近 N 個月的月均行駛公里數，用來把「還剩幾公里」換算成「大概什麼時候要保養」
 function avgMonthlyKm(plate, n){
   const logs = STATE.mileageLogs
-    .filter(m => m.plate === plate)
+    .filter(m => m.plate === plate && mlIsPerf(m))
     .sort((a,b)=>String(b.log_date||'').localeCompare(String(a.log_date||'')))
     .slice(0, n || 6)
     .map(mlMonthlyKm)
@@ -10539,12 +10544,29 @@ function renderStatsVehicleSelects(){
   if(tollPlates.includes(tlCurrent)) tlSel.value = tlCurrent;
 }
 
-// 該車該月的行駛公里（來源：行政系統「公里數登錄檔」，與車輛里程統計同一份資料）
+// 該車該月的行駛公里，來源是【加油紀錄自己的月底油表】。
+// 油耗頁從此自給自足，不再去抓里程登錄檔——那一份是績效檔，
+// 專供保養里程與車輛里程統計使用，兩邊刻意分開。
+// 算法：本月最後一次加油的油表 − 上個月最後一次加油的油表。
+// 只有「剛好是上一個月」才算得出來；中間有月份沒加油、或油表沒填，
+// 就回 null 讓畫面顯示「—」，不把兩三個月的公里數硬塞進一個月。
 function monthlyKmOf(plate, month){
-  const r = STATE.mileageLogs.find(x => x.plate === plate && String(x.log_date||'').slice(0,7) === month);
-  if(!r) return null;
-  const k = mlMonthlyKm(r);
-  return (k === null || k <= 0) ? null : k;
+  const byMonth = {};
+  STATE.fuelLogs.forEach(f => {
+    if(f.plate !== plate || !f.fuel_date || f.mileage_at_fill == null) return;
+    const m = String(f.fuel_date).slice(0,7);
+    const d = String(f.fuel_date).slice(0,10);
+    if(!byMonth[m] || d >= byMonth[m].d) byMonth[m] = { d: d, odo: Number(f.mileage_at_fill) };
+  });
+  const cur = byMonth[month];
+  if(!cur) return null;
+  const y = parseInt(String(month).slice(0,4), 10), mo = parseInt(String(month).slice(5,7), 10);
+  if(!y || !mo) return null;
+  const pm = mo === 1 ? (y - 1) + '-12' : y + '-' + String(mo - 1).padStart(2, '0');
+  const prev = byMonth[pm];
+  if(!prev) return null;
+  const km = cur.odo - prev.odo;
+  return km > 0 ? km : null;
 }
 // 把單月油耗跟該車自己的平均比，差太多就標色（±25%）
 function fuelEffCls(kmpl, plate){
@@ -12765,12 +12787,12 @@ function renderMileageSelects(){
   const keep = sel.value, keepTrend = trendSel.value;
   sel.innerHTML = opts;
   // 趨勢圖只列出真的有里程資料的車
-  const withData = [...new Set(STATE.mileageLogs.map(r => { const v = mlVehicleOf(r); return v ? v.plate : r.plate; }).filter(Boolean))].sort();
+  const withData = [...new Set(STATE.mileageLogs.filter(mlIsPerf).map(r => { const v = mlVehicleOf(r); return v ? v.plate : r.plate; }).filter(Boolean))].sort();
   trendSel.innerHTML = withData.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
   if(keep) sel.value = keep;
   if(withData.includes(keepTrend)) trendSel.value = keepTrend;
 
-  const years = [...new Set(STATE.mileageLogs.map(r => (r.log_date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const years = [...new Set(STATE.mileageLogs.filter(mlIsPerf).map(r => (r.log_date||'').slice(0,4)).filter(Boolean))].sort().reverse();
   const ySel = document.getElementById('ml_year');
   const keepYear = ySel.value;
   ySel.innerHTML = years.map(y => `<option value="${esc(y)}">${esc(y)} 年（民國 ${parseInt(y,10)-1911}）</option>`).join('');
@@ -12804,6 +12826,7 @@ function mileageMatrix(){
   const q = document.getElementById('ml_search').value.trim();
   const byVehicle = new Map();
   STATE.mileageLogs.forEach(r => {
+    if(!mlIsPerf(r)) return;
     if(!r.log_date || r.log_date.slice(0,4) !== year) return;
     const v = mlVehicleOf(r);
     const plate = (v && v.plate) || r.plate || '（未對應車號）';
@@ -12874,7 +12897,8 @@ function renderMileageTrend(){
   if(!sel) return;
   const plate = sel.value;
   const rows = STATE.mileageLogs
-    .filter(r => { const v = mlVehicleOf(r); return ((v && v.plate) || r.plate) === plate; })
+    .filter(r => { if(!mlIsPerf(r)) return false;
+                   const v = mlVehicleOf(r); return ((v && v.plate) || r.plate) === plate; })
     .slice().sort((a,b)=>(a.log_date||'').localeCompare(b.log_date||''));
 
   document.getElementById('mlTrendBody').innerHTML = rows.slice().reverse().map((r,i,arr) => {
@@ -12967,10 +12991,12 @@ document.getElementById('ml_add').addEventListener('click', async () => {
     existing.mileage = odo;
     existing.monthly_km = km;
     if(notes) existing.notes = notes;
+    existing.source = '績效檔';   // 手動補的一律當績效檔，保養與統計才會採用
   }else{
     STATE.mileageLogs.push({
       id: nextId(STATE.mileageLogs), vehicle_id: vehicleId, plate,
-      log_date: logDate, mileage: odo, monthly_km: km, notes
+      log_date: logDate, mileage: odo, monthly_km: km, notes,
+      source: '績效檔'
     });
   }
   await saveState('vehicle_mileage_logs', STATE.mileageLogs, true);
@@ -15493,7 +15519,7 @@ document.getElementById('mr_add').addEventListener('click', async () => {
   }
 
   // 維修單上的里程【不再寫進里程統計】。
-  // 里程一律以「公里數登錄檔」與加油耗月結為準；維修單填的里程只留在維修紀錄本身，
+  // 里程一律以薪資績效系統的績效檔為準；維修單填的里程只留在維修紀錄本身，
   // 並透過上面的 maintenance_schedules.last_service_mileage 供保養到期估算使用。
 
   ['mr_plate','mr_date','mr_mileage','mr_vendor','mr_cost','mr_invoice','mr_desc','mr_parts','mr_applicant'].forEach(id=>{ const _el=document.getElementById(id); if(_el) _el.value=''; });
