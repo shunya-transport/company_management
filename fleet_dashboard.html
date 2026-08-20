@@ -572,10 +572,14 @@
           <option value="在役">在役</option>
           <option value="停用">停用</option>
         </select>
+        <select id="fleet_brand_filter"><option value="all">全部廠牌</option></select>
+        <select id="fleet_type_filter"><option value="all">全部車型</option></select>
+        <select id="fleet_tons_filter"><option value="all">全部噸數</option></select>
+        <button type="button" class="btn ghost" id="fleet_filter_reset">清除篩選</button>
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>車型</th><th>公司別</th><th>發車地</th><th>狀態</th><th>車用物品</th><th>滅火器</th><th>濾毒罐</th><th>醫藥箱</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>廠牌</th><th>車型</th><th>噸數</th><th>公司別</th><th>發車地</th><th>狀態</th><th>車用物品</th><th>滅火器</th><th>濾毒罐</th><th>醫藥箱</th><th></th></tr></thead>
           <tbody id="fleetTableBody"></tbody>
         </table>
       </div>
@@ -6624,19 +6628,53 @@ function renderVdTable(){
     </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+// 廠牌／車型／噸數三個下拉的選項，只列出【目前清單上真的有】的值。
+// 每次重畫都重建，車輛資料改了選項就會自己跟著變，不用回來改程式；
+// 使用者已經選到一半的值會保留，選項裡沒有了才退回「全部」。
+function fleetRefreshFilters(pool){
+  const fill = (id, vals, allLabel, fmt) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const keep = el.value;
+    el.innerHTML = `<option value="all">${allLabel}</option>`
+      + vals.map(x => `<option value="${esc(String(x))}">${esc(fmt ? fmt(x) : String(x))}</option>`).join('');
+    el.value = (keep && vals.some(x => String(x) === keep)) ? keep : 'all';
+  };
+  const uniq = (pick, numeric) => {
+    const s = [...new Set(pool.map(pick).filter(x => x !== null && x !== undefined && String(x) !== ''))];
+    return numeric ? s.sort((a,b) => Number(a) - Number(b)) : s.sort();
+  };
+  fill('fleet_brand_filter', uniq(v => v.brand), '全部廠牌');
+  fill('fleet_type_filter',  uniq(v => v.vehicle_type), '全部車型');
+  fill('fleet_tons_filter',  uniq(v => v.load_capacity, true), '全部噸數', x => x + ' 噸');
+}
+
 function renderFleetTable(){
   const statusFilter = document.getElementById('fleet_status_filter').value;
   const fleetQ = document.getElementById('fleet_search').value.trim();
-  const vehicleRows = STATE.vehicles.filter(v =>
-    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v) && (statusFilter==='all' || v.status===statusFilter) &&
+  // 下拉選項用「還在清單上的車」去產生，已報廢／待賣出的車才有的廠牌不要跑出來
+  const fleetPool = STATE.vehicles.filter(v =>
+    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v));
+  fleetRefreshFilters(fleetPool);
+  const _val = id => { const el = document.getElementById(id); return el ? el.value : 'all'; };
+  const brandF = _val('fleet_brand_filter');
+  const typeF  = _val('fleet_type_filter');
+  const tonsF  = _val('fleet_tons_filter');
+  const vehicleRows = fleetPool.filter(v =>
+    (statusFilter==='all' || v.status===statusFilter) &&
+    (brandF==='all' || String(v.brand||'') === brandF) &&
+    (typeF ==='all' || String(v.vehicle_type||'') === typeF) &&
+    (tonsF ==='all' || String(v.load_capacity == null ? '' : v.load_capacity) === tonsF) &&
     (!fleetQ || (v.plate||'').includes(fleetQ) || (v.company_name||'').includes(fleetQ) || (v.base_location||'').includes(fleetQ))
   );
   document.getElementById('fleet_vehicle_count').textContent = `共 ${vehicleRows.length} 台`;
   document.getElementById('fleetTableBody').innerHTML = vehicleRows.map(v => `
     <tr>
       <td><button class="name-link" data-view-vehicle="${v.id}">${esc(v.plate)}</button></td>
+      <td>${esc(v.brand||'')}</td>
       <td>${esc(v.vehicle_type||'')}</td>
-      <td>${esc(v.company_name||'')}</td>
+      <td style="text-align:right;">${(v.load_capacity != null && String(v.load_capacity) !== '') ? esc(String(v.load_capacity)) : ''}</td>
+      <td title="${esc(v.company_name||'')}">${esc(shortCompany(v.company_name))}</td>
       <td>${esc(v.base_location||'')}</td>
       <td>${esc(v.status)}</td>
       <td><button class="name-link" data-edit-vequip="${v.id}">車用物品 (${STATE.vehicleEquipment.filter(x=>x.vehicle_id===v.id && x.status==='使用中').length})</button></td>
@@ -6644,7 +6682,7 @@ function renderFleetTable(){
       <td><button class="name-link" data-edit-doc="${v.id}|濾毒罐">濾毒罐 (${STATE.vehicleDocuments.filter(x=>x.vehicle_id===v.id && x.doc_type==='濾毒罐').length})</button></td>
       <td><button class="name-link" data-edit-medkit="${v.id}">醫藥箱 (${STATE.medicalKitItems.filter(x=>x.vehicle_id===v.id).length})</button></td>
       <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="10" class="empty">目前沒有車輛資料</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="12" class="empty">沒有符合條件的車輛</td></tr>`;
 
   refreshTrailerSizeList();
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
@@ -12631,6 +12669,20 @@ document.getElementById('icTableBody').addEventListener('click', async (e) => {
 document.getElementById('fleet_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('trailer_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('fleet_search').addEventListener('input', renderFleetTable);
+['fleet_brand_filter','fleet_type_filter','fleet_tons_filter'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', renderFleetTable);
+});
+{
+  const _fr = document.getElementById('fleet_filter_reset');
+  if(_fr) _fr.addEventListener('click', () => {
+    ['fleet_brand_filter','fleet_type_filter','fleet_tons_filter','fleet_status_filter'].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = 'all';
+    });
+    const q = document.getElementById('fleet_search'); if(q) q.value = '';
+    renderFleetTable();
+  });
+}
 document.getElementById('trailerTableBody').addEventListener('change', (e) => {
   if(e.target && e.target.classList && e.target.classList.contains('tsz-in')) saveTrailerSizeInline(e.target);
 });
