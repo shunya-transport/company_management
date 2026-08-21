@@ -670,6 +670,8 @@ async function authFetch(url, options={}){
 const STATE = { accounts: [], subjects: [], entries: [], pettyBooks: [], pettyEntries: [] };
 let CURRENT_USER = '';
 const LOAD_FAILED = [];
+// 每張表「實際載進來幾筆／伺服器說共幾筆」，用來判斷有沒有少抓
+const LOAD_COUNTS = {};
 
 // ---------- 小工具 ----------
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -732,17 +734,33 @@ async function sbSelect(path){
 //   整個科目的傳票都在 1000 筆之外時，那個科目還會從報表上消失。
 async function sbSelectAll(path){
   const PAGE = 1000;
-  let all = [], offset = 0;
-  while(true){
+  const key = String(path).split('?')[0];
+  let all = [], offset = 0, total = null;
+  // 上限只是保險絲，避免伺服器一直回同樣的東西時無限迴圈
+  for(let guard = 0; guard < 500; guard++){
     const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      headers: {'Range-Unit':'items', 'Range': `${offset}-${offset + PAGE - 1}`}
+      // count=exact 讓 PostgREST 在 Content-Range 告訴我們總共有幾筆，
+      // 有了總筆數就不必再用「這頁不足 1000 筆」去猜有沒有抓完
+      headers: {'Range-Unit':'items', 'Range': `${offset}-${offset + PAGE - 1}`,
+                'Prefer': 'count=exact'}
     });
+    // 位移已經超過總筆數時 PostgREST 會回 416，那代表本來就抓完了，不是錯誤
+    if(res.status === 416) break;
     if(!res.ok) throw new Error(await res.text());
+    // Content-Range 長這樣：0-999/2901　斜線後面才是總筆數（可能是 *，代表沒算）
+    const cr = res.headers.get('Content-Range') || res.headers.get('content-range') || '';
+    const m = /\/(\d+)\s*$/.exec(cr);
+    if(m) total = parseInt(m[1], 10);
     const rows = await res.json();
-    all = all.concat(rows || []);
-    if(!rows || rows.length < PAGE) break;
-    offset += PAGE;
+    if(!rows || !rows.length) break;
+    all = all.concat(rows);
+    // ★ 一定要用「這一頁實際拿到幾筆」推進，不能寫死加 PAGE。
+    //   伺服器少給幾筆時寫死會直接跳過那幾筆，而且看不出來。
+    offset += rows.length;
+    if(total != null && all.length >= total) break;
+    if(total == null && rows.length < PAGE) break;
   }
+  LOAD_COUNTS[key] = { got: all.length, total: total };
   return all;
 }
 async function sbInsert(table, row){
@@ -773,6 +791,18 @@ async function loadAll(){
     // 一定要用 sbSelectAll：這張表早就超過 1000 筆，用 sbSelect 只看得到最新的 1000 筆。
     // 分頁一定要有穩定的排序（entry_id 是主鍵），不然每一頁的順序不保證一致，會漏抓或重複。
     STATE.entries  = await sbSelectAll('acc_entries?select=*&order=entry_id.asc');
+    // 少抓了一定要讓人看見。以前是靜靜少一段，畫面上完全沒有徵兆，
+    // 最新的那幾個月整片不見，還會被當成「資料沒登錄」。
+    const _c = LOAD_COUNTS['acc_entries'] || {};
+    if(_c.total != null && _c.got < _c.total){
+      const w = document.getElementById('storageWarning');
+      if(w){
+        w.style.display = 'block';
+        w.textContent = '⚠️ 記帳資料沒有載完整：雲端有 ' + _c.total + ' 筆，這次只讀到 '
+          + _c.got + ' 筆，畫面上會少一段（通常是最新的）。請重新整理頁面；'
+          + '一直這樣就是連線被截斷，先不要用這一頁的金額對帳。';
+      }
+    }
   }catch(e){
     LOAD_FAILED.push('acc');
     document.getElementById('storageWarning').style.display = 'block';
@@ -1516,7 +1546,11 @@ function pendingRows(){
   rows.sort((a,b) => {
     if(sort === 'amount') return grossAmt(b) - grossAmt(a);
     if(sort === 'date') return (a.entry_date < b.entry_date) ? 1 : -1;
-    const ad = a.due_date || '9999-12-31', bd = b.due_date || '9999-12-31';
+    // 沒填預計收付日的用【發生日】遞補，排在同一條時間軸上。
+    // 以前一律當成 9999-12-31，等於全部沉到清單最後面，
+    // 新開又還沒訂收款日的帳反而最難找，看起來像「這個月都沒有帳」。
+    const ad = a.due_date || a.entry_date || '9999-12-31';
+    const bd = b.due_date || b.entry_date || '9999-12-31';
     return ad < bd ? -1 : (ad > bd ? 1 : 0);
   });
   return rows;
@@ -1543,7 +1577,14 @@ function renderPending(){
     }else if(filtering){
       note.innerHTML = '目前條件：篩選後 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）';
     }else{
-      note.textContent = '';
+      // 沒下任何條件時也把筆數寫出來，才看得出資料是不是整份都在
+      const _c = LOAD_COUNTS['acc_entries'] || {};
+      note.innerHTML = '掛帳中共 <strong>' + allCnt + '</strong> 筆'
+        + '　<span class="muted">（記帳資料已載入 ' + (_c.got != null ? _c.got : STATE.entries.length) + ' 筆'
+        + (_c.total != null ? ' ／ 雲端共 ' + _c.total + ' 筆' : '') + '）</span>'
+        + (_c.total != null && _c.got < _c.total
+            ? '　<span class="pill red">資料沒載完整，畫面會少一段，請重新整理</span>' : '')
+        + '　<span class="muted">沒填預計收付日的會照發生日排在同一條時間軸上，那一格顯示「未定」。</span>';
     }
   }
   document.getElementById('pdStatRow').innerHTML =
