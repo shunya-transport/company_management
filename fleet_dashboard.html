@@ -3211,33 +3211,60 @@ async function supaFetch(path, options={}){
 // Supabase/PostgREST 預設一次最多回傳1000筆，超過的表格需要分批（用Range header）抓取才能拿到完整資料
 async function supaFetchAll(path, sep){
   const PAGE_SIZE = 1000;
+  const _key = String(path).split('?')[0];
   let allRows = [];
   let offset = 0;
-  while(true){
+  let total = null;
+  // 上限只是保險絲，避免伺服器一直回同樣的東西時無限迴圈
+  for(let guard = 0; guard < 500; guard++){
     const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
         'Content-Type': 'application/json',
         'Range-Unit': 'items',
-        'Range': `${offset}-${offset + PAGE_SIZE - 1}`
+        'Range': `${offset}-${offset + PAGE_SIZE - 1}`,
+        // count=exact 讓 PostgREST 在 Content-Range 告訴我們總共有幾筆，
+        // 有了總筆數就不必再用「這頁不足 1000 筆」去猜抓完了沒有
+        'Prefer': 'count=exact'
       }
     });
+    // 位移已經超過總筆數時 PostgREST 回 416，那代表本來就抓完了，不是錯誤
+    if(res.status === 416) break;
     if(!res.ok){
       const text = await res.text().catch(()=> '');
       throw new Error(`Supabase ${res.status}: ${text}`);
     }
+    // Content-Range 長這樣：0-999/2901　斜線後面才是總筆數（也可能是 *，代表沒算）
+    const cr = res.headers.get('Content-Range') || res.headers.get('content-range') || '';
+    const _m = /\/(\d+)\s*$/.exec(cr);
+    if(_m) total = parseInt(_m[1], 10);
     const text = await res.text();
     const rows = text ? JSON.parse(text) : [];
+    if(!rows.length) break;
     allRows = allRows.concat(rows);
-    if(rows.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
+    // ★ 一定要用「這一頁實際拿到幾筆」推進，不能寫死加 PAGE_SIZE。
+    //   伺服器少給幾筆時寫死會直接跳過那幾筆，而且完全看不出來。
+    offset += rows.length;
+    if(total != null && allRows.length >= total) break;
+    if(total == null && rows.length < PAGE_SIZE) break;
+  }
+  LOAD_COUNTS[_key] = { got: allRows.length, total: total };
+  // ★ 少抓了就當成讀取失敗丟出去。
+  //   safeGet 接到之後會把這張表列入 LOAD_FAILED 並跳紅色警告，
+  //   saveState 看到 LOAD_FAILED 就會拒絕存檔 —— 這一步是關鍵：
+  //   少抓的那一段如果沒擋下來，下次存檔會被當成「使用者刪掉了」而真的從雲端刪除。
+  if(total != null && allRows.length < total){
+    throw new Error('資料沒有載完整：雲端共 ' + total + ' 筆，這次只讀到 ' + allRows.length
+                  + ' 筆（' + _key + '）。請重新整理頁面再試，這中間請不要存檔。');
   }
   return allRows;
 }
 
 // ===== 載入失敗保護:記住哪些資料沒讀成功,避免用備援資料覆蓋雲端 =====
 const LOAD_FAILED = new Set();
+// 每張表「實際載進來幾筆／伺服器說共幾筆」，用來判斷有沒有少抓
+const LOAD_COUNTS = {};
 
 // ===== 存檔失敗還原 =====
 // 每一份清單都留一份「雲端最後確認過的樣子」。存檔失敗時原地還原，
@@ -3657,9 +3684,16 @@ async function saveState(key, value, shared){
       .filter(pk => !currentIds.has(String(pk)));
     if(idsToDelete.length > 0){
       // 保險:一次要刪掉超過5筆且佔全表一半以上,先跳出確認,避免整表誤刪
-      if(idsToDelete.length > 5 && idsToDelete.length >= ((existingRows||[]).length * 0.5)){
+      // 保險線改嚴：原本要「超過 5 筆且佔全表一半」才問，少抓三成完全擋不住。
+      // 現在只要一次刪超過 20 筆、或佔全表兩成，就一定跳出來確認，並列出編號給人看。
+      if(idsToDelete.length > 5 &&
+         (idsToDelete.length > 20 || idsToDelete.length >= ((existingRows||[]).length * 0.2))){
+        const _peek = idsToDelete.slice(0, 12).join('、')
+                    + (idsToDelete.length > 12 ? ' …等' : '');
         if(!confirm('系統偵測到這次存檔會從雲端刪除 ' + idsToDelete.length + ' 筆「' + map.table + '」資料'
-                    + '（雲端目前共 ' + (existingRows||[]).length + ' 筆）。\n\n這通常代表資料沒有正常載入。如果您不是刻意要刪除,請按「取消」。\n\n確定要刪除嗎?')){
+                    + '（雲端目前共 ' + (existingRows||[]).length + ' 筆）。\n\n要刪掉的編號：' + _peek
+                    + '\n\n這通常代表資料沒有正常載入。如果您不是刻意要刪除,請按「取消」,'
+                    + '然後重新整理頁面確認上方沒有紅色警告。\n\n確定要刪除嗎?')){
           throw new Error('已取消刪除動作,雲端資料未變更');
         }
       }
