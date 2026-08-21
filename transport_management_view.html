@@ -3900,73 +3900,87 @@ async function saveState(key, value, shared){
 }
 
 async function loadState(){
-  STATE.leases = await safeGet('trailer_leases', SEED.trailer_leases, true);
-  STATE.lessees = await safeGet('lessees', SEED.lessees, true);
-  STATE.trainings = await safeGet('employee_trainings', SEED.trainings || [], true);
+  // ★ 這 47 份雲端資料彼此獨立，所以【全部一起發出去】，最後再一次收回來。
+  //   以前是一支一支 await，等於 47 趟網路來回排隊跑，光是等待就要好幾秒。
+  //   現在總時間只等於最慢的那一兩支。
+  //   收回結果的動作刻意排在 loadOrgRefs() 之前 —— 它會讀 STATE.employees 當退路，
+  //   排在後面的話那份退路會拿到空陣列。
+  //   讀取失敗不會在這裡爆掉：safeGet 自己接住，改用備援資料並列入 LOAD_FAILED，
+  //   存檔那一關照樣會被擋下來。
+  const _P = {};
+  const _kick = (prop, args) => { _P[prop] = safeGet.apply(null, args); };
+  _kick('leases', ['trailer_leases', SEED.trailer_leases, true]);
+  _kick('lessees', ['lessees', SEED.lessees, true]);
+  _kick('trainings', ['employee_trainings', SEED.trainings || [], true]);
+  _kick('employees', ['roster_employees', SEED.employees, true]);
+  _kick('employeesHistory', ['roster_employees_history', [], true]);
+  _kick('vehicles', ['roster_vehicles', SEED.vehicles, true]);
+  _kick('mileageLogs', ['vehicle_mileage_logs', SEED.mileage_logs || [], true]);
+  _kick('fuelLogs', ['fuel_logs', SEED.fuel_logs || [], true]);
+  _kick('maintSchedules', ['maintenance_schedules', SEED.maint_schedules || [], true]);
+  _kick('axleRecords', ['axle_maintenance_records', [], true]);
+  _kick('greaseRecords', ['grease_records', [], true]);
+  _kick('emissionRecords', ['emission_test_records', [], true]);
+  _kick('insuranceChanges', ['insurance_changes', SEED.insurance_changes || [], true]);
+  _kick('accessCards', ['access_cards', SEED.access_cards || [], true]);
+  _kick('accessCardRoster', ['access_card_roster', SEED.access_card_roster || [], true]);
+  _kick('trainingLog', ['training_log', SEED.training_log || [], true]);
+  _kick('docChecklist', ['doc_checklist', SEED.doc_checklist || [], true]);
+  _kick('vehicleDocuments', ['vehicle_documents', SEED.vehicle_documents || [], true]);
+  _kick('vehicleInsurance', ['vehicle_insurance', SEED.vehicle_insurance || [], true]);
+  _kick('employeeEquipment', ['employee_equipment', [], true]);
+  _kick('tireRecords', ['tire_records', [], true]);
+  _kick('tireOrders', ['tire_service_orders', [], true]);
+  _kick('tireOrderTires', ['tire_service_tires', [], true]);
+  _kick('tireOrderCharges', ['tire_service_charges', [], true]);
+  _kick('medicalExamRecords', ['medical_exam_records', SEED.medical_exam_records || [], true]);
+  _kick('containerInspections', ['container_inspections', [], true]);
+  _kick('pensionElections', ['pension_elections', [], true]);
+  _kick('stockItems', ['stock_items', [], true]);
+  _kick('stockTransactions', ['stock_transactions', [], true]);
+  _kick('instruments', ['instruments', SEED.instruments || [], true]);
+  _kick('calibrationRecords', ['calibration_records', SEED.calibration_records || [], true]);
+  _kick('ureaLogs', ['urea_logs', [], true]);
+  _kick('ureaStockIn', ['urea_stock_in', [], true]);
+  _kick('ureaOpening', ['urea_stock_opening', [], true]);
+  _kick('companyPhones', ['company_phones', SEED.company_phones || [], true]);
+  _kick('officeExtensions', ['office_extensions', SEED.office_extensions || [], true]);
+  _kick('officeLocations', ['office_locations', SEED.office_locations || [], true]);
+  _kick('workHourDaily', ['work_hour_daily', SEED.work_hour_daily || [], true]);
+  _kick('workHourMonthly', ['work_hour_monthly', SEED.work_hour_monthly || [], true]);
+  _kick('vehicleEquipment', ['vehicle_equipment', [], true]);
+  _kick('medicalKitItems', ['medical_kit_items', SEED.medical_kit_items || [], true]);
+  _kick('annualLeaveYearly', ['annual_leave_yearly', SEED.annual_leave_yearly || [], true]);
+  _kick('leaveRecords', ['leave_records', SEED.leave_records || [], true]);
+  _kick('overtimeRecords', ['overtime_records', SEED.overtime_records || [], true]);
+  _kick('maintRecords', ['maint_records', SEED.maint_records || [], true]);
+  _kick('adminRewards', ['admin_rewards', SEED.admin_rewards || [], true]);
+  _kick('adminTolls', ['admin_tolls', SEED.admin_tolls || [], true]);
+
   STATE.trainingTypes = SEED.training_types;
-  STATE.employees = await safeGet('roster_employees', SEED.employees, true);
-  STATE.employeesHistory = await safeGet('roster_employees_history', [], true);
-  STATE.vehicles = await safeGet('roster_vehicles', SEED.vehicles, true);
-  STATE.mileageLogs = await safeGet('vehicle_mileage_logs', SEED.mileage_logs || [], true);
-  STATE.fuelLogs = await safeGet('fuel_logs', SEED.fuel_logs || [], true);
-  STATE.maintSchedules = await safeGet('maintenance_schedules', SEED.maint_schedules || [], true);
-  STATE.axleRecords = await safeGet('axle_maintenance_records', [], true);
-  STATE.greaseRecords = await safeGet('grease_records', [], true);
-  STATE.emissionRecords = await safeGet('emission_test_records', [], true);
   STATE.internalTrainings = SEED.internal_trainings || [];
-  STATE.insuranceChanges = await safeGet('insurance_changes', SEED.insurance_changes || [], true);
-  STATE.accessCards = await safeGet('access_cards', SEED.access_cards || [], true);
   STATE.insuranceMonthly = SEED.insurance_monthly || [];
-  STATE.accessCardRoster = await safeGet('access_card_roster', SEED.access_card_roster || [], true);
-  STATE.trainingLog = await safeGet('training_log', SEED.training_log || [], true);
   STATE.internalTrainingTypes = SEED.internal_training_types || [];
   STATE.docItems = SEED.doc_items || [];
-  STATE.docChecklist = await safeGet('doc_checklist', SEED.doc_checklist || [], true);
-  STATE.vehicleDocuments = await safeGet('vehicle_documents', SEED.vehicle_documents || [], true);
   STATE.maintenanceStandards = SEED.maintenance_standards || [];
-  STATE.vehicleInsurance = await safeGet('vehicle_insurance', SEED.vehicle_insurance || [], true);
   STATE.equipmentTypes = SEED.equipment_types || [];
-  STATE.employeeEquipment = await safeGet('employee_equipment', [], true);
-  STATE.tireRecords = await safeGet('tire_records', [], true);
-  STATE.tireOrders = await safeGet('tire_service_orders', [], true);
-  STATE.tireOrderTires = await safeGet('tire_service_tires', [], true);
-  STATE.tireOrderCharges = await safeGet('tire_service_charges', [], true);
-  STATE.medicalExamRecords = await safeGet('medical_exam_records', SEED.medical_exam_records || [], true);
   // 貨櫃檢查表：司機用 container_inspection.html 填的，這裡只讀不寫。
   // 還沒跑 SQL #78 的話會讀失敗，畫面上會顯示提示，不影響其他分頁。
-  STATE.containerInspections = await safeGet('container_inspections', [], true);
-  STATE.pensionElections = await safeGet('pension_elections', [], true);
-  STATE.stockItems = await safeGet('stock_items', [], true);
-  STATE.stockTransactions = await safeGet('stock_transactions', [], true);
-  STATE.instruments = await safeGet('instruments', SEED.instruments || [], true);
-  STATE.calibrationRecords = await safeGet('calibration_records', SEED.calibration_records || [], true);
-  STATE.ureaLogs = await safeGet('urea_logs', [], true);
-  STATE.ureaStockIn = await safeGet('urea_stock_in', [], true);
-  STATE.ureaOpening = await safeGet('urea_stock_opening', [], true);
-  STATE.companyPhones = await safeGet('company_phones', SEED.company_phones || [], true);
-  STATE.officeExtensions = await safeGet('office_extensions', SEED.office_extensions || [], true);
-  STATE.officeLocations = await safeGet('office_locations', SEED.office_locations || [], true);
-  STATE.workHourDaily = await safeGet('work_hour_daily', SEED.work_hour_daily || [], true);
-  STATE.workHourMonthly = await safeGet('work_hour_monthly', SEED.work_hour_monthly || [], true);
-  STATE.vehicleEquipment = await safeGet('vehicle_equipment', [], true);
-  STATE.medicalKitItems = await safeGet('medical_kit_items', SEED.medical_kit_items || [], true);
   STATE.annualLeaveTiers = SEED.annual_leave_tiers || [];
-  STATE.annualLeaveYearly = await safeGet('annual_leave_yearly', SEED.annual_leave_yearly || [], true);
-  STATE.leaveRecords = await safeGet('leave_records', SEED.leave_records || [], true);
-  STATE.overtimeRecords = await safeGet('overtime_records', SEED.overtime_records || [], true);
-  STATE.maintRecords = await safeGet('maint_records', SEED.maint_records || [], true);
   STATE.maintItems = SEED.maint_items || [];
   STATE.refPositions = SEED.ref_positions || [];
   STATE.refDepartments = SEED.ref_departments || [];
   STATE.refYards = SEED.ref_yards || [];
   STATE.refCompanies = SEED.companies_full || [];
+
+  // 收回上面所有一起發出去的讀取結果（照發出的順序寫回 STATE）
+  for(const _k of Object.keys(_P)) STATE[_k] = await _P[_k];
+
   await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
   rpLoad();                     // 設備報修單（不 await，讀不到也不要卡住整頁）
-  STATE.adminRewards = await safeGet('admin_rewards', SEED.admin_rewards || [], true);
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
   STATE.adminDeputies = SEED.admin_deputies || [];
-  STATE.adminTolls = await safeGet('admin_tolls', SEED.admin_tolls || [], true);
   STATE.adminTolls = STATE.adminTolls.map((t,i) => t.id!=null ? t : {...t, id:i+1});
   STATE.adminInstructorReqs = SEED.admin_instructor_reqs || [];
   STATE.adminSpecialistReqs = SEED.admin_specialist_reqs || [];
