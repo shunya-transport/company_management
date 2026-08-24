@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>司機績效每日輸入 — 順亞運通</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&family=Montserrat:wght@500;600;700&display=swap');
+  :root{
+    --bg:#eef1f5; --card:#FFFEFB; --border:#EDE0D0; --border-strong:#D9C4A8;
+    --text:#142033; --text-2:#3f4650; --text-3:#8b929b;
+    --navy-950:#071525; --navy-900:#0d1b2c; --navy-850:#102238; --navy-800:#152a43; --navy-700:#203e61;
+    --gold-700:#9d6d2f; --gold-600:#b9843f; --gold-500:#c99a56; --gold-400:#d8b374; --gold-300:#ead3a4;
+    --ivory-50:#fffdf9; --ivory-100:#fbf8f3; --ivory-200:#f2ede5;
+    --accent:#9d6d2f; --accent-dark:#7d5624; --accent-bg:#f6ead6;
+    --navy:#0d1b2c; --navy-2:#152a43;
+    --red:#B3261E; --red-bg:#FBEAE8;
+    --amber:#9C6B00; --amber-bg:#FDF1DC;
+    --green:#3F7D44; --green-bg:#EAF3E7;
+    --gray:#6B5A48; --gray-bg:#F1E9DD;
+    --radius:14px; --radius-sm:11px;
+    --shadow-sm:0 1px 2px rgba(13,27,44,.07);
+    --shadow-md:0 12px 32px rgba(20,32,51,.09), 0 1px 2px rgba(13,27,44,.05);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:
+      radial-gradient(circle at 88% 8%, rgba(216,179,116,.14), transparent 20%),
+      radial-gradient(circle at 10% 75%, rgba(32,62,97,.07), transparent 24%),
+      linear-gradient(145deg, #fff 0%, #f8f5f1 54%, #eef1f5 100%);
+    color:var(--text); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{
+    max-width:1600px;margin:0 auto;min-height:100vh;display:grid;
+    grid-template-columns:190px minmax(0,1fr);
+    background:rgba(255,255,255,.32);box-shadow:0 0 80px rgba(9,24,41,.08);
+  }
+  .sidebar{
+    position:sticky;top:0;z-index:50;height:100vh;padding:26px 12px 20px;display:flex;flex-direction:column;gap:18px;
+    background:linear-gradient(180deg, rgba(255,255,255,.97), rgba(249,248,246,.96)), radial-gradient(circle at 20% 10%, rgba(216,179,116,.18), transparent 42%);
+    border-right:1px solid rgba(13,27,44,.08);overflow-y:auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 10px;}
+  .brand-mark{
+    font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;line-height:1;color:transparent;
+    background:linear-gradient(140deg,#8d5b21 3%,#f5e4bc 36%,#b2782f 67%,#f0d59d 100%);
+    -webkit-background-clip:text;background-clip:text;
+  }
+  .brand-copy{color:var(--gold-700);font-family:Montserrat,sans-serif;font-size:9px;font-weight:600;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 0 60px;}
+  header.banner{
+    background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 55%,var(--accent-dark) 100%);
+    color:#fff;padding:30px 28px 34px;position:relative;overflow:hidden;
+  }
+  header.banner::after{
+    content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.10),transparent 70%);
+  }
+  .hero-kicker{margin:0 0 8px;color:var(--gold-300);font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;position:relative;}
+  header.banner h1{font-family:"Noto Serif TC",serif;font-size:26px;font-weight:700;margin:0 0 8px;letter-spacing:.5px;position:relative;}
+  header.banner .sub{color:rgba(255,255,255,.72);font-size:13px;position:relative;max-width:640px;line-height:1.7;}
+  .content{padding:20px 26px 40px;position:relative;}
+  .content-pad{padding:0 24px;}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
+  .sub{color:var(--text-2);font-size:13px;}
+  nav{display:flex;flex-direction:column;gap:6px;}
+  nav button{
+    appearance:none;border:1px solid transparent;background:none;text-align:left;padding:10px 12px;font-size:12.5px;font-weight:600;
+    color:#3f4650;cursor:pointer;border-radius:13px;transition:background .2s,color .15s,transform .15s;
+  }
+  nav button:hover{background:rgba(255,255,255,.9);border-color:rgba(13,27,44,.08);transform:translateX(2px);}
+  nav button.active{
+    color:var(--gold-700);
+    background:linear-gradient(100deg, rgba(246,240,230,.98), rgba(236,205,155,.76));
+    border-color:rgba(201,154,86,.28);box-shadow:0 9px 22px rgba(157,109,47,.13);
+  }
+  .sidebar-motto{
+    margin-top:auto;padding:14px 12px;border:1px solid rgba(201,154,86,.48);border-radius:16px;color:#725426;text-align:center;
+    background:linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,244,223,.88));box-shadow:0 12px 30px rgba(201,154,86,.13);
+  }
+  .sidebar-motto strong{display:block;font-size:12px;letter-spacing:.04em;}
+  .sidebar-motto span{display:block;margin-top:6px;color:#a57632;font-family:Montserrat,sans-serif;font-size:8px;letter-spacing:.045em;text-transform:uppercase;}
+  .panel{display:none;} .panel.active{display:block;animation:fadein .18s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px;
+    box-shadow:var(--shadow-sm);
+  }
+  .stat-card .n{font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.5px;}
+  .stat-card .l{font-size:12px;color:var(--text-2);margin-top:6px;font-weight:500;}
+  .stat-card.red .n{color:var(--red);} .stat-card.amber .n{color:var(--amber);} .stat-card.green .n{color:var(--green);}
+  .card{
+    position:relative;background:linear-gradient(160deg, rgba(255,255,255,.98), rgba(252,252,252,.94));
+    border:1px solid rgba(255,255,255,.82);border-radius:20px;padding:22px 24px;
+    margin-bottom:16px;box-shadow:var(--shadow-md);overflow:hidden;
+  }
+  .card::after{
+    content:"";position:absolute;top:-60px;right:-70px;width:190px;height:190px;border:1px solid rgba(201,154,86,.30);
+    border-radius:50%;opacity:.10;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, rgba(13,27,44,.98) 0 10%, transparent 10.5% 18%, rgba(201,154,86,.88) 18.5% 28%, transparent 28.5%);
+  }
+  .card h2{font-size:15px;font-weight:700;margin:0 0 14px;color:var(--navy-900);position:relative;letter-spacing:.02em;}
+  .card h2 .count-badge{
+    display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--accent);
+    background:var(--accent-bg);padding:2px 8px;border-radius:99px;vertical-align:middle;
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;color:#263240;font-weight:600;padding:12px 14px;border-bottom:1px solid rgba(13,27,44,.08);
+    white-space:nowrap;font-size:11.5px;letter-spacing:.3px;background:linear-gradient(90deg,#fbfaf8,#f2ece4);
+  }
+  td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
+  tbody tr:hover td{background:#fffaf0;}
+  /* 請假／加班登錄清單專用。日期不能被折成兩行，所以日期整欄 nowrap；
+     姓名與備註字小一點、左右留白縮一點，把寬度讓給日期。 */
+  table.lvot-table th, table.lvot-table td{padding-left:9px;padding-right:9px;}
+  table.lvot-table th{white-space:nowrap;}
+  table.lvot-table .c-nw{white-space:nowrap;}
+  table.lvot-table .c-name{font-size:12px;white-space:nowrap;}
+  table.lvot-table .c-note{font-size:11.5px;line-height:1.45;}
+  table.lvot-table .c-days{font-size:12.5px;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .pill.red{background:var(--red-bg);color:var(--red);}
+  .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.green{background:var(--green-bg);color:var(--green);}
+  .pill.gray{background:var(--gray-bg);color:var(--gray);}
+  .pill.hold{background:var(--gray-bg);color:var(--gray);border:1px dashed var(--gray);}
+  /* 備註只佔一行，太長用「…」收掉，滑鼠移上去看全文 —— 一列折成三行整張表就很難掃 */
+  .note-1line{max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input{
+    font-size:13px;padding:9px 12px;border:1px solid rgba(13,27,44,.15);border-radius:11px;
+    background:rgba(255,255,255,.88);color:var(--text);transition:border-color .15s,box-shadow .15s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  select:focus,input:focus{outline:none;border-color:var(--gold-500);background:#fff;box-shadow:0 0 0 4px rgba(201,154,86,.15);}
+  button.btn{
+    appearance:none;border:none;color:#fff;padding:10px 20px;border-radius:13px;
+    font-size:13px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .2s,filter .15s;
+    background:linear-gradient(105deg,var(--navy-900) 0%,var(--navy-800) 56%,var(--gold-400) 100%);
+    box-shadow:0 10px 23px rgba(13,27,44,.18);
+  }
+  button.btn:hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 15px 29px rgba(13,27,44,.23);}
+  button.btn:active{transform:translateY(0);}
+  button.btn.ghost{background:none;color:var(--text-2);border:1px solid var(--border-strong);box-shadow:none;}
+  button.btn.ghost:hover{background:var(--gray-bg);color:var(--text);transform:none;filter:none;}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
+  .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
+  .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
+  .table-scroll table{margin:0;}
+  .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
+  /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
+  /* 公里數統計表／平均公里數（季）：欄位多，改用緊湊版面且不換行 */
+  table.km-table{font-size:12px;}
+  table.km-table th{padding:8px 8px;font-size:11.5px;white-space:nowrap;}
+  table.km-table td{padding:7px 8px;white-space:nowrap;vertical-align:middle;}
+  table.km-table td.km-num,table.km-table th.km-num{text-align:right;font-variant-numeric:tabular-nums;}
+  table.km-table td.km-total{font-weight:700;}
+  table.km-table tbody tr:hover{background:rgba(13,27,44,.03);}
+  table.mh-table{table-layout:fixed;min-width:940px;font-size:14px;}
+  table.mh-table th{font-size:12.5px;padding:12px 10px;}
+  table.mh-table td{padding:11px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  table.mh-table td.mh-desc,table.mh-table td.mh-parts{white-space:normal;overflow:visible;font-size:11.5px;line-height:1.5;word-break:break-word;color:#5b6672;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .lessee-bar{display:flex;align-items:center;gap:10px;padding:7px 0;}
+  .lessee-bar .name{width:70px;font-size:13px;flex-shrink:0;font-weight:500;}
+  .lessee-bar .track{flex:1;height:8px;background:var(--gray-bg);border-radius:99px;overflow:hidden;}
+  .lessee-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:99px;}
+  .lessee-bar .count{width:90px;text-align:right;font-size:12px;color:var(--text-2);flex-shrink:0;}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .del-btn:hover{background:var(--red-bg);}
+  .move-btn{background:none;border:none;color:var(--amber);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;}
+  .move-btn:hover{background:var(--amber-bg);}
+  .name-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;font-weight:600;}
+  .name-link:hover{text-decoration:underline;}
+  .modal-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(43,33,26,.55);z-index:100;
+    align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;backdrop-filter:blur(2px);
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal-box{background:#fff;border-radius:16px;max-width:640px;width:100%;padding:26px;position:relative;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .modal-box h3{margin:0 0 16px;font-size:18px;font-weight:700;}
+  .modal-close{position:absolute;top:18px;right:18px;background:var(--gray-bg);border:none;font-size:15px;color:var(--text-2);cursor:pointer;width:28px;height:28px;border-radius:50%;}
+  .modal-close:hover{background:var(--border-strong);}
+  .detail-grid{display:grid;grid-template-columns:120px 1fr;gap:9px 12px;font-size:13px;margin-bottom:16px;}
+  .detail-grid dt{color:var(--text-2);font-weight:500;}
+  .detail-grid dd{margin:0;}
+  .detail-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .detail-section h4{font-size:12.5px;margin:0 0 10px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+  .badge-team{display:inline-block;padding:2px 9px;background:var(--gray-bg);border-radius:99px;font-size:12px;color:var(--text-2);}
+  .tire-body{max-width:260px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:20px 16px;position:relative;}
+.axle-grid{max-width:520px;margin:0 auto;background:#F5EDE1;border-radius:12px;padding:18px 14px;}
+.axle-title{text-align:center;font-weight:700;font-size:13px;color:var(--text-2);margin-bottom:10px;}
+.axle-row{display:grid;grid-template-columns:1fr 1fr 18px 1fr 1fr;gap:6px;align-items:stretch;margin-bottom:10px;}
+.axle-spine{background:var(--border-strong);width:3px;justify-self:center;border-radius:2px;}
+.tire-cell{background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:6px 4px;text-align:center;font-size:11px;cursor:pointer;min-height:52px;}
+.tire-cell:hover{box-shadow:0 0 0 2px rgba(201,154,86,.35);}
+.tire-cell.blank{background:transparent;border:none;cursor:default;box-shadow:none;}
+.tire-cell.green{border-color:var(--green);background:var(--green-bg);}
+.tire-cell.amber{border-color:var(--amber);background:var(--amber-bg);}
+.tire-cell.red{border-color:var(--red);background:var(--red-bg);}
+.tire-cell.gray{border-color:var(--border-strong);background:#fafafa;color:var(--text-3);}
+.tire-cell.picked{outline:3px solid var(--gold);outline-offset:1px;}
+.tire-cell .pos{font-weight:700;font-size:11px;color:var(--text-2);}
+.tire-cell .who{font-size:10.5px;line-height:1.45;}
+.ts-table input,.ts-table select{width:100%;box-sizing:border-box;font-size:12px;padding:3px 4px;}
+.ts-table td,.ts-table th{padding:3px 4px;}
+  .tire-row{display:flex;justify-content:space-between;margin-bottom:14px;gap:16px;}
+  .tire-slot{
+    flex:1;background:#fff;border:1.5px solid var(--border-strong);border-radius:8px;padding:8px 6px;
+    text-align:center;font-size:11.5px;cursor:default;
+  }
+  .tire-slot.green{border-color:var(--green);background:var(--green-bg);}
+  .tire-slot.amber{border-color:var(--amber);background:var(--amber-bg);}
+  .tire-slot.red{border-color:var(--red);background:var(--red-bg);}
+  .tire-slot.gray{border-color:var(--border-strong);background:#fafafa;color:var(--text-3);}
+  .tire-slot .pos-label{font-weight:700;font-size:11px;color:var(--text-2);margin-bottom:3px;}
+  .tire-slot .tire-info{font-size:11px;line-height:1.5;}
+  @media (max-width:860px){
+    .app-shell{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;top:auto;}
+    nav{flex-direction:row;flex-wrap:wrap;}
+    nav button{flex:0 0 auto;}
+  }
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;padding:40px;}
+    .no-print{display:none !important;}
+  }
+  /* ===== 設備保養維修單（DGTT-P012-R07-01）列印版面 =====
+     容器直接掛在 <body> 底下，不放在任何分頁面板裡。
+     面板 display:none 的時候裡面的東西不會被排版，只切 visibility 蓋不掉，印出來是白紙。 */
+  #mrPrintRoot{display:none;}
+  @media print{
+    html.mr-printing body{background:#fff!important;background-image:none!important;}
+    html.mr-printing body > *{display:none!important;}
+    html.mr-printing body > #mrPrintRoot{display:block!important;visibility:visible!important;
+      position:static!important;margin:0!important;padding:0!important;background:#fff!important;}
+    html.mr-printing #mrPrintRoot *{visibility:visible!important;}
+    .mr-sheet{page-break-after:always;page-break-inside:avoid;}
+    .mr-sheet:last-child{page-break-after:auto;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+  /* 儀表板本身的 table/td 樣式會蓋進來，所以關鍵屬性一律 !important */
+  .mr-sheet{font-family:'標楷體','DFKai-SB','BiauKai',serif;color:#000;width:188mm;max-width:100%;
+            box-sizing:border-box;background:#fff;}
+  .mr-sheet .mr-head{position:relative;height:44px;}
+  .mr-sheet .mr-head img{position:absolute;left:0;top:2px;height:34px;}
+  .mr-sheet .mr-head .ttl{text-align:center;font-size:29px;font-weight:700;letter-spacing:9px;line-height:44px;}
+  .mr-sheet table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;
+                  margin:0!important;box-shadow:none!important;}
+  .mr-sheet td,.mr-sheet th{border:1px solid #000!important;padding:3px 6px!important;
+                            font-size:15px!important;line-height:1.6!important;vertical-align:middle!important;
+                            background:#fff!important;color:#000!important;letter-spacing:0!important;
+                            font-weight:400!important;white-space:normal!important;text-align:left!important;}
+  .mr-sheet td.sec{text-align:center!important;font-weight:700!important;font-size:17px!important;letter-spacing:6px!important;}
+  /* 左欄標題字略小一點，「完成公里數（時數）」才不會被擠成兩行 */
+  .mr-sheet td.lb{text-align:center!important;font-weight:700!important;
+                  font-size:14px!important;letter-spacing:-0.5px!important;}
+  /* 「完成公里數（時數）」字比較多，再小一點才不會被擠成兩行 */
+  .mr-sheet td.lbs{font-size:12.5px!important;letter-spacing:-1px!important;}
+  .mr-sheet td.lb2{text-align:center!important;font-weight:700!important;}
+  /* 撐到接近紙本一整頁：A4 直式扣掉上下邊界約 1054px */
+  .mr-sheet tr.sig td{height:80px;vertical-align:top!important;}
+  .mr-sheet .note{font-size:12px!important;line-height:1.45;}
+  .mr-sheet .fill{font-weight:700;font-size:16px;}
+  /* 金額、維修原因說明、實際保修內容這三格的字再大一級 */
+  .mr-sheet .big{font-size:18px!important;font-weight:700;}
+  .mr-sheet .wrap{min-height:46px;word-break:break-all;font-size:18px;font-weight:700;line-height:1.5;}
+  /* 執行人員：跟申請人同一個人，直接印上去，還是留位置給他簽 */
+  .mr-sheet td.sigfill{text-align:center!important;font-size:16px;font-weight:700;padding-top:12px!important;}
+  .mr-sheet .mr-tail{font-size:13px;line-height:1.7;margin-top:8px;}
+  .mr-sheet .mr-foot{text-align:right;font-size:12.5px;margin-top:2px;}
+
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;}
+  .form-grid label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--text-2);font-weight:600;}
+  .form-grid input,.form-grid select{padding:9px 10px;border:1px solid var(--border-strong);border-radius:9px;font-size:13.5px;font-family:inherit;background:#fff;}
+  th.num,td.num{text-align:right;}
+  .num{font-variant-numeric:tabular-nums;}
+</style>
+</head>
+<body>
+<div id="loginOverlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0d1b2c,#152a43);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="background:#fff;padding:34px 30px;border-radius:16px;width:340px;box-shadow:0 24px 70px rgba(0,0,0,.45);">
+    <div style="font-size:20px;font-weight:700;color:#142033;margin-bottom:4px;">順亞運通 管理系統</div>
+    <div style="font-size:12.5px;color:#8b929b;margin-bottom:20px;">請登入以存取資料</div>
+    <input id="login_email" type="email" placeholder="帳號 (Email)" autocomplete="username" style="width:100%;padding:11px;margin-bottom:11px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <input id="login_pw" type="password" placeholder="密碼" autocomplete="current-password" style="width:100%;padding:11px;margin-bottom:16px;border:1px solid #D9C4A8;border-radius:9px;box-sizing:border-box;font-size:14px;">
+    <button id="login_btn" style="width:100%;padding:12px;background:linear-gradient(120deg,#9d6d2f,#7d5624);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;">登入</button>
+    <div id="login_msg" style="margin-top:13px;font-size:12.5px;color:#B3261E;min-height:17px;text-align:center;"></div>
+  </div>
+</div>
+
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">順亞</div>
+      <div class="brand-copy">Shun Ya<br>Transportation</div>
+    </div>
+    <nav>
+      <button data-tab="entry" class="active">每日輸入</button>
+      <button data-tab="month">本月明細</button>
+      <button data-tab="export">月底匯出</button>
+    </nav>
+    <div class="sidebar-motto">
+      <strong>安全 準時 用心</strong>
+      <span>Since Establishment</span>
+    </div>
+  </div>
+  <div class="main">
+    <header class="banner">
+      <p class="hero-kicker">Shun Ya Transportation</p>
+      <h1>司機績效每日輸入</h1>
+      <div class="sub">每天輸入 ・ 工時／里程／站數自動計算 ・ 直接存進雲端 ・ 月底匯出績效檔格式給主管算薪</div>
+    </header>
+    <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
+    <div class="content">
+
+    <!-- ============ 每日輸入 ============ -->
+    <div id="entry" class="panel active">
+      <div class="card">
+        <h2>輸入一筆<span class="count-badge" id="pf_editing_badge" style="display:none;">修改中</span></h2>
+        <div class="muted" style="margin-bottom:10px;">
+          總工時、加班時數、總里程、本日站數、出勤代碼這五項<b>不用自己算</b>，填完上面的欄位下面就會跑出來，跟薪資績效系統的算法一致。
+          載運獎金這一版還是手填 —— 它在 Excel 裡沒有公式，是巨集算完直接寫進去的。
+        </div>
+        <div class="form-grid">
+          <label>日期<input id="pf_date" type="date"></label>
+          <label>姓名<select id="pf_driver"></select></label>
+          <label>出勤類別<select id="pf_attend"></select></label>
+          <label>出勤代碼<input id="pf_code" readonly style="background:var(--ivory-200);"></label>
+          <label>本日總趟次<input id="pf_trips" type="number" min="0" step="1" value="1"></label>
+          <label>區域<select id="pf_region"></select></label>
+          <label>車隊分類<select id="pf_group"></select></label>
+          <label>車號<select id="pf_plate"></select></label>
+          <label>載運類別<select id="pf_carry"></select></label>
+          <label>開始作業<input id="pf_start" type="time"></label>
+          <label>結束作業<input id="pf_end" type="time"></label>
+          <label style="align-self:end;"><span style="display:flex;align-items:center;gap:6px;padding:9px 0;">
+            <input id="pf_overnight" type="checkbox" style="width:auto;"> 結束時間是隔天（跨日）</span></label>
+          <label>路碼錶 去程<input id="pf_odo_out" type="number" step="1" placeholder="選車號會自動帶上次的回程"></label>
+          <label>路碼錶 回程<input id="pf_odo_in" type="number" step="1"></label>
+          <label>待工 (hr)<input id="pf_wait" type="number" step="0.1"></label>
+          <label>載運獎金<input id="pf_bonus" type="number" step="1"></label>
+          <label>特支費<input id="pf_special" type="number" step="1"></label>
+          <label>春節(颱風)出勤補助<input id="pf_extra" type="number" step="1"></label>
+          <label>第一提貨點<input id="pf_first" list="pfPointList" autocomplete="off"></label>
+          <label>最後回貨點<input id="pf_last" list="pfPointList" autocomplete="off"></label>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="display:block;">行程點（<b>一行一站</b>，最多 27 站；本日站數就是這裡的行數）
+            <textarea id="pf_stops" rows="6" placeholder="晶呈一&#10;晶呈二&#10;帆宣&#10;銅鑼美光"
+                      style="width:100%;padding:9px;border:1px solid var(--border-strong);border-radius:9px;font-family:inherit;font-size:13.5px;"></textarea>
+          </label>
+          <datalist id="pfPointList"></datalist>
+        </div>
+        <div style="margin-top:10px;">
+          <label style="display:block;">備註<input id="pf_notes" style="width:100%;"></label>
+        </div>
+
+        <div class="stat-row" id="pf_calc" style="margin-top:16px;"></div>
+        <div id="pf_warn" class="muted" style="margin:6px 0 12px;"></div>
+
+        <div class="toolbar">
+          <button class="btn" id="pf_save">存入雲端</button>
+          <button class="btn ghost" id="pf_saveNext">存檔並繼續輸入下一位</button>
+          <button class="btn ghost" id="pf_clear">清空表單</button>
+          <span class="muted" id="pf_msg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>這一天已經輸入的<span class="count-badge" id="pf_day_count">0</span></h2>
+        <div class="muted" style="margin-bottom:10px;">上面「日期」那一格選哪天，這裡就列哪天。點姓名可以叫回來修改。</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>姓名</th><th>車號</th><th>出勤類別</th><th>趟次</th><th>開始</th><th>結束</th>
+            <th class="num">工時</th><th class="num">加班</th><th class="num">里程</th><th class="num">站數</th>
+            <th class="num">載運獎金</th><th></th></tr></thead>
+            <tbody id="pfDayBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 本月明細 ============ -->
+    <div id="month" class="panel">
+      <div class="stat-row" id="pfMonthStat"></div>
+      <div class="card">
+        <h2>本月明細<span class="count-badge" id="pf_month_count">0</span></h2>
+        <div class="toolbar">
+          <label class="muted">月份 <input id="pf_month" type="month"></label>
+          <input id="pf_search" placeholder="搜尋姓名／車號／載運類別／行程點" style="min-width:240px;">
+          <select id="pf_driver_filter"><option value="all">全部司機</option></select>
+          <select id="pf_region_filter"><option value="all">全部區域</option></select>
+          <button class="btn ghost" id="pf_reload">重新載入</button>
+        </div>
+        <div class="table-scroll" style="max-height:560px;">
+          <table><thead><tr><th>日期</th><th>姓名</th><th>車號</th><th>區域</th><th>載運類別</th>
+            <th>出勤</th><th class="num">趟次</th><th class="num">工時</th><th class="num">加班</th>
+            <th class="num">里程</th><th class="num">站數</th><th class="num">載運獎金</th><th>行程點</th><th></th></tr></thead>
+            <tbody id="pfMonthBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 月底匯出 ============ -->
+    <div id="export" class="panel">
+      <div class="card">
+        <h2>月底匯出</h2>
+        <div class="muted" style="margin-bottom:12px;">
+          「績效檔格式」匯出的是<b>跟薪資績效系統那張「績效檔」工作表一模一樣的 119 欄</b>，欄位順序完全一致，
+          主管開起來可以整片複製貼回去。沒有輸入的津貼欄位一律留空白。<br>
+          <b>績效合計</b>＝載運獎金＋特支費＋春節(颱風)出勤補助，這條規則是拿 115 年 7 月的 551 筆實際資料驗算過的，全部對得上。<br>
+          「設定」欄一律填 1、「績效分帳系統碼」留空，這兩欄原本就是巨集自己在管的。
+        </div>
+        <div class="toolbar">
+          <label class="muted">月份 <input id="pf_ex_month" type="month"></label>
+          <button class="btn" id="pf_ex_perf">匯出績效檔格式（119 欄）</button>
+          <button class="btn ghost" id="pf_ex_simple">匯出簡表（看得懂的版本）</button>
+          <span class="muted" id="pf_ex_msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>每位司機月統計</h2>
+        <div class="muted" style="margin-bottom:10px;">照上面選的月份計算，可以先跟主管的表對一下總數再匯出。</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>姓名</th><th>區域</th><th class="num">出勤天數</th><th class="num">總趟次</th>
+            <th class="num">總工時</th><th class="num">加班時數</th><th class="num">總里程</th>
+            <th class="num">總站數</th><th class="num">載運獎金</th><th class="num">績效合計</th></tr></thead>
+            <tbody id="pfSumBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+
+// ===== 登入驗證(Supabase Auth)=====
+let AUTH_TOKEN=null, REFRESH_TOKEN=null;
+function ensureLogin(){
+  return new Promise((resolve)=>{
+    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='flex';
+    async function doLogin(){
+      const email=(document.getElementById('login_email').value||'').trim();
+      const pw=document.getElementById('login_pw').value||'';
+      const msg=document.getElementById('login_msg');
+      if(!email||!pw){ msg.textContent='請輸入帳號與密碼'; return; }
+      msg.textContent='登入中…';
+      try{
+        const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+        const d=await r.json();
+        if(!r.ok||!d.access_token){ msg.textContent='登入失敗:'+((d&&(d.error_description||d.msg||d.error))||'帳號或密碼錯誤'); return; }
+        AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token;
+        setInterval(refreshToken, 30*60*1000);
+        document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshToken(); });
+        if(ov) ov.style.display='none';
+        resolve();
+      }catch(e){ msg.textContent='連線錯誤:'+e.message; }
+    }
+    const btn=document.getElementById('login_btn'); if(btn) btn.onclick=doLogin;
+    const pwEl=document.getElementById('login_pw'); if(pwEl) pwEl.onkeydown=(e)=>{ if(e.key==='Enter') doLogin(); };
+  });
+}
+async function refreshToken(){
+  if(!REFRESH_TOKEN) return false;
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:REFRESH_TOKEN})});
+    const d=await r.json();
+    if(r.ok && d && d.access_token){ AUTH_TOKEN=d.access_token; REFRESH_TOKEN=d.refresh_token||REFRESH_TOKEN; return true; }
+  }catch(e){}
+  return false;
+}
+// ===== 連線階段逾時自動處理:先試著續期,續期失敗才跳出登入框 =====
+let _reauthPromise=null;
+function _reauth(){
+  if(!_reauthPromise){
+    _reauthPromise=(async ()=>{
+      if(await refreshToken()) return true;
+      AUTH_TOKEN=null;
+      const msg=document.getElementById('login_msg');
+      if(msg) msg.textContent='連線階段已逾時,請重新登入(您未存檔的內容仍保留在畫面上)';
+      await ensureLogin();
+      return true;
+    })().finally(()=>{ _reauthPromise=null; });
+  }
+  return _reauthPromise;
+}
+// 統一帶上「目前最新」的 token;遇到 401/403 先續期再重試一次
+async function authFetch(url, options={}){
+  const build=()=>{
+    const h=Object.assign({}, options.headers||{});
+    delete h.apikey; delete h.Authorization;
+    return Object.assign({}, options, {headers: Object.assign({
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${AUTH_TOKEN||SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    }, h)});
+  };
+  let res = await fetch(url, build());
+  if(res.status===401 || res.status===403){
+    await _reauth();
+    res = await fetch(url, build());
+  }
+  return res;
+}
+
+
+// ===================== 司機績效每日輸入 =====================
+// 資料表：driver_perf_daily（SQL #139 建的）
+// 這一頁是一列一列直接寫雲端，不做整批覆蓋，也不會刪除沒送出的資料，
+// 所以不需要儀表板那一套 saveState／LOAD_FAILED 的保護。
+
+const ATTEND_CODE = {"出勤": "A", "出勤-支援開車": "A", "出勤-未上線跟車": "D", "出勤-未上線出車": "A", "休假": "N", "補上月出勤": "E", "臨時出勤 (第2趟計薪)": "E", "教育訓練": "N", "元旦出勤": "B", "春節出勤": "B", "和平紀念日出勤": "B", "清明節出勤": "B", "端午節出勤": "B", "中秋節出勤": "B", "國慶日出勤": "B", "勞動節出勤": "B", "選舉日": "B", "教師節出勤": "B", "光復節出勤": "B", "行憲紀念日出勤": "B"};
+const CARRY_TYPES = ["專業貨櫃", "亞東氫氣槽車", "亞東液態槽車", "鋼瓶/集合組", "國喬鋼瓶/集合組", "三福鋼瓶/集合組", "協明車趟", "德謙車趟", "大貨車-支援助手", "聯結車-支援助手", "大貨車-支援聯結車", "(新進)大貨車司機-跟車", "(新進)聯結車司機-跟車", "教育訓練", "教育訓練-(新進)聯結車司機", "教育訓練-(新進)大貨車司機", "實習司機", "待命(未出車)", "春節待命(未出車)"];
+const FLEET_GROUPS = ["三福鋼瓶車隊", "亞東氣態車隊", "亞東液態車隊", "其他鋼瓶車隊", "協明鋼瓶車隊", "國喬鋼瓶車隊", "貨櫃車隊"];
+const REGIONS = ["台中", "台南", "新竹"];
+// 績效檔的 119 個欄位標題，順序就是 Excel 的 A ~ DO，匯出時照這個排
+const PERF_HEAD = ["日期", "姓名", "出勤類別", "出勤代碼", "本日總趟次", "區域", "車隊分類", "開始作業", "結束作業", "總工時", "加班時數", "路碼錶去", "路碼錶回", "總里程數", "車號", "載運類別", "第一提貨點", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "最後回貨點", "CO2站數", "LOX站數", "LAR站數", "液態站數", "氣態站數", "1元支數", "5元支數", "15元支數", "20元支數", "100元支數", "200元支數", "其他支數", "拆裝支數", "瓶帽支數", "其他拆裝", "其他拆裝", "樓層支數", "≧3F支數", "搬梯支數", "其他搬運", "第1趟", "第2趟", "第3趟", "第4趟", "第5趟", "本日站數", "待工(hr)", "載運獎金", "站數津貼", "里程津貼", "待工津貼", "加班費", "卸貨津貼", "鋼瓶津貼", "拆裝津貼", "搬運津貼", "超里津貼", "臨時出車津貼", "休假出勤津貼", "休息補貼", "春節出勤津貼", "春節(補)加班費", "出勤不足補貼", "區域補貼", "專車津貼", "第2趟出車津貼", "跨區站數補貼", "超站補貼", "其他站數補貼", "站數補貼", "提貨津貼", "未下貨補貼", "槽(尾)車津貼", "支援雙人津貼", "支援其他津貼", "貨櫃補貼", "移(櫃)車津貼", "灌(充)車津貼", "吊掛補貼", "洗桶津貼", "過磅津貼", "吊組津貼", "醫療車津貼", "系統操作津貼", "併貨津貼", "盤貨津貼", "無助手補貼", "春節(颱風)出勤補助", "特支費", "績效合計", "備註", "設定", "日期&姓名", "績效分帳系統碼"];
+
+const STATE = { rows: [], employees: [], vehicles: [], lastOdo: {} };
+let EDIT_ID = null;
+let CURRENT_USER = '';
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function num(v){ const n = Number(v); return isFinite(n) ? n : 0; }
+function money(v){ const n = Math.round(num(v)); return n.toLocaleString('en-US'); }
+function todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function monthISO(){ return todayISO().slice(0,7); }
+function toROC(iso){ if(!iso) return ''; const p=String(iso).slice(0,10).split('-'); return p.length<3?'':((+p[0])-1911)+'/'+p[1]+'/'+p[2]; }
+function msg(id, t, bad){ const el=document.getElementById(id); if(!el) return; el.textContent=t||''; el.style.color = bad ? 'var(--red)' : 'var(--green)'; }
+function warn(t){ const el=document.getElementById('pf_warn'); if(el){ el.innerHTML=t||''; } }
+
+// ---------- 資料層 ----------
+async function sbGet(path){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {headers:{'Prefer':'count=exact'}});
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+async function sbInsert(table, row){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}`,
+    {method:'POST', headers:{'Prefer':'return=representation'}, body: JSON.stringify(row)});
+  if(!res.ok) throw new Error(await res.text());
+  const d = await res.json(); return Array.isArray(d) ? d[0] : d;
+}
+async function sbUpdate(table, pk, id, patch){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}?${pk}=eq.${encodeURIComponent(id)}`,
+    {method:'PATCH', headers:{'Prefer':'return=representation'}, body: JSON.stringify(patch)});
+  if(!res.ok) throw new Error(await res.text());
+  const d = await res.json(); return Array.isArray(d) ? d[0] : d;
+}
+async function sbDelete(table, pk, id){
+  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}?${pk}=eq.${encodeURIComponent(id)}`, {method:'DELETE'});
+  if(!res.ok) throw new Error(await res.text());
+}
+
+// ---------- 五項自動計算 ----------
+// 規則全部取自薪資績效系統，並拿 115/07 的 551 筆實際資料逐筆驗算過。
+
+// 總工時＝（結束 − 開始）無條件捨去到 0.1 小時。跨日就加 24 小時。
+function calcWorkHours(start, end, overnight){
+  if(!start || !end) return null;
+  const toMin = t => { const p = String(t).split(':'); return (+p[0])*60 + (+p[1] || 0); };
+  let m = toMin(end) - toMin(start);
+  if(overnight) m += 24*60;
+  if(m <= 0) return null;
+  return Math.floor((m/60) * 10) / 10;
+}
+// 加班時數＝（總工時 − 10）；不足 1 小時歸零，其餘往下取到 0.5。
+// 這一條等同薪資系統「加班設定」那張對照表，只是用算的不用查表。
+function calcOvertime(workHours){
+  if(workHours == null) return null;
+  const x = workHours - 10;
+  if(x < 1) return 0;
+  return Math.floor(x * 2) / 2;
+}
+// 本日站數＝行程點的行數（不含第一提貨點與最後回貨點）
+function stopList(text){
+  return String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+}
+
+function readForm(){
+  const g = id => (document.getElementById(id) || {}).value;
+  const stops = stopList(g('pf_stops'));
+  const wh = calcWorkHours(g('pf_start'), g('pf_end'), document.getElementById('pf_overnight').checked);
+  const odoOut = g('pf_odo_out') === '' ? null : parseInt(g('pf_odo_out'), 10);
+  const odoIn  = g('pf_odo_in')  === '' ? null : parseInt(g('pf_odo_in'), 10);
+  const emp = STATE.employees.find(e => e.name === g('pf_driver'));
+  return {
+    work_date: g('pf_date') || null,
+    driver_name: g('pf_driver') || null,
+    employee_id: emp ? emp.employee_id : null,
+    attend_type: g('pf_attend') || null,
+    attend_code: ATTEND_CODE[g('pf_attend')] || null,
+    trip_count: g('pf_trips') === '' ? null : parseInt(g('pf_trips'), 10),
+    region: g('pf_region') || null,
+    fleet_group: g('pf_group') || null,
+    start_time: g('pf_start') || null,
+    end_time: g('pf_end') || null,
+    overnight: document.getElementById('pf_overnight').checked ? 1 : 0,
+    work_hours: wh,
+    overtime_hours: calcOvertime(wh),
+    odo_out: isNaN(odoOut) ? null : odoOut,
+    odo_in: isNaN(odoIn) ? null : odoIn,
+    total_km: (odoOut != null && odoIn != null && !isNaN(odoOut) && !isNaN(odoIn)) ? (odoIn - odoOut) : null,
+    plate: g('pf_plate') || null,
+    carry_type: g('pf_carry') || null,
+    first_pickup: g('pf_first') || null,
+    stops: stops.join('、') || null,
+    last_return: g('pf_last') || null,
+    stop_count: stops.length,
+    wait_hours: g('pf_wait') === '' ? null : Number(g('pf_wait')),
+    carry_bonus: g('pf_bonus') === '' ? null : Number(g('pf_bonus')),
+    special_pay: g('pf_special') === '' ? null : Number(g('pf_special')),
+    extra_subsidy: g('pf_extra') === '' ? null : Number(g('pf_extra')),
+    notes: g('pf_notes') || null
+  };
+}
+
+function renderCalc(){
+  const r = readForm();
+  document.getElementById('pf_code').value = r.attend_code || '';
+  document.getElementById('pf_calc').innerHTML =
+    `<div class="stat-card"><div class="n">${r.work_hours == null ? '—' : r.work_hours.toFixed(1)}</div><div class="l">總工時 (hr)</div></div>
+     <div class="stat-card ${r.overtime_hours ? 'amber' : ''}"><div class="n">${r.overtime_hours == null ? '—' : r.overtime_hours.toFixed(1)}</div><div class="l">加班時數 (hr)</div></div>
+     <div class="stat-card"><div class="n">${r.total_km == null ? '—' : money(r.total_km)}</div><div class="l">總里程 (km)</div></div>
+     <div class="stat-card"><div class="n">${r.stop_count}</div><div class="l">本日站數</div></div>
+     <div class="stat-card green"><div class="n">${money(num(r.carry_bonus) + num(r.special_pay) + num(r.extra_subsidy))}</div><div class="l">績效合計</div></div>`;
+  // 明顯有問題的先擋在畫面上，不要等存檔才發現
+  const w = [];
+  if(r.start_time && r.end_time && r.work_hours == null)
+    w.push('結束作業比開始作業早。真的做到隔天的話請勾「跨日」。');
+  if(r.total_km != null && r.total_km < 0)
+    w.push('路碼錶回程比去程小，總里程會是負的，請確認是不是打反了。');
+  if(r.total_km != null && r.total_km > 2000)
+    w.push('總里程 ' + money(r.total_km) + ' km 看起來太大，請確認碼錶有沒有少打一位。');
+  if(r.work_hours != null && r.work_hours > 20)
+    w.push('總工時 ' + r.work_hours + ' 小時偏高，請確認時間有沒有填錯。');
+  if(stopList(document.getElementById('pf_stops').value).length > 27)
+    w.push('行程點超過 27 站，績效檔最多只放得下 27 站，多的匯出時會被截掉。');
+  warn(w.length ? '<span class="pill amber">請確認</span> ' + w.join('　') : '');
+}
+
+// ---------- 下拉與預設值 ----------
+function fillSelect(id, items, blank){
+  const el = document.getElementById(id); if(!el) return;
+  const keep = el.value;
+  el.innerHTML = (blank ? `<option value="">${blank}</option>` : '')
+    + items.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  if(keep && items.indexOf(keep) >= 0) el.value = keep;
+}
+function renderSelects(){
+  const drivers = STATE.employees.map(e => e.name).filter(Boolean);
+  fillSelect('pf_driver', drivers, '請選擇');
+  fillSelect('pf_attend', Object.keys(ATTEND_CODE), '');
+  fillSelect('pf_region', REGIONS, '');
+  fillSelect('pf_group', FLEET_GROUPS, '');
+  fillSelect('pf_carry', CARRY_TYPES, '');
+  fillSelect('pf_plate', STATE.vehicles.map(v => v.plate_number), '請選擇');
+  const dsel = document.getElementById('pf_driver_filter');
+  if(dsel){
+    const keep = dsel.value;
+    dsel.innerHTML = '<option value="all">全部司機</option>'
+      + drivers.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    if(keep) dsel.value = keep;
+  }
+  const rsel = document.getElementById('pf_region_filter');
+  if(rsel && rsel.options.length <= 1){
+    rsel.innerHTML = '<option value="all">全部區域</option>'
+      + REGIONS.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  }
+  // 行程點的建議清單：這個月已經打過的地點，打過一次以後就有下拉可選
+  const pts = new Set();
+  STATE.rows.forEach(r => {
+    String(r.stops || '').split('、').forEach(p => { if(p.trim()) pts.add(p.trim()); });
+    if(r.first_pickup) pts.add(r.first_pickup);
+    if(r.last_return) pts.add(r.last_return);
+  });
+  const dl = document.getElementById('pfPointList');
+  if(dl) dl.innerHTML = [...pts].sort().map(p => `<option value="${esc(p)}"></option>`).join('');
+}
+// 選了車號就把去程碼錶帶成「這台車最後一筆的回程碼錶」，少打一次也少錯一次
+function autoFillOdo(){
+  const plate = document.getElementById('pf_plate').value;
+  const el = document.getElementById('pf_odo_out');
+  if(EDIT_ID || !plate || el.value !== '') return;
+  const last = STATE.lastOdo[plate];
+  if(last != null) el.value = last;
+  renderCalc();
+}
+// 選了司機就把區域帶成他的所屬車場
+function autoFillRegion(){
+  const emp = STATE.employees.find(e => e.name === document.getElementById('pf_driver').value);
+  const el = document.getElementById('pf_region');
+  if(emp && emp.region && !el.value) el.value = emp.region;
+  renderCalc();
+}
+
+// ---------- 載入 ----------
+async function loadRefs(){
+  const [emps, vehs] = await Promise.all([
+    sbGet('employees?select=employee_id,name,region,status&status=eq.' + encodeURIComponent('在職') + '&order=employee_no.asc'),
+    sbGet('vehicles?select=vehicle_id,plate_number,status,vehicle_category&vehicle_category=eq.' + encodeURIComponent('車輛') + '&order=plate_number.asc')
+  ]);
+  STATE.employees = emps || [];
+  STATE.vehicles = (vehs || []).filter(v => v.status !== '報廢' && v.status !== '繳銷');
+}
+async function loadMonth(ym){
+  const from = ym + '-01';
+  const d = new Date(+ym.slice(0,4), +ym.slice(5,7), 0);
+  const to = ym + '-' + String(d.getDate()).padStart(2,'0');
+  STATE.rows = await sbGet('driver_perf_daily?select=*&work_date=gte.' + from + '&work_date=lte.' + to
+                           + '&order=work_date.asc,driver_name.asc,seq.asc');
+  // 每台車最後一次的回程碼錶（拿整份資料裡最新的一筆，不限這個月）
+  try{
+    const last = await sbGet('driver_perf_daily?select=plate,odo_in,work_date&odo_in=not.is.null&order=work_date.desc,perf_id.desc&limit=1000');
+    STATE.lastOdo = {};
+    (last || []).forEach(r => { if(r.plate && STATE.lastOdo[r.plate] == null) STATE.lastOdo[r.plate] = r.odo_in; });
+  }catch(e){ STATE.lastOdo = {}; }
+}
+
+// ---------- 畫面 ----------
+function rowsOfDay(iso){
+  return STATE.rows.filter(r => String(r.work_date).slice(0,10) === iso);
+}
+function renderDay(){
+  const iso = document.getElementById('pf_date').value;
+  const rows = rowsOfDay(iso);
+  document.getElementById('pf_day_count').textContent = rows.length;
+  document.getElementById('pfDayBody').innerHTML = rows.map(r => `
+    <tr>
+      <td><button class="name-link" data-edit="${r.perf_id}">${esc(r.driver_name)}</button>${r.seq > 1 ? ' <span class="pill gray">第'+r.seq+'筆</span>' : ''}</td>
+      <td>${esc(r.plate||'')}</td><td>${esc(r.attend_type||'')}</td>
+      <td class="num">${r.trip_count==null?'':r.trip_count}</td>
+      <td>${esc(r.start_time||'')}</td><td>${esc(r.end_time||'')}${r.overnight?'<span class="pill amber">跨日</span>':''}</td>
+      <td class="num">${r.work_hours==null?'':Number(r.work_hours).toFixed(1)}</td>
+      <td class="num">${r.overtime_hours?Number(r.overtime_hours).toFixed(1):''}</td>
+      <td class="num">${r.total_km==null?'':money(r.total_km)}</td>
+      <td class="num">${r.stop_count==null?'':r.stop_count}</td>
+      <td class="num">${r.carry_bonus==null?'':money(r.carry_bonus)}</td>
+      <td><button class="del-btn" data-del="${r.perf_id}">刪除</button></td>
+    </tr>`).join('') || '<tr><td colspan="12" class="empty">這一天還沒有輸入任何一筆</td></tr>';
+}
+function monthRows(){
+  const q = (document.getElementById('pf_search').value || '').trim();
+  const dF = document.getElementById('pf_driver_filter').value;
+  const rF = document.getElementById('pf_region_filter').value;
+  return STATE.rows.filter(r => {
+    if(dF !== 'all' && r.driver_name !== dF) return false;
+    if(rF !== 'all' && r.region !== rF) return false;
+    if(q && [r.driver_name, r.plate, r.carry_type, r.stops, r.first_pickup, r.last_return, r.notes]
+             .map(x => String(x==null?'':x)).join(' ').indexOf(q) < 0) return false;
+    return true;
+  });
+}
+function renderMonth(){
+  const rows = monthRows();
+  document.getElementById('pf_month_count').textContent = rows.length;
+  const sum = (f) => rows.reduce((s, r) => s + num(r[f]), 0);
+  const days = new Set(rows.map(r => String(r.work_date).slice(0,10))).size;
+  document.getElementById('pfMonthStat').innerHTML =
+    `<div class="stat-card"><div class="n">${rows.length}</div><div class="l">筆數（有幾天：${days}）</div></div>
+     <div class="stat-card"><div class="n">${sum('work_hours').toFixed(1)}</div><div class="l">總工時 (hr)</div></div>
+     <div class="stat-card amber"><div class="n">${sum('overtime_hours').toFixed(1)}</div><div class="l">加班時數 (hr)</div></div>
+     <div class="stat-card"><div class="n">${money(sum('total_km'))}</div><div class="l">總里程 (km)</div></div>
+     <div class="stat-card"><div class="n">${sum('stop_count')}</div><div class="l">總站數</div></div>
+     <div class="stat-card green"><div class="n">${money(sum('carry_bonus')+sum('special_pay')+sum('extra_subsidy'))}</div><div class="l">績效合計</div></div>`;
+  document.getElementById('pfMonthBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(toROC(r.work_date))}</td>
+      <td><button class="name-link" data-edit="${r.perf_id}">${esc(r.driver_name)}</button></td>
+      <td>${esc(r.plate||'')}</td><td>${esc(r.region||'')}</td><td>${esc(r.carry_type||'')}</td>
+      <td>${esc(r.attend_type||'')}</td>
+      <td class="num">${r.trip_count==null?'':r.trip_count}</td>
+      <td class="num">${r.work_hours==null?'':Number(r.work_hours).toFixed(1)}</td>
+      <td class="num">${r.overtime_hours?Number(r.overtime_hours).toFixed(1):''}</td>
+      <td class="num">${r.total_km==null?'':money(r.total_km)}</td>
+      <td class="num">${r.stop_count==null?'':r.stop_count}</td>
+      <td class="num">${r.carry_bonus==null?'':money(r.carry_bonus)}</td>
+      <td class="muted" style="max-width:280px;">${esc(r.stops||'')}</td>
+      <td><button class="del-btn" data-del="${r.perf_id}">刪除</button></td>
+    </tr>`).join('') || '<tr><td colspan="14" class="empty">這個月還沒有資料</td></tr>';
+  renderSummary();
+}
+function renderSummary(){
+  const by = new Map();
+  STATE.rows.forEach(r => {
+    const k = r.driver_name || '（未填姓名）';
+    if(!by.has(k)) by.set(k, {name:k, region:r.region||'', days:new Set(), trips:0, wh:0, ot:0, km:0, st:0, bonus:0, total:0});
+    const o = by.get(k);
+    o.days.add(String(r.work_date).slice(0,10));
+    o.trips += num(r.trip_count); o.wh += num(r.work_hours); o.ot += num(r.overtime_hours);
+    o.km += num(r.total_km); o.st += num(r.stop_count); o.bonus += num(r.carry_bonus);
+    o.total += num(r.carry_bonus) + num(r.special_pay) + num(r.extra_subsidy);
+  });
+  const rows = [...by.values()].sort((a,b) => a.name.localeCompare(b.name));
+  const el = document.getElementById('pfSumBody');
+  if(el) el.innerHTML = rows.map(o => `
+    <tr><td>${esc(o.name)}</td><td>${esc(o.region)}</td>
+      <td class="num">${o.days.size}</td><td class="num">${o.trips}</td>
+      <td class="num">${o.wh.toFixed(1)}</td><td class="num">${o.ot.toFixed(1)}</td>
+      <td class="num">${money(o.km)}</td><td class="num">${o.st}</td>
+      <td class="num">${money(o.bonus)}</td><td class="num"><strong>${money(o.total)}</strong></td></tr>`).join('')
+    || '<tr><td colspan="10" class="empty">這個月還沒有資料</td></tr>';
+}
+function renderAll(){ renderSelects(); renderDay(); renderMonth(); }
+
+// ---------- 存檔 ----------
+function fillForm(r){
+  const s = (id, v) => { const el = document.getElementById(id); if(el) el.value = (v == null ? '' : v); };
+  s('pf_date', String(r.work_date).slice(0,10)); s('pf_driver', r.driver_name);
+  s('pf_attend', r.attend_type); s('pf_trips', r.trip_count); s('pf_region', r.region);
+  s('pf_group', r.fleet_group); s('pf_plate', r.plate); s('pf_carry', r.carry_type);
+  s('pf_start', r.start_time); s('pf_end', r.end_time);
+  document.getElementById('pf_overnight').checked = !!r.overnight;
+  s('pf_odo_out', r.odo_out); s('pf_odo_in', r.odo_in);
+  s('pf_wait', r.wait_hours); s('pf_bonus', r.carry_bonus);
+  s('pf_special', r.special_pay); s('pf_extra', r.extra_subsidy);
+  s('pf_first', r.first_pickup); s('pf_last', r.last_return); s('pf_notes', r.notes);
+  document.getElementById('pf_stops').value = String(r.stops || '').split('、').filter(Boolean).join('\n');
+  EDIT_ID = r.perf_id;
+  document.getElementById('pf_editing_badge').style.display = '';
+  document.getElementById('pf_editing_badge').textContent = '修改中：' + toROC(r.work_date) + ' ' + r.driver_name;
+  renderCalc();
+  document.querySelector('[data-tab="entry"]').click();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function clearForm(keepDate){
+  const d = document.getElementById('pf_date').value;
+  ['pf_driver','pf_start','pf_end','pf_odo_out','pf_odo_in','pf_wait','pf_bonus','pf_special',
+   'pf_extra','pf_first','pf_last','pf_notes','pf_stops'].forEach(id => {
+     const el = document.getElementById(id); if(el) el.value = '';
+   });
+  document.getElementById('pf_overnight').checked = false;
+  document.getElementById('pf_trips').value = 1;
+  if(keepDate) document.getElementById('pf_date').value = d;
+  EDIT_ID = null;
+  document.getElementById('pf_editing_badge').style.display = 'none';
+  renderCalc();
+}
+async function doSave(andNext){
+  const r = readForm();
+  if(!r.work_date){ msg('pf_msg', '請選日期', true); return; }
+  if(!r.driver_name){ msg('pf_msg', '請選姓名', true); return; }
+  if(!r.attend_type){ msg('pf_msg', '請選出勤類別', true); return; }
+  // 休假、教育訓練這種沒出車的不強制要車號；有出車的一定要有車號
+  const mustDrive = ['A','B','E'].indexOf(r.attend_code) >= 0;
+  if(mustDrive && !r.plate){ msg('pf_msg', '這個出勤類別要填車號', true); return; }
+  if(r.total_km != null && r.total_km < 0 &&
+     !confirm('總里程是負的（' + r.total_km + ' km），路碼錶去回是不是打反了？\n\n還是要照這樣存嗎？')) return;
+
+  const btn = document.getElementById('pf_save');
+  btn.disabled = true; msg('pf_msg', '存檔中…');
+  try{
+    if(EDIT_ID){
+      const saved = await sbUpdate('driver_perf_daily', 'perf_id', EDIT_ID, r);
+      const at = STATE.rows.findIndex(x => String(x.perf_id) === String(EDIT_ID));
+      if(at >= 0) STATE.rows[at] = saved; else STATE.rows.push(saved);
+      msg('pf_msg', '已更新 ' + toROC(r.work_date) + ' ' + r.driver_name);
+    }else{
+      // 同一人同一天可以有第二筆（臨時出勤第2趟），用序號區分
+      const same = rowsOfDay(r.work_date).filter(x => x.driver_name === r.driver_name);
+      if(same.length && !confirm(r.driver_name + ' 在 ' + toROC(r.work_date) + ' 已經有 ' + same.length
+          + ' 筆了。\n\n要再新增一筆嗎？（臨時出勤第2趟計薪才需要，按取消就不存）')) {
+        btn.disabled = false; msg('pf_msg', '已取消，沒有存檔'); return;
+      }
+      r.seq = same.length + 1;
+      r.created_by = CURRENT_USER || null;
+      const saved = await sbInsert('driver_perf_daily', r);
+      STATE.rows.push(saved);
+      msg('pf_msg', '已存入雲端：' + toROC(r.work_date) + ' ' + r.driver_name
+                  + '（工時 ' + (r.work_hours==null?'—':r.work_hours) + '、里程 '
+                  + (r.total_km==null?'—':r.total_km) + '、站數 ' + r.stop_count + '）');
+    }
+    STATE.rows.sort((a,b) => String(a.work_date).localeCompare(String(b.work_date))
+                            || String(a.driver_name).localeCompare(String(b.driver_name))
+                            || num(a.seq) - num(b.seq));
+    if(r.plate && r.odo_in != null) STATE.lastOdo[r.plate] = r.odo_in;
+    clearForm(true);
+    renderAll();
+  }catch(e){
+    msg('pf_msg', '存檔失敗：' + (e && e.message ? e.message : e), true);
+    alert('沒有存進雲端，畫面上的內容都還在，請排除問題後再按一次。\n\n錯誤訊息：' + (e && e.message ? e.message : e));
+  }finally{ btn.disabled = false; }
+}
+
+// ---------- 匯出 ----------
+function csvLines(head, rows){
+  const out = [head.map(h => '"' + String(h==null?'':h).replace(/"/g,'""') + '"').join(',')];
+  rows.forEach(r => out.push(r.map(x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"').join(',')));
+  return out.join('\r\n');
+}
+function download(name, text){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + text], {type:'text/csv;charset=utf-8'}));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+// Excel 的日期序號（1899-12-30 當作第 0 天），績效檔的「日期&姓名」那一欄要用
+function excelSerial(iso){
+  const d = new Date(String(iso).slice(0,10) + 'T00:00:00Z');
+  return Math.round((d.getTime() - Date.UTC(1899,11,30)) / 86400000);
+}
+// 匯出成績效檔那 119 欄的格式，欄位順序完全照 Excel 的 A ~ DO。
+// 沒有輸入的津貼欄位一律留空白，主管貼回去之後照原本的方式處理。
+function exportPerf(){
+  const ym = document.getElementById('pf_ex_month').value || monthISO();
+  const rows = STATE.rows.filter(r => String(r.work_date).slice(0,7) === ym);
+  if(!rows.length){ msg('pf_ex_msg', ym + ' 沒有資料可以匯出', true); return; }
+  const IDX = {};                      // 欄位名稱 → 第幾欄（0 起算）
+  PERF_HEAD.forEach((h, i) => { if(h && IDX[h] == null) IDX[h] = i; });
+  const body = rows.map(r => {
+    const a = new Array(PERF_HEAD.length).fill('');
+    const put = (i, v) => { if(i != null && i >= 0) a[i] = (v == null ? '' : v); };
+    put(0,  String(r.work_date).slice(0,10).replace(/-/g,'/'));   // A 日期
+    put(1,  r.driver_name);                                       // B 姓名
+    put(2,  r.attend_type);                                       // C 出勤類別
+    put(3,  r.attend_code);                                       // D 出勤代碼
+    put(4,  r.trip_count);                                        // E 本日總趟次
+    put(5,  r.region);                                            // F 區域
+    put(6,  r.fleet_group);                                       // G 車隊分類
+    put(7,  r.start_time);                                        // H 開始作業
+    put(8,  r.end_time);                                          // I 結束作業
+    put(9,  r.work_hours);                                        // J 總工時
+    put(10, r.overtime_hours);                                    // K 加班時數
+    put(11, r.odo_out);                                           // L 路碼錶去
+    put(12, r.odo_in);                                            // M 路碼錶回
+    put(13, r.total_km);                                          // N 總里程數
+    put(14, r.plate);                                             // O 車號
+    put(15, r.carry_type);                                        // P 載運類別
+    put(16, r.first_pickup);                                      // Q 第一提貨點
+    const stops = String(r.stops || '').split('、').filter(Boolean);
+    for(let i = 0; i < 27; i++) put(17 + i, stops[i] || '');       // R~AR 行程點 1~27
+    put(44, r.last_return);                                       // AS 最後回貨點
+    put(IDX['本日站數'], r.stop_count);
+    put(IDX['待工(hr)'], r.wait_hours);
+    put(IDX['載運獎金'], r.carry_bonus);
+    put(IDX['春節(颱風)出勤補助'], r.extra_subsidy);
+    put(IDX['特支費'], r.special_pay);
+    put(IDX['績效合計'], num(r.carry_bonus) + num(r.special_pay) + num(r.extra_subsidy));
+    put(IDX['備註'], r.notes);
+    put(IDX['設定'], 1);
+    put(IDX['日期&姓名'], excelSerial(r.work_date) + String(r.driver_name || ''));
+    return a;
+  });
+  download('績效檔_' + ym.replace('-','') + '_' + rows.length + '筆.csv', csvLines(PERF_HEAD, body));
+  msg('pf_ex_msg', '已匯出 ' + rows.length + ' 筆（' + ym + '）');
+}
+function exportSimple(){
+  const ym = document.getElementById('pf_ex_month').value || monthISO();
+  const rows = STATE.rows.filter(r => String(r.work_date).slice(0,7) === ym);
+  if(!rows.length){ msg('pf_ex_msg', ym + ' 沒有資料可以匯出', true); return; }
+  const head = ['日期','日期(民國)','姓名','出勤類別','出勤代碼','趟次','區域','車隊分類','車號','載運類別',
+                '開始作業','結束作業','跨日','總工時','加班時數','路碼錶去','路碼錶回','總里程',
+                '第一提貨點','行程點','最後回貨點','本日站數','待工(hr)','載運獎金','特支費',
+                '春節(颱風)出勤補助','績效合計','備註'];
+  const body = rows.map(r => [
+    String(r.work_date).slice(0,10), toROC(r.work_date), r.driver_name, r.attend_type, r.attend_code,
+    r.trip_count, r.region, r.fleet_group, r.plate, r.carry_type,
+    r.start_time, r.end_time, r.overnight ? '跨日' : '', r.work_hours, r.overtime_hours,
+    r.odo_out, r.odo_in, r.total_km, r.first_pickup, r.stops, r.last_return, r.stop_count,
+    r.wait_hours, r.carry_bonus, r.special_pay, r.extra_subsidy,
+    num(r.carry_bonus) + num(r.special_pay) + num(r.extra_subsidy), r.notes]);
+  download('司機績效簡表_' + ym.replace('-','') + '.csv', csvLines(head, body));
+  msg('pf_ex_msg', '已匯出簡表 ' + rows.length + ' 筆');
+}
+
+// ---------- 啟動 ----------
+async function init(){
+  await ensureLogin();
+  document.getElementById('pf_date').value = todayISO();
+  document.getElementById('pf_month').value = monthISO();
+  document.getElementById('pf_ex_month').value = monthISO();
+  try{
+    await loadRefs();
+    await loadMonth(monthISO());
+  }catch(e){
+    const w = document.getElementById('storageWarning');
+    w.style.display = 'block';
+    w.textContent = '⚠️ 讀不到雲端資料：' + (e && e.message ? e.message : e)
+                  + '　（driver_perf_daily 這張表可能還沒建立，請先執行 SQL #139）';
+  }
+  renderAll();
+  renderCalc();
+}
+
+document.querySelectorAll('.sidebar nav button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar nav button').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.getAttribute('data-tab')).classList.add('active');
+  });
+});
+['pf_start','pf_end','pf_odo_out','pf_odo_in','pf_stops','pf_attend','pf_bonus','pf_special','pf_extra']
+  .forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderCalc); });
+document.getElementById('pf_overnight').addEventListener('change', renderCalc);
+document.getElementById('pf_plate').addEventListener('change', autoFillOdo);
+document.getElementById('pf_driver').addEventListener('change', autoFillRegion);
+document.getElementById('pf_date').addEventListener('change', renderDay);
+document.getElementById('pf_save').addEventListener('click', () => doSave(false));
+document.getElementById('pf_saveNext').addEventListener('click', () => doSave(true));
+document.getElementById('pf_clear').addEventListener('click', () => { clearForm(true); msg('pf_msg',''); });
+document.getElementById('pf_ex_perf').addEventListener('click', exportPerf);
+document.getElementById('pf_ex_simple').addEventListener('click', exportSimple);
+['pf_search','pf_driver_filter','pf_region_filter'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', renderMonth);
+  if(el) el.addEventListener('change', renderMonth);
+});
+document.getElementById('pf_month').addEventListener('change', async (e) => {
+  try{ await loadMonth(e.target.value); renderAll(); }
+  catch(err){ alert('載入失敗：' + (err && err.message ? err.message : err)); }
+});
+document.getElementById('pf_reload').addEventListener('click', async () => {
+  try{ await loadMonth(document.getElementById('pf_month').value); renderAll(); }
+  catch(err){ alert('載入失敗：' + (err && err.message ? err.message : err)); }
+});
+[['pfDayBody'],['pfMonthBody']].forEach(([id]) => {
+  document.getElementById(id).addEventListener('click', async (e) => {
+    const ed = e.target.getAttribute('data-edit');
+    if(ed){ const r = STATE.rows.find(x => String(x.perf_id) === String(ed)); if(r) fillForm(r); return; }
+    const dl = e.target.getAttribute('data-del');
+    if(dl){
+      const r = STATE.rows.find(x => String(x.perf_id) === String(dl));
+      if(!r) return;
+      if(!confirm('確定要刪除這一筆嗎？\n\n' + toROC(r.work_date) + '　' + r.driver_name + '　' + (r.plate||''))) return;
+      try{
+        await sbDelete('driver_perf_daily', 'perf_id', dl);
+        STATE.rows = STATE.rows.filter(x => String(x.perf_id) !== String(dl));
+        if(String(EDIT_ID) === String(dl)) clearForm(true);
+        renderAll();
+      }catch(err){ alert('刪除失敗：' + (err && err.message ? err.message : err)); }
+    }
+  });
+});
+init();
+
+</script>
+</body>
+</html>
