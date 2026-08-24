@@ -664,7 +664,7 @@
 
     <div class="card">
       <h2>車輛證件效期<span class="count-badge" id="vd_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">驗車、行照、行車記錄器、自主管理標章、汽車強制卡、保稅車檢驗都在這裡登錄與查詢。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
+      <div class="muted" style="margin-bottom:10px;">驗車、行照、行車記錄器、自主管理標章、汽車強制卡、保稅車檢驗都在這裡登錄與查詢。<b>「汽車強制卡」不用在這裡手動改</b>——到「車輛管理 → 保險」登錄強制險時，這邊的到期日會自動跟著更新（沒有的話會自動建一筆）。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
       <div class="form-grid">
         <label>車號
           <select id="vd_plate"></select>
@@ -3714,8 +3714,8 @@ async function saveState(key, value, shared){
 }
 
 async function loadState(){
-  // ★ 這 47 份雲端資料彼此獨立，所以【全部一起發出去】，最後再一次收回來。
-  //   以前是一支一支 await，等於 47 趟網路來回排隊跑，光是等待就要好幾秒。
+  // ★ 這些雲端資料彼此獨立，所以【全部一起發出去】，最後再一次收回來。
+  //   以前是一支一支 await，等於幾十趟網路來回排隊跑，光是等待就要好幾秒。
   //   現在總時間只等於最慢的那一兩支。
   //   收回結果的動作刻意排在 loadOrgRefs() 之前 —— 它會讀 STATE.employees 當退路，
   //   排在後面的話那份退路會拿到空陣列。
@@ -6620,6 +6620,48 @@ function renderViTable(){
 // 有獨立的輸入視窗，其餘證件沒有任何地方可以新增或改到期日。這一區把入口補上。
 // 滅火器／濾毒罐刻意不放進來，同一台車可能掛好幾支，仍走車輛清單那兩顆按鈕。
 const VD_TYPES = ['驗車','行照','行車記錄器','自主管理標章','汽車強制卡','保稅車檢驗'];
+
+// 強制險 →「汽車強制卡」：這兩個講的是同一件事，只是分別存在
+// vehicle_insurance 與 vehicle_documents 兩張表。以前各記各的，
+// 保險續約了卡沒跟著改，證件清單就會一直誤報「快到期」。
+// 現在保險存完就把卡帶過去，只維護保險那一邊即可。
+//   ‧ 只有保險種類含「強制」而且有填到期日才動，任意險、貨物險完全不碰。
+//   ‧ 日期本來就一樣就什麼都不做，不會白寫一次雲端。
+//   ‧ 證件那邊還沒有這一筆就建一筆（證號與發證日留空，之後再補）。
+//   ‧ 刻意不做反向連動：保險是主檔，雙向同步會變成兩邊互相覆蓋。
+async function vdSyncCompulsory(vehicleId, insType, expiry){
+  if(!vehicleId || !expiry) return;
+  if(String(insType || '').indexOf('強制') < 0) return;
+  const e = String(expiry).slice(0, 10);
+  const v = STATE.vehicles.find(x => x.id === vehicleId);
+  const plate = v ? v.plate : '';
+  const rows = (STATE.vehicleDocuments || [])
+    .filter(x => x.vehicle_id === vehicleId && x.doc_type === '汽車強制卡')
+    .sort((a, b) => String(b.expiry_date || '').localeCompare(String(a.expiry_date || '')));
+  let msg = '';
+  if(rows.length){
+    if(String(rows[0].expiry_date || '').slice(0, 10) === e) return;   // 已經一樣
+    const old = rows[0].expiry_date || '未設定';
+    rows[0].expiry_date = e;
+    msg = plate + ' 的「汽車強制卡」到期日已一併更新：' + old + ' → ' + e + '。';
+  }else{
+    STATE.vehicleDocuments.push({
+      id: nextId(STATE.vehicleDocuments), vehicle_id: vehicleId, doc_type: '汽車強制卡',
+      doc_number: null, issue_date: null, expiry_date: e, file_path: null
+    });
+    msg = plate + ' 在「車輛證件效期」原本沒有汽車強制卡，已依這張強制險新建一筆，到期日 ' + e
+        + '。\n（證號與發證日留空，之後可以到證件效期那邊補。）';
+  }
+  try{
+    await saveState('vehicle_documents', STATE.vehicleDocuments, true);
+    alert(msg);
+  }catch(err){
+    // 保險那一筆已經存進去了，不回滾；只請人手動補證件那一邊
+    alert('強制險已經存檔了，但「汽車強制卡」的到期日沒有同步成功。\n\n'
+        + '請到「車輛證件效期」手動把 ' + plate + ' 的汽車強制卡改成 ' + e + '。\n\n'
+        + '錯誤訊息：' + (err && err.message ? err.message : err));
+  }
+}
 
 function vdSelectableVehicles(){
   return STATE.vehicles.filter(v => !isRetiredVehicle(v))
@@ -12826,6 +12868,8 @@ document.getElementById('vi_add').addEventListener('click', async () => {
     notes: ''
   });
   await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
+  // 強制險存好之後，把證件效期那張「汽車強制卡」的到期日一起帶過去
+  await vdSyncCompulsory(plateToVehicleId(plate), document.getElementById('vi_type').value, expiry || null);
   ['vi_expiry','vi_scope'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
