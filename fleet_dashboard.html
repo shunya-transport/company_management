@@ -652,6 +652,9 @@
           <option value="在役">在役</option>
           <option value="停用">停用</option>
         </select>
+        <select id="trailer_size_filter"><option value="all">全部尺寸</option></select>
+        <button type="button" class="btn ghost" id="trailer_export"
+                title="匯出目前所有板架，不受左邊的搜尋與篩選影響">匯出全部板架</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -659,7 +662,7 @@
           <tbody id="trailerTableBody"></tbody>
         </table>
       </div>
-      <div class="muted" style="margin-top:8px;">板架的出租/自用狀況、位置請到「板架管理」分頁查看。</div>
+      <div class="muted" style="margin-top:8px;">板架的出租/自用狀況、位置請到「板架管理」分頁查看。尺寸可以用上面的下拉篩選，選「未填」就會只列出還沒填尺寸的。「匯出全部板架」不受搜尋與篩選影響，一律匯出全部，並會一併帶出滅火器支數、出租狀況、承租方與驗車到期日。</div>
     </div>
 
     <div class="card">
@@ -5669,6 +5672,59 @@ function closeVehicleModal(){ document.getElementById('vehicleModal').classList.
 // 資料庫本來沒有這個欄位（SQL #79 才加的），所以建議清單以「已經填過的值」為主，
 // 再補幾個常見寫法當起手式。這只是輸入建議，想怎麼寫就怎麼寫，不受清單限制。
 const TRAILER_SIZE_HINTS = ['22呎', '40呎', '20呎'];
+// 板架清單的「目前還在清單上」的那一批（已報廢／待賣出的不算）。
+// 篩選、下拉選項、匯出三個地方都用同一份，才不會各算各的。
+function trailerPool(){
+  return (STATE.vehicles || []).filter(v =>
+    v.vehicle_category === '板架' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v));
+}
+// 尺寸下拉的選項照清單裡真的有的值產生，另外固定給一個「未填」。
+// 每次重畫都重建，尺寸改了選單會自己跟著變；使用者選到一半的值會保留。
+function trailerRefreshSizeFilter(pool){
+  const el = document.getElementById('trailer_size_filter');
+  if(!el) return;
+  const keep = el.value;
+  const sizes = [...new Set(pool.map(v => String(v.trailer_size || '').trim()).filter(Boolean))]
+                  .sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0) || a.localeCompare(b));
+  const blank = pool.filter(v => !String(v.trailer_size || '').trim()).length;
+  el.innerHTML = '<option value="all">全部尺寸</option>'
+    + sizes.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('')
+    + (blank ? `<option value="__blank__">未填（${blank} 台）</option>` : '');
+  el.value = (keep === '__blank__' && blank) || sizes.indexOf(keep) >= 0 ? keep : 'all';
+}
+function trailerSizeMatch(v, f){
+  if(f === 'all') return true;
+  const s = String(v.trailer_size || '').trim();
+  return f === '__blank__' ? !s : s === f;
+}
+// 匯出全部板架。刻意不看上面的搜尋與篩選 —— 按鈕寫「全部」就該是全部。
+// 除了畫面上那幾欄，順便把要跨分頁才查得到的東西一起帶出來。
+function trailerExportCsv(){
+  const rows = trailerPool().slice()
+    .sort((a, b) => String(a.plate || '').localeCompare(String(b.plate || '')));
+  if(!rows.length){ alert('目前沒有板架資料可以匯出。'); return; }
+  const head = ['車號','車型','尺寸','公司別','發車地','狀態','滅火器支數',
+                '出租/自用','承租方','驗車到期日','驗車到期日(民國)','備註'];
+  const body = rows.map(v => {
+    const ext = (STATE.vehicleDocuments || [])
+      .filter(x => x.vehicle_id === v.id && x.doc_type === '滅火器').length;
+    const lease = (STATE.leases || []).find(l => l.plate === v.plate && l.status !== '已歸還') || null;
+    const insp = (STATE.vehicleDocuments || [])
+      .filter(x => x.vehicle_id === v.id && x.doc_type === '驗車')
+      .sort((a, b) => String(b.expiry_date || '').localeCompare(String(a.expiry_date || '')))[0];
+    const exp = insp ? String(insp.expiry_date || '').slice(0, 10) : '';
+    return [v.plate || '', v.vehicle_type || '', v.trailer_size || '',
+            v.company_name || '', v.base_location || '', v.status || '', ext,
+            lease ? (lease.dispatch_mode || '') : '', lease ? (lease.lessee_name || '') : '',
+            exp, exp ? toROCDate(exp) : '', v.notes || ''];
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csvLines(head, body)],
+                                        {type:'text/csv;charset=utf-8'}));
+  a.download = '板架清單_全部' + rows.length + '台_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
 function refreshTrailerSizeList(){
   const dl = document.getElementById('trailerSizeList');
   if(!dl) return;
@@ -6777,8 +6833,12 @@ function renderFleetTable(){
   refreshTrailerSizeList();
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
   const trailerQ = document.getElementById('trailer_search').value.trim();
-  const trailerRows = STATE.vehicles.filter(v =>
-    v.vehicle_category==='板架' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v) && (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
+  const _tPool = trailerPool();
+  trailerRefreshSizeFilter(_tPool);
+  const _tSizeF = ((document.getElementById('trailer_size_filter') || {}).value) || 'all';
+  const trailerRows = _tPool.filter(v =>
+    (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
+    trailerSizeMatch(v, _tSizeF) &&
     (!trailerQ || (v.plate||'').includes(trailerQ) || (v.company_name||'').includes(trailerQ) || (v.base_location||'').includes(trailerQ))
   );
   document.getElementById('fleet_trailer_count').textContent = `共 ${trailerRows.length} 台`;
@@ -12777,6 +12837,12 @@ document.getElementById('trailerTableBody').addEventListener('change', (e) => {
   if(e.target && e.target.classList && e.target.classList.contains('tsz-in')) saveTrailerSizeInline(e.target);
 });
 document.getElementById('trailer_search').addEventListener('input', renderFleetTable);
+{
+  const _tsf = document.getElementById('trailer_size_filter');
+  if(_tsf) _tsf.addEventListener('change', renderFleetTable);
+  const _tex = document.getElementById('trailer_export');
+  if(_tex) _tex.addEventListener('click', trailerExportCsv);
+}
 {
   const _rsa = document.getElementById('fleet_retired_show_all');
   if(_rsa) _rsa.addEventListener('change', renderFleetTable);
