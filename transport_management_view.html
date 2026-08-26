@@ -657,7 +657,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>廠牌</th><th>車型</th><th>噸數</th><th>公司別</th><th>發車地</th><th>狀態</th><th>車用物品</th><th>滅火器</th><th>濾毒罐</th><th>醫藥箱</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>廠牌</th><th>車型</th><th>噸數</th><th>公司別</th><th>發車地</th><th>狀態</th><th style="text-align:right;">目前里程</th><th>車用物品</th><th>滅火器</th><th>濾毒罐</th><th>醫藥箱</th><th></th></tr></thead>
           <tbody id="fleetTableBody"></tbody>
         </table>
       </div>
@@ -682,7 +682,7 @@
           <tbody id="trailerTableBody"></tbody>
         </table>
       </div>
-      <div class="muted" style="margin-top:8px;">板架的出租/自用狀況、位置請到「板架管理」分頁查看。尺寸可以用上面的下拉篩選，選「未填」就會只列出還沒填尺寸的。「匯出全部板架」不受搜尋與篩選影響，一律匯出全部，並會一併帶出滅火器支數、出租狀況、承租方與驗車到期日。</div>
+      <div class="muted" style="margin-top:8px;">車輛清單的「目前里程」取自里程登錄檔（薪資績效系統的績效檔），小字是那筆資料的年月；落後全隊最新月份 2 個月以上會標成琥珀色，代表那台車有一陣子沒有里程登錄了（停用或沒出車的車很常見）。板架的出租/自用狀況、位置請到「板架管理」分頁查看。尺寸可以用上面的下拉篩選，選「未填」就會只列出還沒填尺寸的。「匯出全部板架」不受搜尋與篩選影響，一律匯出全部，並會一併帶出滅火器支數、出租狀況、承租方與驗車到期日。</div>
     </div>
 
     <div class="card">
@@ -6817,6 +6817,48 @@ function getVehicleLatestMileage(plate){
   const v = STATE.vehicles.find(x => x.plate === plate);
   return v ? (v.current_mileage || null) : null;
 }
+// 最新一筆里程「連同它是哪個月的」。車輛清單要把月份一起顯示出來，
+// 不然看到一個數字會以為是現在的，其實可能停在好幾個月前。
+function vehicleLatestMileageRow(plate){
+  const logs = STATE.mileageLogs.filter(m => m.plate === plate && mlIsPerf(m))
+    .sort((a,b)=>String(b.log_date||'').localeCompare(String(a.log_date||'')));
+  return logs.length ? logs[0] : null;
+}
+// 全隊里程登錄到哪一個月（用來判斷某一台是不是落後了）
+let _MLNEWEST = null;
+function mileageNewestMonth(){
+  if(_MLNEWEST !== null) return _MLNEWEST;
+  let top = '';
+  (STATE.mileageLogs || []).forEach(m => {
+    if(!mlIsPerf(m)) return;
+    const d = String(m.log_date || '').slice(0, 7);
+    if(d > top) top = d;
+  });
+  _MLNEWEST = top || '';
+  return _MLNEWEST;
+}
+// 「115/04」這種年月字串，兩個相減得到差幾個月
+function _ymDiff(a, b){
+  const pa = String(a).split('-'), pb = String(b).split('-');
+  if(pa.length < 2 || pb.length < 2) return 0;
+  return (Number(pb[0]) * 12 + Number(pb[1])) - (Number(pa[0]) * 12 + Number(pa[1]));
+}
+// 車輛清單那一格：里程表讀數 ＋ 小字寫是哪個月的。
+// 落後全隊最新月份 2 個月以上就標色，完全沒紀錄的標灰。
+function fleetMileageCell(plate){
+  const r = vehicleLatestMileageRow(plate);
+  if(!r || r.mileage == null)
+    return '<td style="text-align:right;"><span class="pill gray">無紀錄</span></td>';
+  const ym = String(r.log_date || '').slice(0, 7);
+  const behind = _ymDiff(ym, mileageNewestMonth());
+  const roc = ym ? ((Number(ym.slice(0,4)) - 1911) + '/' + ym.slice(5,7)) : '';
+  const stale = behind >= 2;
+  return '<td style="text-align:right;">'
+       + '<strong>' + Number(r.mileage).toLocaleString() + '</strong>'
+       + '<div class="muted" style="font-size:11px;'
+       + (stale ? 'color:var(--amber);font-weight:600;' : '') + '">'
+       + esc(roc) + (stale ? '（已 ' + behind + ' 個月未更新）' : '') + '</div></td>';
+}
 // 輪位編號與輪胎行的紙本作業單完全一致：
 //   A＝車頭   第一軸單輪  A1 ─┬─ A2
 //             第二軸雙輪  A3 A4 ─┼─ A5 A6
@@ -7569,14 +7611,16 @@ function renderFleetTable(){
       <td title="${esc(v.company_name||'')}">${esc(shortCompany(v.company_name))}</td>
       <td>${esc(v.base_location||'')}</td>
       <td>${esc(v.status)}</td>
+      ${fleetMileageCell(v.plate)}
       <td><button class="name-link" data-edit-vequip="${v.id}">車用物品 (${STATE.vehicleEquipment.filter(x=>x.vehicle_id===v.id && x.status==='使用中').length})</button></td>
       <td><button class="name-link" data-edit-doc="${v.id}|滅火器">滅火器 (${STATE.vehicleDocuments.filter(x=>x.vehicle_id===v.id && x.doc_type==='滅火器').length})</button></td>
       <td><button class="name-link" data-edit-doc="${v.id}|濾毒罐">濾毒罐 (${STATE.vehicleDocuments.filter(x=>x.vehicle_id===v.id && x.doc_type==='濾毒罐').length})</button></td>
       <td><button class="name-link" data-edit-medkit="${v.id}">醫藥箱 (${STATE.medicalKitItems.filter(x=>x.vehicle_id===v.id).length})</button></td>
       <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="12" class="empty">沒有符合條件的車輛</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的車輛</td></tr>`;
 
   refreshTrailerSizeList();
+  _MLNEWEST = null;          // 里程資料可能剛剛改過，重算「全隊登錄到哪個月」
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
   const trailerQ = document.getElementById('trailer_search').value.trim();
   const _tPool = trailerPool();
