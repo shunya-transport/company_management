@@ -644,6 +644,22 @@
     </div>
 
     <div class="card">
+      <h2>匯出車輛配備檢查表<span class="count-badge" id="eqchk_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        產生跟 Google 表單彙整檔<b>一模一樣的 26 欄</b>，Excel 打開可以整片複製貼回去。
+        只拉<b>在役、而且不是待賣出</b>的營業車（堆高機、夾櫃機、公務車不在這張表的範圍）。
+        「有／NA」取自車用配備登錄的數量，濾毒罐與滅火器放的是證件效期的到期日；
+        檢查日期與檢查人員留白，由現場填。
+      </div>
+      <div class="toolbar">
+        <label class="muted">年月（民國） <input id="eqchk_ym" placeholder="11509" maxlength="5" style="width:90px;"></label>
+        <button class="btn" id="eqchk_export">匯出檢查表 CSV</button>
+        <span class="muted" id="eqchk_msg"></span>
+      </div>
+      <div class="muted" id="eqchk_note" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="card">
       <h2>板架清單<span class="count-badge" id="fleet_trailer_count"></span></h2>
       <div class="toolbar">
         <input id="trailer_search" placeholder="搜尋車號/公司別/發車地">
@@ -6099,6 +6115,95 @@ function _ymDiff(a, b){
 }
 // 車輛清單那一格：里程表讀數 ＋ 小字寫是哪個月的。
 // 落後全隊最新月份 2 個月以上就標色，完全沒紀錄的標灰。
+// ===== 匯出「車輛配備檢查表」格式 =====
+// 26 個欄位的順序就是原本 Google 表單彙整檔的 A~Z，不要更動。
+const EQCHK_HEAD = ['年月','檢查日期\n時間戳記','車號','檢查人員','區域','運送類別',
+  '半罩式防毒面具\n\n(1個)','濾毒罐\n(綜合型1包)','C級防護衣\n(1件)','耐酸鹼手套\n(1雙)',
+  '警示帶\n(1捲)','指揮棒\n(1支)','急救箱','滅火器(1支)',
+  '輪檔\n大貨車*4\n曳引車*6','三角錐\n 大貨車*4\n 曳引車*6','連桿(2支)',
+  '捆綁帶(6條)-----適用鋼瓶大貨車.鋼瓶尾車','防震墊(1塊) -----適用鋼瓶大貨車.鋼瓶尾車',
+  '車軿 / 門閂 /尾門固定栓-----適用鋼瓶大貨車.鋼瓶尾車','第五輪聯結器總成(1組)----適用曳引車',
+  '吊鉤-----適用框式貨車','防爆板手','貨櫃剪','缺少數量請填寫\n (補件品名與數量)','補件完成打\nV'];
+// 第 7~24 欄（索引 6~23）對到配備管理裡的品項名稱；濾毒罐與滅火器改放證件到期日。
+const EQCHK_MAP = {6:'半罩式防毒面具', 8:'C級防護衣', 9:'耐酸鹼手套', 10:'警示帶', 11:'指揮棒',
+  12:'急救箱（醫藥箱）', 14:'輪檔', 15:'三角錐', 16:'連結環', 17:'拖救帶', 18:'防震墊',
+  19:'車鉤/閂門/固定栓', 20:'第五輪聯結器總成', 21:'吊裝環', 22:'防爆板手', 23:'貨櫥剪'};
+
+// 這張檢查表要拉的車：在役、不是待賣出、不是報廢繳銷、而且是營業車。
+// 堆高機／夾櫃機／公務車不在這張表的範圍，車型不是「營業」開頭的一律不拉。
+function eqchkVehicles(){
+  return (STATE.vehicles || []).filter(v =>
+    v.vehicle_category === '車輛' &&
+    v.status === '在役' &&
+    !isRetiredVehicle(v) &&
+    !isPendingSaleVehicle(v) &&
+    /^營業/.test(String(v.vehicle_type || ''))
+  ).sort((a, b) => String(a.plate || '').localeCompare(String(b.plate || '')));
+}
+function eqchkType(v){
+  const t = String(v.vehicle_type || '');
+  return t.indexOf('曳引') >= 0 ? '曳引車' : (t.indexOf('大貨') >= 0 ? '大貨車' : t);
+}
+function eqchkDoc(vid, type){
+  const rows = (STATE.vehicleDocuments || [])
+    .filter(x => x.vehicle_id === vid && x.doc_type === type && x.expiry_date)
+    .sort((a, b) => String(b.expiry_date).localeCompare(String(a.expiry_date)));
+  return rows.length ? String(rows[0].expiry_date).slice(0, 10) : '';
+}
+function eqchkExport(){
+  const ymEl = document.getElementById('eqchk_ym');
+  const ym = String((ymEl && ymEl.value) || '').trim() || todayROC().slice(0, 5).replace('/', '');
+  const rows = eqchkVehicles();
+  if(!rows.length){ msgEqchk('目前沒有符合條件的車輛', true); return; }
+  const typeId = {};
+  (STATE.equipmentTypes || []).forEach(t => { typeId[t.name] = t.id; });
+  const body = rows.map(v => {
+    const a = new Array(26).fill('');
+    a[0] = ym; a[2] = v.plate || ''; a[4] = v.base_location || ''; a[5] = eqchkType(v);
+    Object.keys(EQCHK_MAP).forEach(k => {
+      const i = Number(k), tid = typeId[EQCHK_MAP[k]];
+      if(tid == null) return;
+      const e = (STATE.vehicleEquipment || [])
+        .find(x => x.vehicle_id === v.id && String(x.type_id) === String(tid) && x.status === '使用中');
+      if(e) a[i] = (Number(e.quantity) > 0) ? '有' : 'NA';
+    });
+    a[7]  = eqchkDoc(v.id, '濾毒罐');
+    a[13] = eqchkDoc(v.id, '滅火器');
+    return a;
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csvLines(EQCHK_HEAD, body)],
+                                        {type:'text/csv;charset=utf-8'}));
+  a.download = '車輛配備檢查表_' + ym + '_' + rows.length + '台.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  msgEqchk('已匯出 ' + rows.length + ' 台（' + ym + '）');
+}
+function msgEqchk(t, bad){
+  const el = document.getElementById('eqchk_msg');
+  if(el){ el.textContent = t || ''; el.style.color = bad ? 'var(--red)' : 'var(--green)'; }
+}
+function renderEqchk(){
+  const rows = eqchkVehicles();
+  const cEl = document.getElementById('eqchk_count');
+  if(cEl) cEl.textContent = '共 ' + rows.length + ' 台';
+  const ymEl = document.getElementById('eqchk_ym');
+  if(ymEl && !ymEl.value) ymEl.value = todayROC().slice(0, 5).replace('/', '');
+  // 被排除掉的車列出來，免得有人以為漏了
+  const out = (STATE.vehicles || []).filter(v =>
+    v.vehicle_category === '車輛' && /^營業/.test(String(v.vehicle_type || '')) &&
+    !(v.status === '在役' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v)));
+  const noteEl = document.getElementById('eqchk_note');
+  if(noteEl){
+    noteEl.innerHTML = (out.length
+        ? '<span class="pill gray">沒有拉進來的營業車</span> '
+          + out.map(v => esc(v.plate) + '（' + esc(v.status)
+              + (isPendingSaleVehicle(v) ? '・待賣出' : '') + '）').join('　') + '<br>'
+        : '')
+      + '<span class="pill amber">先核對再用</span> 捆綁帶、防震墊、車軿、第五輪聯結器、吊鉤、貨櫃剪這六個看車型才適用的品項，'
+      + '資料庫目前的登錄跟 115/08 的紙本檢查表對不起來（像是按車型填反了），匯出後請先核對這幾欄再送出。';
+  }
+}
+
 function fleetMileageCell(plate){
   const r = vehicleLatestMileageRow(plate);
   if(!r || r.mileage == null)
@@ -6874,6 +6979,7 @@ function renderFleetTable(){
     </tr>`).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的車輛</td></tr>`;
 
   refreshTrailerSizeList();
+  renderEqchk();
   _MLNEWEST = null;          // 里程資料可能剛剛改過，重算「全隊登錄到哪個月」
   const trailerStatusFilter = document.getElementById('trailer_status_filter').value;
   const trailerQ = document.getElementById('trailer_search').value.trim();
@@ -12881,6 +12987,10 @@ document.getElementById('trailerTableBody').addEventListener('change', (e) => {
   if(e.target && e.target.classList && e.target.classList.contains('tsz-in')) saveTrailerSizeInline(e.target);
 });
 document.getElementById('trailer_search').addEventListener('input', renderFleetTable);
+{
+  const _eqx = document.getElementById('eqchk_export');
+  if(_eqx) _eqx.addEventListener('click', eqchkExport);
+}
 {
   const _tsf = document.getElementById('trailer_size_filter');
   if(_tsf) _tsf.addEventListener('change', renderFleetTable);
