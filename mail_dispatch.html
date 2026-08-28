@@ -404,6 +404,8 @@
           <label class="muted">縮放 <input id="md_env_scale" type="number" step="1" style="width:70px;">%</label>
           <label class="muted">左右 <input id="md_env_dx" type="number" step="0.5" value="0" style="width:70px;">mm</label>
           <label class="muted">上下 <input id="md_env_dy" type="number" step="0.5" value="0" style="width:70px;">mm</label>
+          <label class="muted" style="display:flex;align-items:center;gap:5px;">
+            <input id="md_env_rot" type="checkbox" style="width:auto;"> 轉 180 度</label>
           <span class="muted" id="md_env_hint"></span>
         </div>
         <div class="muted" style="margin-top:8px;">
@@ -858,12 +860,14 @@ function openPrint(title, css, inner, tailScript){
 //   最左邊一直行  寄件人公司、地址、電話
 //   左下角        寄件人郵遞區號
 //
-// 三種尺寸的紙張、邊界、縮放都照原檔：
-//   小 A4 210×297（版面 110.8×227.9）／中 B5 信封 176×250（166.1×236.2）
-//   大 C4 信封 229×324（211.5×303.2）
-// 中跟大的版面比紙略高，原檔本來就是靠縮放塞進去的，所以預設縮放不是 100%。
+// 紙張照印表機實際的設定（不是 Excel 檔裡那個被轉檔弄壞的頁面設定）：
+//   小　信封 Nagagata3（長形3號）120×235 mm　版面 110.8×227.9
+//   中　信封 B5              176×250 mm　版面 166.1×236.2
+//   大　信封 C4              229×324 mm　版面 211.5×303.2
+// 三種都是 100% 不縮放，版面置中在信封上。
+// 小跟大進紙方向是反的，所以整張轉 180 度（畫面上可以取消勾選）。
 // 印歪了不用改程式，用畫面上的「縮放／左右／上下」微調就好。
-const ENV_GEOM = {"信封(小)": {"paper": [210, 297], "margin": [3.0, 15.0], "block": [110.8, 227.9], "scale": 100.0, "zip_to": {"box": [77.2, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [33.0, 17.5, 44.1, 184.4], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [90.1, 17.5, 20.8, 210.5], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 100.2, 33.0, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [77.2, 143.5, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 215.7, 33.0, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [33.0, 215.9, 44.1, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [77.2, 138.0, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}}, "信封(中)": {"paper": [176, 250], "margin": [3.0, 30.0], "block": [166.1, 236.2], "scale": 91.4, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}}, "信封(大)": {"paper": [229, 324], "margin": [3.0, 29.0], "block": [211.5, 303.2], "scale": 96.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}}};
+const ENV_GEOM = {"信封(小)": {"paper": [120, 235], "margin": [4.6, 3.5], "block": [110.8, 227.9], "scale": 100.0, "zip_to": {"box": [77.2, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [33.0, 17.5, 44.1, 184.4], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [90.1, 17.5, 20.8, 210.5], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 100.2, 33.0, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [77.2, 143.5, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 215.7, 33.0, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [33.0, 215.9, 44.1, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [77.2, 138.0, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 Nagagata3（長形3號）120×235 mm", "rot180": true}, "信封(中)": {"paper": [176, 250], "margin": [5.0, 6.9], "block": [166.1, 236.2], "scale": 100.0, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 B5 176×250 mm", "rot180": false}, "信封(大)": {"paper": [229, 324], "margin": [8.8, 10.4], "block": [211.5, 303.2], "scale": 100.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 C4 229×324 mm", "rot180": true}};
 
 // 直書用 writing-mode + text-orientation:upright，
 // 對應 Excel 的 textRotation=255（字不轉，一個一個往下疊）。
@@ -874,6 +878,7 @@ const PRINT_CSS_ENV = `
   .pg{ position:relative; width:__PW__mm; height:__PH__mm; overflow:hidden;
        page-break-after:always; break-after:page; }
   .pg:last-child{ page-break-after:auto; break-after:auto; }
+  .rot{ position:absolute; left:0; top:0; width:__PW__mm; height:__PH__mm; transform-origin:50% 50%; }
   .blk{ position:absolute; transform-origin:left top; }
   .f{ position:absolute; overflow:hidden; display:flex; justify-content:center; }
   .f>span{ white-space:pre-line; }
@@ -915,9 +920,11 @@ function syncEnvHint(){
   const size = document.getElementById('md_env_size').value;
   const G = ENV_GEOM[size]; if(!G) return;
   document.getElementById('md_env_scale').value = G.scale;
-  document.getElementById('md_env_hint').textContent =
-    '紙張 ' + G.paper[0] + '×' + G.paper[1] + ' mm，版面 ' + G.block[0] + '×' + G.block[1] + ' mm，'
-    + '預設縮放 ' + G.scale + '%（照原本 Excel 的設定）。第一次印先試一張，位置不對再調上面三個數字。';
+  document.getElementById('md_env_rot').checked = !!G.rot180;
+  document.getElementById('md_env_hint').innerHTML =
+    '印表機的<b>原稿尺寸與紙張尺寸都要選「' + esc(G.paper_name) + '」</b>、直印、'
+    + '給紙匣手動送紙、紙張種類信封。版面 ' + G.block[0] + '×' + G.block[1] + ' mm，不縮放。'
+    + '第一次印先試一張，位置差幾公釐就調上面的左右／上下。';
 }
 function printEnvelopes(){
   if(!STATE.picked.length){ msg('md_msg', '清單是空的', true); return; }
@@ -929,6 +936,7 @@ function printEnvelopes(){
   const sc = (Number(scEl.value) || G.scale) / 100;
   const dx = Number(document.getElementById('md_env_dx').value) || 0;
   const dy = Number(document.getElementById('md_env_dy').value) || 0;
+  const rot = document.getElementById('md_env_rot').checked;   // 小跟大的信封進紙方向是反的
   const fromText = [ (s && s.sender_name) || '', (s && s.address) || '', (s && s.tel) || '' ]
                      .filter(Boolean).join('\n');
   const pages = STATE.picked.map(p => {
@@ -942,13 +950,15 @@ function printEnvelopes(){
       + envField('fz',  G.zip_from, esc((s && s.zip_code) || ''));
       // 信封上不印查件編號（使用者要求）。號碼還是存在寄送紀錄裡，
       // 便利帶地址條上仍然保留那一行，因為那張是要貼在包裹上的。
-    return `<div class="pg"><div class="blk" style="left:${G.margin[0] + dx}mm;top:${G.margin[1] + dy}mm;`
-         + `width:${G.block[0]}mm;height:${G.block[1]}mm;transform:scale(${sc});">${inner}</div></div>`;
+    return `<div class="pg"><div class="rot"${rot ? ' style="transform:rotate(180deg);"' : ''}>`
+         + `<div class="blk" style="left:${G.margin[0] + dx}mm;top:${G.margin[1] + dy}mm;`
+         + `width:${G.block[0]}mm;height:${G.block[1]}mm;transform:scale(${sc});">${inner}</div></div></div>`;
   }).join('');
   const css = PRINT_CSS_ENV.replace(/__PW__/g, G.paper[0]).replace(/__PH__/g, G.paper[1]);
   openPrint(size + ' 列印', css, pages, ENV_FIT_JS);
   msg('md_msg', '已送出 ' + STATE.picked.length + ' 張 ' + size
-      + '（紙張 ' + G.paper[0] + '×' + G.paper[1] + 'mm，縮放 ' + Math.round(sc * 1000) / 10 + '%）');
+      + '（' + G.paper_name + '，縮放 ' + Math.round(sc * 1000) / 10 + '%'
+      + (rot ? '，已轉 180 度' : '') + '）');
 }
 
 const PRINT_CSS_LABEL = `
