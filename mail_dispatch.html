@@ -323,7 +323,7 @@
     <header class="banner">
       <p class="hero-kicker">Shun Ya Transportation</p>
       <h1>郵件寄送</h1>
-      <div class="sub">收件人建檔 ・ 自動帶入產生寄送單 ・ 列印信封與地址條 ・ 寄送紀錄可查</div>
+      <div class="sub">收件人建檔 ・ 自動帶入產生寄送單 ・ 列印便利帶地址條 ・ 寄送紀錄可查</div>
     </header>
     <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;"></div>
     <div class="content">
@@ -337,9 +337,9 @@
           「寄什麼」會自動帶收件人平常寄的東西，可以改。
         </div>
         <div class="form-grid">
-          <label>寄件人（信封上印哪一家）<select id="md_sender"></select></label>
+          <label>寄件人（地址條上印哪一家）<select id="md_sender"></select></label>
           <label>寄件日期<input id="md_date" type="date"></label>
-          <label>預設信封別<select id="md_env"></select></label>
+          <label>預設寄送方式<select id="md_env"></select></label>
         </div>
         <div style="margin-top:14px;position:relative;">
           <label style="display:block;font-size:12.5px;color:var(--text-2);font-weight:600;">加入收件人
@@ -383,47 +383,21 @@
           <table>
             <thead><tr>
               <th style="width:44px;">#</th><th>收件人</th><th>郵遞區號</th><th>地址</th>
-              <th>電話／手機</th><th style="width:120px;">信封別</th><th style="width:190px;">寄什麼</th>
+              <th>電話／手機</th><th style="width:120px;">寄送方式</th><th style="width:190px;">寄什麼</th>
               <th style="width:62px;">件數</th><th style="width:150px;">查件編號</th><th style="width:46px;"></th>
             </tr></thead>
             <tbody id="md_body"></tbody>
           </table>
         </div>
         <div class="toolbar" style="margin-top:14px;">
-          <button class="btn" id="md_print_env">列印信封（直式）</button>
-          <select id="md_env_size" title="要印哪一種信封">
-            <option>信封(小)</option><option>信封(中)</option><option>信封(大)</option>
-          </select>
           <button class="btn" id="md_print_label">列印地址條（便利帶）</button>
           <button class="btn ghost" id="md_export">匯出便利帶託運總表 CSV</button>
           <button class="btn" id="md_save">存成寄送紀錄</button>
           <span class="muted" id="md_msg"></span>
         </div>
-        <div class="toolbar" style="margin-top:8px;">
-          <span class="muted">信封微調</span>
-          <label class="muted">縮放 <input id="md_env_scale" type="number" step="1" style="width:70px;">%</label>
-          <label class="muted">左右 <input id="md_env_dx" type="number" step="0.5" value="0" style="width:70px;">mm</label>
-          <label class="muted">上下 <input id="md_env_dy" type="number" step="0.5" value="0" style="width:70px;">mm</label>
-          <label class="muted" style="display:flex;align-items:center;gap:5px;">
-            <input id="md_env_rot" type="checkbox" style="width:auto;"> 轉 180 度</label>
-          <label class="muted" style="display:flex;align-items:center;gap:5px;">
-            <input id="md_env_guide" type="checkbox" style="width:auto;"> 印對齊框</label>
-          <button class="btn ghost" id="md_env_ruler">列印校正尺</button>
-        </div>
-        <div class="toolbar" style="margin-top:6px;">
-          <span class="muted">量完填這裡</span>
-          <label class="muted">角上短線 <input id="md_cal_tick" type="number" step="0.5" style="width:66px;" placeholder="10">mm</label>
-          <label class="muted">框到信封左邊 <input id="md_cal_left" type="number" step="0.5" style="width:66px;">mm</label>
-          <label class="muted">框到信封上邊 <input id="md_cal_top" type="number" step="0.5" style="width:66px;">mm</label>
-          <button class="btn" id="md_cal_apply">算出設定</button>
-          <span class="muted" id="md_cal_msg"></span>
-        </div>
-        <div class="toolbar" style="margin-top:2px;">
-          <span class="muted" id="md_env_hint"></span>
-        </div>
         <div class="muted" style="margin-top:8px;">
           <b>查件編號</b>那一欄便利帶和郵局掛號都填這裡，寄出後回來補也可以（在寄送紀錄那一頁改）；
-          列印出來的信封與地址條上也留了一行，可以先印空白再手寫上去。
+          列印出來的地址條上也留了一行，可以先印空白再手寫上去。
           存檔會把<b>當下的公司、聯絡人、地址、電話一起抄一份存進紀錄</b>，
           之後在收件人維護那邊改了資料，也不會動到已經寄出去的那幾筆，半年後查還是查得到當時寄到哪裡。
         </div>
@@ -485,8 +459,8 @@
       <div class="card">
         <h2 id="sd_form_title">新增寄件公司</h2>
         <div class="muted" style="margin-bottom:10px;">
-          這裡改的是<b>信封上「寄件人」那一格要印什麼</b>。搬家的時候改這裡就好，
-          改完之後印出來的信封、地址條、便利帶託運總表都會跟著換成新地址。
+          這裡改的是<b>地址條上「寄件人」那一段要印什麼</b>。搬家的時候改這裡就好，
+          改完之後印出來的地址條與便利帶託運總表都會跟著換成新地址。
           <b>已經寄出去的紀錄不會被改動</b>——寄送紀錄存的是寄的當下抄下來的地址，
           所以以前寄的還是查得到當時的舊地址。
         </div>
@@ -534,7 +508,7 @@
           <label class="muted">到 <input id="lg_to" type="date"></label>
           <input id="lg_search" placeholder="公司、收件人、寄什麼、查件編號…" style="min-width:240px;">
           <select id="lg_sender"><option value="">全部寄件人</option></select>
-          <select id="lg_env"><option value="">全部信封別</option></select>
+          <select id="lg_env"><option value="">全部寄送方式</option></select>
           <button class="btn ghost" id="lg_reload">重新讀取</button>
           <button class="btn ghost" id="lg_export">匯出 CSV</button>
           <span class="muted" id="lg_msg"></span>
@@ -548,7 +522,7 @@
           <table>
             <thead><tr>
               <th style="width:96px;">寄件日期</th><th>寄件人</th><th>收件人</th><th>地址</th>
-              <th style="width:96px;">信封別</th><th>寄什麼</th><th style="width:56px;">件數</th>
+              <th style="width:96px;">寄送方式</th><th>寄什麼</th><th style="width:56px;">件數</th>
               <th>查件編號</th><th>批號</th><th style="width:64px;"></th>
             </tr></thead>
             <tbody id="lg_body"></tbody>
@@ -851,250 +825,19 @@ function addBlankRow(){
 }
 
 // ---------- 列印 ----------
-function openPrint(title, css, inner, tailScript){
+function openPrint(title, css, inner){
   const w = window.open('', '_blank');
   if(!w){ alert('瀏覽器擋掉了新視窗，請允許彈出視窗再試一次。'); return; }
   w.document.write('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>' + title + '</title>'
-    + '<style>' + css + '</style></head><body>' + inner
-    + (tailScript ? '<script>' + tailScript + '<\/script>' : '') + '</body></html>');
+    + '<style>' + css + '</style></head><body>' + inner + '</body></html>');
   w.document.close();
-  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 500);
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 400);
 }
-// ===== 直式信封（中式信封）列印 =====
-// 版面不是我自己排的，是直接從「信封小.xls」的三張信封工作表量出來的：
-// 每一格的左上角座標、寬高、字級都照原檔換算成公釐，欄寬用 Excel 的字元寬換算，
-// 列高用點數換算（1pt = 0.3528mm）。所以印出來的位置跟你原本那個 Excel 一樣。
-//
-// 直式信封的擺法（跟西式相反，是直書、由右往左讀）：
-//   最右邊一直行  收件人地址
-//   中間大字      收件人公司與姓名
-//   右上角方框    收件人郵遞區號
-//   中間偏右小字  收件人電話（上面有 TEL）
-//   最左邊一直行  寄件人公司、地址、電話
-//   左下角        寄件人郵遞區號
-//
-// 紙張照印表機實際的設定（不是 Excel 檔裡那個被轉檔弄壞的頁面設定）：
-//   小　自訂 122×247 mm（實際量到的信封尺寸，不是 Nagagata3）版面就是信封本身
-//   中　信封 B5              176×250 mm　版面 166.1×236.2
-//   大　信封 C4              229×324 mm　版面 211.5×303.2
-// 三種都是 100% 不縮放，版面置中在信封上。
-// 小跟大的信封進紙方向是反的，所以預設整張轉 180 度；中不轉。
-//
-// ★ 印出來偏小通常不是版面的問題，是【瀏覽器列印對話框】自己縮的：
-//   Chrome 的「縮放」預設是「符合頁面」，它會把整頁縮到印表機的可列印範圍內，
-//   信封四邊有 4~5mm 印不到，於是就縮成 92% 左右 —— 看起來就是整個小一號。
-//   解法：列印對話框裡「更多設定」→ 縮放改成「自訂 100」、邊界改成「無」。
-//   如果印表機驅動就是縮不掉，用下面的「列印校正尺」量出實際比例，
-//   再把畫面上的縮放調成 100÷量到的值×100，一次調好就固定了。
-const ENV_GEOM = {"信封(小)": {"paper": [122, 247], "paper_name": "122×247 mm（你實際量的信封尺寸）", "margin": [0.0, 0.0], "block": [122.0, 247.0], "scale": 100.0, "rot180": true, "zip_to": {"box": [48.8, 25.1, 59.1, 11.6], "pt": 20.0, "vert": false, "va": "center", "ls": 3.5}, "name_to": {"box": [39.5, 49.0, 40.0, 174.0], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [88.0, 40.0, 31.0, 182.0], "pt": 19.0, "vert": true, "va": "top"}, "tel_label": {"box": [81.0, 152.0, 6.5, 5.0], "pt": 8.0, "vert": false, "va": "bottom"}, "tel": {"box": [81.0, 157.5, 6.5, 62.0], "pt": 10.0, "vert": true, "va": "top"}, "from": {"box": [3.0, 105.0, 34.0, 112.0], "pt": 16.0, "vert": true, "va": "top"}, "zip_from": {"box": [4.1, 225.3, 34.6, 8.6], "pt": 15.0, "vert": false, "va": "center", "ls": 3.0}}, "信封(中)": {"paper": [176, 250], "margin": [5.0, 6.9], "block": [166.1, 236.2], "scale": 100.0, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 B5 176×250 mm", "rot180": false}, "信封(大)": {"paper": [229, 324], "margin": [8.8, 10.4], "block": [211.5, 303.2], "scale": 100.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 C4 229×324 mm", "rot180": true}};
-
-// 直書用 writing-mode + text-orientation:upright，
-// 對應 Excel 的 textRotation=255（字不轉，一個一個往下疊）。
-const PRINT_CSS_ENV = `
-  @page{ size:__PW__mm __PH__mm; margin:0; }
-  html,body{ margin:0; padding:0; }
-  body{ font-family:"標楷體","DFKai-SB","BiauKai","Noto Serif CJK TC",serif; }
-  .pg{ position:relative; width:__PW__mm; height:__PH__mm; overflow:hidden;
-       page-break-after:always; break-after:page; }
-  .pg:last-child{ page-break-after:auto; break-after:auto; }
-  .rot{ position:absolute; left:0; top:0; width:__PW__mm; height:__PH__mm; transform-origin:50% 50%; }
-  .blk{ position:absolute; transform-origin:left top; }
-  .f{ position:absolute; overflow:hidden; display:flex; justify-content:center; }
-  .f>span{ white-space:pre-line; }
-  .f.h{ }
-  .f.h>span{ text-align:center; width:100%; }
-  .f.va-center{ align-items:center; }
-  .f.va-top{ align-items:flex-start; }
-  .f.va-bottom{ align-items:flex-end; }
-  .f.v>span{ writing-mode:vertical-rl; text-orientation:upright; height:100%;
-             line-height:1.06; letter-spacing:0.5px; }
-  .f.v.t-center>span{ text-align:center; }
-  .f.v.t-top>span{ text-align:start; }
-  .trk u{ display:inline-block; min-width:60%; text-decoration:none; border-bottom:1px solid #999; }
-`;
-// 印出來之前先把塞不下的欄位自動縮字級，免得長公司名或長地址被裁掉。
-const ENV_FIT_JS = `
-(function(){
-  document.querySelectorAll('.f').forEach(function(f){
-    var sp = f.firstElementChild; if(!sp) return;
-    var pt = parseFloat(sp.getAttribute('data-pt')) || 12, guard = 0;
-    function fits(){
-      return sp.scrollHeight <= sp.clientHeight + 1 && sp.scrollWidth <= f.clientWidth + 1;
-    }
-    while(!fits() && pt > 5 && guard++ < 80){ pt -= 0.5; sp.style.fontSize = pt + 'pt'; }
-  });
-})();
-`;
-function envField(cls, g, text, extraCls){
-  if(g == null) return '';
-  const b = g.box;
-  const ls = g.ls ? ('letter-spacing:' + g.ls + 'mm;') : '';
-  const va = g.vert ? '' : (' va-' + (g.va === 'center' ? 'center' : (g.va === 'top' ? 'top' : 'bottom')));
-  const ta = g.vert ? (' t-' + (g.va === 'center' ? 'center' : 'top')) : '';
-  return `<div class="f ${g.vert ? 'v' : 'h'}${va}${ta} ${cls} ${extraCls || ''}"
-    style="left:${b[0]}mm;top:${b[1]}mm;width:${b[2]}mm;height:${b[3]}mm;">`
-    + `<span data-pt="${g.pt}" style="font-size:${g.pt}pt;${ls}">${text}</span></div>`;
-}
-// 拿尺量完對齊框，這裡幫你把縮放與左右／上下算出來，不用自己試。
-//
-// 為什麼這樣就能不動印表機設定也印對：
-//   不管驅動在背後把畫面縮了幾倍（叫它 k），只要它每次都縮一樣多，
-//   對齊框上那段「應該 10mm」的短線量出來就是 k×目前縮放×10。
-//   量到幾就反推得出 k，把畫面上的縮放乘回去，紙上就會剛好 1:1。
-//   位置同理：框現在離信封邊幾 mm，跟應該的 5mm 差多少，換算回畫面上的 mm 就是要補的位移。
-function applyCalibration(){
-  const g = id => Number((document.getElementById(id) || {}).value);
-  const m = g('md_cal_tick');            // 角上短線實際量到幾 mm（設計值 10）
-  if(!m || m <= 0){ msg('md_cal_msg', '請先填角上短線量到幾 mm', true); return; }
-  const size = document.getElementById('md_env_size').value;
-  const G = ENV_GEOM[size]; if(!G) return;
-  const s0 = Number(document.getElementById('md_env_scale').value) || 100;
-  const dx0 = Number(document.getElementById('md_env_dx').value) || 0;
-  const dy0 = Number(document.getElementById('md_env_dy').value) || 0;
-  const factor = 10 / m;                 // 要把縮放乘上這個倍數
-  const sNew = Math.round(s0 * factor * 10) / 10;
-  // 畫面上調 1mm，紙上會動 k mm；k = m /(10 × 目前縮放/100)
-  const perMm = (10 * (s0 / 100)) / m;   // 紙上要動 1mm，畫面上要調幾 mm
-  const INSET = 5;                       // 對齊框往版面內縮的 mm，跟列印那邊同一個值
-  // 縮放改了之後，框本身也會跟著往內／往外挪 INSET×(新縮放−舊縮放)，
-  // 所以位移不能只補「量到的差」，要把這一段一起算進去，不然改完位置又跑掉。
-  const tgtL = G.margin[0] + INSET, tgtT = G.margin[1] + INSET;
-  const L = document.getElementById('md_cal_left').value;
-  const T = document.getElementById('md_cal_top').value;
-  let dxNew = dx0, dyNew = dy0;
-  if(L !== '') dxNew = Math.round((dx0 + (tgtL - Number(L) - INSET + m / 2) * perMm) * 10) / 10;
-  if(T !== '') dyNew = Math.round((dy0 + (tgtT - Number(T) - INSET + m / 2) * perMm) * 10) / 10;
-  document.getElementById('md_env_scale').value = sNew;
-  document.getElementById('md_env_dx').value = dxNew;
-  document.getElementById('md_env_dy').value = dyNew;
-  saveEnvPref();
-  msg('md_cal_msg', '縮放 ' + s0 + '% → ' + sNew + '%，左右 ' + dx0 + ' → ' + dxNew
-      + ' mm，上下 ' + dy0 + ' → ' + dyNew + ' mm。再印一張對齊框確認，通常一次就到位。');
-}
-
-// 換信封尺寸時，把該尺寸的預設縮放與紙張大小填進微調欄
-// 校正好的縮放與位移記在這台電腦的瀏覽器裡，下次開就不用再調。
-// key 帶版本號：改過預設值之後換版本，舊的記憶就不會蓋掉新預設
-function envPrefKey(size){ return 'mail_env_pref_v3_' + size; }
-function loadEnvPref(size){
-  try{ return JSON.parse(localStorage.getItem(envPrefKey(size)) || 'null'); }catch(e){ return null; }
-}
-function saveEnvPref(){
-  const size = document.getElementById('md_env_size').value;
-  try{
-    localStorage.setItem(envPrefKey(size), JSON.stringify({
-      scale: Number(document.getElementById('md_env_scale').value) || 100,
-      dx: Number(document.getElementById('md_env_dx').value) || 0,
-      dy: Number(document.getElementById('md_env_dy').value) || 0,
-      rot: document.getElementById('md_env_rot').checked ? 1 : 0
-    }));
-  }catch(e){}
-}
-function syncEnvHint(){
-  const size = document.getElementById('md_env_size').value;
-  const G = ENV_GEOM[size]; if(!G) return;
-  const pref = loadEnvPref(size) || {};
-  document.getElementById('md_env_scale').value = pref.scale != null ? pref.scale : G.scale;
-  document.getElementById('md_env_dx').value    = pref.dx    != null ? pref.dx    : 0;
-  document.getElementById('md_env_dy').value    = pref.dy    != null ? pref.dy    : 0;
-  document.getElementById('md_env_rot').checked = pref.rot != null ? !!pref.rot : !!G.rot180;
-  document.getElementById('md_env_hint').innerHTML =
-    '紙張要選<b>「' + esc(G.paper_name) + '」</b>。'
-    + '<b>印出來偏小，是因為紙張尺寸沒有一個對得上你的信封。</b>'
-    + '驅動裡的「縮放」設在自動時，只要來稿尺寸跟紙張尺寸不一樣，它就會自己縮到符合，'
-    + '所以你把倍率調大也沒有用。'
-    + '想一勞永逸的話，可以在印表機內容 →「使用者設定」建一個 <b>' + G.paper[0] + '×' + G.paper[1]
-    + ' mm</b> 的自訂尺寸，原稿與紙張都選它、縮放手動 100%，就完全不用校正。'
-    + '<b>不想動印表機設定也可以</b>：勾「印對齊框」印一張，拿尺量三個數字'
-    + '（角上短線幾 mm、框到信封左邊幾 mm、框到信封上邊幾 mm）填進上面那排，按「算出設定」，'
-    + '縮放與位移我幫你算好。正確值是短線 10mm、左邊 '
-    + (Math.round((G.margin[0]+5)*10)/10) + 'mm、上邊 ' + (Math.round((G.margin[1]+5)*10)/10)
-    + 'mm。算完再印一張確認，通常一次就到位，設定會自動記住。';
-}
-// 印出來的大小對不對，用尺量最準。這一張印出來的線應該剛好 100mm。
-function printRuler(){
-  const size = document.getElementById('md_env_size').value;
-  const G = ENV_GEOM[size]; if(!G) return;
-  const sc = (Number(document.getElementById('md_env_scale').value) || 100) / 100;
-  let ticks = '';
-  for(let i = 0; i <= 10; i++){
-    ticks += `<div style="position:absolute;left:${i * 10}mm;top:0;width:0.3mm;height:${i % 5 === 0 ? 6 : 3.5}mm;background:#000;"></div>`;
-    if(i % 5 === 0) ticks += `<div style="position:absolute;left:${i * 10}mm;top:7mm;font-size:8pt;transform:translateX(-50%);">${i * 10}</div>`;
-  }
-  let vt = '';
-  for(let i = 0; i <= 10; i++){
-    vt += `<div style="position:absolute;top:${i * 10}mm;left:0;height:0.3mm;width:${i % 5 === 0 ? 6 : 3.5}mm;background:#000;"></div>`;
-    if(i % 5 === 0) vt += `<div style="position:absolute;top:${i * 10}mm;left:7mm;font-size:8pt;transform:translateY(-50%);">${i * 10}</div>`;
-  }
-  const inner = `<div class="pg"><div class="blk" style="left:${G.margin[0]}mm;top:${G.margin[1]}mm;`
-    + `width:${G.block[0]}mm;height:${G.block[1]}mm;transform:scale(${sc});">`
-    + `<div style="position:absolute;left:0;top:0;width:${G.block[0]}mm;height:${G.block[1]}mm;border:0.3mm dashed #999;"></div>`
-    + `<div style="position:absolute;left:5mm;top:8mm;font-size:10pt;line-height:1.6;width:${G.block[0] - 10}mm;">`
-    + `<b>${esc(size)} 列印校正尺</b><br>紙張 ${esc(G.paper_name)}<br>目前縮放 ${Math.round(sc * 1000) / 10}%<br><br>`
-    + `拿尺量下面那條橫線。<br>量到剛好 <b>100 mm</b> 就是對的。<br>`
-    + `如果量到 92mm，把畫面上的縮放改成<br><b>100 ÷ 92 × 100 ＝ 109</b>，再印一次。<br><br>`
-    + `虛線框是信封版面的範圍，<br>它應該剛好落在信封裡面。</div>`
-    + `<div style="position:absolute;left:5mm;top:70mm;width:100mm;height:14mm;">`
-    + `<div style="position:absolute;left:0;top:0;width:100mm;height:0.4mm;background:#000;"></div>${ticks}</div>`
-    + `<div style="position:absolute;left:5mm;top:105mm;width:14mm;height:100mm;">`
-    + `<div style="position:absolute;left:0;top:0;height:100mm;width:0.4mm;background:#000;"></div>${vt}</div>`
-    + `<div style="position:absolute;left:22mm;top:105mm;font-size:9pt;">↑ 這條直線<br>也要剛好<br>100 mm</div>`
-    + `</div></div>`;
-  const css = PRINT_CSS_ENV.replace(/__PW__/g, G.paper[0]).replace(/__PH__/g, G.paper[1]);
-  openPrint('列印校正尺', css, inner);
-  msg('md_msg', '校正尺已送出，印出來用尺量那條 100mm 的線');
-}
-function printEnvelopes(){
-  if(!STATE.picked.length){ msg('md_msg', '清單是空的', true); return; }
-  const size = document.getElementById('md_env_size').value;
-  const G = ENV_GEOM[size];
-  if(!G){ msg('md_msg', '沒有這個信封尺寸的版面', true); return; }
-  const s = currentSender();
-  const scEl = document.getElementById('md_env_scale');
-  const sc = (Number(scEl.value) || G.scale) / 100;
-  const dx = Number(document.getElementById('md_env_dx').value) || 0;
-  const dy = Number(document.getElementById('md_env_dy').value) || 0;
-  const rot = document.getElementById('md_env_rot').checked;   // 小跟大的信封進紙方向是反的
-  const guide = document.getElementById('md_env_guide').checked; // 印對齊框，用來校正位置與大小
-  const fromText = [ (s && s.sender_name) || '', (s && s.address) || '', (s && s.tel) || '' ]
-                     .filter(Boolean).join('\n');
-  // 對齊框：沿著版面邊界畫一圈細線，四角各畫一段 10mm 的尺。
-  // 印一張出來量：框到信封四邊的距離應該是 __EDGE__，角上那段線應該剛好 10mm。
-  // 不對就調上面的縮放與左右／上下，調到對為止，再把這個勾拿掉正式印。
-  // 框往內縮 5mm，因為印表機四邊本來就有印不到的範圍，畫在最邊邊會被吃掉。
-  const IN = 5;
-  const edgeL = Math.round((G.margin[0] + IN) * 10) / 10, edgeT = Math.round((G.margin[1] + IN) * 10) / 10;
-  const gw = G.block[0] - IN * 2, gh = G.block[1] - IN * 2;
-  const guideBox = !guide ? '' : (
-      `<div style="position:absolute;left:${IN}mm;top:${IN}mm;width:${gw}mm;height:${gh}mm;`
-    + `border:0.3mm solid #000;box-sizing:border-box;"></div>`
-    + `<div style="position:absolute;left:${IN}mm;top:${IN}mm;width:10mm;height:0.6mm;background:#000;"></div>`
-    + `<div style="position:absolute;left:${IN}mm;top:${IN}mm;width:0.6mm;height:10mm;background:#000;"></div>`
-    + `<div style="position:absolute;left:${IN + gw - 10}mm;top:${IN + gh - 0.6}mm;width:10mm;height:0.6mm;background:#000;"></div>`
-    + `<div style="position:absolute;left:${IN + gw - 0.6}mm;top:${IN + gh - 10}mm;width:0.6mm;height:10mm;background:#000;"></div>`
-    + `<div style="position:absolute;left:${IN + 12}mm;top:${IN + 1}mm;font-size:7pt;">`
-    + `框距信封邊：左右 ${edgeL}mm、上下 ${edgeT}mm；框本身 ${Math.round(gw*10)/10}×${Math.round(gh*10)/10}mm；角上短線各 10mm</div>`);
-  const pages = STATE.picked.map(p => {
-    const inner = guideBox +
-        envField('zip', G.zip_to,   esc(p.zip_code || ''))
-      + envField('nm',  G.name_to,  esc(fullName(p)))
-      + envField('ad',  G.addr_to,  esc(p.address || ''))
-      + envField('tl',  G.tel_label, 'TEL')
-      + envField('tel', G.tel,      esc(phoneOf(p)))
-      + envField('fr',  G.from,     esc(fromText))
-      + envField('fz',  G.zip_from, esc((s && s.zip_code) || ''));
-      // 信封上不印查件編號（使用者要求）。號碼還是存在寄送紀錄裡，
-      // 便利帶地址條上仍然保留那一行，因為那張是要貼在包裹上的。
-    return `<div class="pg"><div class="rot"${rot ? ' style="transform:rotate(180deg);"' : ''}>`
-         + `<div class="blk" style="left:${G.margin[0] + dx}mm;top:${G.margin[1] + dy}mm;`
-         + `width:${G.block[0]}mm;height:${G.block[1]}mm;transform:scale(${sc});">${inner}</div></div></div>`;
-  }).join('');
-  const css = PRINT_CSS_ENV.replace(/__PW__/g, G.paper[0]).replace(/__PH__/g, G.paper[1]);
-  openPrint(size + ' 列印', css, pages, ENV_FIT_JS);
-  msg('md_msg', '已送出 ' + STATE.picked.length + ' 張 ' + size
-      + '（' + G.paper_name + '，縮放 ' + Math.round(sc * 1000) / 10 + '%'
-      + (rot ? '，已轉 180 度' : '') + '）');
-}
+// 信封列印已經整段移除。
+// 原因：驅動裡沒有一個紙張尺寸對得上實際的 122×247 信封，
+// 只要尺寸對不上，驅動的自動縮放就會把版面縮掉，每台機器還不一樣，
+// 要靠校正才能印準，維護成本比手寫信封還高。
+// 實際列印只保留便利帶地址條（A4 一般紙張，不挑尺寸，不會有這個問題）。
 
 const PRINT_CSS_LABEL = `
   @page{ size:A4 portrait; margin:10mm; }
@@ -1337,7 +1080,7 @@ function renderLog(){
 function exportLog(){
   const rows = lgFiltered();
   const lines = [['寄件日期','批號','寄件人','編號','收件公司','收件人','郵遞區號','地址','電話','手機',
-                  '信封別','寄什麼','補充','件數','查件編號','狀態','備註','建檔人']];
+                  '寄送方式','寄什麼','補充','件數','查件編號','狀態','備註','建檔人']];
   rows.forEach(d => lines.push([toROC(d.send_date), d.batch_no, d.sender_name, d.recipient_no,
     d.recipient_company, d.recipient_contact, d.zip_code, d.address, d.tel, d.mobile,
     d.envelope, d.items, d.item_note, d.qty, d.tracking_no, d.status, d.notes, d.created_by]));
@@ -1349,7 +1092,7 @@ function fillSelects(){
   const env = document.getElementById('md_env');
   env.innerHTML = ENVELOPES.map(e => `<option>${esc(e)}</option>`).join('');
   const lgEnv = document.getElementById('lg_env');
-  lgEnv.innerHTML = '<option value="">全部信封別</option>'
+  lgEnv.innerHTML = '<option value="">全部寄送方式</option>'
     + ENVELOPES.map(e => `<option>${esc(e)}</option>`).join('');
   const dl = document.getElementById('mdItemList');
   const seen = {};
@@ -1371,7 +1114,7 @@ function fillSenders(){
 }
 
 // ================= 寄件資訊 =================
-// 搬家就是改這裡。信封、地址條、便利帶託運總表都吃這份資料。
+// 搬家就是改這裡。地址條與便利帶託運總表都吃這份資料。
 let SD_EDIT = null;
 function sdFill(r){
   SD_EDIT = r ? r.sender_id : null;
@@ -1451,7 +1194,6 @@ async function init(){
     CURRENT_USER = t.email || '';
   }catch(e){}
   document.getElementById('md_date').value = todayISO();
-  syncEnvHint();
   const d = new Date(); d.setMonth(d.getMonth() - 3);
   document.getElementById('lg_from').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';
   document.getElementById('lg_to').value = todayISO();
@@ -1533,14 +1275,6 @@ document.addEventListener('DOMContentLoaded', () => {
     STATE.picked.forEach(p => { p.envelope = v; });
     renderPicked();
   });
-  document.getElementById('md_env_size').addEventListener('change', syncEnvHint);
-  document.getElementById('md_env_ruler').addEventListener('click', printRuler);
-  document.getElementById('md_cal_apply').addEventListener('click', applyCalibration);
-  ['md_env_scale','md_env_dx','md_env_dy','md_env_rot'].forEach(id => {   // 對齊框是測試用的，不記憶
-    const el = document.getElementById(id);
-    el.addEventListener('change', saveEnvPref);
-  });
-  document.getElementById('md_print_env').addEventListener('click', printEnvelopes);
   document.getElementById('md_print_label').addEventListener('click', printLabels);
   document.getElementById('md_export').addEventListener('click', exportBill);
   document.getElementById('md_save').addEventListener('click', saveDispatch);
