@@ -406,6 +406,7 @@
           <label class="muted">上下 <input id="md_env_dy" type="number" step="0.5" value="0" style="width:70px;">mm</label>
           <label class="muted" style="display:flex;align-items:center;gap:5px;">
             <input id="md_env_rot" type="checkbox" style="width:auto;"> 轉 180 度</label>
+          <button class="btn ghost" id="md_env_ruler">列印校正尺</button>
           <span class="muted" id="md_env_hint"></span>
         </div>
         <div class="muted" style="margin-top:8px;">
@@ -865,9 +866,14 @@ function openPrint(title, css, inner, tailScript){
 //   中　信封 B5              176×250 mm　版面 166.1×236.2
 //   大　信封 C4              229×324 mm　版面 211.5×303.2
 // 三種都是 100% 不縮放，版面置中在信封上。
-// 小跟大進紙方向是反的，所以整張轉 180 度（畫面上可以取消勾選）。
-// 印歪了不用改程式，用畫面上的「縮放／左右／上下」微調就好。
-const ENV_GEOM = {"信封(小)": {"paper": [120, 235], "margin": [4.6, 3.5], "block": [110.8, 227.9], "scale": 100.0, "zip_to": {"box": [77.2, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [33.0, 17.5, 44.1, 184.4], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [90.1, 17.5, 20.8, 210.5], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 100.2, 33.0, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [77.2, 143.5, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 215.7, 33.0, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [33.0, 215.9, 44.1, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [77.2, 138.0, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 Nagagata3（長形3號）120×235 mm", "rot180": true}, "信封(中)": {"paper": [176, 250], "margin": [5.0, 6.9], "block": [166.1, 236.2], "scale": 100.0, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 B5 176×250 mm", "rot180": false}, "信封(大)": {"paper": [229, 324], "margin": [8.8, 10.4], "block": [211.5, 303.2], "scale": 100.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 C4 229×324 mm", "rot180": true}};
+//
+// ★ 印出來偏小通常不是版面的問題，是【瀏覽器列印對話框】自己縮的：
+//   Chrome 的「縮放」預設是「符合頁面」，它會把整頁縮到印表機的可列印範圍內，
+//   信封四邊有 4~5mm 印不到，於是就縮成 92% 左右 —— 看起來就是整個小一號。
+//   解法：列印對話框裡「更多設定」→ 縮放改成「自訂 100」、邊界改成「無」。
+//   如果印表機驅動就是縮不掉，用下面的「列印校正尺」量出實際比例，
+//   再把畫面上的縮放調成 100÷量到的值×100，一次調好就固定了。
+const ENV_GEOM = {"信封(小)": {"paper": [120, 235], "margin": [4.6, 3.5], "block": [110.8, 227.9], "scale": 100.0, "zip_to": {"box": [77.2, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [33.0, 17.5, 44.1, 184.4], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [90.1, 17.5, 20.8, 210.5], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 100.2, 33.0, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [77.2, 143.5, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 215.7, 33.0, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [33.0, 215.9, 44.1, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [77.2, 138.0, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 Nagagata3（長形3號）120×235 mm", "rot180": false}, "信封(中)": {"paper": [176, 250], "margin": [5.0, 6.9], "block": [166.1, 236.2], "scale": 100.0, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 B5 176×250 mm", "rot180": false}, "信封(大)": {"paper": [229, 324], "margin": [8.8, 10.4], "block": [211.5, 303.2], "scale": 100.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 C4 229×324 mm", "rot180": false}};
 
 // 直書用 writing-mode + text-orientation:upright，
 // 對應 Excel 的 textRotation=255（字不轉，一個一個往下疊）。
@@ -916,15 +922,68 @@ function envField(cls, g, text, extraCls){
     + `<span data-pt="${g.pt}" style="font-size:${g.pt}pt;">${text}</span></div>`;
 }
 // 換信封尺寸時，把該尺寸的預設縮放與紙張大小填進微調欄
+// 校正好的縮放與位移記在這台電腦的瀏覽器裡，下次開就不用再調。
+function envPrefKey(size){ return 'mail_env_pref_' + size; }
+function loadEnvPref(size){
+  try{ return JSON.parse(localStorage.getItem(envPrefKey(size)) || 'null'); }catch(e){ return null; }
+}
+function saveEnvPref(){
+  const size = document.getElementById('md_env_size').value;
+  try{
+    localStorage.setItem(envPrefKey(size), JSON.stringify({
+      scale: Number(document.getElementById('md_env_scale').value) || 100,
+      dx: Number(document.getElementById('md_env_dx').value) || 0,
+      dy: Number(document.getElementById('md_env_dy').value) || 0,
+      rot: document.getElementById('md_env_rot').checked ? 1 : 0
+    }));
+  }catch(e){}
+}
 function syncEnvHint(){
   const size = document.getElementById('md_env_size').value;
   const G = ENV_GEOM[size]; if(!G) return;
-  document.getElementById('md_env_scale').value = G.scale;
-  document.getElementById('md_env_rot').checked = !!G.rot180;
+  const pref = loadEnvPref(size) || {};
+  document.getElementById('md_env_scale').value = pref.scale != null ? pref.scale : G.scale;
+  document.getElementById('md_env_dx').value    = pref.dx    != null ? pref.dx    : 0;
+  document.getElementById('md_env_dy').value    = pref.dy    != null ? pref.dy    : 0;
+  document.getElementById('md_env_rot').checked = pref.rot != null ? !!pref.rot : !!G.rot180;
   document.getElementById('md_env_hint').innerHTML =
-    '印表機的<b>原稿尺寸與紙張尺寸都要選「' + esc(G.paper_name) + '」</b>、直印、'
-    + '給紙匣手動送紙、紙張種類信封。版面 ' + G.block[0] + '×' + G.block[1] + ' mm，不縮放。'
-    + '第一次印先試一張，位置差幾公釐就調上面的左右／上下。';
+    '印表機：<b>原稿尺寸與紙張尺寸都選「' + esc(G.paper_name) + '」</b>、直印、手動送紙、紙張種類信封。'
+    + '瀏覽器的列印視窗裡，<b>「縮放」要改成自訂 100、「邊界」改成無</b>——'
+    + '它預設會幫你縮到「符合頁面」，那就是印出來整個小一號的原因。'
+    + '還是不對就按「列印校正尺」，量出來再把上面的縮放調好，調好會自動記住。';
+}
+// 印出來的大小對不對，用尺量最準。這一張印出來的線應該剛好 100mm。
+function printRuler(){
+  const size = document.getElementById('md_env_size').value;
+  const G = ENV_GEOM[size]; if(!G) return;
+  const sc = (Number(document.getElementById('md_env_scale').value) || 100) / 100;
+  let ticks = '';
+  for(let i = 0; i <= 10; i++){
+    ticks += `<div style="position:absolute;left:${i * 10}mm;top:0;width:0.3mm;height:${i % 5 === 0 ? 6 : 3.5}mm;background:#000;"></div>`;
+    if(i % 5 === 0) ticks += `<div style="position:absolute;left:${i * 10}mm;top:7mm;font-size:8pt;transform:translateX(-50%);">${i * 10}</div>`;
+  }
+  let vt = '';
+  for(let i = 0; i <= 10; i++){
+    vt += `<div style="position:absolute;top:${i * 10}mm;left:0;height:0.3mm;width:${i % 5 === 0 ? 6 : 3.5}mm;background:#000;"></div>`;
+    if(i % 5 === 0) vt += `<div style="position:absolute;top:${i * 10}mm;left:7mm;font-size:8pt;transform:translateY(-50%);">${i * 10}</div>`;
+  }
+  const inner = `<div class="pg"><div class="blk" style="left:${G.margin[0]}mm;top:${G.margin[1]}mm;`
+    + `width:${G.block[0]}mm;height:${G.block[1]}mm;transform:scale(${sc});">`
+    + `<div style="position:absolute;left:0;top:0;width:${G.block[0]}mm;height:${G.block[1]}mm;border:0.3mm dashed #999;"></div>`
+    + `<div style="position:absolute;left:5mm;top:8mm;font-size:10pt;line-height:1.6;width:${G.block[0] - 10}mm;">`
+    + `<b>${esc(size)} 列印校正尺</b><br>紙張 ${esc(G.paper_name)}<br>目前縮放 ${Math.round(sc * 1000) / 10}%<br><br>`
+    + `拿尺量下面那條橫線。<br>量到剛好 <b>100 mm</b> 就是對的。<br>`
+    + `如果量到 92mm，把畫面上的縮放改成<br><b>100 ÷ 92 × 100 ＝ 109</b>，再印一次。<br><br>`
+    + `虛線框是信封版面的範圍，<br>它應該剛好落在信封裡面。</div>`
+    + `<div style="position:absolute;left:5mm;top:70mm;width:100mm;height:14mm;">`
+    + `<div style="position:absolute;left:0;top:0;width:100mm;height:0.4mm;background:#000;"></div>${ticks}</div>`
+    + `<div style="position:absolute;left:5mm;top:105mm;width:14mm;height:100mm;">`
+    + `<div style="position:absolute;left:0;top:0;height:100mm;width:0.4mm;background:#000;"></div>${vt}</div>`
+    + `<div style="position:absolute;left:22mm;top:105mm;font-size:9pt;">↑ 這條直線<br>也要剛好<br>100 mm</div>`
+    + `</div></div>`;
+  const css = PRINT_CSS_ENV.replace(/__PW__/g, G.paper[0]).replace(/__PH__/g, G.paper[1]);
+  openPrint('列印校正尺', css, inner);
+  msg('md_msg', '校正尺已送出，印出來用尺量那條 100mm 的線');
 }
 function printEnvelopes(){
   if(!STATE.picked.length){ msg('md_msg', '清單是空的', true); return; }
@@ -1399,6 +1458,11 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPicked();
   });
   document.getElementById('md_env_size').addEventListener('change', syncEnvHint);
+  document.getElementById('md_env_ruler').addEventListener('click', printRuler);
+  ['md_env_scale','md_env_dx','md_env_dy','md_env_rot'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', saveEnvPref);
+  });
   document.getElementById('md_print_env').addEventListener('click', printEnvelopes);
   document.getElementById('md_print_label').addEventListener('click', printLabels);
   document.getElementById('md_export').addEventListener('click', exportBill);
