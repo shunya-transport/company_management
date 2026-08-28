@@ -4133,11 +4133,17 @@ function renderEmpSelect(){
 // 為什麼要覆蓋：疊第二筆之後，到期提醒會同時吃到舊那筆的日期，
 // 畫面上就會一直掛著一條洗不掉的「已逾期」，久了大家就不看提醒了。
 // 舊的發證日／到期日不會消失，會寫進 notes 當「覆驗履歷」。
-const HIDDEN_TRAINING_TYPE_IDS = [26, 33, 35];
+const HIDDEN_TRAINING_TYPE_IDS = [];
+// ↑ 原本是 [26, 33, 35]，用來隱藏「職業職業聯結車駕照」那種前綴重複的舊項目。
+//   SQL #54 整理完編號之後，26 已經變成「道路危險物品運送人員訓練證明書」，
+//   33 與 35 也不存在了（項目最大編號只到 27）。
+//   再留著會讓這張證從下拉消失，所以清空。
 // ↑ 「職業職業聯結車駕照」這種前綴重複兩次的舊項目：只從下拉隱藏，不從 STATE 拿掉。
 //   還沒跑 SQL #54 之前，舊紀錄的 type_id 還掛在 26/33/35 上，
 //   留著才查得到 type_name，不然清單會出現一整排空白的訓練項目。
-const TRAINING_TYPE_ALIAS = { 26: 23, 33: 25, 35: 24 };
+const TRAINING_TYPE_ALIAS = {};
+// ↑ 同上。現有紀錄用到的 type_id 是 1~27，每一個都對得到真的項目，不需要別名。
+//   留著會把「道路危險物品運送人員訓練證明書」的紀錄算成職業聯結車駕照。
 function trainingTypeKey(id){ return TRAINING_TYPE_ALIAS[id] || id; }
 function trainingTypeOptions(currentId){
   return (STATE.trainingTypes || [])
