@@ -311,6 +311,7 @@
     <nav>
       <button data-tab="make" class="active">產生寄送單</button>
       <button data-tab="recip">收件人維護</button>
+      <button data-tab="sender">寄件資訊</button>
       <button data-tab="log">寄送紀錄</button>
     </nav>
     <div class="sidebar-motto">
@@ -389,11 +390,21 @@
           </table>
         </div>
         <div class="toolbar" style="margin-top:14px;">
-          <button class="btn" id="md_print_env">列印信封</button>
+          <button class="btn" id="md_print_env">列印信封（直式）</button>
+          <select id="md_env_size" title="要印哪一種信封">
+            <option>信封(小)</option><option>信封(中)</option><option>信封(大)</option>
+          </select>
           <button class="btn" id="md_print_label">列印地址條（便利帶）</button>
           <button class="btn ghost" id="md_export">匯出便利帶託運總表 CSV</button>
           <button class="btn" id="md_save">存成寄送紀錄</button>
           <span class="muted" id="md_msg"></span>
+        </div>
+        <div class="toolbar" style="margin-top:8px;">
+          <span class="muted">信封微調</span>
+          <label class="muted">縮放 <input id="md_env_scale" type="number" step="1" style="width:70px;">%</label>
+          <label class="muted">左右 <input id="md_env_dx" type="number" step="0.5" value="0" style="width:70px;">mm</label>
+          <label class="muted">上下 <input id="md_env_dy" type="number" step="0.5" value="0" style="width:70px;">mm</label>
+          <span class="muted" id="md_env_hint"></span>
         </div>
         <div class="muted" style="margin-top:8px;">
           <b>查件編號</b>那一欄便利帶和郵局掛號都填這裡，寄出後回來補也可以（在寄送紀錄那一頁改）；
@@ -450,6 +461,51 @@
             </tr></thead>
             <tbody id="rc_body"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 寄件資訊 ============ -->
+    <div id="sender" class="panel">
+      <div class="card">
+        <h2 id="sd_form_title">新增寄件公司</h2>
+        <div class="muted" style="margin-bottom:10px;">
+          這裡改的是<b>信封上「寄件人」那一格要印什麼</b>。搬家的時候改這裡就好，
+          改完之後印出來的信封、地址條、便利帶託運總表都會跟著換成新地址。
+          <b>已經寄出去的紀錄不會被改動</b>——寄送紀錄存的是寄的當下抄下來的地址，
+          所以以前寄的還是查得到當時的舊地址。
+        </div>
+        <div class="form-grid">
+          <label>公司名稱<input id="sd_name" placeholder="順亞運通(股)公司"></label>
+          <label>郵遞區號<input id="sd_zip" maxlength="6" placeholder="300043"></label>
+          <label>電話<input id="sd_tel" placeholder="03-5166069"></label>
+          <label>便利帶客戶代碼<input id="sd_code" placeholder="229981（沒有就留空）"></label>
+          <label>排序<input id="sd_sort" type="number" step="1" placeholder="數字小的排前面"></label>
+          <label>狀態<select id="sd_active"><option value="1">使用中</option><option value="0">停用</option></select></label>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="display:block;">地址<input id="sd_addr" style="width:100%;" placeholder="新竹市公道五路二段278號"></label>
+        </div>
+        <div class="toolbar" style="margin-top:14px;">
+          <button class="btn" id="sd_save">存檔</button>
+          <button class="btn ghost" id="sd_cancel" style="display:none;">取消修改</button>
+          <span class="muted" id="sd_msg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>寄件公司<span class="count-badge" id="sd_count">0</span></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th style="width:52px;">排序</th><th>公司名稱</th><th style="width:70px;">郵區</th>
+              <th>地址</th><th>電話</th><th>便利帶代碼</th><th style="width:70px;">狀態</th><th style="width:80px;"></th>
+            </tr></thead>
+            <tbody id="sd_body"></tbody>
+          </table>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          停用的公司不會出現在「產生寄送單」的寄件人下拉，但舊紀錄查得到，也還能在寄送紀錄那一頁用它篩選。
         </div>
       </div>
     </div>
@@ -652,6 +708,12 @@ function currentSender(){
   const id = document.getElementById('md_sender').value;
   return STATE.senders.find(s => String(s.sender_id) === String(id)) || null;
 }
+// 產生寄送單的下拉只放使用中的；寄送紀錄的篩選要放全部，
+// 不然停用掉的公司以前寄的那些就篩不出來了。
+function activeSenders(){
+  return STATE.senders.filter(s => Number(s.active) !== 0)
+    .sort((a, b) => (Number(a.sort_order) || 99) - (Number(b.sort_order) || 99));
+}
 function renderSuggest(){
   const box = document.getElementById('md_sugg');
   const kw = String(document.getElementById('md_search').value || '').trim().toLowerCase();
@@ -774,59 +836,121 @@ function addBlankRow(){
 }
 
 // ---------- 列印 ----------
-function openPrint(title, css, inner){
+function openPrint(title, css, inner, tailScript){
   const w = window.open('', '_blank');
   if(!w){ alert('瀏覽器擋掉了新視窗，請允許彈出視窗再試一次。'); return; }
   w.document.write('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>' + title + '</title>'
-    + '<style>' + css + '</style></head><body>' + inner + '</body></html>');
+    + '<style>' + css + '</style></head><body>' + inner
+    + (tailScript ? '<script>' + tailScript + '<\/script>' : '') + '</body></html>');
   w.document.close();
-  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 300);
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 500);
 }
+// ===== 直式信封（中式信封）列印 =====
+// 版面不是我自己排的，是直接從「信封小.xls」的三張信封工作表量出來的：
+// 每一格的左上角座標、寬高、字級都照原檔換算成公釐，欄寬用 Excel 的字元寬換算，
+// 列高用點數換算（1pt = 0.3528mm）。所以印出來的位置跟你原本那個 Excel 一樣。
+//
+// 直式信封的擺法（跟西式相反，是直書、由右往左讀）：
+//   最右邊一直行  收件人地址
+//   中間大字      收件人公司與姓名
+//   右上角方框    收件人郵遞區號
+//   中間偏右小字  收件人電話（上面有 TEL）
+//   最左邊一直行  寄件人公司、地址、電話
+//   左下角        寄件人郵遞區號
+//
+// 三種尺寸的紙張、邊界、縮放都照原檔：
+//   小 A4 210×297（版面 110.8×227.9）／中 B5 信封 176×250（166.1×236.2）
+//   大 C4 信封 229×324（211.5×303.2）
+// 中跟大的版面比紙略高，原檔本來就是靠縮放塞進去的，所以預設縮放不是 100%。
+// 印歪了不用改程式，用畫面上的「縮放／左右／上下」微調就好。
+const ENV_GEOM = {"信封(小)": {"paper": [210, 297], "margin": [3.0, 15.0], "block": [110.8, 227.9], "scale": 100.0, "zip_to": {"box": [77.2, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [33.0, 17.5, 44.1, 184.4], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [90.1, 17.5, 20.8, 210.5], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 100.2, 33.0, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [77.2, 143.5, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 215.7, 33.0, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [33.0, 215.9, 44.1, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [77.2, 138.0, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}}, "信封(中)": {"paper": [176, 250], "margin": [3.0, 30.0], "block": [166.1, 236.2], "scale": 91.4, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}}, "信封(大)": {"paper": [229, 324], "margin": [3.0, 29.0], "block": [211.5, 303.2], "scale": 96.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}}};
+
+// 直書用 writing-mode + text-orientation:upright，
+// 對應 Excel 的 textRotation=255（字不轉，一個一個往下疊）。
 const PRINT_CSS_ENV = `
-  @page{ size:A4 landscape; margin:12mm; }
-  body{ font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif; margin:0; }
-  .env{ page-break-after:always; height:180mm; position:relative; padding:14mm; box-sizing:border-box; }
-  .env:last-child{ page-break-after:auto; }
-  .from{ position:absolute; top:12mm; left:14mm; font-size:13pt; line-height:1.5; }
-  .from .z{ font-size:15pt; letter-spacing:3px; font-weight:700; }
-  .to{ position:absolute; top:62mm; left:78mm; right:14mm; font-size:19pt; line-height:1.7; }
-  .to .z{ font-size:24pt; letter-spacing:6px; font-weight:700; }
-  .to .nm{ font-size:22pt; font-weight:700; white-space:pre-line; }
-  .to .ad{ font-size:17pt; }
-  .to .tel{ font-size:14pt; color:#333; }
-  .to .trk{ font-size:13pt; color:#333; margin-top:4mm; }
-  .to .trk u{ display:inline-block; min-width:52mm; text-decoration:none; border-bottom:1px solid #999; }
-  .mark{ position:absolute; bottom:10mm; right:14mm; font-size:10pt; color:#888; }
+  @page{ size:__PW__mm __PH__mm; margin:0; }
+  html,body{ margin:0; padding:0; }
+  body{ font-family:"標楷體","DFKai-SB","BiauKai","Noto Serif CJK TC",serif; }
+  .pg{ position:relative; width:__PW__mm; height:__PH__mm; overflow:hidden;
+       page-break-after:always; break-after:page; }
+  .pg:last-child{ page-break-after:auto; break-after:auto; }
+  .blk{ position:absolute; transform-origin:left top; }
+  .f{ position:absolute; overflow:hidden; display:flex; justify-content:center; }
+  .f>span{ white-space:pre-line; }
+  .f.h{ }
+  .f.h>span{ text-align:center; width:100%; }
+  .f.va-center{ align-items:center; }
+  .f.va-top{ align-items:flex-start; }
+  .f.va-bottom{ align-items:flex-end; }
+  .f.v>span{ writing-mode:vertical-rl; text-orientation:upright; height:100%;
+             line-height:1.06; letter-spacing:0.5px; }
+  .f.v.t-center>span{ text-align:center; }
+  .f.v.t-top>span{ text-align:start; }
+  .trk u{ display:inline-block; min-width:60%; text-decoration:none; border-bottom:1px solid #999; }
 `;
+// 印出來之前先把塞不下的欄位自動縮字級，免得長公司名或長地址被裁掉。
+const ENV_FIT_JS = `
+(function(){
+  document.querySelectorAll('.f').forEach(function(f){
+    var sp = f.firstElementChild; if(!sp) return;
+    var pt = parseFloat(sp.getAttribute('data-pt')) || 12, guard = 0;
+    function fits(){
+      return sp.scrollHeight <= sp.clientHeight + 1 && sp.scrollWidth <= f.clientWidth + 1;
+    }
+    while(!fits() && pt > 5 && guard++ < 80){ pt -= 0.5; sp.style.fontSize = pt + 'pt'; }
+  });
+})();
+`;
+function envField(cls, g, text, extraCls){
+  if(g == null) return '';
+  const b = g.box;
+  const va = g.vert ? '' : (' va-' + (g.va === 'center' ? 'center' : (g.va === 'top' ? 'top' : 'bottom')));
+  const ta = g.vert ? (' t-' + (g.va === 'center' ? 'center' : 'top')) : '';
+  return `<div class="f ${g.vert ? 'v' : 'h'}${va}${ta} ${cls} ${extraCls || ''}"
+    style="left:${b[0]}mm;top:${b[1]}mm;width:${b[2]}mm;height:${b[3]}mm;">`
+    + `<span data-pt="${g.pt}" style="font-size:${g.pt}pt;">${text}</span></div>`;
+}
+// 換信封尺寸時，把該尺寸的預設縮放與紙張大小填進微調欄
+function syncEnvHint(){
+  const size = document.getElementById('md_env_size').value;
+  const G = ENV_GEOM[size]; if(!G) return;
+  document.getElementById('md_env_scale').value = G.scale;
+  document.getElementById('md_env_hint').textContent =
+    '紙張 ' + G.paper[0] + '×' + G.paper[1] + ' mm，版面 ' + G.block[0] + '×' + G.block[1] + ' mm，'
+    + '預設縮放 ' + G.scale + '%（照原本 Excel 的設定）。第一次印先試一張，位置不對再調上面三個數字。';
+}
 function printEnvelopes(){
   if(!STATE.picked.length){ msg('md_msg', '清單是空的', true); return; }
-  const s = currentSender(); const date = document.getElementById('md_date').value;
-  const inner = STATE.picked.map(p => `
-    <div class="env">
-      <div class="from">
-        <div class="z">${esc((s && s.zip_code) || '')}</div>
-        <div>${esc((s && s.sender_name) || '')}</div>
-        <div>${esc((s && s.address) || '')}</div>
-        <div>${esc((s && s.tel) || '')}</div>
-      </div>
-      <div class="to">
-        <div class="z">${esc(p.zip_code || '')}</div>
-        <div class="nm">${esc(fullName(p))}</div>
-        <div class="ad">${esc(p.address || '')}</div>
-        <div class="tel">TEL ${esc(phoneOf(p))}</div>
-        <div class="trk">查件編號 <u>${esc(p.tracking_no || '')}</u></div>
-      </div>
-      <div class="mark">${esc(p.envelope || '')}　${esc(p.items || '')}　${esc(toROC(date))}</div>
-    </div>`).join('');
-  openPrint('信封列印', PRINT_CSS_ENV, inner);
+  const size = document.getElementById('md_env_size').value;
+  const G = ENV_GEOM[size];
+  if(!G){ msg('md_msg', '沒有這個信封尺寸的版面', true); return; }
+  const s = currentSender();
+  const scEl = document.getElementById('md_env_scale');
+  const sc = (Number(scEl.value) || G.scale) / 100;
+  const dx = Number(document.getElementById('md_env_dx').value) || 0;
+  const dy = Number(document.getElementById('md_env_dy').value) || 0;
+  const fromText = [ (s && s.sender_name) || '', (s && s.address) || '', (s && s.tel) || '' ]
+                     .filter(Boolean).join('\n');
+  const pages = STATE.picked.map(p => {
+    const inner =
+        envField('zip', G.zip_to,   esc(p.zip_code || ''))
+      + envField('nm',  G.name_to,  esc(fullName(p)))
+      + envField('ad',  G.addr_to,  esc(p.address || ''))
+      + envField('tl',  G.tel_label, 'TEL')
+      + envField('tel', G.tel,      esc(phoneOf(p)))
+      + envField('fr',  G.from,     esc(fromText))
+      + envField('fz',  G.zip_from, esc((s && s.zip_code) || ''));
+      // 信封上不印查件編號（使用者要求）。號碼還是存在寄送紀錄裡，
+      // 便利帶地址條上仍然保留那一行，因為那張是要貼在包裹上的。
+    return `<div class="pg"><div class="blk" style="left:${G.margin[0] + dx}mm;top:${G.margin[1] + dy}mm;`
+         + `width:${G.block[0]}mm;height:${G.block[1]}mm;transform:scale(${sc});">${inner}</div></div>`;
+  }).join('');
+  const css = PRINT_CSS_ENV.replace(/__PW__/g, G.paper[0]).replace(/__PH__/g, G.paper[1]);
+  openPrint(size + ' 列印', css, pages, ENV_FIT_JS);
+  msg('md_msg', '已送出 ' + STATE.picked.length + ' 張 ' + size
+      + '（紙張 ' + G.paper[0] + '×' + G.paper[1] + 'mm，縮放 ' + Math.round(sc * 1000) / 10 + '%）');
 }
-// 地址條版面。上一版字會壓到裁切線，這一版做了四件事：
-//   1. 裁切線（虛線框）跟內容分開 —— 框是 .lb，字全部放在 .in 裡面，
-//      .in 四邊各留 6mm 的安全邊界，字再長也碰不到框。
-//   2. .in 設 overflow:hidden，萬一真的太長是被裁掉而不是溢出去疊到隔壁那張。
-//   3. 長地址會自動折行（word-break），不會撐破格子。
-//   4. 字數多的那幾張自動縮一級字（.tight），常見的長公司名＋長地址就塞得下。
-// 一張 A4 排 2 欄 × 4 列＝8 張，每張 63mm 高（A4 可用高度 277mm，4×63＋3×6＝270mm 剛好放得下）。
+
 const PRINT_CSS_LABEL = `
   @page{ size:A4 portrait; margin:10mm; }
   body{ font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif; margin:0; }
@@ -1088,16 +1212,88 @@ function fillSelects(){
   dl.innerHTML = all.filter(x => (seen[x] ? false : (seen[x] = 1))).map(x => `<option value="${esc(x)}">`).join('');
 }
 function fillSenders(){
+  const keep = document.getElementById('md_sender').value;
   const sel = document.getElementById('md_sender');
-  sel.innerHTML = STATE.senders.map(s =>
+  sel.innerHTML = activeSenders().map(s =>
     `<option value="${s.sender_id}">${esc(s.sender_name)}</option>`).join('');
+  if(keep && activeSenders().some(s => String(s.sender_id) === String(keep))) sel.value = keep;
   const lg = document.getElementById('lg_sender');
+  const keepLg = lg.value;
   lg.innerHTML = '<option value="">全部寄件人</option>'
-    + STATE.senders.map(s => `<option value="${s.sender_id}">${esc(s.sender_name)}</option>`).join('');
+    + STATE.senders.map(s => `<option value="${s.sender_id}">${esc(s.sender_name)}`
+        + (Number(s.active) === 0 ? '（停用）' : '') + '</option>').join('');
+  lg.value = keepLg || '';
+}
+
+// ================= 寄件資訊 =================
+// 搬家就是改這裡。信封、地址條、便利帶託運總表都吃這份資料。
+let SD_EDIT = null;
+function sdFill(r){
+  SD_EDIT = r ? r.sender_id : null;
+  const g = id => document.getElementById(id);
+  g('sd_name').value   = r ? (r.sender_name || '') : '';
+  g('sd_zip').value    = r ? (r.zip_code || '') : '';
+  g('sd_addr').value   = r ? (r.address || '') : '';
+  g('sd_tel').value    = r ? (r.tel || '') : '';
+  g('sd_code').value   = r ? (r.courier_code || '') : '';
+  g('sd_sort').value   = r ? (r.sort_order == null ? '' : r.sort_order) : '';
+  g('sd_active').value = r ? String(r.active == null ? 1 : r.active) : '1';
+  g('sd_form_title').textContent = r ? ('修改：' + (r.sender_name || '')) : '新增寄件公司';
+  g('sd_cancel').style.display = r ? '' : 'none';
+  msg('sd_msg', '');
+  if(r) window.scrollTo({top: 0, behavior: 'smooth'});
+}
+async function sdSave(){
+  const g = id => String(document.getElementById(id).value || '').trim();
+  if(!g('sd_name')){ msg('sd_msg', '公司名稱一定要填', true); return; }
+  const patch = {
+    sender_name: g('sd_name'), zip_code: g('sd_zip') || null,
+    address: g('sd_addr') || null, tel: g('sd_tel') || null,
+    courier_code: g('sd_code') || null,
+    sort_order: g('sd_sort') === '' ? 99 : parseInt(g('sd_sort'), 10),
+    active: parseInt(g('sd_active'), 10)
+  };
+  const btn = document.getElementById('sd_save'); btn.disabled = true;
+  try{
+    let done = '';
+    if(SD_EDIT != null){
+      const row = await sbUpdate('mail_senders', 'sender_id', SD_EDIT, patch);
+      const i = STATE.senders.findIndex(x => String(x.sender_id) === String(SD_EDIT));
+      if(i >= 0) STATE.senders[i] = row;
+      done = '已更新：' + (row.sender_name || '');
+    }else{
+      // sender_id 不是自動編號，所以自己接下一號
+      const used = STATE.senders.map(x => Number(x.sender_id)).filter(n => !isNaN(n));
+      patch.sender_id = (used.length ? Math.max.apply(null, used) : 0) + 1;
+      const rows = await sbInsert('mail_senders', [patch]);
+      STATE.senders.push(rows[0]);
+      done = '已新增：' + rows[0].sender_name;
+    }
+    sdFill(null); msg('sd_msg', done);
+    fillSenders(); renderSenders();
+  }catch(err){
+    msg('sd_msg', '存檔失敗：' + (err && err.message ? err.message : err), true);
+  }finally{ btn.disabled = false; }
+}
+function renderSenders(){
+  const rows = STATE.senders.slice()
+    .sort((a, b) => (Number(a.sort_order) || 99) - (Number(b.sort_order) || 99));
+  document.getElementById('sd_count').textContent = rows.length;
+  document.getElementById('sd_body').innerHTML = rows.map(r =>
+    `<tr${Number(r.active) === 0 ? ' style="opacity:.5;"' : ''}>
+      <td>${esc(r.sort_order == null ? '' : r.sort_order)}</td>
+      <td><b>${esc(r.sender_name)}</b></td>
+      <td>${esc(r.zip_code || '')}</td>
+      <td>${esc(r.address || '')}</td>
+      <td>${esc(r.tel || '')}</td>
+      <td>${esc(r.courier_code || '')}</td>
+      <td>${Number(r.active) === 0 ? '<span class="pill gray">停用</span>' : '<span class="pill green">使用中</span>'}</td>
+      <td><button class="btn ghost" data-sd-edit="${r.sender_id}" style="padding:4px 8px;">修改</button></td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">還沒有寄件公司</td></tr>';
 }
 async function loadAll(){
   const [sd, rc, dp] = await Promise.all([
-    sbAll('mail_senders?select=*&active=eq.1&order=sort_order.asc'),
+    sbAll('mail_senders?select=*&order=sort_order.asc'),
     sbAll('mail_recipients?select=*&order=print_no.asc'),
     sbAll('mail_dispatch?select=*&order=send_date.desc,dispatch_id.desc')
   ]);
@@ -1110,6 +1306,7 @@ async function init(){
     CURRENT_USER = t.email || '';
   }catch(e){}
   document.getElementById('md_date').value = todayISO();
+  syncEnvHint();
   const d = new Date(); d.setMonth(d.getMonth() - 3);
   document.getElementById('lg_from').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';
   document.getElementById('lg_to').value = todayISO();
@@ -1121,7 +1318,7 @@ async function init(){
     w.textContent = '讀取失敗：' + (err && err.message ? err.message : err);
   }
   fillSenders(); fillSelects(); fillBrowseItems();
-  renderPicked(); renderRecipients(); renderBrowse(); renderLog();
+  renderPicked(); renderRecipients(); renderBrowse(); renderSenders(); renderLog();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1191,6 +1388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     STATE.picked.forEach(p => { p.envelope = v; });
     renderPicked();
   });
+  document.getElementById('md_env_size').addEventListener('change', syncEnvHint);
   document.getElementById('md_print_env').addEventListener('click', printEnvelopes);
   document.getElementById('md_print_label').addEventListener('click', printLabels);
   document.getElementById('md_export').addEventListener('click', exportBill);
@@ -1212,6 +1410,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // 寄件資訊
+  document.getElementById('sd_save').addEventListener('click', sdSave);
+  document.getElementById('sd_cancel').addEventListener('click', () => sdFill(null));
+  document.getElementById('sd_body').addEventListener('click', e => {
+    const id = e.target.getAttribute('data-sd-edit'); if(!id) return;
+    sdFill(STATE.senders.find(x => String(x.sender_id) === String(id)));
+  });
+
   // 寄送紀錄
   ['lg_from','lg_to','lg_search','lg_sender','lg_env'].forEach(id => {
     const el = document.getElementById(id);
@@ -1221,7 +1427,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('lg_reload').addEventListener('click', async () => {
     msg('lg_msg', '重新讀取中…');
     try{ await loadAll(); fillSenders(); fillSelects(); fillBrowseItems();
-           renderRecipients(); renderBrowse(); renderLog(); msg('lg_msg', '已更新'); }
+           renderRecipients(); renderBrowse(); renderSenders(); renderLog(); msg('lg_msg', '已更新'); }
     catch(err){ msg('lg_msg', '讀取失敗：' + (err && err.message ? err.message : err), true); }
   });
   document.getElementById('lg_body').addEventListener('click', async e => {
