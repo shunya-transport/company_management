@@ -509,6 +509,8 @@
           <input id="lg_search" placeholder="公司、收件人、寄什麼、查件編號…" style="min-width:240px;">
           <select id="lg_sender"><option value="">全部寄件人</option></select>
           <select id="lg_env"><option value="">全部寄送方式</option></select>
+          <label class="muted" style="display:flex;align-items:center;gap:5px;">
+            <input id="lg_notrk" type="checkbox" style="width:auto;"> 只看還沒填查件編號</label>
           <button class="btn ghost" id="lg_reload">重新讀取</button>
           <button class="btn ghost" id="lg_export">匯出 CSV</button>
           <span class="muted" id="lg_msg"></span>
@@ -518,6 +520,12 @@
 
       <div class="card">
         <h2>明細<span class="count-badge" id="lg_count">0</span></h2>
+        <div class="muted" style="margin-bottom:10px;">
+          <b>查件編號可以直接在這張表上補。</b>寄完拿到郵局收據或便利帶單據，
+          勾上面的「只看還沒填查件編號」，在欄位裡打完按 <b>Enter</b> 就存進雲端，
+          游標會自動跳到下一列，一張收據可以一路打到底不用滑鼠。
+          郵局掛號、便利帶、快遞的號碼都填這一欄，之後用上面的關鍵字就查得到。
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr>
@@ -1040,12 +1048,14 @@ function lgFiltered(){
   const g = id => String(document.getElementById(id).value || '').trim();
   const from = g('lg_from'), to = g('lg_to'), kw = g('lg_search').toLowerCase();
   const sd = g('lg_sender'), en = g('lg_env');
+  const noTrk = document.getElementById('lg_notrk').checked;
   return STATE.dispatch.filter(d => {
     const dt = String(d.send_date || '').slice(0, 10);
     if(from && dt < from) return false;
     if(to && dt > to) return false;
     if(sd && String(d.sender_id) !== sd) return false;
     if(en && String(d.envelope || '') !== en) return false;
+    if(noTrk && String(d.tracking_no || '').trim()) return false;
     if(!kw) return true;
     return [d.recipient_company, d.recipient_contact, d.items, d.item_note,
             d.tracking_no, d.address, d.batch_no, d.sender_name, d.envelope, d.notes]
@@ -1071,12 +1081,42 @@ function renderLog(){
     <td>${esc(d.envelope || '')}</td>
     <td>${esc(d.items || '')}${d.item_note ? '<div class="muted">' + esc(d.item_note) + '</div>' : ''}</td>
     <td>${esc(d.qty == null ? 1 : d.qty)}</td>
-    <td>${esc(d.tracking_no || '')}</td>
+    <td><input data-lg-trk="${d.dispatch_id}" value="${esc(d.tracking_no || '')}"
+               placeholder="郵局／便利帶單號" autocomplete="off"
+               style="width:100%;min-width:130px;padding:5px 7px;border:1px solid var(--border-strong);
+                      border-radius:7px;font-size:12.5px;font-family:inherit;box-sizing:border-box;"></td>
     <td class="muted">${esc(d.batch_no || '')}</td>
     <td><button class="btn ghost" data-lg-del="${d.dispatch_id}" style="padding:4px 8px;">刪</button></td>
   </tr>`).join('') || '<tr><td colspan="10" class="empty">這段期間沒有寄送紀錄</td></tr>';
   if(rows.length > 800) msg('lg_msg', '符合 ' + rows.length + ' 筆，畫面只顯示最近 800 筆，要看全部請匯出 CSV');
 }
+// 在寄送紀錄那張表上直接補查件編號。一筆一筆存，不走整批覆蓋，
+// 所以不會動到同一列的其他欄位，也不需要 saveState 那套保護。
+async function saveTracking(id, value){
+  const d = STATE.dispatch.find(x => String(x.dispatch_id) === String(id));
+  if(!d) return;
+  const v = String(value || '').trim();
+  if(String(d.tracking_no || '') === v) return;          // 沒改就不要送
+  const el = document.querySelector(`[data-lg-trk="${id}"]`);
+  if(el) el.style.borderColor = 'var(--amber)';
+  try{
+    await sbUpdate('mail_dispatch', 'dispatch_id', id, {tracking_no: v || null});
+    d.tracking_no = v || null;
+    if(el){ el.style.borderColor = 'var(--green)'; setTimeout(() => { el.style.borderColor = ''; }, 1200); }
+    msg('lg_msg', '已存 ' + (d.recipient_company || '') + '：' + (v || '（清空）'));
+  }catch(err){
+    if(el) el.style.borderColor = 'var(--red)';
+    msg('lg_msg', '存檔失敗：' + ((err && err.message) || err), true);
+  }
+}
+// 按 Enter 就跳下一列，一張收據可以一路打到底
+function focusNextTracking(el){
+  const all = Array.prototype.slice.call(document.querySelectorAll('[data-lg-trk]'));
+  const i = all.indexOf(el);
+  if(i >= 0 && i + 1 < all.length){ all[i + 1].focus(); all[i + 1].select(); }
+  else el.blur();
+}
+
 function exportLog(){
   const rows = lgFiltered();
   const lines = [['寄件日期','批號','寄件人','編號','收件公司','收件人','郵遞區號','地址','電話','手機',
@@ -1304,7 +1344,22 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 寄送紀錄
-  ['lg_from','lg_to','lg_search','lg_sender','lg_env'].forEach(id => {
+  {
+    const body = document.getElementById('lg_body');
+    // change 會在離開欄位時觸發，Enter 也算，所以存檔掛這裡就夠
+    body.addEventListener('change', e => {
+      const id = e.target.getAttribute('data-lg-trk');
+      if(id) saveTracking(id, e.target.value);
+    });
+    body.addEventListener('keydown', e => {
+      if(e.key !== 'Enter') return;
+      const id = e.target.getAttribute('data-lg-trk');
+      if(!id) return;
+      e.preventDefault();
+      saveTracking(id, e.target.value).then(() => focusNextTracking(e.target));
+    });
+  }
+  ['lg_from','lg_to','lg_search','lg_sender','lg_env','lg_notrk'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener('input', renderLog); el.addEventListener('change', renderLog);
   });
