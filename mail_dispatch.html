@@ -864,7 +864,7 @@ function openPrint(title, css, inner, tailScript){
 //   左下角        寄件人郵遞區號
 //
 // 紙張照印表機實際的設定（不是 Excel 檔裡那個被轉檔弄壞的頁面設定）：
-//   小　信封 Nagagata3（長形3號）120×235 mm　版面 110.8×227.9
+//   小　自訂 122×247 mm（實際量到的信封尺寸，不是 Nagagata3）版面就是信封本身
 //   中　信封 B5              176×250 mm　版面 166.1×236.2
 //   大　信封 C4              229×324 mm　版面 211.5×303.2
 // 三種都是 100% 不縮放，版面置中在信封上。
@@ -876,7 +876,7 @@ function openPrint(title, css, inner, tailScript){
 //   解法：列印對話框裡「更多設定」→ 縮放改成「自訂 100」、邊界改成「無」。
 //   如果印表機驅動就是縮不掉，用下面的「列印校正尺」量出實際比例，
 //   再把畫面上的縮放調成 100÷量到的值×100，一次調好就固定了。
-const ENV_GEOM = {"信封(小)": {"paper": [120, 235], "paper_name": "信封 Nagagata3（長形3號）120×235 mm", "margin": [0.0, 0.0], "block": [120.0, 235.0], "scale": 100.0, "rot180": true, "zip_to": {"box": [48.0, 12.0, 58.5, 12.0], "pt": 20.0, "vert": false, "va": "center", "ls": 3.4}, "name_to": {"box": [39.0, 36.0, 39.5, 174.0], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [86.0, 28.0, 30.0, 182.0], "pt": 19.0, "vert": true, "va": "top"}, "tel_label": {"box": [79.0, 144.5, 6.5, 5.0], "pt": 8.0, "vert": false, "va": "bottom"}, "tel": {"box": [79.0, 150.0, 6.5, 62.0], "pt": 10.0, "vert": true, "va": "top"}, "from": {"box": [2.5, 100.0, 34.0, 108.0], "pt": 16.0, "vert": true, "va": "top"}, "zip_from": {"box": [4.0, 211.0, 34.0, 10.0], "pt": 16.0, "vert": false, "va": "center", "ls": 3.0}}, "信封(中)": {"paper": [176, 250], "margin": [5.0, 6.9], "block": [166.1, 236.2], "scale": 100.0, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 B5 176×250 mm", "rot180": false}, "信封(大)": {"paper": [229, 324], "margin": [8.8, 10.4], "block": [211.5, 303.2], "scale": 100.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 C4 229×324 mm", "rot180": true}};
+const ENV_GEOM = {"信封(小)": {"paper": [122, 247], "paper_name": "自訂尺寸 122×247 mm（要先在印表機內容的「使用者設定」建一個）", "margin": [0.0, 0.0], "block": [122.0, 247.0], "scale": 100.0, "rot180": true, "zip_to": {"box": [48.8, 25.1, 59.1, 11.6], "pt": 20.0, "vert": false, "va": "center", "ls": 3.5}, "name_to": {"box": [39.5, 49.0, 40.0, 174.0], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [88.0, 40.0, 31.0, 182.0], "pt": 19.0, "vert": true, "va": "top"}, "tel_label": {"box": [81.0, 152.0, 6.5, 5.0], "pt": 8.0, "vert": false, "va": "bottom"}, "tel": {"box": [81.0, 157.5, 6.5, 62.0], "pt": 10.0, "vert": true, "va": "top"}, "from": {"box": [3.0, 105.0, 34.0, 112.0], "pt": 16.0, "vert": true, "va": "top"}, "zip_from": {"box": [4.1, 225.3, 34.6, 8.6], "pt": 15.0, "vert": false, "va": "center", "ls": 3.0}}, "信封(中)": {"paper": [176, 250], "margin": [5.0, 6.9], "block": [166.1, 236.2], "scale": 100.0, "zip_to": {"box": [132.5, 0.0, 33.6, 17.5], "pt": 22.0, "vert": false, "va": "center"}, "name_to": {"box": [36.5, 17.5, 96.0, 192.7], "pt": 26.0, "vert": true, "va": "center"}, "addr_to": {"box": [145.4, 17.5, 20.8, 218.7], "pt": 19.0, "vert": true, "va": "top"}, "from": {"box": [0.0, 108.5, 36.5, 115.4], "pt": 18.0, "vert": true, "va": "top"}, "tel": {"box": [132.5, 151.8, 12.9, 84.0], "pt": 10.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 223.9, 36.5, 11.9], "pt": 18.0, "vert": false, "va": "bottom"}, "trk": {"box": [36.5, 224.2, 96.0, 11.0], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [132.5, 146.3, 12.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 B5 176×250 mm", "rot180": false}, "信封(大)": {"paper": [229, 324], "margin": [8.8, 10.4], "block": [211.5, 303.2], "scale": 100.0, "zip_to": {"box": [153.1, 0.0, 58.4, 22.0], "pt": 22.0, "vert": false, "va": "center"}, "addr_to": {"box": [175.0, 22.0, 36.5, 281.2], "pt": 24.0, "vert": true, "va": "top"}, "name_to": {"box": [41.8, 32.5, 111.3, 260.1], "pt": 36.0, "vert": true, "va": "center"}, "from": {"box": [0.0, 134.8, 41.8, 157.8], "pt": 24.0, "vert": true, "va": "top"}, "tel": {"box": [153.1, 178.1, 21.9, 114.5], "pt": 14.0, "vert": true, "va": "top"}, "zip_from": {"box": [0.0, 292.6, 41.8, 10.6], "pt": 22.0, "vert": false, "va": "bottom"}, "trk": {"box": [41.8, 293.6, 111.3, 8.6], "pt": 9, "vert": false, "va": "bottom"}, "tel_label": {"box": [153.1, 172.6, 21.9, 5.5], "pt": 8, "vert": false, "va": "bottom"}, "paper_name": "信封 C4 229×324 mm", "rot180": true}};
 
 // 直書用 writing-mode + text-orientation:upright，
 // 對應 Excel 的 textRotation=255（字不轉，一個一個往下疊）。
@@ -928,7 +928,7 @@ function envField(cls, g, text, extraCls){
 // 換信封尺寸時，把該尺寸的預設縮放與紙張大小填進微調欄
 // 校正好的縮放與位移記在這台電腦的瀏覽器裡，下次開就不用再調。
 // key 帶版本號：改過預設值之後換版本，舊的記憶就不會蓋掉新預設
-function envPrefKey(size){ return 'mail_env_pref_v2_' + size; }
+function envPrefKey(size){ return 'mail_env_pref_v3_' + size; }
 function loadEnvPref(size){
   try{ return JSON.parse(localStorage.getItem(envPrefKey(size)) || 'null'); }catch(e){ return null; }
 }
@@ -952,13 +952,13 @@ function syncEnvHint(){
   document.getElementById('md_env_dy').value    = pref.dy    != null ? pref.dy    : 0;
   document.getElementById('md_env_rot').checked = pref.rot != null ? !!pref.rot : !!G.rot180;
   document.getElementById('md_env_hint').innerHTML =
-    '<b>印出來偏小的話，八成是紙張大小沒對上。</b>'
-    + 'Chrome 列印視窗的「紙張大小」要選到<b>「' + esc(G.paper_name) + '」</b>；'
-    + '清單裡沒有的話，先去 Windows 的印表機內容把這個尺寸設成預設紙張，Chrome 才會列出來。'
-    + '接著「縮放」選自訂 <b>100</b>、「邊界」選<b>無</b>；'
-    + '印表機內容那邊的「縮放」也要從<b>自動改成手動 100%</b>——'
-    + '設成自動的時候，只要 Chrome 送出去的紙張不是這個尺寸，驅動就會自己把它縮到符合，'
-    + '整張就變小了。'
+    '紙張要選<b>「' + esc(G.paper_name) + '」</b>。'
+    + '<b>印出來偏小，是因為紙張尺寸沒有一個對得上你的信封。</b>'
+    + '驅動裡的「縮放」設在自動時，只要來稿尺寸跟紙張尺寸不一樣，它就會自己縮到符合，'
+    + '所以你把倍率調大也沒有用。'
+    + '正確做法是：印表機內容 →「使用者設定」建一個 <b>' + G.paper[0] + '×' + G.paper[1] + ' mm</b> 的自訂尺寸，'
+    + '把<b>原稿尺寸與紙張尺寸都選它</b>，縮放改成<b>手動 100%</b>；'
+    + 'Chrome 列印視窗的「紙張大小」也要選到同一個，縮放自訂 <b>100</b>、邊界<b>無</b>。'
     + '不確定對不對就先勾<b>「印對齊框」</b>印一張：框到信封四邊應該是左右 '
     + (Math.round((G.margin[0]+5)*10)/10) + 'mm、上下 ' + (Math.round((G.margin[1]+5)*10)/10)
     + 'mm，角上的短線各 10mm。短線不到 10mm 就是被縮小了，把縮放調大；'
