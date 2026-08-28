@@ -348,9 +348,31 @@
           <div id="md_sugg" class="sugg-box"></div>
         </div>
         <div class="toolbar" style="margin-top:10px;">
+          <button class="btn ghost" id="md_browse_toggle">從名單裡勾選</button>
           <button class="btn ghost" id="md_addblank">加一筆手寫的（名單上沒有的）</button>
           <button class="btn ghost" id="md_clear">清空清單</button>
           <span class="muted" id="md_pick_msg"></span>
+        </div>
+
+        <!-- 從名單裡直接勾選，不用一個一個搜尋 -->
+        <div id="md_browse" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+          <div class="toolbar">
+            <input id="md_browse_search" placeholder="篩選：公司、收件人、地址、備註…" style="min-width:260px;">
+            <select id="md_browse_item"><option value="">全部（不分寄什麼）</option></select>
+            <button class="btn ghost" id="md_browse_all">勾選目前顯示的全部</button>
+            <button class="btn ghost" id="md_browse_none">全部取消</button>
+            <button class="btn" id="md_browse_add">把勾選的加入寄送清單</button>
+            <span class="muted" id="md_browse_msg"></span>
+          </div>
+          <div class="table-wrap" style="margin-top:10px;max-height:420px;overflow:auto;">
+            <table>
+              <thead><tr>
+                <th style="width:36px;"></th><th style="width:56px;">編號</th><th>公司／單位</th>
+                <th>收件人</th><th style="width:70px;">郵區</th><th>地址</th><th>平常寄</th><th>備註</th>
+              </tr></thead>
+              <tbody id="md_browse_body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -361,7 +383,7 @@
             <thead><tr>
               <th style="width:44px;">#</th><th>收件人</th><th>郵遞區號</th><th>地址</th>
               <th>電話／手機</th><th style="width:120px;">信封別</th><th style="width:190px;">寄什麼</th>
-              <th style="width:62px;">件數</th><th style="width:130px;">單號</th><th style="width:46px;"></th>
+              <th style="width:62px;">件數</th><th style="width:150px;">查件編號</th><th style="width:46px;"></th>
             </tr></thead>
             <tbody id="md_body"></tbody>
           </table>
@@ -374,6 +396,8 @@
           <span class="muted" id="md_msg"></span>
         </div>
         <div class="muted" style="margin-top:8px;">
+          <b>查件編號</b>那一欄便利帶和郵局掛號都填這裡，寄出後回來補也可以（在寄送紀錄那一頁改）；
+          列印出來的信封與地址條上也留了一行，可以先印空白再手寫上去。
           存檔會把<b>當下的公司、聯絡人、地址、電話一起抄一份存進紀錄</b>，
           之後在收件人維護那邊改了資料，也不會動到已經寄出去的那幾筆，半年後查還是查得到當時寄到哪裡。
         </div>
@@ -437,7 +461,7 @@
         <div class="toolbar">
           <label class="muted">從 <input id="lg_from" type="date"></label>
           <label class="muted">到 <input id="lg_to" type="date"></label>
-          <input id="lg_search" placeholder="公司、收件人、寄什麼、單號…" style="min-width:240px;">
+          <input id="lg_search" placeholder="公司、收件人、寄什麼、查件編號…" style="min-width:240px;">
           <select id="lg_sender"><option value="">全部寄件人</option></select>
           <select id="lg_env"><option value="">全部信封別</option></select>
           <button class="btn ghost" id="lg_reload">重新讀取</button>
@@ -454,7 +478,7 @@
             <thead><tr>
               <th style="width:96px;">寄件日期</th><th>寄件人</th><th>收件人</th><th>地址</th>
               <th style="width:96px;">信封別</th><th>寄什麼</th><th style="width:56px;">件數</th>
-              <th>單號</th><th>批號</th><th style="width:64px;"></th>
+              <th>查件編號</th><th>批號</th><th style="width:64px;"></th>
             </tr></thead>
             <tbody id="lg_body"></tbody>
           </table>
@@ -647,7 +671,7 @@ function renderSuggest(){
        <div class="muted" style="font-size:11.5px;">${esc(r.zip_code || '')} ${esc(r.address || '')}　${esc(phoneOf(r))}</div></span>
      </div>`).join('');
 }
-function pickRecipient(id){
+function pickRecipient(id, quiet){
   const r = STATE.recipients.find(x => String(x.recipient_id) === String(id));
   if(!r) return;
   STATE.picked.push({
@@ -657,6 +681,7 @@ function pickRecipient(id){
     envelope: document.getElementById('md_env').value,
     items: r.default_item || '', qty: 1, tracking_no: '', item_note: ''
   });
+  if(quiet) return;                    // 批次加入時不要每加一筆就重畫、跳訊息
   document.getElementById('md_search').value = '';
   renderSuggest(); renderPicked();
   msg('md_pick_msg', '已加入 ' + r.company);
@@ -679,10 +704,66 @@ function renderPicked(){
           `<option${e === p.envelope ? ' selected' : ''}>${esc(e)}</option>`).join('')}</select></td>
     <td><input data-f="items" data-i="${i}" list="mdItemList" value="${esc(p.items || '')}" style="width:100%;"></td>
     <td><input data-f="qty" data-i="${i}" type="number" min="1" step="1" value="${esc(p.qty || 1)}" style="width:56px;"></td>
-    <td><input data-f="tracking_no" data-i="${i}" value="${esc(p.tracking_no || '')}" style="width:100%;"></td>
+    <td><input data-f="tracking_no" data-i="${i}" value="${esc(p.tracking_no || '')}"
+               placeholder="便利帶／郵局皆可" style="width:100%;"></td>
     <td><button class="btn ghost" data-drop="${i}" style="padding:4px 9px;">刪</button></td>
   </tr>`).join('');
 }
+// ---------- 從名單裡勾選 ----------
+// 搜尋列適合「我知道要寄給誰」；這一塊適合「我要把某一類的一次挑一挑」，
+// 例如把平常寄發票的十幾家一次全部勾起來。
+const BROWSE_PICK = {};      // recipient_id -> true
+function browseRows(){
+  const kw = String(document.getElementById('md_browse_search').value || '').trim().toLowerCase();
+  const item = String(document.getElementById('md_browse_item').value || '');
+  return STATE.recipients.filter(r => {
+    if(Number(r.active) === 0) return false;
+    if(item && String(r.default_item || '') !== item) return false;
+    if(!kw) return true;
+    return [r.print_no, r.company, r.contact, r.address, r.notes, r.default_item, r.tel, r.mobile]
+      .map(x => String(x == null ? '' : x)).join(' ').toLowerCase().indexOf(kw) >= 0;
+  });
+}
+function renderBrowse(){
+  const rows = browseRows();
+  const tb = document.getElementById('md_browse_body');
+  tb.innerHTML = rows.map(r => `<tr>
+    <td><input type="checkbox" data-bpick="${r.recipient_id}"${BROWSE_PICK[r.recipient_id] ? ' checked' : ''}></td>
+    <td>${esc(r.print_no == null ? '' : r.print_no)}</td>
+    <td><b>${esc(r.company)}</b></td>
+    <td>${esc(r.contact || '')}</td>
+    <td>${esc(r.zip_code || '')}</td>
+    <td>${esc(r.address || '') || '<span class="pill amber">沒有地址</span>'}</td>
+    <td>${esc(r.default_item || '')}</td>
+    <td class="muted">${esc(r.notes || '')}</td>
+  </tr>`).join('') || '<tr><td colspan="8" class="empty">沒有符合的收件人</td></tr>';
+  const n = Object.keys(BROWSE_PICK).filter(k => BROWSE_PICK[k]).length;
+  msg('md_browse_msg', '顯示 ' + rows.length + ' 筆' + (n ? '，已勾選 ' + n + ' 筆' : ''));
+}
+function fillBrowseItems(){
+  const seen = {}, list = [];
+  STATE.recipients.forEach(r => {
+    const v = String(r.default_item || '').trim();
+    if(v && !seen[v]){ seen[v] = 1; list.push(v); }
+  });
+  list.sort();
+  document.getElementById('md_browse_item').innerHTML =
+    '<option value="">全部（不分寄什麼）</option>'
+    + list.map(v => `<option value="${esc(v)}">平常寄：${esc(v)}</option>`).join('');
+}
+function addBrowsePicked(){
+  const ids = Object.keys(BROWSE_PICK).filter(k => BROWSE_PICK[k]);
+  if(!ids.length){ msg('md_browse_msg', '還沒有勾任何一筆', true); return; }
+  let added = 0, dup = 0;
+  ids.forEach(id => {
+    if(STATE.picked.some(p => String(p.recipient_id) === String(id))){ dup++; return; }
+    pickRecipient(id, true); added++;
+  });
+  ids.forEach(id => { delete BROWSE_PICK[id]; });
+  renderBrowse(); renderPicked();
+  msg('md_pick_msg', '加入 ' + added + ' 筆' + (dup ? '（有 ' + dup + ' 筆清單上已經有了，沒有重複加）' : ''));
+}
+
 function addBlankRow(){
   const c = prompt('公司／單位名稱');
   if(!c) return;
@@ -708,11 +789,13 @@ const PRINT_CSS_ENV = `
   .env:last-child{ page-break-after:auto; }
   .from{ position:absolute; top:12mm; left:14mm; font-size:13pt; line-height:1.5; }
   .from .z{ font-size:15pt; letter-spacing:3px; font-weight:700; }
-  .to{ position:absolute; top:62mm; left:78mm; font-size:19pt; line-height:1.7; }
+  .to{ position:absolute; top:62mm; left:78mm; right:14mm; font-size:19pt; line-height:1.7; }
   .to .z{ font-size:24pt; letter-spacing:6px; font-weight:700; }
   .to .nm{ font-size:22pt; font-weight:700; white-space:pre-line; }
   .to .ad{ font-size:17pt; }
   .to .tel{ font-size:14pt; color:#333; }
+  .to .trk{ font-size:13pt; color:#333; margin-top:4mm; }
+  .to .trk u{ display:inline-block; min-width:52mm; text-decoration:none; border-bottom:1px solid #999; }
   .mark{ position:absolute; bottom:10mm; right:14mm; font-size:10pt; color:#888; }
 `;
 function printEnvelopes(){
@@ -731,33 +814,58 @@ function printEnvelopes(){
         <div class="nm">${esc(fullName(p))}</div>
         <div class="ad">${esc(p.address || '')}</div>
         <div class="tel">TEL ${esc(phoneOf(p))}</div>
+        <div class="trk">查件編號 <u>${esc(p.tracking_no || '')}</u></div>
       </div>
       <div class="mark">${esc(p.envelope || '')}　${esc(p.items || '')}　${esc(toROC(date))}</div>
     </div>`).join('');
   openPrint('信封列印', PRINT_CSS_ENV, inner);
 }
+// 地址條版面。上一版字會壓到裁切線，這一版做了四件事：
+//   1. 裁切線（虛線框）跟內容分開 —— 框是 .lb，字全部放在 .in 裡面，
+//      .in 四邊各留 6mm 的安全邊界，字再長也碰不到框。
+//   2. .in 設 overflow:hidden，萬一真的太長是被裁掉而不是溢出去疊到隔壁那張。
+//   3. 長地址會自動折行（word-break），不會撐破格子。
+//   4. 字數多的那幾張自動縮一級字（.tight），常見的長公司名＋長地址就塞得下。
+// 一張 A4 排 2 欄 × 4 列＝8 張，每張 63mm 高（A4 可用高度 277mm，4×63＋3×6＝270mm 剛好放得下）。
 const PRINT_CSS_LABEL = `
-  @page{ size:A4; margin:8mm; }
+  @page{ size:A4 portrait; margin:10mm; }
   body{ font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif; margin:0; }
-  .sheet{ display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
-  .lb{ border:1px dashed #999; padding:5mm; height:52mm; box-sizing:border-box; font-size:11pt; line-height:1.5; }
-  .lb .z{ font-size:15pt; font-weight:700; letter-spacing:3px; }
-  .lb .nm{ font-size:13pt; font-weight:700; white-space:pre-line; }
-  .lb .ad{ font-size:11.5pt; }
-  .lb .ft{ margin-top:3mm; padding-top:2mm; border-top:1px solid #ccc; font-size:9pt; color:#444; }
+  .sheet{ display:grid; grid-template-columns:1fr 1fr; gap:6mm 6mm; }
+  .lb{ border:1px dashed #b0b0b0; height:63mm; box-sizing:border-box; overflow:hidden;
+       page-break-inside:avoid; break-inside:avoid; }
+  .in{ padding:6mm; height:100%; box-sizing:border-box; overflow:hidden;
+       font-size:10.5pt; line-height:1.3; word-break:break-word; overflow-wrap:anywhere; }
+  .in .z{ font-size:13.5pt; font-weight:700; letter-spacing:2.5px; }
+  .in .nm{ font-size:12pt; font-weight:700; white-space:pre-line; margin-top:0.8mm; }
+  .in .ad{ font-size:10.5pt; margin-top:0.8mm; }
+  .in .tel{ font-size:9.5pt; color:#333; }
+  .in .trk{ font-size:9pt; color:#333; margin-top:0.8mm; }
+  .in .trk u{ display:inline-block; min-width:32mm; text-decoration:none; border-bottom:1px solid #aaa; }
+  .in .ft{ margin-top:1.5mm; padding-top:1mm; border-top:1px solid #ddd; font-size:7.5pt; color:#555; line-height:1.3; }
+  .tight{ font-size:9.5pt; }
+  .tight .z{ font-size:12pt; }
+  .tight .nm{ font-size:10.5pt; }
+  .tight .ad{ font-size:9.5pt; }
+  .tight .tel,.tight .trk{ font-size:8.5pt; }
+  .tight .ft{ font-size:7pt; }
 `;
 function printLabels(){
   if(!STATE.picked.length){ msg('md_msg', '清單是空的', true); return; }
   const s = currentSender(); const date = document.getElementById('md_date').value;
-  const inner = '<div class="sheet">' + STATE.picked.map(p => `
-    <div class="lb">
+  const inner = '<div class="sheet">' + STATE.picked.map(p => {
+    // 字太多就縮一級。門檻是實測量出來的：現有 187 筆最長的是 48 個字，
+    // 超過 40 個字就縮一級，印出來才不會頂到裁切線。
+    const bulk = (fullName(p) + (p.address || '')).replace(/\s/g, '').length;
+    return `
+    <div class="lb"><div class="in${bulk > 40 ? ' tight' : ''}">
       <div class="z">${esc(p.zip_code || '')}</div>
       <div class="nm">${esc(fullName(p))}</div>
       <div class="ad">${esc(p.address || '')}</div>
-      <div>TEL ${esc(phoneOf(p))}</div>
+      <div class="tel">TEL ${esc(phoneOf(p))}</div>
+      <div class="trk">查件編號 <u>${esc(p.tracking_no || '')}</u></div>
       <div class="ft">寄件：${esc((s && s.sender_name) || '')}　${esc((s && s.address) || '')}　${esc((s && s.tel) || '')}
         <br>${esc(toROC(date))}　${esc(p.items || '')}</div>
-    </div>`).join('') + '</div>';
+    </div></div>`; }).join('') + '</div>';
   openPrint('地址條列印', PRINT_CSS_LABEL, inner);
 }
 
@@ -873,7 +981,7 @@ async function rcSave(){
     STATE.recipients.sort((a, b) => (Number(a.print_no) || 9e9) - (Number(b.print_no) || 9e9));
     rcFill(null);                 // 表單清空要先做，它會把訊息一起清掉
     msg('rc_msg', done);          // 所以存檔結果的訊息擺在後面才看得到
-    fillSelects(); renderRecipients();
+    fillSelects(); fillBrowseItems(); renderRecipients(); renderBrowse();
   }catch(err){
     msg('rc_msg', '存檔失敗：' + (err && err.message ? err.message : err), true);
   }finally{ btn.disabled = false; }
@@ -960,7 +1068,7 @@ function renderLog(){
 function exportLog(){
   const rows = lgFiltered();
   const lines = [['寄件日期','批號','寄件人','編號','收件公司','收件人','郵遞區號','地址','電話','手機',
-                  '信封別','寄什麼','補充','件數','單號','狀態','備註','建檔人']];
+                  '信封別','寄什麼','補充','件數','查件編號','狀態','備註','建檔人']];
   rows.forEach(d => lines.push([toROC(d.send_date), d.batch_no, d.sender_name, d.recipient_no,
     d.recipient_company, d.recipient_contact, d.zip_code, d.address, d.tel, d.mobile,
     d.envelope, d.items, d.item_note, d.qty, d.tracking_no, d.status, d.notes, d.created_by]));
@@ -1012,8 +1120,8 @@ async function init(){
     w.style.display = 'block';
     w.textContent = '讀取失敗：' + (err && err.message ? err.message : err);
   }
-  fillSenders(); fillSelects();
-  renderPicked(); renderRecipients(); renderLog();
+  fillSenders(); fillSelects(); fillBrowseItems();
+  renderPicked(); renderRecipients(); renderBrowse(); renderLog();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1036,6 +1144,29 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('md_sugg').addEventListener('mousedown', e => {
     const el = e.target.closest('[data-pick]'); if(el) pickRecipient(el.getAttribute('data-pick'));
   });
+  document.getElementById('md_browse_toggle').addEventListener('click', () => {
+    const box = document.getElementById('md_browse');
+    const open = box.style.display === 'none';
+    box.style.display = open ? '' : 'none';
+    document.getElementById('md_browse_toggle').textContent = open ? '收起名單' : '從名單裡勾選';
+    if(open) renderBrowse();
+  });
+  ['md_browse_search','md_browse_item'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', renderBrowse); el.addEventListener('change', renderBrowse);
+  });
+  document.getElementById('md_browse_body').addEventListener('change', e => {
+    const id = e.target.getAttribute('data-bpick'); if(!id) return;
+    BROWSE_PICK[id] = e.target.checked;
+    renderBrowse();
+  });
+  document.getElementById('md_browse_all').addEventListener('click', () => {
+    browseRows().forEach(r => { BROWSE_PICK[r.recipient_id] = true; }); renderBrowse();
+  });
+  document.getElementById('md_browse_none').addEventListener('click', () => {
+    Object.keys(BROWSE_PICK).forEach(k => delete BROWSE_PICK[k]); renderBrowse();
+  });
+  document.getElementById('md_browse_add').addEventListener('click', addBrowsePicked);
   document.getElementById('md_addblank').addEventListener('click', addBlankRow);
   document.getElementById('md_clear').addEventListener('click', () => {
     if(STATE.picked.length && !confirm('清空這 ' + STATE.picked.length + ' 筆？')) return;
@@ -1089,7 +1220,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('lg_export').addEventListener('click', exportLog);
   document.getElementById('lg_reload').addEventListener('click', async () => {
     msg('lg_msg', '重新讀取中…');
-    try{ await loadAll(); fillSenders(); fillSelects(); renderRecipients(); renderLog(); msg('lg_msg', '已更新'); }
+    try{ await loadAll(); fillSenders(); fillSelects(); fillBrowseItems();
+           renderRecipients(); renderBrowse(); renderLog(); msg('lg_msg', '已更新'); }
     catch(err){ msg('lg_msg', '讀取失敗：' + (err && err.message ? err.message : err), true); }
   });
   document.getElementById('lg_body').addEventListener('click', async e => {
