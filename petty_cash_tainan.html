@@ -613,6 +613,8 @@
     <div class="toolbar">
       <button class="btn primary" id="em_save">儲存</button>
       <button class="btn" id="em_cancel">取消</button>
+      <button class="btn ghost" id="em_delete"
+              style="color:var(--red);border-color:var(--red);margin-left:auto;">刪除這一筆</button>
       <span id="em_msg" style="font-size:13px;"></span>
     </div>
   </div>
@@ -1949,6 +1951,61 @@ function wire(){
       $('editModal').classList.remove('show'); EDIT_ID = null;
       renderAll();
     }catch(e){ msg.textContent = '失敗：' + e.message; }
+  };
+
+  // ----- 刪除一筆 -----
+  // 零用金是帳，刪掉會直接影響餘額，所以刪之前把整筆攤開來讓人看清楚再問。
+  $('em_delete').onclick = async () => {
+    const msg = $('em_msg');
+    const e = STATE.entries.find(x => x.pe_id === EDIT_ID);
+    if(!e){ msg.textContent = '找不到這一筆，請關掉視窗重開。'; return; }
+
+    // 防線 1：撥補產生的那些已經在會計那邊開了傳票，從這裡刪會留下孤兒傳票
+    if(e.acc_entry_id){
+      alert('這一筆已經掛到會計傳票 #' + e.acc_entry_id + '，不能從這裡刪除。\n\n'
+          + '（它是撥補的時候一起開出去的，零用金這邊刪掉，會計那邊會留下一張對不到的傳票。）\n\n'
+          + '真的要刪，請先在會計系統處理掉那張傳票，或是把這一筆的狀態改成「已作廢」就好，'
+          + '紀錄留著、金額不再計入餘額。');
+      return;
+    }
+
+    // 防線 2：已經匯過款的代墊，刪掉等於帳跟匯款對不起來
+    const inRealBatch = typeof isTransferred === 'function'
+      && isTransferred(e) && (typeof isOldPaid !== 'function' || !isOldPaid(e));
+    if(inRealBatch && !confirm('這一筆代墊已經在「' + e.settle_batch + '」那一批匯款裡了。\n\n'
+        + '刪掉之後，那一批的金額就跟實際匯出去的錢對不起來。\n'
+        + '建議先到代墊費用明細那一列按「取消」把它退出批次，再回來刪。\n\n'
+        + '還是要繼續刪嗎？')) { msg.textContent = '已取消，沒有刪除。'; return; }
+
+    // 防線 3：把整筆攤開來，順便算給他看刪完餘額會變多少
+    const before = calcBalance();
+    const delta  = e.status === '已作廢' ? 0
+                 : (e.direction === '收入' ? -num(e.amount) : num(e.amount));
+    const after  = before + delta;
+    if(!confirm('確定要刪除這一筆嗎？刪掉就救不回來了。\n\n'
+        + '日期　：' + toROC(e.entry_date) + '\n'
+        + '收支　：' + e.direction + '　' + (e.subject_name || '') + '\n'
+        + '摘要　：' + (e.memo || '（沒有摘要）') + '\n'
+        + '金額　：NT$ ' + fmt(e.amount) + '\n'
+        + '領款人：' + (e.payee || '（沒有填）') + '\n'
+        + '狀態　：' + (e.status || '已入帳') + '\n\n'
+        + '刪除後餘額：NT$ ' + fmt(before) + ' → NT$ ' + fmt(after)
+        + (delta === 0 ? '（這筆是已作廢，本來就沒有計入餘額）' : ''))) {
+      msg.textContent = '已取消，沒有刪除。'; return;
+    }
+
+    try{
+      msg.textContent = '刪除中…';
+      await sbDelete('petty_entries', 'pe_id', EDIT_ID);
+      STATE.entries = STATE.entries.filter(x => x.pe_id !== EDIT_ID);
+      $('editModal').classList.remove('show'); EDIT_ID = null;
+      renderAll();
+    }catch(err){
+      msg.textContent = '刪除失敗：' + err.message;
+      alert('沒有刪掉。\n\n' + err.message
+          + '\n\n如果訊息裡有 permission 或 policy 之類的字，'
+          + '代表 Supabase 那張表沒有開放刪除權限，跟我說我出一段 SQL 給你。');
+    }
   };
 
   // ----- 磅費 -----

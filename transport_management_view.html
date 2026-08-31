@@ -823,9 +823,13 @@
           <option value="soon90">90天內到期</option>
           <option value="green">正常</option>
           <option value="renewed">已續保（舊紀錄）</option>
+          <option value="off">已中止／退保</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
           <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出/繳銷車輛
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
+          <input type="checkbox" id="vi_show_off" style="width:auto;"> 顯示已中止的保險
         </label>
         <button class="btn ghost" id="vi_export90" style="padding:8px 14px;font-size:13px;">匯出 90 天內到期</button>
       </div>
@@ -2596,6 +2600,45 @@
   <div class="modal-box">
     <button class="modal-close" id="ciEditClose">✕</button>
     <div id="ciEditContent"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop no-print" id="insOffModal">
+  <div class="modal-box" style="max-width:460px;">
+    <button class="modal-close" id="insOffClose">✕</button>
+    <h3>中止這張保險</h3>
+    <div class="muted" style="margin-bottom:12px;" id="insOffWho"></div>
+    <div class="muted" style="margin-bottom:12px;">
+      中止之後這張保單<b>不會再跳到期提醒</b>，也不會出現在通知信裡，
+      但紀錄留著，之後查保險沿革還是看得到。按錯了可以再按「復保」還原。
+    </div>
+    <div class="form-grid">
+      <label>中止日期
+        <input id="insOffDate" type="date">
+      </label>
+      <label>原因
+        <select id="insOffReason">
+          <option value="車輛賣出">車輛賣出</option>
+          <option value="車輛報廢">車輛報廢</option>
+          <option value="車輛繳銷">車輛繳銷</option>
+          <option value="停駛">停駛</option>
+          <option value="換保險公司">換保險公司</option>
+          <option value="不續保">不續保</option>
+          <option value="其他">其他（自己打）</option>
+        </select>
+      </label>
+    </div>
+    <div style="margin-top:10px;">
+      <label style="display:block;font-size:12.5px;color:var(--text-2);font-weight:600;">補充說明（選填）
+        <input id="insOffNote" placeholder="例：賣給○○車行、退費 3,200"
+               style="width:100%;padding:9px;border:1px solid var(--border-strong);border-radius:9px;margin-top:4px;">
+      </label>
+    </div>
+    <div class="toolbar" style="margin-top:16px;">
+      <button class="btn" id="insOffSave">確定中止</button>
+      <button class="btn ghost" id="insOffCancel">取消</button>
+      <span class="muted" id="insOffMsg"></span>
+    </div>
   </div>
 </div>
 
@@ -7445,7 +7488,17 @@ function updateViAutoFields(){
   document.getElementById('vi_company').value = v ? (v.company_name || '') : '';
 }
 
+// 中止（退保）的保單：車子賣了、報廢、停駛、換保險公司都算。
+// 這種保單到期日還在，但已經不生效了，所以到期提醒、通知信、
+// 「已續保」的判斷通通要把它排除，不然會一直跳一張根本不存在的保單。
+function insIsOff(i){ return String((i && i.status) || '有效') === '已中止'; }
+function insOffLabel(i){
+  const d = String(i.terminated_date || '').slice(0, 10);
+  const r = String(i.terminated_reason || '').trim();
+  return '已中止' + (d ? '　' + d : '') + (r ? '　' + r : '');
+}
 function vehicleInsuranceStatus(i){
+  if(insIsOff(i)) return 'gray';
   if(!i.expiry_date) return 'gray';
   return statusOf(i.expiry_date, 30);
 }
@@ -7466,6 +7519,7 @@ function insRenewKey(i){
 function insLatestByKey(){
   const m = {};
   (STATE.vehicleInsurance || []).forEach(i => {
+    if(insIsOff(i)) return;              // 中止掉的不能拿來壓別人「已續保」
     const d = String(i.expiry_date || '').slice(0, 10);
     if(!d) return;
     const k = insRenewKey(i);
@@ -7488,6 +7542,7 @@ function insDue90Rows(){
   const latest = insLatestByKey();
   return (STATE.vehicleInsurance || [])
     .filter(i => {
+      if(insIsOff(i)) return false;      // 已中止的不催
       if(!i.expiry_date) return false;
       if(insRenewedTo(i, latest)) return false;
       const v = STATE.vehicles.find(x => x.plate === i.plate);
@@ -7526,14 +7581,19 @@ function renderViTable(){
   const typeF = document.getElementById('vi_type_filter').value;
   const statusF = document.getElementById('vi_status_filter').value;
   const showRetired = document.getElementById('vi_show_retired').checked;
+  const showOffEl = document.getElementById('vi_show_off');
+  const showOff = (showOffEl && showOffEl.checked) || statusF === 'off';
   const viLatest = insLatestByKey();
   let rows = STATE.vehicleInsurance.filter(i => {
+    if(insIsOff(i) && !showOff) return false;   // 中止的預設收起來，清單才乾淨
     const v = STATE.vehicles.find(x => x.plate === i.plate);
     return showRetired || !v || !isRetiredVehicle(v);
   });
   if(q) rows = rows.filter(i => (i.plate||'').includes(q));
   if(typeF!=='all') rows = rows.filter(i => i.insurance_type===typeF);
-  if(statusF!=='all') rows = rows.filter(i => {
+  if(statusF==='off') rows = rows.filter(insIsOff);
+  else if(statusF!=='all') rows = rows.filter(i => {
+    if(insIsOff(i)) return false;
     // 已續保的舊紀錄自成一類：選「已續保」才看得到，
     // 選「已逾期」「30天內到期」時不要再把它們算進來。
     const renewed = !!insRenewedTo(i, viLatest);
@@ -7553,7 +7613,7 @@ function renderViTable(){
     const s = vehicleInsuranceStatus(i);
     const renewedTo = insRenewedTo(i, viLatest);
     const retiredTag = v && isRetiredVehicle(v) ? ` <span class="pill gray">已${esc(v.status)}</span>` : '';
-    return `<tr>
+    return `<tr${insIsOff(i) ? ' style="opacity:.55;"' : ''}>
       <td>${esc(i.plate)}${retiredTag}</td>
       <td>${v ? esc(v.load_capacity||'') : ''}</td>
       <td>${v ? esc(v.company_name||'') : ''}</td>
@@ -7561,10 +7621,14 @@ function renderViTable(){
       <td>${esc(i.insurance_type)}</td>
       <td class="muted">${esc(i.coverage_item||'')}</td>
       <td>${esc(i.expiry_date||'—')}</td>
-      <td>${renewedTo
-        ? `<span class="pill gray">已續保</span> <span class="muted" style="font-size:11.5px;">新到期日 ${esc(renewedTo)}</span>`
-        : `<span class="pill ${s}">${i.expiry_date ? statusLabel(i.expiry_date,30) : (esc(i.notes)||'無到期資料')}</span>`}</td>
-      <td><button class="del-btn" data-del-insurance="${i.id}">刪除</button></td>
+      <td>${insIsOff(i)
+        ? `<span class="pill gray">${esc(insOffLabel(i))}</span>`
+        : renewedTo
+          ? `<span class="pill gray">已續保</span> <span class="muted" style="font-size:11.5px;">新到期日 ${esc(renewedTo)}</span>`
+          : `<span class="pill ${s}">${i.expiry_date ? statusLabel(i.expiry_date,30) : (esc(i.notes)||'無到期資料')}</span>`}</td>
+      <td style="white-space:nowrap;">${insIsOff(i)
+        ? `<button class="name-link" data-on-insurance="${i.id}">復保</button> `
+        : `<button class="name-link" data-off-insurance="${i.id}">中止</button> `}<button class="del-btn" data-del-insurance="${i.id}">刪除</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
@@ -12858,6 +12922,10 @@ document.getElementById('vi_search').addEventListener('input', renderViTable);
 document.getElementById('vi_type_filter').addEventListener('change', renderViTable);
 document.getElementById('vi_status_filter').addEventListener('change', renderViTable);
 document.getElementById('vi_show_retired').addEventListener('change', renderViTable);
+  {
+    const _vo = document.getElementById('vi_show_off');
+    if(_vo) _vo.addEventListener('change', renderViTable);
+  }
 document.getElementById('vi_add').addEventListener('click', async () => {
   const plate = document.getElementById('vi_plate').value;
   const expiry = document.getElementById('vi_expiry').value;
@@ -12879,11 +12947,106 @@ document.getElementById('vi_add').addEventListener('click', async () => {
   renderAll();
 });
 document.getElementById('viTableBody').addEventListener('click', async (e) => {
+  const offId = e.target.getAttribute('data-off-insurance');
+  if(offId){ openInsOff(offId); return; }
+
+  const onId = e.target.getAttribute('data-on-insurance');
+  if(onId){
+    const ins = STATE.vehicleInsurance.find(i => String(i.id) === onId);
+    if(!ins) return;
+    if(!confirm('要把這張保險改回「有效」嗎？\n\n'
+      + ins.plate + '　' + (ins.insurance_type || '') + '　' + (ins.insurance_company || '') + '\n'
+      + '原本標的中止日與原因會清掉，到期提醒也會恢復。')) return;
+    ins.status = '有效'; ins.terminated_date = null; ins.terminated_reason = null;
+    await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
+    renderAll();
+    return;
+  }
+
+  // 刪除是真的刪掉，救不回來，所以一定要問，而且要先建議他用「中止」
   const id = e.target.getAttribute('data-del-insurance');
   if(id){
+    const ins = STATE.vehicleInsurance.find(i => String(i.id) === id);
+    if(!ins) return;
+    if(!confirm('確定要【刪除】這一筆保險紀錄嗎？刪掉就救不回來了。\n\n'
+      + '車號　　：' + (ins.plate || '') + '\n'
+      + '險種　　：' + (ins.insurance_type || '') + '\n'
+      + '保險公司：' + (ins.insurance_company || '') + '\n'
+      + '到期日　：' + (ins.expiry_date || '（沒有）') + '\n\n'
+      + '★ 如果只是車子賣了、停駛或不保了，請按「中止」不要按刪除 ——\n'
+      + '　 中止會保留這張保單的紀錄，只是不再跳提醒。\n'
+      + '　 刪除只適合用在「這筆一開始就key錯了」。')) return;
     STATE.vehicleInsurance = STATE.vehicleInsurance.filter(i => String(i.id) !== id);
     await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
     renderAll();
+  }
+});
+
+// ----- 中止保險 -----
+let INS_OFF_ID = null;
+function openInsOff(id){
+  const ins = STATE.vehicleInsurance.find(i => String(i.id) === String(id));
+  if(!ins) return;
+  INS_OFF_ID = String(id);
+  document.getElementById('insOffWho').innerHTML =
+    '<b>' + esc(ins.plate || '') + '</b>　' + esc(ins.insurance_type || '')
+    + '　' + esc(ins.insurance_company || '')
+    + '　到期日 ' + esc(ins.expiry_date || '（沒有）');
+  document.getElementById('insOffDate').value = todayISO();
+  document.getElementById('insOffReason').value = '車輛賣出';
+  document.getElementById('insOffNote').value = '';
+  document.getElementById('insOffMsg').textContent = '';
+  document.getElementById('insOffModal').classList.add('show');
+}
+function closeInsOff(){
+  document.getElementById('insOffModal').classList.remove('show');
+  INS_OFF_ID = null;
+}
+document.getElementById('insOffClose').addEventListener('click', closeInsOff);
+document.getElementById('insOffCancel').addEventListener('click', closeInsOff);
+document.getElementById('insOffSave').addEventListener('click', async () => {
+  const msgEl = document.getElementById('insOffMsg');
+  const ins = STATE.vehicleInsurance.find(i => String(i.id) === INS_OFF_ID);
+  if(!ins){ msgEl.textContent = '找不到這一筆，請關掉重開。'; return; }
+  const d = document.getElementById('insOffDate').value;
+  if(!d){ msgEl.textContent = '請填中止日期'; msgEl.style.color = 'var(--red)'; return; }
+  let reason = document.getElementById('insOffReason').value;
+  const note = document.getElementById('insOffNote').value.trim();
+  if(reason === '其他'){
+    const t = prompt('中止原因：', '');
+    if(t === null) return;
+    reason = String(t).trim() || '其他';
+  }
+  if(note) reason = reason + '（' + note + '）';
+  try{
+    msgEl.style.color = ''; msgEl.textContent = '存檔中…';
+    ins.status = '已中止';
+    ins.terminated_date = d;
+    ins.terminated_reason = reason;
+    await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
+    // 強制險存檔時會自動把到期日帶到證件效期的「汽車強制卡」，
+    // 保險中止了卡還留著就會繼續跳提醒，所以在這裡一起問。
+    if(String(ins.insurance_type || '').indexOf('強制') >= 0){
+      const vid = (typeof plateToVehicleId === 'function') ? plateToVehicleId(ins.plate) : null;
+      const cards = (STATE.vehicleDocuments || [])
+        .filter(x => x.vehicle_id === vid && x.doc_type === '汽車強制卡');
+      if(cards.length && confirm('這台車的證件效期裡還有一張「汽車強制卡」'
+          + '（到期日 ' + (cards[0].expiry_date || '未填') + '）。\n\n'
+          + '那張卡是強制險存檔時自動帶過去的，強制險中止了卡還留著會繼續跳提醒。\n\n'
+          + '要不要一起拿掉？')){
+        const ids = cards.map(x => String(x.id));
+        STATE.vehicleDocuments = STATE.vehicleDocuments.filter(x => ids.indexOf(String(x.id)) < 0);
+        await saveState('vehicle_documents', STATE.vehicleDocuments, true);
+      }
+    }
+    closeInsOff();
+    renderAll();
+  }catch(err){
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = '存檔失敗：' + ((err && err.message) || err);
+    alert('沒有存進去。\n\n' + ((err && err.message) || err)
+      + '\n\n如果訊息裡有 status 或 terminated_date 之類的欄位名，'
+      + '代表雲端那張表還沒加欄位，請先跑 SQL #144。');
   }
 });
 document.getElementById('mh_search').addEventListener('input', renderMaintHistoryTable);

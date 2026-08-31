@@ -57,8 +57,14 @@ async function main() {
   // 續保之後舊的那一列還留在資料表裡，如果照單全收，去年那張保單會永遠
   // 出現在信裡（115/08/05 使用者回報：「我從HTML輸入了新的保險，但舊的提醒依然還在」）。
   // 同一台車、同一個險種只看最新的那一張；舊的留在資料庫裡查沿革，但不寄信。
+  //
+  // 115/08/31 再加一條：車子賣了、報廢、停駛、換保險公司而中止的保單
+  // （status = '已中止'）也不寄，不然那台車都不在了信裡還一直催。
+  // 中止是在車輛管理的保險清單按「中止」標的，紀錄留著只是不催。
+  const insOff = (i) => String(i.status || '有效') === '已中止';
   const insLatest = {};
   insurance.forEach(i => {
+    if (insOff(i)) return;               // 中止的不能拿來壓別人「已續保」
     const d = String(i.expiry_date || '').slice(0, 10);
     if (!d) return;
     const k = `${i.vehicle_id}|${String(i.insurance_type || '').trim()}`;
@@ -69,7 +75,7 @@ async function main() {
     const top = insLatest[`${i.vehicle_id}|${String(i.insurance_type || '').trim()}`];
     return !!(top && d && top > d);
   };
-  const insItems = insurance.filter(i => i.expiry_date && !insSuperseded(i)).map(attachVehicle);
+  const insItems = insurance.filter(i => i.expiry_date && !insOff(i) && !insSuperseded(i)).map(attachVehicle);
   const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', i => `<tr>
     <td><b>${i.plate}</b></td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
   </tr>`, ['車號', '險種', '保險公司', '到期日', '剩餘天數']);
