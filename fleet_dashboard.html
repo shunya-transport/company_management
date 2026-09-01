@@ -14540,18 +14540,76 @@ document.getElementById('staffHistoryBody').addEventListener('click', async (e) 
   if(!confirm(`確定要將 ${emp.name} 復職嗎？`)) return;
   const rehireDate = prompt('請輸入復職日期（YYYY-MM-DD）：', todayISO());
   if(!rehireDate) return;
+  // 這個日期等一下會直接變成勞健保的加保生效日，打錯要再跑一趟，所以先擋一下
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(rehireDate).trim())){
+    alert('復職日期要照 YYYY-MM-DD 這個格式填，例如 ' + todayISO() + '。\n\n'
+        + '（民國年、用斜線的寫法都不行，這個日期會直接變成勞健保的加保生效日。）');
+    return;
+  }
+  const _rehireISO = String(rehireDate).trim();
+  const _resignISO = String(emp.resign_date || '').slice(0, 10);
+  if(_resignISO && _rehireISO < _resignISO
+     && !confirm('復職日 ' + _rehireISO + ' 比離職日 ' + _resignISO + ' 還早，確定沒填錯嗎？\n\n'
+               + '（勞健保的加保生效日會照這個日期建立。）')) return;
   STATE.employeesHistory = STATE.employeesHistory.filter(x => String(x.id) !== id);
   // moved_to_history_at 只有離職歷史表才有，帶回 employees 會被 PostgREST 擋掉（PGRST204）
   const { resign_date, resign_reason, moved_to_history_at, ...rest } = emp;
   STATE.employees.push({...rest, status:'在職', rehire_date: rehireDate});
-  await saveState('roster_employees', STATE.employees, true);
-  await saveState('roster_employees_history', STATE.employeesHistory, true);
+
+  // ----- 勞健保：復職當日加保 -----
+  // 離職那邊會自動產生一筆「退保」，復職卻只在提示文字裡叫人記得辦，
+  // 投保清單上什麼都不會多出來，人員的加保日也還停在上一次。
+  // 這裡比照離職，自動補一筆生效日＝復職日的「加保」。
+  let _icNewId = null;
+  const _dupIc = (STATE.insuranceChanges || []).some(r =>
+    r.employee_id === emp.id
+    && String(r.effective_date || '').slice(0, 10) === _rehireISO
+    && String(r.change_type || '').indexOf('加保') >= 0);
+  if(!_dupIc){
+    // 親屬加保沿用他離職前最後一筆的設定，不用再問一次
+    const _prevIc = (STATE.insuranceChanges || [])
+      .filter(r => r.employee_id === emp.id && r.effective_date)
+      .sort((a, b) => String(a.effective_date).localeCompare(String(b.effective_date)))
+      .pop();
+    const _prevDep = !!(_prevIc && (_prevIc.has_dependents === true
+      || String(_prevIc.has_dependents) === '1' || String(_prevIc.has_dependents) === 'true'));
+    _icNewId = nextId(STATE.insuranceChanges);
+    STATE.insuranceChanges.push({
+      id: _icNewId, employee_id: emp.id,
+      change_type: '加保', effective_date: _rehireISO,
+      // 投保金額留空：畫面上那欄本來就是藏起來的，離職的退保也是留空，這裡不猜
+      insured_salary: null,
+      has_dependents: _prevDep,
+      dependents_count: _prevDep ? (parseInt(_prevIc.dependents_count) || 0) : 0,
+      notes: '復職自動產生加保紀錄'
+    });
+    // 人員主檔的「加保日期」跟著往前推到復職日（這個函式只會往後更新）
+    syncInsuredDate(emp.id);
+  }
+
+  try{
+    await saveState('roster_employees', STATE.employees, true);
+    await saveState('roster_employees_history', STATE.employeesHistory, true);
+    if(!_dupIc) await saveState('insurance_changes', STATE.insuranceChanges, true);
+  }catch(err){
+    // saveState 失敗時自己會跳訊息，這裡只負責把剛才塞進去的加保紀錄收回來，
+    // 免得畫面上留著一列其實沒存進雲端的資料。
+    if(_icNewId !== null){
+      STATE.insuranceChanges = STATE.insuranceChanges.filter(r => r.id !== _icNewId);
+    }
+    renderAll();
+    return;
+  }
   renderAll();
   // 復職之後哪些東西自動回來、哪些要重辦，講清楚，免得以為系統漏掉
   const _back = (STATE.docChecklist || []).filter(x => x.employee_id === emp.id).length;
   alert(emp.name + ' 已復職（' + rehireDate + '）。\n\n'
       + '自動接回來的：必繳文件檢核 ' + _back + ' 項、體檢、證照、駕照、請假、加班、工時、訓練紀錄。\n\n'
-      + '要重新辦的：門禁卡（實體已於離職時繳回）、公務機、配備領用、分機、勞健保加保。');
+      + '勞健保：' + (_dupIc
+          ? '本來就已經有一筆生效日 ' + _rehireISO + ' 的加保紀錄，沒有重複新增。'
+          : '已自動建立一筆「加保」異動，生效日 ' + _rehireISO + '，'
+            + '在行政資料的「勞健保投保清單」看得到。實際申報還是要記得送出去。') + '\n\n'
+      + '要重新辦的：門禁卡（實體已於離職時繳回）、公務機、配備領用、分機。');
 });
 document.getElementById('staffModalClose').addEventListener('click', closeStaffModal);
 document.getElementById('checklistModalClose').addEventListener('click', closeChecklistModal);
