@@ -5401,7 +5401,20 @@ function visibleHistory(){
   return STATE.employeesHistory
     .filter(e => isWithinRetention(e.resign_date))
     .slice()
-    .sort((a,b) => String(b.employee_no||'').localeCompare(String(a.employee_no||''), 'zh-Hant', {numeric:true}));
+    // 以離職日排序，最近離職的排最上面。
+    // ※ 畫面上顯示的是民國年，但資料庫存的是西元 ISO（YYYY-MM-DD），
+    //   民國年是在「顯示的最後一刻」才換算的（見檔案後段的 rocify），
+    //   所以這裡直接比字串就等於比時間，不用轉 Date，也不會踩到時區。
+    .sort((a,b) => {
+      const da = String(a.resign_date || ''), db = String(b.resign_date || '');
+      if(da !== db){
+        if(!da) return 1;    // 沒填離職日的排最後面
+        if(!db) return -1;
+        return db.localeCompare(da);
+      }
+      // 同一天離職的，再照員工編號由大到小（維持原本的次序）
+      return String(b.employee_no||'').localeCompare(String(a.employee_no||''), 'zh-Hant', {numeric:true});
+    });
 }
 
 function computeStockLevel(itemId){
