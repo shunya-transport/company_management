@@ -4320,6 +4320,24 @@ function renderDatalists(){
 // 名稱欄（dept_name / position_name / company_name）在 COMPUTED_FIELDS 裡，存檔前一定會被濾掉，
 // 所以存檔時【一定要】把名稱換算成編號寫回去，只寫名稱等於什麼都沒存。
 const REF_NAME2ID = { dept:{}, position:{}, company:{} };
+// 反過來的對照：編號 → 名稱。
+// 離職歷史那幾列身上只有 dept_id / position_id / company_id ——
+// safeGet() 只對 roster_employees 做 join 取名稱，employees_history 沒做，
+// 而且 historyRowFor() 搬人的時候還會主動把名稱欄 delete 掉
+// （資料庫沒有那三欄，帶著會被 PostgREST 擋）。
+// 所以顯示離職者的公司別／部門／職稱時，要用編號反查。
+const REF_ID2NAME = { dept:{}, position:{}, company:{} };
+// 取顯示用的名稱：身上有名稱就用（在職人員都有），沒有就用編號反查（離職者）。
+function empOrgName(e, kind){
+  if(!e) return '';
+  const F = { dept:      ['dept_name',     'dept_id'],
+              position:  ['position_name', 'position_id'],
+              company:   ['company_name',  'company_id'] }[kind];
+  if(!F) return '';
+  if(e[F[0]]) return e[F[0]];
+  const id = e[F[1]];
+  return (id == null ? '' : REF_ID2NAME[kind][id]) || '';
+}
 // 整列也留一份，「部門與職稱維護」那張卡片要用（要顯示類別、人數，改名刪除也要編號）
 const ORG_ROWS = { dept:[], position:[], company:[] };
 async function loadOrgRefs(){
@@ -4330,6 +4348,7 @@ async function loadOrgRefs(){
       (rows || []).forEach(r => {
         const nm = String(r[nameCol] == null ? '' : r[nameCol]).trim();
         if(nm) REF_NAME2ID[key][nm] = r[idCol];
+        if(nm) REF_ID2NAME[key][r[idCol]] = nm;
       });
     }catch(e){ /* 讀不到就退回用現有人員資料推 */ }
   };
@@ -4343,6 +4362,10 @@ async function loadOrgRefs(){
     if(e.dept_id && e.dept_name && REF_NAME2ID.dept[e.dept_name] == null) REF_NAME2ID.dept[e.dept_name] = e.dept_id;
     if(e.position_id && e.position_name && REF_NAME2ID.position[e.position_name] == null) REF_NAME2ID.position[e.position_name] = e.position_id;
     if(e.company_id && e.company_name && REF_NAME2ID.company[e.company_name] == null) REF_NAME2ID.company[e.company_name] = e.company_id;
+    // 反查表的退路：參照表讀不到時，至少從在職人員身上把編號→名稱補起來
+    if(e.dept_id     && e.dept_name     && REF_ID2NAME.dept[e.dept_id]         == null) REF_ID2NAME.dept[e.dept_id]         = e.dept_name;
+    if(e.position_id && e.position_name && REF_ID2NAME.position[e.position_id] == null) REF_ID2NAME.position[e.position_id] = e.position_name;
+    if(e.company_id  && e.company_name  && REF_ID2NAME.company[e.company_id]   == null) REF_ID2NAME.company[e.company_id]   = e.company_name;
   });
 }
 function orgNames(kind){ return Object.keys(REF_NAME2ID[kind]); }
@@ -5672,7 +5695,7 @@ function renderIcTable(){
     const isHistory = emp && !STATE.employees.includes(emp);
     return `<tr>
       <td>${esc(emp?emp.name:'')}${isHistory?' <span class="pill gray">已離職</span>':''}</td>
-      <td>${esc(emp?emp.company_name:'')}</td>
+      <td>${esc(empOrgName(emp, 'company'))}</td>
       <td>${esc(c.change_type||'')}</td>
       <td>${esc(c.effective_date||'')}</td>
       <td>${c.has_dependents ? `<span class="pill green">是（${c.dependents_count??0}人）</span>` : `<span class="pill gray">否</span>`}</td>
@@ -5725,7 +5748,7 @@ function renderStaffTable(){
   }else{
     hempty.style.display='none';
     hbody.innerHTML = visible.map(e => `
-      <tr><td>${esc(e.employee_no)}</td><td>${esc(e.name)}</td><td>${esc(e.dept_name||'')}</td>
+      <tr><td>${esc(e.employee_no)}</td><td>${esc(e.name)}</td><td>${esc(empOrgName(e, 'dept'))}</td>
       <td>${esc(e.resign_date||'')}</td><td>${esc(e.resign_reason||'')}</td>
       <td><button class="name-link" data-rehire-staff="${e.id}">復職</button></td></tr>`).join('');
   }
