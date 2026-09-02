@@ -5484,7 +5484,9 @@ function renderStockTxTable(){
   document.getElementById('stockTxBody').innerHTML = rows.map(t => {
     const item = STATE.stockItems.find(i => i.item_id === t.item_id);
     const type = item ? STATE.equipmentTypes.find(x => x.id === item.type_id) : null;
-    const emp = STATE.employees.find(e => e.id === t.employee_id);
+    // 領用人一樣要連離職歷史一起找，不然人一離職，過去的領用紀錄就沒有名字了
+    const emp = STATE.employees.find(e => e.id === t.employee_id)
+             || findEmployeeAnywhere(t.employee_id);
     const sign = (t.transaction_type==='進貨'||t.transaction_type==='退回') ? '+' : '-';
     return `<tr>
       <td>${esc(t.transaction_date||'')}</td>
@@ -12436,9 +12438,13 @@ function renderLeaveTable(){
   if(typeF!=='all') rows = rows.filter(r => r.leave_type===typeF);
   document.getElementById('lv_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('leaveTableBody').innerHTML = rows.map(r => {
-    const emp = STATE.employees.find(e => e.id === r.employee_id);
-    const displayName = emp ? emp.name : (r.employee_name_raw || '');
-    const tag = !emp && r.employee_name_raw ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
+    // 姓名要連離職歷史一起找。這個函式上面的搜尋用的就是 findEmployeeAnywhere，
+    // 這裡卻只查在職名冊，所以有人離職之後，他的紀錄搜尋得到、姓名欄卻是空白。
+    // （employee_name_raw 只有早期匯入的舊資料才有值，正常新增的紀錄是空的。）
+    const emp = STATE.employees.find(e => e.id === r.employee_id);   // 在職才有，下面判斷用
+    const empAny = emp || findEmployeeAnywhere(r.employee_id);       // 顯示姓名用
+    const displayName = empAny ? empAny.name : (r.employee_name_raw || '');
+    const tag = (!emp && displayName) ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
     let daysCell = leaveDaysOf(r).toFixed(2);
     if(r.leave_type.trim()==='特休' && emp){
       const remaining = annualLeaveRemaining(emp.id, emp.hire_date, r.start_date);
@@ -12512,9 +12518,13 @@ function renderOvertimeTable(){
   if(typeF!=='all') rows = rows.filter(r => (r.ot_type||'').trim()===typeF);
   document.getElementById('ot_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('overtimeTableBody').innerHTML = rows.map(r => {
-    const emp = STATE.employees.find(e => e.id === r.employee_id);
-    const displayName = emp ? emp.name : (r.employee_name_raw || '');
-    const tag = !emp && r.employee_name_raw ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
+    // 姓名要連離職歷史一起找。這個函式上面的搜尋用的就是 findEmployeeAnywhere，
+    // 這裡卻只查在職名冊，所以有人離職之後，他的紀錄搜尋得到、姓名欄卻是空白。
+    // （employee_name_raw 只有早期匯入的舊資料才有值，正常新增的紀錄是空的。）
+    const emp = STATE.employees.find(e => e.id === r.employee_id);   // 在職才有，下面判斷用
+    const empAny = emp || findEmployeeAnywhere(r.employee_id);       // 顯示姓名用
+    const displayName = empAny ? empAny.name : (r.employee_name_raw || '');
+    const tag = (!emp && displayName) ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
     const settlement = r.settlement_type || '未設定';
     const isEditing = String(editingOvertimeSettlementId) === String(r.id);
     const settlementCell = isEditing
@@ -13581,6 +13591,56 @@ async function ureaRefresh(){
   STATE.ureaLogs = await safeGet('urea_logs', STATE.ureaLogs, true);
 }
 
+// 把資料庫的防呆錯誤翻成看得懂的話。
+// 公開頁 urea_log.html 早就有同一套（那邊叫 tidyErr），fleet 之前沒有，
+// 所以跳出來的是原始的 23514 JSON，看不出到底哪裡不對。
+function ureaTidyErr(msg){
+  const s = String(msg || '');
+  if(s.indexOf('urea_person_not_found') >= 0){
+    const m = s.match(/「([^」]+)」/);
+    return '「' + (m ? m[1] : '') + '」在員工名冊與離職歷史裡都找不到，資料庫不接受這個填充人。\n\n'
+         + '請確認有沒有打錯字；如果那位同仁確實在職，代表人員名冊那邊少了他，要先補回去。';
+  }
+  if(s.indexOf('urea_person_required') >= 0) return '請填「誰填充」，這一格不可以空白。';
+  if(s.indexOf('urea_plate_not_found') >= 0)
+    return '這個車號不是本公司在役、且會用到尿素的車輛，資料庫不接受。';
+  if(s.indexOf('urea_plate_required') >= 0) return '請選車號，這一格不可以空白。';
+  if(s.indexOf('urea_logs_quantity_positive') >= 0) return '使用量要大於 0，請重新確認。';
+  if(s.indexOf('23505') >= 0 || s.indexOf('duplicate key') >= 0)
+    return '編號重複，這一筆沒有存進去。再按一次新增通常就會好（會自動取下一個號碼）。';
+  return s;
+}
+
+// 只送新增的那一列。
+// 【不要】改回 saveState('urea_logs', ...)：那是整張表 upsert，
+// 會把 60 幾筆舊資料丟回去讓資料庫的防呆重新檢查一遍，
+// 只要其中一筆的填充人現在對不上（人被刪了、改名了），
+// 整批就被退回來，新的一筆永遠存不進去 —— 115/09/02 就是踩到這個。
+async function ureaInsertOne(row){
+  const { id, ...rest } = row;
+  for(let tryNo = 0; tryNo < 5; tryNo++){
+    try{
+      const back = await supaFetch('urea_logs', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=representation' },
+        body: JSON.stringify([Object.assign({ log_id: row.id + tryNo }, rest)])
+      });
+      const got = back && back[0];
+      if(got && got.log_id != null) row.id = got.log_id;
+      return row;
+    }catch(err){
+      // 只有「編號撞號」才值得換個號碼再試，其他錯誤直接往外丟
+      if(String(err && err.message || '').indexOf('23505') < 0) throw err;
+    }
+  }
+  throw new Error('23505 編號一直撞號，請重新整理頁面後再試一次。');
+}
+
+async function ureaDeleteOne(id){
+  await supaFetch('urea_logs?log_id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+  return true;
+}
+
 document.getElementById('ur_add').addEventListener('click', async () => {
   const date = document.getElementById('ur_date').value;
   const qtyRaw = document.getElementById('ur_qty').value;
@@ -13590,7 +13650,7 @@ document.getElementById('ur_add').addEventListener('click', async () => {
   if(!date || !qtyRaw || isNaN(qty)){ alert('請填寫日期並填寫使用量'); return; }
   if(qty <= 0){ alert('使用量要大於 0'); return; }
   await ureaRefresh();
-  STATE.ureaLogs.push({
+  const _row = {
     id: nextId(STATE.ureaLogs), region: document.getElementById('ur_region').value,
     log_date: date, quantity: Math.round(qty * 1000) / 1000,
     vehicle_id: plate ? plateToVehicleId(plate) : null,
@@ -13598,8 +13658,14 @@ document.getElementById('ur_add').addEventListener('click', async () => {
     filled_by: by || null,
     cost: document.getElementById('ur_cost').value ? parseFloat(document.getElementById('ur_cost').value) : null,
     notes: document.getElementById('ur_notes').value.trim()
-  });
-  await saveState('urea_logs', STATE.ureaLogs, true);
+  };
+  try{
+    await ureaInsertOne(_row);
+  }catch(err){
+    alert('這一筆沒有存進去。\n\n' + ureaTidyErr(err && err.message));
+    return;
+  }
+  STATE.ureaLogs.push(_row);
   ['ur_date','ur_qty','ur_cost','ur_notes'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
@@ -13610,8 +13676,13 @@ document.getElementById('ureaTableBody').addEventListener('click', async (e) => 
   const id = e.target.getAttribute('data-del-urea');
   if(id){
     await ureaRefresh();
+    try{
+      await ureaDeleteOne(id);
+    }catch(err){
+      alert('沒有刪掉。\n\n' + ureaTidyErr(err && err.message));
+      return;
+    }
     STATE.ureaLogs = STATE.ureaLogs.filter(u => String(u.id) !== id);
-    await saveState('urea_logs', STATE.ureaLogs, true);
     renderAll();
   }
 });

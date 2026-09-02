@@ -5316,7 +5316,9 @@ function renderStockTxTable(){
   document.getElementById('stockTxBody').innerHTML = rows.map(t => {
     const item = STATE.stockItems.find(i => i.item_id === t.item_id);
     const type = item ? STATE.equipmentTypes.find(x => x.id === item.type_id) : null;
-    const emp = STATE.employees.find(e => e.id === t.employee_id);
+    // 領用人一樣要連離職歷史一起找，不然人一離職，過去的領用紀錄就沒有名字了
+    const emp = STATE.employees.find(e => e.id === t.employee_id)
+             || findEmployeeAnywhere(t.employee_id);
     const sign = (t.transaction_type==='進貨'||t.transaction_type==='退回') ? '+' : '-';
     return `<tr>
       <td>${esc(t.transaction_date||'')}</td>
@@ -12061,9 +12063,13 @@ function renderLeaveTable(){
   if(typeF!=='all') rows = rows.filter(r => r.leave_type===typeF);
   document.getElementById('lv_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('leaveTableBody').innerHTML = rows.map(r => {
-    const emp = STATE.employees.find(e => e.id === r.employee_id);
-    const displayName = emp ? emp.name : (r.employee_name_raw || '');
-    const tag = !emp && r.employee_name_raw ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
+    // 姓名要連離職歷史一起找。這個函式上面的搜尋用的就是 findEmployeeAnywhere，
+    // 這裡卻只查在職名冊，所以有人離職之後，他的紀錄搜尋得到、姓名欄卻是空白。
+    // （employee_name_raw 只有早期匯入的舊資料才有值，正常新增的紀錄是空的。）
+    const emp = STATE.employees.find(e => e.id === r.employee_id);   // 在職才有，下面判斷用
+    const empAny = emp || findEmployeeAnywhere(r.employee_id);       // 顯示姓名用
+    const displayName = empAny ? empAny.name : (r.employee_name_raw || '');
+    const tag = (!emp && displayName) ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
     let daysCell = leaveDaysOf(r).toFixed(2);
     if(r.leave_type.trim()==='特休' && emp){
       const remaining = annualLeaveRemaining(emp.id, emp.hire_date, r.start_date);
@@ -12137,9 +12143,13 @@ function renderOvertimeTable(){
   if(typeF!=='all') rows = rows.filter(r => (r.ot_type||'').trim()===typeF);
   document.getElementById('ot_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('overtimeTableBody').innerHTML = rows.map(r => {
-    const emp = STATE.employees.find(e => e.id === r.employee_id);
-    const displayName = emp ? emp.name : (r.employee_name_raw || '');
-    const tag = !emp && r.employee_name_raw ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
+    // 姓名要連離職歷史一起找。這個函式上面的搜尋用的就是 findEmployeeAnywhere，
+    // 這裡卻只查在職名冊，所以有人離職之後，他的紀錄搜尋得到、姓名欄卻是空白。
+    // （employee_name_raw 只有早期匯入的舊資料才有值，正常新增的紀錄是空的。）
+    const emp = STATE.employees.find(e => e.id === r.employee_id);   // 在職才有，下面判斷用
+    const empAny = emp || findEmployeeAnywhere(r.employee_id);       // 顯示姓名用
+    const displayName = empAny ? empAny.name : (r.employee_name_raw || '');
+    const tag = (!emp && displayName) ? ' <span class="pill gray">非現職/歷史資料</span>' : '';
     const settlement = r.settlement_type || '未設定';
     const isEditing = String(editingOvertimeSettlementId) === String(r.id);
     const settlementCell = isEditing
