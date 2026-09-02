@@ -1658,6 +1658,7 @@
         <label>年份<select id="lvstat_year"></select></label>
         <label>月份<select id="lvstat_month"><option value="all">(全部)</option></select></label>
         <label>車場<select id="lvstat_region"><option value="all">(全部)</option></select></label>
+        <label>姓名<input id="lvstat_search" placeholder="打幾個字就好，例如「曾」" autocomplete="off"></label>
       </div>
       <div class="table-scroll" style="max-height:600px;">
         <table id="leaveStatTable" style="font-size:12.5px;">
@@ -12367,8 +12368,17 @@ function renderLeaveStatTable(){
     return emp && emp.region === region;
   };
 
-  const leaveRows = STATE.leaveRecords.filter(r => inPeriod(r.start_date) && empMatches(r.employee_id));
-  const otRows = STATE.overtimeRecords.filter(r => inPeriod(r.ot_date) && empMatches(r.employee_id));
+  // 姓名查詢：套在篩選紀錄這一層，不是只把列藏起來。
+  // 這樣假別欄位也會跟著收斂，查一個人時不會留一排空欄位。
+  const kw = ((document.getElementById('lvstat_search') || {}).value || '').trim();
+  const nameMatches = (empId) => {
+    if(!kw) return true;
+    const e = findEmployeeAnywhere(empId);
+    return !!(e && String(e.name || '').indexOf(kw) >= 0);
+  };
+
+  const leaveRows = STATE.leaveRecords.filter(r => inPeriod(r.start_date) && empMatches(r.employee_id) && nameMatches(r.employee_id));
+  const otRows = STATE.overtimeRecords.filter(r => inPeriod(r.ot_date) && empMatches(r.employee_id) && nameMatches(r.employee_id));
 
   const leaveTypes = [...new Set(leaveRows.map(r=>(r.leave_type||'').trim()).filter(Boolean))];
   const peopleIds = [...new Set([...leaveRows.map(r=>r.employee_id), ...otRows.map(r=>r.employee_id)].filter(Boolean))];
@@ -12406,7 +12416,21 @@ function renderLeaveStatTable(){
     grandHours += rowHours;
     return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(e.name)}</td>${cells.join('')}<td style="text-align:center;">${otSum||''}</td><td style="text-align:center;font-weight:700;"${rowHours ? ` title="${fmt2(rowHours)} 小時"` : ''}>${toDays(rowHours)||''}</td></tr>`;
   });
-  document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+3}" class="empty">此期間沒有請假或加班紀錄</td></tr>`;
+  // 查無資料時，如果那個名字其實是離職的人，直接講明白 ——
+  // 這張表目前只列在職人員（上面 people 那段的 .filter(Boolean) 會把離職者濾掉），
+  // 不說的話會以為是搜尋壞了。
+  let emptyMsg = '此期間沒有請假或加班紀錄';
+  if(!bodyRows.length && kw){
+    const gone = (STATE.employeesHistory || []).filter(h => String(h.name || '').indexOf(kw) >= 0);
+    const here = (STATE.employees || []).some(e => String(e.name || '').indexOf(kw) >= 0);
+    if(gone.length && !here){
+      emptyMsg = '「' + esc(kw) + '」找不到。' + esc(gone.map(h => h.name).join('、'))
+               + ' 已經離職，這張統計表目前只列在職人員。';
+    }else{
+      emptyMsg = '「' + esc(kw) + '」在這個期間沒有請假或加班紀錄。';
+    }
+  }
+  document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+3}" class="empty">${emptyMsg}</td></tr>`;
 
   const footCells = ['<td style="position:sticky;left:0;background:rgba(201,154,86,.08);">總計</td>']
     .concat(leaveTypes.map(t=>`<td style="text-align:center;"${colHours[t] ? ` title="${fmt2(colHours[t])} 小時"` : ''}>${toDays(colHours[t])||''}</td>`))
@@ -13732,6 +13756,10 @@ document.getElementById('lvgrid_month').addEventListener('change', renderLeaveGr
 document.getElementById('lvstat_year').addEventListener('change', renderLeaveStatTable);
 document.getElementById('lvstat_month').addEventListener('change', renderLeaveStatTable);
 document.getElementById('lvstat_region').addEventListener('change', renderLeaveStatTable);
+{
+  const _ls = document.getElementById('lvstat_search');
+  if(_ls) _ls.addEventListener('input', renderLeaveStatTable);
+}
 
 const OT_SPLIT_IDS = ['ot_le2','ot_gt2','ot_gt4','ot_rest_le2','ot_rest_gt2','ot_rest_gt8','ot_holiday'];
 function otSplitVal(id){
