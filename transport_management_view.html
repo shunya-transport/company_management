@@ -840,6 +840,40 @@
         </table>
       </div>
     </div>
+
+    <div class="card">
+      <h2>保養里程總覽<span class="count-badge" id="mm_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        現在里程以績效檔的里程登錄為準；建議里程＝上次保養里程＋該車系的保養週期。
+        差距是負數代表已經超出。排序預設由急到不急。
+      </div>
+      <div class="toolbar">
+        <input id="mm_search" placeholder="搜尋車號">
+        <select id="mm_status_filter">
+          <option value="all">全部狀態</option>
+          <option value="red">已超出</option>
+          <option value="amber">快到了</option>
+          <option value="green">正常</option>
+          <option value="gray">資料不足</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
+          <input type="checkbox" id="mm_show_retired" style="width:auto;"> 顯示已報廢/繳銷車輛
+        </label>
+        <button class="btn ghost" id="mm_export" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>車號</th><th>保養車型</th><th>現在里程</th>
+            <th>小保週期</th><th>小保建議里程</th><th>小保差距</th>
+            <th>大保週期</th><th>大保建議里程</th><th>大保差距</th>
+            <th>下一次要做</th>
+          </tr></thead>
+          <tbody id="mmTableBody"></tbody>
+        </table>
+      </div>
+      <div id="mm_note" class="muted" style="margin-top:8px;font-size:12px;"></div>
+    </div>
   </div>
 
   <div id="leases" class="panel">
@@ -7509,6 +7543,125 @@ function computeMaintenanceDue(vehicle){
   });
   return results;
 }
+// ===== 保養里程總覽 =====
+// 全部數字都走既有的 computeMaintenanceDue()，不另外算一套，
+// 才不會跟「保養到期提醒」出現兩個不一樣的答案。
+function mmRowFor(v){
+  const std = STATE.maintenanceStandards.find(s => s.model_name === v.maintenance_model);
+  const cur = getVehicleLatestMileage(v.plate);
+  const mrow = (typeof vehicleLatestMileageRow === 'function') ? vehicleLatestMileageRow(v.plate) : null;
+  const due = computeMaintenanceDue(v);
+  const pick = (label) => {
+    const d = due.find(x => x.label === label);
+    // computeMaintenanceDue 對「里程或上次保養里程缺一」的情況回 gray、沒有數字
+    if(!d) return null;
+    return {status: d.status, remaining: (typeof d.remaining === 'number') ? d.remaining : null,
+            nextDue: (typeof d.nextDue === 'number') ? d.nextDue : null, text: d.text};
+  };
+  const small = pick('小保養'), large = pick('大保養');
+  const cand = [small, large].filter(x => x && typeof x.remaining === 'number');
+  // 「下一次要做」＝剩最少的那一項（已經超出的算更急，負得越多越急）
+  let next = null;
+  if(cand.length){
+    const m = Math.min.apply(null, cand.map(x => x.remaining));
+    next = (small && small.remaining === m) ? '小保養' : '大保養';
+  }
+  const rank = {red:0, amber:1, green:2, gray:3};
+  const worst = [small, large].filter(Boolean)
+    .reduce((a, b) => (rank[b.status] < a ? rank[b.status] : a), 3);   // a 已經是數字，不可以再 rank[a]
+  const sortKey = cand.length ? Math.min.apply(null, cand.map(x => x.remaining)) : Infinity;
+  return {v, std, cur, mrow, small, large, next, sortKey,
+          status: ['red','amber','green','gray'][worst]};
+}
+function mmVisibleRows(){
+  const kw = ((document.getElementById('mm_search') || {}).value || '').trim().toUpperCase();
+  const f  = ((document.getElementById('mm_status_filter') || {}).value) || 'all';
+  const showRetired = !!(document.getElementById('mm_show_retired') || {}).checked;
+  return (STATE.vehicles || [])
+    // 只列真的有保養週期的動力車。板架、貨櫃架、吊掛機、堆高機的週期是 null，
+    // 列進來每一格都空白，反而看不出重點。
+    .filter(v => {
+      const std = STATE.maintenanceStandards.find(s => s.model_name === v.maintenance_model);
+      return std && (std.small_service_km || std.large_service_km);
+    })
+    .filter(v => showRetired || !isRetiredVehicle(v))
+    .map(mmRowFor)
+    .filter(r => !kw || String(r.v.plate || '').toUpperCase().indexOf(kw) >= 0)
+    .filter(r => f === 'all' || r.status === f)
+    .sort((a, b) => a.sortKey - b.sortKey
+                 || String(a.v.plate || '').localeCompare(String(b.v.plate || '')));
+}
+function mmKm(v){ return (v == null) ? '' : Number(v).toLocaleString('en-US'); }
+function mmGapCell(part){
+  if(!part) return '<td class="muted">—</td>';
+  if(typeof part.remaining !== 'number') return '<td class="muted">資料不足</td>';
+  const r = part.remaining;
+  const cls = part.status === 'red' ? 'red' : (part.status === 'amber' ? 'amber' : 'green');
+  const txt = r <= 0 ? ('已超出 ' + mmKm(-r)) : ('還有 ' + mmKm(r));
+  return `<td><span class="pill ${cls}">${txt}</span></td>`;
+}
+function renderMaintMileageCard(){
+  const body = document.getElementById('mmTableBody');
+  if(!body) return;
+  const rows = mmVisibleRows();
+  const cEl = document.getElementById('mm_count');
+  if(cEl) cEl.textContent = rows.length + ' 台';
+  body.innerHTML = rows.length ? rows.map(r => {
+    const month = r.mrow ? String(r.mrow.log_date || '').slice(0, 7) : '';
+    const curCell = (r.cur == null)
+      ? '<span class="muted">尚無里程登錄</span>'
+      : mmKm(r.cur) + (month ? ` <span class="muted" style="font-size:11px;">(${esc(month)})</span>` : '');
+    return `<tr>
+      <td><button class="name-link" data-view-vehicle="${esc(r.v.plate)}">${esc(r.v.plate)}</button></td>
+      <td class="muted">${esc(r.v.maintenance_model || '')}</td>
+      <td>${curCell}</td>
+      <td class="muted">${mmKm(r.std && r.std.small_service_km) || '—'}</td>
+      <td>${r.small && r.small.nextDue != null ? mmKm(r.small.nextDue) : '<span class="muted">—</span>'}</td>
+      ${mmGapCell(r.small)}
+      <td class="muted">${mmKm(r.std && r.std.large_service_km) || '—'}</td>
+      <td>${r.large && r.large.nextDue != null ? mmKm(r.large.nextDue) : '<span class="muted">—</span>'}</td>
+      ${mmGapCell(r.large)}
+      <td><b>${r.next ? esc(r.next) : '<span class="muted">—</span>'}</b></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="10" class="empty">沒有符合條件的車輛</td></tr>';
+
+  // 沒列進來的車也要交代一下，免得以為漏了
+  const noStd = (STATE.vehicles || []).filter(v => {
+    if(isRetiredVehicle(v)) return false;
+    const std = STATE.maintenanceStandards.find(s => s.model_name === v.maintenance_model);
+    return !std || !(std.small_service_km || std.large_service_km);
+  });
+  const noMile = rows.filter(r => r.cur == null).length;
+  const noSched = rows.filter(r => r.cur != null
+    && (!r.small || r.small.nextDue == null) && (!r.large || r.large.nextDue == null)).length;
+  const note = document.getElementById('mm_note');
+  if(note){
+    const bits = [];
+    if(noStd.length) bits.push('另有 ' + noStd.length + ' 台沒有列進來（板架、貨櫃架、吊掛機、堆高機這類沒有保養里程週期，或車型還沒設定保養標準）');
+    if(noMile) bits.push(noMile + ' 台還沒有里程登錄，算不出差距');
+    if(noSched) bits.push(noSched + ' 台查不到上次保養里程（保養排程沒有資料），要先補一次保養紀錄才算得出建議里程');
+    note.textContent = bits.join('；') + (bits.length ? '。' : '');
+  }
+}
+function exportMaintMileage(){
+  const rows = mmVisibleRows();
+  if(!rows.length){ alert('目前清單沒有資料可以匯出。'); return; }
+  const head = ['車號','保養車型','現在里程','里程月份','小保週期','小保建議里程','小保差距',
+                '大保週期','大保建議里程','大保差距','下一次要做','狀態'];
+  const S = {red:'已超出', amber:'快到了', green:'正常', gray:'資料不足'};
+  const gap = p => (p && typeof p.remaining === 'number') ? p.remaining : '';
+  const out = rows.map(r => [
+    r.v.plate, r.v.maintenance_model || '', r.cur == null ? '' : r.cur,
+    r.mrow ? String(r.mrow.log_date || '').slice(0, 7) : '',
+    (r.std && r.std.small_service_km) || '', r.small && r.small.nextDue != null ? r.small.nextDue : '', gap(r.small),
+    (r.std && r.std.large_service_km) || '', r.large && r.large.nextDue != null ? r.large.nextDue : '', gap(r.large),
+    r.next || '', S[r.status] || '']);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csvLines(head, out), ], {type:'text/csv;charset=utf-8'}));
+  a.download = '保養里程總覽_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
 function fleetMaintenanceSummary(){
   let overdue=0, soon=0, normal=0;
   STATE.vehicles.forEach(v => {
@@ -12440,6 +12593,7 @@ function renderLeaveStatTable(){
 }
 
 function renderAll(){
+  renderMaintMileageCard();
   renderForms();
   fgFillSelects();
   renderOverview();
@@ -12982,6 +13136,16 @@ document.getElementById('icTableBody').addEventListener('click', async (e) => {
     renderAll();
   }
 });
+{
+  const _mmS = document.getElementById('mm_search');
+  if(_mmS) _mmS.addEventListener('input', renderMaintMileageCard);
+  ['mm_status_filter','mm_show_retired'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', renderMaintMileageCard);
+  });
+  const _mmE = document.getElementById('mm_export');
+  if(_mmE) _mmE.addEventListener('click', exportMaintMileage);
+}
 document.getElementById('fleet_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('trailer_status_filter').addEventListener('change', renderFleetTable);
 document.getElementById('fleet_search').addEventListener('input', renderFleetTable);
