@@ -2028,19 +2028,23 @@
 
     <div class="card">
       <h2>車用尿素月統計</h2>
-      <div class="muted" style="margin-bottom:10px;">選一個車場，看它每月的尿素用量趨勢，可快速看出異常波動（較上月變化超過±20%會標色提醒）。</div>
+      <div class="muted" style="margin-bottom:10px;">車場選「全部」就各場並排比較；月份選定一個月，就看那個月各場分別用多少。（較上月變化超過 ±20% 會標色）</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>車場
           <select id="ur_stats_region">
+            <option value="all">全部車場（三場並排）</option>
             <option value="台中">台中</option>
             <option value="新竹">新竹</option>
             <option value="台南">台南</option>
           </select>
         </label>
+        <label>月份
+          <select id="ur_stats_month"><option value="all">全部月份</option></select>
+        </label>
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>月份</th><th>登錄次數</th><th>總使用量(公升)</th><th>總金額</th><th>數量較上月</th></tr></thead>
+          <thead id="ureaStatsHead"></thead>
           <tbody id="ureaStatsBody"></tbody>
         </table>
       </div>
@@ -11310,30 +11314,109 @@ function renderUreaTable(){
     </tr>`).join('') || `<tr><td colspan="8" class="empty">尚無登錄紀錄</td></tr>`;
 }
 
-function renderUreaStats(){
-  const region = document.getElementById('ur_stats_region').value;
-  const byMonth = {};
-  STATE.ureaLogs.forEach(u => {
-    if(!u.log_date || u.region !== region) return;
-    const month = u.log_date.slice(0,7);
-    byMonth[month] = byMonth[month] || {count:0, quantity:0, cost:0};
-    byMonth[month].count += 1;
-    // 雲端 NUMERIC 欄位在 JSON 裡是字串（例 "20.125"），不轉數字會變成字串相接
-    byMonth[month].quantity += Number(u.quantity)||0;
-    byMonth[month].cost += Number(u.cost)||0;
+// 車場清單：固定三場，再補上舊資料裡出現過的其他車場。
+// 不補的話，那些紀錄會算進合計卻沒有自己的欄位，看起來就像加錯。
+function ureaStatsYards(){
+  const base = ['台中', '新竹', '台南'];
+  const extra = [];
+  (STATE.ureaLogs || []).forEach(u => {
+    const r = String(u.region || '').trim() || '（未填車場）';
+    if(base.indexOf(r) < 0 && extra.indexOf(r) < 0) extra.push(r);
   });
-  const months = Object.keys(byMonth).sort().reverse();
-  document.getElementById('ureaStatsBody').innerHTML = months.map((m,i) => {
-    const cur = byMonth[m];
-    const prevMonth = months[i+1];
-    const prev = prevMonth ? byMonth[prevMonth] : null;
-    return `<tr>
-      <td>${esc(m)}</td>
-      <td>${cur.count}</td>
-      <td>${ureaQty(cur.quantity)}</td>
-      <td>$${cur.cost.toFixed(0)}</td>
-      <td>${changePill(cur.quantity, prev?prev.quantity:null)}</td>
-    </tr>`;
+  return base.concat(extra.sort());
+}
+
+// 月份下拉的選項是從實際資料長出來的。重畫時盡量保留使用者選的那個月，
+// 除非那個月已經沒有資料了，才退回「全部月份」。
+function renderUreaStatsMonths(months){
+  const sel = document.getElementById('ur_stats_month');
+  if(!sel) return 'all';
+  const cur = sel.value || 'all';
+  sel.innerHTML = '<option value="all">全部月份</option>'
+    + months.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  sel.value = months.indexOf(cur) >= 0 ? cur : 'all';
+  return sel.value;
+}
+
+function renderUreaStats(){
+  const head = document.getElementById('ureaStatsHead');
+  const body = document.getElementById('ureaStatsBody');
+  if(!body) return;
+  const region = document.getElementById('ur_stats_region').value;
+  const yards = ureaStatsYards();
+
+  // acc[月份][車場] = {count, quantity, cost}
+  const acc = {};
+  (STATE.ureaLogs || []).forEach(u => {
+    const m = String(u.log_date || '').slice(0, 7);
+    if(m.length !== 7) return;
+    const r = String(u.region || '').trim() || '（未填車場）';
+    acc[m] = acc[m] || {};
+    acc[m][r] = acc[m][r] || {count:0, quantity:0, cost:0};
+    const c = acc[m][r];
+    c.count += 1;
+    // 雲端 NUMERIC 欄位在 JSON 裡是字串（例 "20.125"），不轉數字會變成字串相接
+    c.quantity += Number(u.quantity) || 0;
+    c.cost += Number(u.cost) || 0;
+  });
+
+  const months = Object.keys(acc).sort().reverse();   // 新到舊
+  const month = renderUreaStatsMonths(months);
+  const cell = (m, r) => (acc[m] && acc[m][r]) || {count:0, quantity:0, cost:0};
+  const sum = (m, list) => list.reduce((s, r) => {
+    const c = cell(m, r);
+    return {count:s.count + c.count, quantity:s.quantity + c.quantity, cost:s.cost + c.cost};
+  }, {count:0, quantity:0, cost:0});
+  const money = v => '$' + Math.round(v).toLocaleString('en-US');
+  const prevOf = m => months[months.indexOf(m) + 1];   // months 是新到舊，下一個就是上個月
+  const TOTAL_STYLE = ' style="font-weight:600;background:var(--ivory-200);"';
+
+  if(!months.length){
+    head.innerHTML = '<tr><th>月份</th></tr>';
+    body.innerHTML = '<tr><td class="empty">尚無尿素登錄資料</td></tr>';
+    return;
+  }
+
+  if(region === 'all' && month !== 'all'){
+    // ★ 選定一個月，一次看三個車場
+    head.innerHTML = '<tr><th>車場</th><th>登錄次數</th><th>使用量(公升)</th><th>金額</th><th>數量較上月</th></tr>';
+    const pm = prevOf(month);
+    const rows = yards.map(r => {
+      const c = cell(month, r), p = pm ? cell(pm, r) : null;
+      return `<tr><td>${esc(r)}</td><td>${c.count}</td><td>${ureaQty(c.quantity)}</td>
+        <td>${money(c.cost)}</td><td>${changePill(c.quantity, p ? p.quantity : null)}</td></tr>`;
+    });
+    const t = sum(month, yards), pt = pm ? sum(pm, yards) : null;
+    rows.push(`<tr${TOTAL_STYLE}><td>全部車場合計</td><td>${t.count}</td><td>${ureaQty(t.quantity)}</td>
+      <td>${money(t.cost)}</td><td>${changePill(t.quantity, pt ? pt.quantity : null)}</td></tr>`);
+    body.innerHTML = rows.join('');
+    return;
+  }
+
+  if(region === 'all'){
+    // 每一列一個月，三個車場並排，最後一欄是合計
+    head.innerHTML = '<tr><th>月份</th>'
+      + yards.map(r => `<th>${esc(r)}(公升)</th>`).join('')
+      + '<th>合計(公升)</th><th>合計金額</th><th>合計較上月</th></tr>';
+    body.innerHTML = months.map(m => {
+      const t = sum(m, yards);
+      const pm = prevOf(m), pt = pm ? sum(pm, yards) : null;
+      return `<tr><td>${esc(m)}</td>`
+        + yards.map(r => `<td>${ureaQty(cell(m, r).quantity)}</td>`).join('')
+        + `<td><b>${ureaQty(t.quantity)}</b></td><td>${money(t.cost)}</td>
+           <td>${changePill(t.quantity, pt ? pt.quantity : null)}</td></tr>`;
+    }).join('');
+    return;
+  }
+
+  // 單一車場（原本的看法）。選了月份就只列那一個月。
+  head.innerHTML = '<tr><th>月份</th><th>登錄次數</th><th>總使用量(公升)</th><th>總金額</th><th>數量較上月</th></tr>';
+  const list = (month === 'all') ? months : [month];
+  body.innerHTML = list.map(m => {
+    const c = cell(m, region);
+    const pm = prevOf(m), p = pm ? cell(pm, region) : null;
+    return `<tr><td>${esc(m)}</td><td>${c.count}</td><td>${ureaQty(c.quantity)}</td>
+      <td>${money(c.cost)}</td><td>${changePill(c.quantity, p ? p.quantity : null)}</td></tr>`;
   }).join('') || `<tr><td colspan="5" class="empty">這個車場尚無尿素登錄資料</td></tr>`;
 }
 
@@ -13723,6 +13806,10 @@ document.getElementById('ureaTableBody').addEventListener('click', async (e) => 
   }
 });
 document.getElementById('ur_stats_region').addEventListener('change', renderUreaStats);
+{
+  const _um = document.getElementById('ur_stats_month');
+  if(_um) _um.addEventListener('change', renderUreaStats);
+}
 
 // ===== 三車場尿素庫存：期初／盤點與進貨登記 =====
 // 跟尿素使用登錄同一個道理：動手改之前先把雲端最新的抓回來，
