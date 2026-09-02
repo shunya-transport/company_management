@@ -12752,27 +12752,38 @@ function renderLeaveStatTable(){
     .concat(['<th style="text-align:center;">加班費時數</th>','<th style="text-align:center;">總計(天)</th>']);
   document.getElementById('leaveStatHead').innerHTML = headCells.join('');
 
-  const colTotals = {};
-  leaveTypes.forEach(t=>colTotals[t]=0);
-  let otTotal = 0, grandTotal = 0;
+  // ★ 一律用「時數」欄算，不要加資料庫的 days 欄。
+  //   days 是存進去時就四捨五入到小數第一位的（1 小時存 0.1、0.5 小時也存 0.1、
+  //   2 小時存 0.3、3.5 小時存 0.4），一筆一筆加起來誤差會累積。
+  //   曾渝芬 115 年事假實際 112 小時＝14.00 天，加 days 欄只會得到 13.9。
+  //   系統其他地方（清單的天數欄、特休剩餘、補休）用的都是 leaveHours()，
+  //   這張表原本是唯一的例外，所以只有它對不起來。
+  //   作法：全程累加【時數】，只在要顯示的時候除以 8 並四捨五入一次。
+  const colHours = {};
+  leaveTypes.forEach(t=>colHours[t]=0);
+  let otTotal = 0, grandHours = 0;
+  const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
 
   const bodyRows = people.map(e => {
-    let rowTotal = 0;
+    let rowHours = 0;
     const cells = leaveTypes.map(t => {
-      const sum = fmt2(leaveRows.filter(r=>r.employee_id===e.id && (r.leave_type||'').trim()===t).reduce((s,r)=>s+(parseFloat(r.days)||0),0));
-      if(sum) { colTotals[t] = fmt2(colTotals[t]+sum); rowTotal += sum; }
-      return `<td style="text-align:center;">${sum||''}</td>`;
+      const h = leaveRows.filter(r=>r.employee_id===e.id && (r.leave_type||'').trim()===t)
+                         .reduce((s,r)=>s+leaveHours(r),0);
+      if(h){ colHours[t] += h; rowHours += h; }
+      const sum = toDays(h);
+      return `<td style="text-align:center;"${h ? ` title="${fmt2(h)} 小時"` : ''}>${sum||''}</td>`;
     });
     const otSum = fmt2(otRows.filter(r=>r.employee_id===e.id && r.settlement_type==='加班費').reduce((s,r)=>s+(parseFloat(r.hours)||0),0));
     otTotal = fmt2(otTotal + (otSum||0));
-    grandTotal = fmt2(grandTotal + rowTotal);
-    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(e.name)}</td>${cells.join('')}<td style="text-align:center;">${otSum||''}</td><td style="text-align:center;font-weight:700;">${fmt2(rowTotal)||''}</td></tr>`;
+    grandHours += rowHours;
+    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(e.name)}</td>${cells.join('')}<td style="text-align:center;">${otSum||''}</td><td style="text-align:center;font-weight:700;"${rowHours ? ` title="${fmt2(rowHours)} 小時"` : ''}>${toDays(rowHours)||''}</td></tr>`;
   });
   document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+3}" class="empty">此期間沒有請假或加班紀錄</td></tr>`;
 
   const footCells = ['<td style="position:sticky;left:0;background:rgba(201,154,86,.08);">總計</td>']
-    .concat(leaveTypes.map(t=>`<td style="text-align:center;">${colTotals[t]||''}</td>`))
-    .concat([`<td style="text-align:center;">${otTotal||''}</td>`, `<td style="text-align:center;">${grandTotal||''}</td>`]);
+    .concat(leaveTypes.map(t=>`<td style="text-align:center;"${colHours[t] ? ` title="${fmt2(colHours[t])} 小時"` : ''}>${toDays(colHours[t])||''}</td>`))
+    .concat([`<td style="text-align:center;">${otTotal||''}</td>`,
+             `<td style="text-align:center;"${grandHours ? ` title="${fmt2(grandHours)} 小時"` : ''}>${toDays(grandHours)||''}</td>`]);
   document.getElementById('leaveStatFoot').innerHTML = bodyRows.length ? footCells.join('') : '';
 }
 
