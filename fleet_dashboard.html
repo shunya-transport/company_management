@@ -510,8 +510,10 @@
       <div class="toolbar">
         <input id="card_search" placeholder="搜尋姓名或卡號">
         <select id="card_scope_filter">
-          <option value="all">全部（含非現職/廠商）</option>
+          <option value="all">全部</option>
           <option value="current">僅現職人員</option>
+          <option value="left">僅已離職</option>
+          <option value="outsider">僅非員工/廠商</option>
         </select>
       </div>
       <div class="table-scroll">
@@ -12345,14 +12347,54 @@ function renderInsuranceLedger(){
     </tr>`).join('') || `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
+// 門禁卡清冊那一列，到底是誰的卡？
+// 原本只看「有沒有掛 employee_id」就判現職，那是錯的 ——
+// 人離職之後編號還在那一列上，所以離職的人會一直顯示現職。
+// 這裡改成真的回頭查人在哪裡，並且用三種方式對照：
+//   employee_id → employee_no（工號）→ 姓名
+// 因為清冊裡有一部分列當初沒掛 employee_id（王世璋、杜固樺就是），
+// 只靠編號對照的話那幾列永遠判不出來。
+function cardMatchEmp(r, list){
+  if(!r || !list) return null;
+  if(r.employee_id != null){
+    const byId = list.find(e => String(e.id) === String(r.employee_id));
+    if(byId) return byId;
+  }
+  const no = String(r.employee_no || '').trim();
+  if(no){
+    const byNo = list.find(e => String(e.employee_no || '').trim() === no);
+    if(byNo) return byNo;
+  }
+  const nm = String(r.name || '').trim();
+  if(nm){
+    const byName = list.find(e => String(e.name || '').trim() === nm);
+    if(byName) return byName;
+  }
+  return null;
+}
+function cardHolderInfo(r){
+  // 已繳回優先：卡片實體已經收回來了，人在哪裡都一樣
+  const back = String((r && r.returned_date) || '').slice(0, 10);
+  if(back) return {key:'returned', cls:'gray', text:'已繳回　' + back};
+  const cur = cardMatchEmp(r, STATE.employees || []);
+  if(cur) return {key:'current', cls:'green', text:'現職'};
+  const gone = cardMatchEmp(r, STATE.employeesHistory || []);
+  if(gone){
+    const d = String(gone.resign_date || '').slice(0, 10);
+    return {key:'left', cls:'amber', text:'已離職' + (d ? '　' + d : '')};
+  }
+  return {key:'outsider', cls:'gray', text:'非員工/廠商'};
+}
 function renderAccessCardLedger(){
   const q = document.getElementById('card_search').value.trim();
   const scopeF = document.getElementById('card_scope_filter').value;
-  let rows = STATE.accessCardRoster;
-  if(q) rows = rows.filter(r => (r.name||'').includes(q) || (r.card_no||'').includes(q));
-  if(scopeF === 'current') rows = rows.filter(r => r.employee_id);
+  let rows = (STATE.accessCardRoster || []).map(r => ({r, info: cardHolderInfo(r)}));
+  if(q) rows = rows.filter(x => (x.r.name||'').includes(q) || (x.r.card_no||'').includes(q));
+  if(scopeF === 'current')  rows = rows.filter(x => x.info.key === 'current');
+  if(scopeF === 'left')     rows = rows.filter(x => x.info.key === 'left');
+  if(scopeF === 'outsider') rows = rows.filter(x => x.info.key === 'outsider');
   document.getElementById('card_ledger_count').textContent = `共 ${rows.length} 筆`;
-  document.getElementById('cardLedgerBody').innerHTML = rows.map(r => `
+  document.getElementById('cardLedgerBody').innerHTML = rows.map(({r, info}) => `
     <tr>
       <td>${esc(r.name||'')}</td>
       <td>${esc(r.position_title||'')}</td>
@@ -12360,7 +12402,7 @@ function renderAccessCardLedger(){
       <td>${esc(r.card_no||'')}</td>
       <td>${esc(r.employee_no||'')}</td>
       <td class="muted">${esc(r.gates||'—')}</td>
-      <td>${r.employee_id ? '<span class="pill green">現職</span>' : '<span class="pill gray">非現職/廠商</span>'}</td>
+      <td><span class="pill ${info.cls}">${esc(info.text)}</span></td>
     </tr>`).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
@@ -14893,10 +14935,21 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
       x.returned_date = resignDate; _touched.add('access_cards');
     }
   });
+  // 門禁卡清冊：不能只比對 employee_id。
+  // 清冊裡有一部分列當初沒掛編號（例如 D0158 王世璋、D0139 杜固樺），
+  // 只比對編號的話，這些人離職時一列都對不到，繳回日永遠是空的。
+  // 改成編號、工號、姓名三種都算，而且對到就順手把 employee_id 補上去，
+  // 下次其他功能就都對得到了。
   (STATE.accessCardRoster || []).forEach(x => {
-    if(x.employee_id === emp.id && !x.returned_date){
-      x.returned_date = resignDate; _touched.add('access_card_roster');
-    }
+    if(x.returned_date) return;
+    const no = String(x.employee_no || '').trim();
+    const hit = (x.employee_id === emp.id)
+             || (no && emp.employee_no && no === String(emp.employee_no).trim())
+             || (!x.employee_id && !no && String(x.name || '').trim() === String(emp.name || '').trim());
+    if(!hit) return;
+    if(x.employee_id == null) x.employee_id = emp.id;   // 順手補編號
+    x.returned_date = resignDate;
+    _touched.add('access_card_roster');
   });
   // 必繳文件檢核：【完全不動】。
   // 「這個人當年繳過哪些文件」是事實，復職後還要用，離職不該把它抹掉。
