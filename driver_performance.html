@@ -369,9 +369,12 @@
         <div id="pf_warn" class="muted" style="margin:6px 0 12px;"></div>
 
         <div class="toolbar">
-          <button class="btn" id="pf_save">存入雲端</button>
-          <button class="btn ghost" id="pf_saveNext">存檔並繼續輸入下一位</button>
-          <button class="btn ghost" id="pf_clear">清空表單</button>
+          <button class="btn" id="pf_save"
+                  title="存完把整張表單清乾淨（含車號、區域、車隊），只留日期">存入雲端</button>
+          <button class="btn ghost" id="pf_saveNext"
+                  title="存完保留日期、區域、車隊、車號，游標跳到姓名，直接打下一個人">存檔並繼續輸入下一位</button>
+          <button class="btn ghost" id="pf_clear"
+                  title="不存檔，只把這個人的欄位清掉重打">清空表單</button>
           <span class="muted" id="pf_msg"></span>
         </div>
       </div>
@@ -714,9 +717,19 @@ function renderSelects(){
     if(dl) dl.innerHTML = drivers.map(x => `<option value="${esc(x)}"></option>`).join('');
   }
   fillSelect('pf_attend', Object.keys(ATTEND_CODE), '');
-  fillSelect('pf_region', REGIONS, '');
-  fillSelect('pf_group', FLEET_GROUPS, '');
-  fillSelect('pf_carry', CARRY_TYPES, '');
+  fillSelect('pf_region', REGIONS, '請選擇');
+  // 車隊分類：寫死的清單 ∪ 員工身上出現過的 ∪ 已輸入紀錄裡出現過的。
+  // 只用寫死的 7 個會漏掉「德謙車隊」「亞東液態槽車」，
+  // 那些值不但自動帶不進來，連修改舊紀錄時都會被下拉清空。
+  {
+    const extra = [];
+    const push = v => { const s = String(v || '').trim();
+      if(s && FLEET_GROUPS.indexOf(s) < 0 && extra.indexOf(s) < 0) extra.push(s); };
+    (STATE.employees || []).forEach(e => push(e.fleet_team));
+    (STATE.rows || []).forEach(r => push(r.fleet_group));
+    fillSelect('pf_group', FLEET_GROUPS.concat(extra.sort()), '請選擇');
+  }
+  fillSelect('pf_carry', CARRY_TYPES, '請選擇');
   fillSelect('pf_plate', STATE.vehicles.map(v => v.plate_number), '請選擇');
   const dsel = document.getElementById('pf_driver_filter');
   if(dsel){
@@ -750,17 +763,35 @@ function autoFillOdo(){
   renderCalc();
 }
 // 選了司機就把區域帶成他的所屬車場
-function autoFillRegion(){
-  const emp = STATE.employees.find(e => e.name === document.getElementById('pf_driver').value);
-  const el = document.getElementById('pf_region');
-  if(emp && emp.region && !el.value) el.value = emp.region;
+// 打完姓名就把「區域」和「車隊分類」帶成那個人的。
+// ★ 換人時一定要【覆蓋】，不能像舊版那樣 if(!el.value) 只在空白時才填 ——
+//   存檔後 clearForm() 不會清掉這兩格，所以換下一位時上一位的車隊還留著，
+//   不覆蓋的話就會把甲的車隊掛到乙身上，那正是要避免的錯誤。
+//   那個人身上沒填的欄位就不動，不會把已經選好的洗掉。
+function autoFillFromDriver(){
+  const nm = String((document.getElementById('pf_driver') || {}).value || '').trim();
+  const emp = STATE.employees.find(e => e.name === nm);
+  if(emp){
+    if(emp.region)     setSelectValue('pf_region', emp.region);
+    if(emp.fleet_team) setSelectValue('pf_group',  emp.fleet_team);
+  }
   renderCalc();
+}
+// 下拉裡沒有這個值的話就先補一個選項再選它。
+// 不補的話 select 會靜靜地選不上、變成空白，比沒有自動帶還糟
+// （在職人員身上就有「德謙車隊」「亞東液態槽車」不在寫死的清單裡）。
+function setSelectValue(id, val){
+  const el = document.getElementById(id);
+  if(!el || !val) return;
+  const has = Array.prototype.some.call(el.options, o => o.value === val);
+  if(!has) el.insertAdjacentHTML('beforeend', `<option value="${esc(val)}">${esc(val)}</option>`);
+  el.value = val;
 }
 
 // ---------- 載入 ----------
 async function loadRefs(){
   const [emps, vehs] = await Promise.all([
-    sbGet('employees?select=employee_id,name,region,status&status=eq.' + encodeURIComponent('在職') + '&order=employee_no.asc'),
+    sbGet('employees?select=employee_id,name,region,fleet_team,status&status=eq.' + encodeURIComponent('在職') + '&order=employee_no.asc'),
     sbGet('vehicles?select=vehicle_id,plate_number,status,vehicle_category&vehicle_category=eq.' + encodeURIComponent('車輛') + '&order=plate_number.asc')
   ]);
   STATE.employees = emps || [];
@@ -886,12 +917,30 @@ function fillForm(r){
   document.querySelector('[data-tab="entry"]').click();
   window.scrollTo({top:0, behavior:'smooth'});
 }
-function clearForm(keepDate){
+// keepContext = true  → 只清「這個人這一天」的欄位，
+//                       區域／車隊／車號／載運類別／出勤類別留著（接著輸入下一位用）
+// keepContext = false → 連上面那些情境欄位一起清乾淨（這一筆收工）
+function clearForm(keepDate, keepContext){
   const d = document.getElementById('pf_date').value;
   ['pf_driver','pf_start','pf_end','pf_odo_out','pf_odo_in','pf_wait','pf_bonus','pf_special',
    'pf_extra','pf_first','pf_last','pf_notes','pf_stops'].forEach(id => {
      const el = document.getElementById(id); if(el) el.value = '';
    });
+  if(keepContext === false){
+    ['pf_region','pf_group','pf_plate','pf_carry','pf_attend'].forEach(id => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      // 區域／車隊／車號／載運類別的下拉都有「請選擇」這個空白選項，
+      // 所以 value='' 是真的清得掉的狀態。
+      // （沒有空白選項的話，設 value='' 瀏覽器會退回第一個選項，
+      //   看起來像有選、其實是亂帶的，比不清還危險 —— 所以上面
+      //   renderSelects 才特地給這幾個下拉加了「請選擇」。）
+      // 出勤類別例外：絕大多數就是「出勤」，清成空白只是讓人多點一次，
+      // 所以回到預設值而不是空白。
+      if(id === 'pf_attend'){ el.value = '出勤'; return; }
+      el.value = '';
+    });
+  }
   document.getElementById('pf_overnight').checked = false;
   document.getElementById('pf_trips').value = 1;
   if(keepDate) document.getElementById('pf_date').value = d;
@@ -943,8 +992,15 @@ async function doSave(andNext){
                             || String(a.driver_name).localeCompare(String(b.driver_name))
                             || num(a.seq) - num(b.seq));
     if(r.plate && r.odo_in != null) STATE.lastOdo[r.plate] = r.odo_in;
-    clearForm(true);
+    // 這裡就是原本漏掉的那一步 —— andNext 從來沒有被用到，
+    // 所以兩顆按鈕才會做一模一樣的事。
+    clearForm(true, !!andNext);
     renderAll();
+    if(andNext){
+      // 接著要打下一個人，游標直接跳到姓名，不用再用滑鼠點
+      const dv = document.getElementById('pf_driver');
+      if(dv){ dv.focus(); dv.select && dv.select(); }
+    }
   }catch(e){
     msg('pf_msg', '存檔失敗：' + (e && e.message ? e.message : e), true);
     alert('沒有存進雲端，畫面上的內容都還在，請排除問題後再按一次。\n\n錯誤訊息：' + (e && e.message ? e.message : e));
@@ -1062,8 +1118,8 @@ document.querySelectorAll('.sidebar nav button').forEach(b => {
   .forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', renderCalc); });
 document.getElementById('pf_overnight').addEventListener('change', renderCalc);
 document.getElementById('pf_plate').addEventListener('change', autoFillOdo);
-document.getElementById('pf_driver').addEventListener('change', autoFillRegion);
-document.getElementById('pf_driver').addEventListener('input', autoFillRegion);
+document.getElementById('pf_driver').addEventListener('change', autoFillFromDriver);
+document.getElementById('pf_driver').addEventListener('input', autoFillFromDriver);
 ['pf_start', 'pf_end'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('blur', () => { tidyTimeField(id); renderCalc(); });
@@ -1071,7 +1127,9 @@ document.getElementById('pf_driver').addEventListener('input', autoFillRegion);
 document.getElementById('pf_date').addEventListener('change', renderDay);
 document.getElementById('pf_save').addEventListener('click', () => doSave(false));
 document.getElementById('pf_saveNext').addEventListener('click', () => doSave(true));
-document.getElementById('pf_clear').addEventListener('click', () => { clearForm(true); msg('pf_msg',''); });
+// 「清空表單」維持只清人相關欄位：按它多半是想重打這個人，
+// 不是想把車號、車隊全部重選。
+document.getElementById('pf_clear').addEventListener('click', () => { clearForm(true, true); msg('pf_msg',''); });
 document.getElementById('pf_ex_perf').addEventListener('click', exportPerf);
 document.getElementById('pf_ex_simple').addEventListener('click', exportSimple);
 ['pf_search','pf_driver_filter','pf_region_filter'].forEach(id => {
@@ -1099,7 +1157,7 @@ document.getElementById('pf_reload').addEventListener('click', async () => {
       try{
         await sbDelete('driver_perf_daily', 'perf_id', dl);
         STATE.rows = STATE.rows.filter(x => String(x.perf_id) !== String(dl));
-        if(String(EDIT_ID) === String(dl)) clearForm(true);
+        if(String(EDIT_ID) === String(dl)) clearForm(true, true);
         renderAll();
       }catch(err){ alert('刪除失敗：' + (err && err.message ? err.message : err)); }
     }
