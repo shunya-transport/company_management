@@ -332,7 +332,8 @@
         </div>
         <div class="form-grid">
           <label>日期<input id="pf_date" type="date"></label>
-          <label>姓名<select id="pf_driver"></select></label>
+          <label>姓名<input id="pf_driver" list="pfDriverList" placeholder="打一個字就會跳出來，例：蘇" autocomplete="off"></label>
+          <datalist id="pfDriverList"></datalist>
           <label>出勤類別<select id="pf_attend"></select></label>
           <label>出勤代碼<input id="pf_code" readonly style="background:var(--ivory-200);"></label>
           <label>本日總趟次<input id="pf_trips" type="number" min="0" step="1" value="1"></label>
@@ -340,8 +341,8 @@
           <label>車隊分類<select id="pf_group"></select></label>
           <label>車號<select id="pf_plate"></select></label>
           <label>載運類別<select id="pf_carry"></select></label>
-          <label>開始作業<input id="pf_start" type="time"></label>
-          <label>結束作業<input id="pf_end" type="time"></label>
+          <label>開始作業<input id="pf_start" type="text" inputmode="numeric" placeholder="0440 或 4:40" autocomplete="off"></label>
+          <label>結束作業<input id="pf_end" type="text" inputmode="numeric" placeholder="1637 或 16:37" autocomplete="off"></label>
           <label style="align-self:end;"><span style="display:flex;align-items:center;gap:6px;padding:9px 0;">
             <input id="pf_overnight" type="checkbox" style="width:auto;"> 結束時間是隔天（跨日）</span></label>
           <label>路碼錶 去程<input id="pf_odo_out" type="number" step="1" placeholder="選車號會自動帶上次的回程"></label>
@@ -567,6 +568,38 @@ async function sbDelete(table, pk, id){
 // 規則全部取自薪資績效系統，並拿 115/07 的 551 筆實際資料逐筆驗算過。
 
 // 總工時＝（結束 − 開始）無條件捨去到 0.1 小時。跨日就加 24 小時。
+// 時間欄位改成用打的（type="text"），所以要自己把各種寫法整理成 HH:MM。
+// 認得：0440、440、4:40、04:40、4.40、4時40分，全形數字也可以。
+// 看不懂就回空字串，不會硬猜一個時間出來。
+function normTime(v){
+  const raw = String(v == null ? '' : v).trim();
+  if(!raw) return '';
+  const half = raw.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  let h, m;
+  // 有分隔符號就照分隔符號拆，【不要】只看數字位數。
+  // 不然「12:5」會被當成 4 位以下的 125 → 01:25，
+  // 那是個看起來很合理、其實完全錯掉的時間，比直接報錯還危險。
+  const sep = half.match(/^(\d{1,2})\s*[:：.．時]\s*(\d{1,2})/);
+  if(sep){
+    h = +sep[1]; m = +sep[2];
+  }else{
+    const t = half.replace(/[^0-9]/g, '');
+    if(!t) return '';
+    if(t.length <= 2){ h = +t; m = 0; }
+    else if(t.length === 3){ h = +t.slice(0, 1); m = +t.slice(1); }
+    else if(t.length === 4){ h = +t.slice(0, 2); m = +t.slice(2); }
+    else return '';
+  }
+  if(!(h >= 0 && h <= 23 && m >= 0 && m <= 59)) return '';
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+// 離開欄位時把它整理成 04:40 這種樣子；看不懂就原樣留著，讓下面的提示去講
+function tidyTimeField(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const n = normTime(el.value);
+  if(n) el.value = n;
+}
 function calcWorkHours(start, end, overnight){
   if(!start || !end) return null;
   const toMin = t => { const p = String(t).split(':'); return (+p[0])*60 + (+p[1] || 0); };
@@ -591,7 +624,11 @@ function stopList(text){
 function readForm(){
   const g = id => (document.getElementById(id) || {}).value;
   const stops = stopList(g('pf_stops'));
-  const wh = calcWorkHours(g('pf_start'), g('pf_end'), document.getElementById('pf_overnight').checked);
+  // 一定要在這裡正規化，不能只靠 blur ——
+  // 使用者打完時間直接按存檔的話不會觸發 blur，
+  // 那樣存進去的就會是 "440" 這種原始字串，工時也算不出來。
+  const startT = normTime(g('pf_start')), endT = normTime(g('pf_end'));
+  const wh = calcWorkHours(startT, endT, document.getElementById('pf_overnight').checked);
   const odoOut = g('pf_odo_out') === '' ? null : parseInt(g('pf_odo_out'), 10);
   const odoIn  = g('pf_odo_in')  === '' ? null : parseInt(g('pf_odo_in'), 10);
   const emp = STATE.employees.find(e => e.name === g('pf_driver'));
@@ -604,8 +641,8 @@ function readForm(){
     trip_count: g('pf_trips') === '' ? null : parseInt(g('pf_trips'), 10),
     region: g('pf_region') || null,
     fleet_group: g('pf_group') || null,
-    start_time: g('pf_start') || null,
-    end_time: g('pf_end') || null,
+    start_time: startT || null,
+    end_time: endT || null,
     overnight: document.getElementById('pf_overnight').checked ? 1 : 0,
     work_hours: wh,
     overtime_hours: calcOvertime(wh),
@@ -637,6 +674,17 @@ function renderCalc(){
      <div class="stat-card green"><div class="n">${money(num(r.carry_bonus) + num(r.special_pay) + num(r.extra_subsidy))}</div><div class="l">績效合計</div></div>`;
   // 明顯有問題的先擋在畫面上，不要等存檔才發現
   const w = [];
+  // 時間欄有東西卻解析不出來，一定要講，不然會被當成沒填、悄悄算不出工時
+  [['pf_start', '開始作業'], ['pf_end', '結束作業']].forEach(([id, label]) => {
+    const v = (document.getElementById(id) || {}).value;
+    if(String(v || '').trim() && !normTime(v))
+      w.push(label + '的時間看不懂（' + v + '），可以打 0440 或 4:40。');
+  });
+  {
+    const nm = String((document.getElementById('pf_driver') || {}).value || '').trim();
+    if(nm && !STATE.employees.some(e => e.name === nm))
+      w.push('「' + nm + '」不在司機清單裡，請從建議清單選一個。');
+  }
   if(r.start_time && r.end_time && r.work_hours == null)
     w.push('結束作業比開始作業早。真的做到隔天的話請勾「跨日」。');
   if(r.total_km != null && r.total_km < 0)
@@ -660,7 +708,11 @@ function fillSelect(id, items, blank){
 }
 function renderSelects(){
   const drivers = STATE.employees.map(e => e.name).filter(Boolean);
-  fillSelect('pf_driver', drivers, '請選擇');
+  // 姓名改成 input + datalist（跟零用金那頁的領款人同一套），所以是填 datalist
+  {
+    const dl = document.getElementById('pfDriverList');
+    if(dl) dl.innerHTML = drivers.map(x => `<option value="${esc(x)}"></option>`).join('');
+  }
   fillSelect('pf_attend', Object.keys(ATTEND_CODE), '');
   fillSelect('pf_region', REGIONS, '');
   fillSelect('pf_group', FLEET_GROUPS, '');
@@ -850,7 +902,13 @@ function clearForm(keepDate){
 async function doSave(andNext){
   const r = readForm();
   if(!r.work_date){ msg('pf_msg', '請選日期', true); return; }
-  if(!r.driver_name){ msg('pf_msg', '請選姓名', true); return; }
+  if(!r.driver_name){ msg('pf_msg', '請填姓名', true); return; }
+  // 姓名是自由輸入，打錯字不能默默存進去 ——
+  // 存成查無此人的名字，後面對員工編號、跟工時表比對都會失敗。
+  if(!STATE.employees.some(e => e.name === r.driver_name)){
+    msg('pf_msg', '「' + r.driver_name + '」不在司機清單裡，請從建議清單選一個（打一個字就會跳出來）', true);
+    return;
+  }
   if(!r.attend_type){ msg('pf_msg', '請選出勤類別', true); return; }
   // 休假、教育訓練這種沒出車的不強制要車號；有出車的一定要有車號
   const mustDrive = ['A','B','E'].indexOf(r.attend_code) >= 0;
@@ -1005,6 +1063,11 @@ document.querySelectorAll('.sidebar nav button').forEach(b => {
 document.getElementById('pf_overnight').addEventListener('change', renderCalc);
 document.getElementById('pf_plate').addEventListener('change', autoFillOdo);
 document.getElementById('pf_driver').addEventListener('change', autoFillRegion);
+document.getElementById('pf_driver').addEventListener('input', autoFillRegion);
+['pf_start', 'pf_end'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('blur', () => { tidyTimeField(id); renderCalc(); });
+});
 document.getElementById('pf_date').addEventListener('change', renderDay);
 document.getElementById('pf_save').addEventListener('click', () => doSave(false));
 document.getElementById('pf_saveNext').addEventListener('click', () => doSave(true));
