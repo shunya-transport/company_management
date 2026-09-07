@@ -2245,7 +2245,10 @@
           <tfoot id="vuFoot"></tfoot>
         </table>
       </div>
-      <button class="btn ghost no-print" id="vu_export" style="margin-top:10px;">匯出 CSV</button>
+      <button class="btn ghost no-print" id="vu_export" style="margin-top:10px;"
+              title="逐筆明細：一列一天一位人員一台車，就是上面這張表">匯出明細</button>
+      <button class="btn ghost no-print" id="vu_export_plate" style="margin-top:10px;"
+              title="一列一台車：整個月每台車跑了幾天、幾個小時、誰在開">匯出車輛月統計</button>
     </div>
 
     <div class="card">
@@ -14195,13 +14198,56 @@ function renderVehicleUsage(){
   const el = document.getElementById(id);
   if(el) el.addEventListener(id === 'vu_period' ? 'change' : 'input', renderVehicleUsage);
 });
+// 一列一台車：整個月每台車跑了幾天、幾個小時、誰在開。
+// 統計範圍就是畫面上這張表（跟著月份與兩個搜尋框走），
+// 畫面看到什麼、匯出就是什麼，不會有第三種答案。
+function vuPlateRows(){
+  const by = {};
+  vuRows().forEach(o => {
+    const b = by[o.plate] = by[o.plate] || {plate:o.plate, hours:0, trips:0, days:{}, names:{}};
+    b.hours += o.hours;
+    b.trips += 1;
+    b.days[o.date] = 1;
+    if(o.name) b.names[o.name] = (b.names[o.name] || 0) + o.hours;
+  });
+  return Object.values(by).map(b => {
+    const days = Object.keys(b.days).length;
+    return {plate:b.plate, hours:b.hours, trips:b.trips, days:days,
+            // 開的人依工時多到少排，第一個就是這台車的主要駕駛
+            names:Object.keys(b.names).sort((x,y) => b.names[y] - b.names[x]),
+            nameCount:Object.keys(b.names).length,
+            avg: days ? b.hours / days : 0};
+  }).sort((a,b) => b.hours - a.hours || String(a.plate).localeCompare(String(b.plate)));
+}
+function vuPeriodLabel(){
+  const p = (document.getElementById('vu_period') || {}).value || 'all';
+  return p === 'all' ? '全部月份' : whPeriodText(p).replace(/\s/g, '');
+}
 {
   const _vuEx = document.getElementById('vu_export');
   if(_vuEx) _vuEx.addEventListener('click', () => {
-    const p = (document.getElementById('vu_period') || {}).value || 'all';
-    whDownloadCsv('車輛使用明細_工時_' + (p === 'all' ? '全部月份' : whPeriodText(p).replace(/\s/g, '')),
+    whDownloadCsv('車輛使用明細_工時_' + vuPeriodLabel(),
       ['日期', '車輛使用人員', '車號', '總工時'],
-      vuRows().map(o => [o.date, o.name, o.plate, whRound(o.hours, 1)]));
+      // 日期照績效檔用民國年（畫面上看到的也是民國），貼回 Excel 才對得起來
+      vuRows().map(o => [alyROC(o.date), o.name, o.plate, whRound(o.hours, 1)]));
+  });
+  const _vuEx2 = document.getElementById('vu_export_plate');
+  if(_vuEx2) _vuEx2.addEventListener('click', () => {
+    const rows = vuPlateRows();
+    if(!rows.length){ alert('這個條件下沒有車輛使用紀錄可以匯出。'); return; }
+    const label = vuPeriodLabel();
+    // 一台車通常一兩個人開；真的很多人開時只列工時最多的前 5 位，
+    // 不然一格塞二十幾個名字，Excel 打開會很難看
+    const nameCell = r => r.names.slice(0, 5).join('、')
+      + (r.nameCount > 5 ? '　等 ' + r.nameCount + ' 人' : '');
+    const out = rows.map(r => [r.plate, label, r.days, r.trips, nameCell(r),
+                               whRound(r.hours, 1), whRound(r.avg, 1)]);
+    // 最後補一列全部車的合計，印出來給人看的時候比較好對
+    const tHours = rows.reduce((n, r) => n + r.hours, 0);
+    const tTrips = rows.reduce((n, r) => n + r.trips, 0);
+    out.push(['合計 ' + rows.length + ' 台', label, '', tTrips, '', whRound(tHours, 1), '']);
+    whDownloadCsv('車輛月工時統計_' + label,
+      ['車號', '月份', '使用天數', '使用人次', '使用人員', '總工時', '日均工時'], out);
   });
 }
 
