@@ -1605,7 +1605,10 @@
           <tfoot><tr id="leaveStatFoot" style="font-weight:700;background:rgba(201,154,86,.08);"></tr></tfoot>
         </table>
       </div>
-      <button class="btn ghost no-print" id="lvstat_export" style="margin-top:10px;">匯出 CSV</button>
+      <button class="btn ghost no-print" id="lvstat_export" style="margin-top:10px;"
+              title="匯出目前畫面上這張表（跟著上面的年份、月份、車場、姓名走）">匯出 CSV（目前條件）</button>
+      <button class="btn ghost no-print" id="lvstat_export_m" style="margin-top:10px;"
+              title="整年 1～12 月，每人每月各一列，多一欄月份，方便在 Excel 做樞紐">匯出全年（分月）</button>
     </div>
 
     <div class="card">
@@ -1618,6 +1621,28 @@
           <tbody id="leaveLedgerBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>曆年特休統計<span class="count-badge" id="aly_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;" id="aly_note"></div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>年度（民國）<select id="aly_year"></select></label>
+        <label>車場<select id="aly_yard"><option value="all">(全部)</option></select></label>
+        <label>姓名<input id="aly_search" placeholder="打幾個字就好" autocomplete="off"></label>
+      </div>
+      <div class="table-scroll" style="max-height:600px;">
+        <table class="km-table">
+          <thead><tr>
+            <th class="km-num">列印編號</th><th class="km-num">年份</th><th>姓名</th><th>工號</th><th>區別</th><th>部門</th><th>職稱</th>
+            <th>到職日</th><th class="km-num">復職前累計年資</th><th class="km-num">上年度未休</th><th>離職日</th>
+            <th>休假期間起</th><th>年資計算起算日</th><th>年資計算截止日</th>
+            <th class="km-num">特休年資</th><th class="km-num">特休日數</th><th class="km-num">剩餘天數</th><th class="km-num">已休天數</th>
+          </tr></thead>
+          <tbody id="alyBody"></tbody>
+        </table>
+      </div>
+      <button class="btn ghost no-print" id="aly_export" style="margin-top:10px;">匯出 CSV</button>
     </div>
 
     <div class="card" style="display:none;">
@@ -12466,6 +12491,188 @@ function leaveNotYetEligible(hireISO){
   return !!(e && todayISO() < e);
 }
 function annualLeaveApproved(emp){ return annualLeaveApprovedFor(emp, rocYearOf(todayISO())); }
+// ===== 曆年特休統計（對應 Excel「特別假統計」那張表）=====
+// 資料庫的 annual_leave_yearly 是 115/08/05 從請假登錄系統 xlsm 匯進去的，
+// 目前只有民國 110～114 共 278 筆。所以這張表分兩種來源：
+//   有資料的年度 → 原封不動照資料庫輸出，一個字都不改
+//   沒資料的年度 → 用系統現有資料即時算（推算方式見下面各欄的註解）
+// ★「上年度未休」只有結算過的年度才有，算不出來就留白，不猜。
+const ALY_MS_YEAR = 365.25 * 86400000;
+function alyD10(v){ return String(v == null ? '' : v).slice(0, 10); }
+function alyNum(v){ return (v == null || v === '') ? '' : v; }
+function alyShiftYears(iso, years){
+  if(!iso || !(years > 0)) return alyD10(iso);
+  const d = new Date(alyD10(iso) + 'T00:00:00');
+  if(isNaN(d.getTime())) return alyD10(iso);
+  return new Date(d.getTime() - years * ALY_MS_YEAR).toISOString().slice(0, 10);
+}
+function alyPrevDay(iso){
+  if(!iso) return '';
+  const d = new Date(alyD10(iso) + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+function alyYearsBetween(a, b){
+  if(!a || !b) return null;
+  const x = new Date(alyD10(a) + 'T00:00:00'), y = new Date(alyD10(b) + 'T00:00:00');
+  if(isNaN(x.getTime()) || isNaN(y.getTime())) return null;
+  return (y.getTime() - x.getTime()) / ALY_MS_YEAR;
+}
+function alyMatch(a, e){
+  return (e.employee_no && a.employee_no && String(a.employee_no).trim() === String(e.employee_no).trim())
+      || (a.employee_id != null && String(a.employee_id) === String(e.id))
+      || (a.employee_name_raw && a.employee_name_raw === e.name);
+}
+// 「復職前累計年資」只有 annual_leave_yearly 裡有（需經公司同意的數字，算不出來），
+// 資料庫沒有的年度就沿用該員最近一個有紀錄的年度。
+function alyPriorYearsOf(e){
+  const hit = (STATE.annualLeaveYearly || [])
+    .filter(a => alyMatch(a, e) && a.prior_years != null && a.prior_years !== '')
+    .sort((a, b) => Number(b.year_roc) - Number(a.year_roc))[0];
+  return hit ? parseFloat(hit.prior_years) : null;
+}
+function alyYearList(){
+  const ys = [...new Set((STATE.annualLeaveYearly || []).map(a => Number(a.year_roc)).filter(Boolean))];
+  const cur = rocYearOf(todayISO());
+  if(!ys.includes(cur)) ys.push(cur);
+  return ys.sort((a, b) => b - a);
+}
+function alyRowsFor(yr){
+  const stored = (STATE.annualLeaveYearly || []).filter(a => Number(a.year_roc) === Number(yr));
+  if(stored.length){
+    return {src:'db', rows: stored.slice().sort((a, b) => Number(a.id) - Number(b.id)).map(a => ({
+      year: a.year_roc, name: a.employee_name_raw || '', no: a.employee_no || '',
+      yard: a.yard || '', dept: a.dept_name || '', position: a.position_name || '',
+      hire: alyD10(a.hire_date), prior: alyNum(a.prior_years), prevUnused: alyNum(a.prev_year_unused),
+      resign: alyD10(a.resign_date), periodStart: alyD10(a.period_start),
+      calcStart: alyD10(a.calc_start), calcEnd: alyD10(a.calc_end),
+      seniority: alyNum(a.seniority), days: alyNum(a.leave_days),
+      remaining: alyNum(a.remaining_days), used: alyNum(a.used_days),
+      key: a.setting_key || ''
+    }))};
+  }
+  // 資料庫還沒有這個年度 —— 用現有資料即時算
+  const ad = (yr + 1911) + '-12-31';
+  const people = (STATE.employees || []).slice()
+    // 該年度離職的人也要在，不然那一年的結算會少人
+    .concat((STATE.employeesHistory || []).filter(h => alyD10(h.resign_date).slice(0, 4) === String(yr + 1911)));
+  const rows = people.map(e => {
+    const hire = alyD10(e.hire_date);
+    const rng = hire ? leaveYearRange(hire, ad) : null;
+    const periodStart = rng ? rng.start : '';
+    const calcEnd = periodStart ? alyPrevDay(periodStart) : '';
+    const prior = alyPriorYearsOf(e);
+    const calcStart = (hire && prior) ? alyShiftYears(hire, prior) : hire;
+    const exact = alyYearsBetween(calcStart, calcEnd);
+    const seniority = (exact == null) ? '' : Math.max(0, Math.floor(exact));
+    let days = null;
+    const appr = annualLeaveApprovedFor(e, yr);
+    if(appr){ days = appr.days; }
+    else if(exact != null && (STATE.annualLeaveTiers || []).length){
+      days = 0;
+      STATE.annualLeaveTiers.forEach(t => { if(exact >= t.min_years) days = t.leave_days; });
+    }
+    const used = hire ? annualLeaveUsed(e.id, hire, rng ? rng.end : null) : null;
+    const remaining = (days == null || used == null) ? '' : fmt2(days - used);
+    return {
+      year: yr, name: e.name || '', no: e.employee_no || '',
+      yard: e.region || '', dept: e.dept_name || '', position: e.position_name || '',
+      hire: hire, prior: (prior == null ? '' : prior),
+      prevUnused: '',                       // ← 上年度未休算不出來，留白不猜
+      resign: alyD10(e.resign_date), periodStart: periodStart,
+      calcStart: calcStart, calcEnd: calcEnd,
+      seniority: seniority, days: (days == null ? '' : days),
+      remaining: remaining, used: (used == null ? '' : used),
+      key: (yr + 1911) + (e.name || '')
+    };
+  }).sort((a, b) => String(a.no).localeCompare(String(b.no)));
+  return {src:'calc', rows: rows};
+}
+function alyVisible(){
+  const sel = document.getElementById('aly_year');
+  const yr = Number((sel && sel.value) || rocYearOf(todayISO()));
+  const out = alyRowsFor(yr);
+  const yard = ((document.getElementById('aly_yard') || {}).value) || 'all';
+  const kw = (((document.getElementById('aly_search') || {}).value) || '').trim();
+  out.year = yr;
+  out.rows = out.rows.filter(r => (yard === 'all' || r.yard === yard))
+                     .filter(r => !kw || String(r.name).indexOf(kw) >= 0);
+  return out;
+}
+function renderAnnualLeaveYearly(){
+  const body = document.getElementById('alyBody');
+  if(!body) return;
+  const ySel = document.getElementById('aly_year');
+  if(ySel && !ySel.options.length){
+    const ys = alyYearList();
+    ySel.innerHTML = ys.map(y => `<option value="${y}">民國 ${y} 年</option>`).join('');
+    const cur = rocYearOf(todayISO());
+    if(ys.includes(cur)) ySel.value = cur;
+  }
+  const yardSel = document.getElementById('aly_yard');
+  if(yardSel && yardSel.options.length <= 1){
+    const yards = [...new Set((STATE.employees || []).map(e => e.region).filter(Boolean))];
+    yardSel.innerHTML = '<option value="all">(全部)</option>' + yards.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+  }
+  const D = alyVisible();
+  const cnt = document.getElementById('aly_count');
+  if(cnt) cnt.textContent = `共 ${D.rows.length} 筆`;
+  const note = document.getElementById('aly_note');
+  if(note){
+    note.innerHTML = D.src === 'db'
+      ? `民國 ${D.year} 年度：直接取自資料庫的曆年特休統計（當初從請假登錄系統匯入的原始數字，沒有再算過）。`
+      : `民國 ${D.year} 年度：<b>資料庫還沒有這一年的結算</b>（目前只有 110～114），以下是用現有的到職日、假單即時算出來的。<b>「上年度未休」算不出來，一律留白</b>，要正確的數字請把最新的請假登錄系統檔案匯進資料庫。`;
+  }
+  body.innerHTML = D.rows.map((r, i) => `<tr>
+      <td class="km-num">${i + 1}</td>
+      <td class="km-num">${esc(r.year)}</td>
+      <td style="font-weight:600;">${esc(r.name)}</td>
+      <td>${esc(r.no)}</td>
+      <td>${esc(r.yard)}</td>
+      <td>${esc(r.dept)}</td>
+      <td>${esc(r.position)}</td>
+      <td>${esc(r.hire)}</td>
+      <td class="km-num">${esc(r.prior)}</td>
+      <td class="km-num">${esc(r.prevUnused)}</td>
+      <td>${esc(r.resign)}</td>
+      <td>${esc(r.periodStart)}</td>
+      <td>${esc(r.calcStart)}</td>
+      <td>${esc(r.calcEnd)}</td>
+      <td class="km-num">${esc(r.seniority)}</td>
+      <td class="km-num">${esc(r.days)}</td>
+      <td class="km-num">${esc(r.remaining)}</td>
+      <td class="km-num">${esc(r.used)}</td>
+    </tr>`).join('') || `<tr><td colspan="18" class="empty">這個條件下沒有資料</td></tr>`;
+}
+// 匯出欄位順序完全照 Excel「特別假統計」那張表（含最後的「設定」欄）。
+// 日期也照 Excel 用民國年（110/02/17 這種），不是資料庫的西元 —— 這樣貼回 Excel 才對得起來。
+function alyROC(iso){
+  const s = String(iso || '').slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? ((+m[1] - 1911) + '/' + m[2] + '/' + m[3]) : s;
+}
+function alyExport(){
+  const D = alyVisible();
+  if(!D.rows.length){ alert('這個條件下沒有資料可以匯出。'); return; }
+  const head = ['列印編號','年份','姓名','工號','區別','部門','職稱','到職日','復職前累計年資',
+                '上年度未休','離職日','休假期間起','年資計算起算日','年資計算截止日',
+                '特休年資','特休日數','剩餘天數','已休天數','設定'];
+  const rows = D.rows.map((r, i) => [i + 1, r.year, r.name, r.no, r.yard, r.dept, r.position,
+    alyROC(r.hire), r.prior, r.prevUnused, alyROC(r.resign), alyROC(r.periodStart),
+    alyROC(r.calcStart), alyROC(r.calcEnd),
+    r.seniority, r.days, r.remaining, r.used, r.key]);
+  whDownloadCsv('特別假統計_民國' + D.year + '年' + (D.src === 'db' ? '' : '_系統推算'), head, rows);
+}
+['aly_year','aly_yard','aly_search'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener(id === 'aly_search' ? 'input' : 'change', renderAnnualLeaveYearly);
+});
+{
+  const _alyEx = document.getElementById('aly_export');
+  if(_alyEx) _alyEx.addEventListener('click', alyExport);
+}
+
 function renderLeaveLedger(){
   const q = document.getElementById('leave_search').value.trim();
   let rows = STATE.employees;
@@ -12950,9 +13157,10 @@ function renderLeaveStatSelects(){
 // 兩邊各算一次遲早會對不起來 —— 這張表已經因為「days 欄在存檔時就四捨五入」
 // 出過一次錯（曾渝芬 115 年事假 14 天顯示成 13.9），不想再來一次。
 // 所以這裡一樣全程累加【時數】，只在要輸出的時候除以 8 四捨五入一次。
-function leaveStatData(){
+// overrideMonth：匯出全年時一個月一個月呼叫，畫面上的月份下拉不動
+function leaveStatData(overrideMonth){
   const year = document.getElementById('lvstat_year').value;
-  const month = document.getElementById('lvstat_month').value;
+  const month = (overrideMonth == null) ? document.getElementById('lvstat_month').value : String(overrideMonth);
   const region = document.getElementById('lvstat_region').value;
   if(!year) return null;
 
@@ -13067,6 +13275,38 @@ function leaveStatExport(){
   whDownloadCsv(name, head, rows);
 }
 
+// 「依月份產出」：1～12 月每人每月各一列，多帶「月份」欄，
+// 直接丟進 Excel 樞紐分析就能按月看。沒有資料的月份不會佔一列。
+function leaveStatExportByMonth(){
+  const year = document.getElementById('lvstat_year').value;
+  const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
+  const months = [];
+  const types = [];
+  for(let m = 1; m <= 12; m++){
+    const D = leaveStatData(m);
+    if(!D) return;
+    D.leaveTypes.forEach(t => { if(types.indexOf(t) < 0) types.push(t); });
+    months.push({m: m, D: D});
+  }
+  const out = [];
+  months.forEach(({m, D}) => {
+    D.rows.forEach(o => {
+      // 這個月完全沒有假也沒有加班的人就不列，不然一年會多出幾百列空白
+      if(!o.rowHours && !o.otSum) return;
+      const byType = {};
+      D.leaveTypes.forEach((t, i) => byType[t] = o.hours[i]);
+      out.push([parseInt(year, 10) - 1911, m, o.emp.name, o.emp.employee_no || '',
+                o.emp.dept_name || '', o.emp.region || '']
+        .concat(types.map(t => toDays(byType[t] || 0) || ''))
+        .concat([o.otSum || '', toDays(o.rowHours) || '', fmt2(o.rowHours) || '']));
+    });
+  });
+  if(!out.length){ alert('民國 ' + (parseInt(year, 10) - 1911) + ' 年沒有請假或加班紀錄可以匯出。'); return; }
+  const head = ['年份(民國)','月份','姓名','員工編號','部門','車場']
+    .concat(types).concat(['加班費時數','總計(天)','總計(小時)']);
+  whDownloadCsv('請假統計_民國' + (parseInt(year, 10) - 1911) + '年_分月', head, out);
+}
+
 function renderAll(){
   renderMaintMileageCard();
   renderOrgTables();
@@ -13119,6 +13359,7 @@ function renderAll(){
   renderInsuranceLedger();
   renderAccessCardLedger();
   renderLeaveLedger();
+  renderAnnualLeaveYearly();
   renderStaffNoBox();
   renderLeaveRegNoBox();
   renderLeaveTable();
@@ -14374,6 +14615,7 @@ document.getElementById('lvstat_year').addEventListener('change', renderLeaveSta
 document.getElementById('lvstat_month').addEventListener('change', renderLeaveStatTable);
 document.getElementById('lvstat_region').addEventListener('change', renderLeaveStatTable);
 document.getElementById('lvstat_export').addEventListener('click', leaveStatExport);
+document.getElementById('lvstat_export_m').addEventListener('click', leaveStatExportByMonth);
 {
   const _ls = document.getElementById('lvstat_search');
   if(_ls) _ls.addEventListener('input', renderLeaveStatTable);
