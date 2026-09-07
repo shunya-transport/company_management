@@ -1721,6 +1721,7 @@
       <div class="muted" style="margin-bottom:10px;" id="aly_note"></div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年度（民國）<select id="aly_year"></select></label>
+        <label>已休計算到<select id="aly_upto"></select></label>
         <label>車場<select id="aly_yard"><option value="all">(全部)</option></select></label>
         <label>姓名<input id="aly_search" placeholder="打幾個字就好" autocomplete="off"></label>
       </div>
@@ -1735,7 +1736,10 @@
           <tbody id="alyBody"></tbody>
         </table>
       </div>
-      <button class="btn ghost no-print" id="aly_export" style="margin-top:10px;">匯出 CSV</button>
+      <button class="btn ghost no-print" id="aly_export" style="margin-top:10px;"
+              title="匯出目前畫面上這張表，欄位順序跟 Excel「特別假統計」完全一樣">匯出 CSV（目前條件）</button>
+      <button class="btn ghost no-print" id="aly_export_m" style="margin-top:10px;"
+              title="整年 1～12 月，每人每月各一列，含當月休幾天、累計已休、剩餘">匯出全年（分月）</button>
     </div>
 
     <div class="card" style="display:none;">
@@ -12226,7 +12230,45 @@ function alyRowsFor(yr){
   }).sort((a, b) => String(a.no).localeCompare(String(b.no)));
   return {src:'calc', rows: rows};
 }
-function alyVisible(){
+// 「已休計算到」幾月底。沒指定的話：當年度算到這個月底，過去的年度算到 12 月底。
+function alyUptoISO(yrRoc, overrideMonth){
+  const ad = yrRoc + 1911;
+  let m = Number(overrideMonth != null ? overrideMonth
+                 : ((document.getElementById('aly_upto') || {}).value || 0));
+  if(!(m >= 1 && m <= 12)) m = (yrRoc === rocYearOf(todayISO())) ? (new Date().getMonth() + 1) : 12;
+  const last = new Date(ad, m, 0).getDate();       // 第 0 天＝上個月最後一天，用來取月底
+  return ad + '-' + String(m).padStart(2, '0') + '-' + String(last).padStart(2, '0');
+}
+// 資料庫那一份是【匯入當下的快照】—— 匯進來之後再請的特休它不會知道，
+// 所以畫面會停在匯入那一天（使用者 115/09/07 看到的「只到 7 月」就是這個）。
+// 這裡把「已休天數／剩餘天數」用假單即時重算到指定月份底。
+// 核定的「特休日數」不動 —— 那是公司核定的數字，不是我們算得出來的。
+// ★ 對不到人、沒有到職日、或那個人的假單掛不到員工編號時【一律不重算】，
+//   保留資料庫原值。用 0 去蓋掉一個本來正確的數字，比不更新還糟。
+function alyApplyLive(D, overrideMonth){
+  const upto = alyUptoISO(D.year, overrideMonth);
+  D.upto = upto;
+  const active = STATE.employees || [];
+  const pool = active.concat(STATE.employeesHistory || []);
+  D.rows.forEach(r => {
+    r.dbUsed = r.used; r.dbRemaining = r.remaining; r.live = false; r._upto = upto;
+    const e = pool.find(x =>
+      (r.no && x.employee_no && String(x.employee_no).trim() === String(r.no).trim())
+      || (r.name && String(x.name || '').trim() === String(r.name).trim()));
+    if(!e || !e.hire_date) return;
+    const onboard = active.some(x => x.id === e.id);
+    // 離職的人要先確認他的假單真的掛得到員工編號，否則重算會得到 0
+    const linked = onboard || (STATE.leaveRecords || []).some(x => x.employee_id === e.id);
+    if(!linked) return;
+    const used = annualLeaveUsed(e.id, alyD10(e.hire_date), upto);
+    if(used == null) return;
+    r.used = used;
+    r.remaining = (r.days === '' || r.days == null) ? '' : fmt2(Number(r.days) - used);
+    r.live = true;
+  });
+  return D;
+}
+function alyVisible(overrideMonth){
   const sel = document.getElementById('aly_year');
   const yr = Number((sel && sel.value) || rocYearOf(todayISO()));
   const out = alyRowsFor(yr);
@@ -12235,7 +12277,7 @@ function alyVisible(){
   out.year = yr;
   out.rows = out.rows.filter(r => (yard === 'all' || r.yard === yard))
                      .filter(r => !kw || String(r.name).indexOf(kw) >= 0);
-  return out;
+  return alyApplyLive(out, overrideMonth);
 }
 // 資料庫裡到底有哪幾個年度的結算，一律【現查現說】。
 // 原本這句話裡的年度區間是寫死的 —— 之後把新的年度匯進去，那句就變成錯的，
@@ -12258,6 +12300,11 @@ function renderAnnualLeaveYearly(){
     const cur = rocYearOf(todayISO());
     if(ys.includes(cur)) ySel.value = cur;
   }
+  const uSel = document.getElementById('aly_upto');
+  if(uSel && !uSel.options.length){
+    uSel.innerHTML = Array.from({length:12}, (_, i) => `<option value="${i+1}">${i+1} 月底</option>`).join('');
+    uSel.value = String(new Date().getMonth() + 1);
+  }
   const yardSel = document.getElementById('aly_yard');
   if(yardSel && yardSel.options.length <= 1){
     const yards = [...new Set((STATE.employees || []).map(e => e.region).filter(Boolean))];
@@ -12271,6 +12318,10 @@ function renderAnnualLeaveYearly(){
     note.innerHTML = D.src === 'db'
       ? `民國 ${D.year} 年度：直接取自資料庫的曆年特休統計（當初從請假登錄系統匯入的原始數字，沒有再算過）。`
       : `民國 ${D.year} 年度：<b>資料庫還沒有這一年的結算</b>（${alyStoredYearsText()}），以下是用現有的到職日、假單即時算出來的。<b>「上年度未休」算不出來，一律留白</b>，要正確的數字請把最新的請假登錄系統檔案匯進資料庫。`;
+    const nLive = D.rows.filter(r => r.live).length;
+    note.innerHTML += `<br>「已休天數／剩餘天數」已用假單重算到 <b>${esc(alyROC(D.upto))}</b>`
+      + `（${nLive} / ${D.rows.length} 人重算成功；對不到人或假單掛不到員工編號的保留資料庫原值，數字後面沒有星號）。`
+      + `核定的「特休日數」不動，仍以資料庫為準。`;
   }
   body.innerHTML = D.rows.map((r, i) => `<tr>
       <td class="km-num">${i + 1}</td>
@@ -12289,8 +12340,8 @@ function renderAnnualLeaveYearly(){
       <td>${esc(r.calcEnd)}</td>
       <td class="km-num">${esc(r.seniority)}</td>
       <td class="km-num">${esc(r.days)}</td>
-      <td class="km-num">${esc(r.remaining)}</td>
-      <td class="km-num">${esc(r.used)}</td>
+      <td class="km-num">${alyLiveCell(r, 'remaining')}</td>
+      <td class="km-num">${alyLiveCell(r, 'used')}</td>
     </tr>`).join('') || `<tr><td colspan="18" class="empty">這個條件下沒有資料</td></tr>`;
 }
 // 匯出欄位順序完全照 Excel「特別假統計」那張表（含最後的「設定」欄）。
@@ -12299,6 +12350,40 @@ function alyROC(iso){
   const s = String(iso || '').slice(0, 10);
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? ((+m[1] - 1911) + '/' + m[2] + '/' + m[3]) : s;
+}
+// 重算過而且跟資料庫原值不一樣的，數字後面標一個小星號，
+// 滑鼠移上去看得到原本匯入的值 —— 不要無聲把匯入的數字換掉。
+function alyLiveCell(r, field){
+  const v = r[field];
+  const db = (field === 'used') ? r.dbUsed : r.dbRemaining;
+  if(!r.live || String(v) === String(db)) return esc(v);
+  return `<span title="資料庫匯入時是 ${esc(db === '' || db == null ? '（空白）' : db)}，這裡是用假單重算到 ${esc(alyROC(r._upto))} 的結果">`
+       + `${esc(v)}<span class="muted" style="font-size:10px;">＊</span></span>`;
+}
+// 「月份產出」：同一個年度，1～12 月各算一次累計已休與剩餘，
+// 再加一欄「當月休(天)」＝本月累計 − 上月累計，看得出特休是什麼時候休掉的。
+function alyExportByMonth(){
+  const base = alyVisible();
+  if(!base.rows.length){ alert('這個條件下沒有資料可以匯出。'); return; }
+  const yr = base.year;
+  const prev = {};
+  const out = [];
+  for(let m = 1; m <= 12; m++){
+    const D = alyVisible(m);
+    D.rows.forEach(r => {
+      const key = String(r.no || r.name);
+      const cum = (r.used === '' || r.used == null) ? null : Number(r.used);
+      const before = (prev[key] == null) ? 0 : prev[key];
+      const thisMonth = (cum == null) ? '' : fmt2(cum - before);
+      if(cum != null) prev[key] = cum;
+      out.push([yr, m, r.name, r.no, r.yard, r.dept, r.position, alyROC(r.hire),
+                r.days, thisMonth, (cum == null ? '' : cum), r.remaining,
+                r.live ? '假單重算' : '資料庫原值']);
+    });
+  }
+  const head = ['年份(民國)','月份','姓名','工號','區別','部門','職稱','到職日',
+                '特休日數','當月休(天)','累計已休(天)','剩餘天數','已休來源'];
+  whDownloadCsv('特別假統計_民國' + yr + '年_分月', head, out);
 }
 function alyExport(){
   const D = alyVisible();
@@ -12310,15 +12395,18 @@ function alyExport(){
     alyROC(r.hire), r.prior, r.prevUnused, alyROC(r.resign), alyROC(r.periodStart),
     alyROC(r.calcStart), alyROC(r.calcEnd),
     r.seniority, r.days, r.remaining, r.used, r.key]);
-  whDownloadCsv('特別假統計_民國' + D.year + '年' + (D.src === 'db' ? '' : '_系統推算'), head, rows);
+  whDownloadCsv('特別假統計_民國' + D.year + '年_已休計算到' + String(D.upto).slice(5, 7) + '月'
+                + (D.src === 'db' ? '' : '_系統推算'), head, rows);
 }
-['aly_year','aly_yard','aly_search'].forEach(id => {
+['aly_year','aly_upto','aly_yard','aly_search'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener(id === 'aly_search' ? 'input' : 'change', renderAnnualLeaveYearly);
 });
 {
   const _alyEx = document.getElementById('aly_export');
   if(_alyEx) _alyEx.addEventListener('click', alyExport);
+  const _alyExM = document.getElementById('aly_export_m');
+  if(_alyExM) _alyExM.addEventListener('click', alyExportByMonth);
 }
 
 function renderLeaveLedger(){
@@ -12795,6 +12883,45 @@ function renderLeaveStatSelects(){
   }
 }
 
+// 加班費要看得出倍率。加班登錄那邊每一筆本來就拆好七個級距了，
+// 統計表卻把它們加成一欄「加班費時數」，算薪水還要回去一筆一筆看。
+// 倍率依勞基法第 24、39 條（就是 OT_TIERS 上面那段註解寫的那一套）：
+//   1.34 倍  平日延長前 2 小時、休息日前 2 小時
+//   1.67 倍  平日第 3 小時以後、休息日第 3～8 小時
+//   2.67 倍  休息日超過 8 小時
+//   例假／國定假日  當日工資加倍發給，不分級距
+const OT_RATE_GROUPS = [
+  ['r134', '1.34倍',    '平日延長前2小時、休息日前2小時',        ['hours_le2', 'rest_hours_le2']],
+  ['r167', '1.67倍',    '平日第3小時以後、休息日第3～8小時',      ['hours_gt2', 'hours_gt4', 'rest_hours_gt2']],
+  ['r267', '2.67倍',    '休息日超過8小時',                      ['rest_hours_gt8']],
+  ['rhol', '例假/國定', '例假日／國定假日：當日工資加倍發給，不分級距', ['holiday_hours']],
+];
+function otTierSums(rows){
+  const o = {r134:0, r167:0, r267:0, rhol:0, none:0, total:0};
+  (rows || []).forEach(r => {
+    const h = parseFloat(r.hours) || 0;
+    o.total += h;
+    let sub = 0;
+    OT_RATE_GROUPS.forEach(g => {
+      let v = 0;
+      g[3].forEach(f => { v += parseFloat(r[f]) || 0; });
+      o[g[0]] += v; sub += v;
+    });
+    // 登記成加班費、七個級距欄卻都空白的舊資料 —— 一定要單獨列出來。
+    // 不列的話倍率四欄加起來會比合計少一截，卻看不出少在哪裡。
+    if(sub === 0 && h > 0) o.none += h;
+  });
+  Object.keys(o).forEach(k => o[k] = fmt2(o[k]));
+  return o;
+}
+function otAddTo(acc, o){
+  Object.keys(o).forEach(k => acc[k] = fmt2((acc[k] || 0) + (o[k] || 0)));
+  return acc;
+}
+// 統計表裡加班費那幾欄的順序（畫面與兩個 CSV 共用，改一次就好）
+const OT_COL_KEYS  = ['r134', 'r167', 'r267', 'rhol', 'none', 'total'];
+const OT_COL_NAMES = ['加班費 1.34倍', '1.67倍', '2.67倍', '例假/國定', '未分級距', '加班費合計'];
+
 // 請假統計表的計算抽出來，畫面與「匯出 CSV」【共用同一份】。
 // 兩邊各算一次遲早會對不起來 —— 這張表已經因為「days 欄在存檔時就四捨五入」
 // 出過一次錯（曾渝芬 115 年事假 14 天顯示成 13.9），不想再來一次。
@@ -12838,6 +12965,7 @@ function leaveStatData(overrideMonth){
   const colHours = {};
   leaveTypes.forEach(t => colHours[t] = 0);
   let otTotal = 0, grandHours = 0;
+  const otSums = {r134:0, r167:0, r267:0, rhol:0, none:0, total:0};
   const rows = people.map(e => {
     let rowHours = 0;
     const hours = leaveTypes.map(t => {
@@ -12846,14 +12974,14 @@ function leaveStatData(overrideMonth){
       if(h){ colHours[t] += h; rowHours += h; }
       return h;
     });
-    const otSum = fmt2(otRows.filter(r => r.employee_id === e.id && r.settlement_type === '加班費')
-                             .reduce((s,r) => s + (parseFloat(r.hours)||0), 0));
-    otTotal = fmt2(otTotal + (otSum||0));
+    const ot = otTierSums(otRows.filter(r => r.employee_id === e.id && r.settlement_type === '加班費'));
+    otAddTo(otSums, ot);
+    otTotal = fmt2(otTotal + (ot.total||0));
     grandHours += rowHours;
-    return {emp:e, hours:hours, otSum:otSum, rowHours:rowHours};
+    return {emp:e, hours:hours, ot:ot, otSum:ot.total, rowHours:rowHours};
   });
   return {year:year, month:month, region:region, kw:kw, leaveTypes:leaveTypes,
-          rows:rows, colHours:colHours, otTotal:otTotal, grandHours:grandHours};
+          rows:rows, colHours:colHours, otSums:otSums, otTotal:otTotal, grandHours:grandHours};
 }
 
 function renderLeaveStatTable(){
@@ -12864,13 +12992,18 @@ function renderLeaveStatTable(){
 
   const headCells = ['<th style="position:sticky;left:0;background:#FBF5EC;z-index:2;">姓名</th>']
     .concat(leaveTypes.map(t=>`<th style="text-align:center;">${esc(t)}</th>`))
-    .concat(['<th style="text-align:center;">加班費時數</th>','<th style="text-align:center;">總計(天)</th>']);
+    .concat(OT_RATE_GROUPS.map(g => `<th style="text-align:center;" title="${esc(g[2])}">${esc(g[1] === '1.34倍' ? '加班費 1.34倍' : g[1])}</th>`))
+    .concat(['<th style="text-align:center;" title="登記成加班費、但七個級距欄都沒填的舊資料。有數字代表那幾筆要回加班登錄補級距。">未分級距</th>',
+             '<th style="text-align:center;">加班費合計</th>',
+             '<th style="text-align:center;">總計(天)</th>']);
   document.getElementById('leaveStatHead').innerHTML = headCells.join('');
 
   const bodyRows = D.rows.map(o => {
     const cells = o.hours.map(h =>
       `<td style="text-align:center;"${h ? ` title="${fmt2(h)} 小時"` : ''}>${toDays(h)||''}</td>`);
-    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(o.emp.name)}</td>${cells.join('')}<td style="text-align:center;">${o.otSum||''}</td><td style="text-align:center;font-weight:700;"${o.rowHours ? ` title="${fmt2(o.rowHours)} 小時"` : ''}>${toDays(o.rowHours)||''}</td></tr>`;
+    const otCells = OT_COL_KEYS.map(k =>
+      `<td style="text-align:center;${k === 'none' && o.ot[k] ? 'color:var(--amber);font-weight:600;' : ''}${k === 'total' ? 'font-weight:600;' : ''}">${o.ot[k]||''}</td>`).join('');
+    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(o.emp.name)}</td>${cells.join('')}${otCells}<td style="text-align:center;font-weight:700;"${o.rowHours ? ` title="${fmt2(o.rowHours)} 小時"` : ''}>${toDays(o.rowHours)||''}</td></tr>`;
   });
   // 查無資料時，如果那個名字其實是離職的人，直接講明白 ——
   // 這張表目前只列在職人員（上面 people 那段的 .filter(Boolean) 會把離職者濾掉），
@@ -12886,12 +13019,12 @@ function renderLeaveStatTable(){
       emptyMsg = '「' + esc(kw) + '」在這個期間沒有請假或加班紀錄。';
     }
   }
-  document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+3}" class="empty">${emptyMsg}</td></tr>`;
+  document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+8}" class="empty">${emptyMsg}</td></tr>`;
 
   const footCells = ['<td style="position:sticky;left:0;background:rgba(201,154,86,.08);">總計</td>']
     .concat(leaveTypes.map(t=>`<td style="text-align:center;"${D.colHours[t] ? ` title="${fmt2(D.colHours[t])} 小時"` : ''}>${toDays(D.colHours[t])||''}</td>`))
-    .concat([`<td style="text-align:center;">${D.otTotal||''}</td>`,
-             `<td style="text-align:center;"${D.grandHours ? ` title="${fmt2(D.grandHours)} 小時"` : ''}>${toDays(D.grandHours)||''}</td>`]);
+    .concat(OT_COL_KEYS.map(k => `<td style="text-align:center;">${D.otSums[k]||''}</td>`))
+    .concat([`<td style="text-align:center;"${D.grandHours ? ` title="${fmt2(D.grandHours)} 小時"` : ''}>${toDays(D.grandHours)||''}</td>`]);
   document.getElementById('leaveStatFoot').innerHTML = bodyRows.length ? footCells.join('') : '';
 }
 
@@ -12902,13 +13035,15 @@ function leaveStatExport(){
   if(!D || !D.rows.length){ alert('這個條件下沒有資料可以匯出。'); return; }
   const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
   const head = ['姓名','員工編號','部門','車場']
-    .concat(D.leaveTypes).concat(['加班費時數','總計(天)','總計(小時)']);
+    .concat(D.leaveTypes).concat(OT_COL_NAMES).concat(['總計(天)','總計(小時)']);
   const rows = D.rows.map(o => [o.emp.name, o.emp.employee_no||'', o.emp.dept_name||'', o.emp.region||'']
     .concat(o.hours.map(h => toDays(h)||''))
-    .concat([o.otSum||'', toDays(o.rowHours)||'', fmt2(o.rowHours)||'']));
+    .concat(OT_COL_KEYS.map(k => o.ot[k]||''))
+    .concat([toDays(o.rowHours)||'', fmt2(o.rowHours)||'']));
   rows.push(['總計','','','']
     .concat(D.leaveTypes.map(t => toDays(D.colHours[t])||''))
-    .concat([D.otTotal||'', toDays(D.grandHours)||'', fmt2(D.grandHours)||'']));
+    .concat(OT_COL_KEYS.map(k => D.otSums[k]||''))
+    .concat([toDays(D.grandHours)||'', fmt2(D.grandHours)||'']));
   const roc = (parseInt(D.year,10) - 1911);
   const name = '請假統計_民國' + roc + '年'
              + (D.month === 'all' ? '全年' : D.month + '月')
@@ -12940,12 +13075,13 @@ function leaveStatExportByMonth(){
       out.push([parseInt(year, 10) - 1911, m, o.emp.name, o.emp.employee_no || '',
                 o.emp.dept_name || '', o.emp.region || '']
         .concat(types.map(t => toDays(byType[t] || 0) || ''))
-        .concat([o.otSum || '', toDays(o.rowHours) || '', fmt2(o.rowHours) || '']));
+        .concat(OT_COL_KEYS.map(k => o.ot[k] || ''))
+        .concat([toDays(o.rowHours) || '', fmt2(o.rowHours) || '']));
     });
   });
   if(!out.length){ alert('民國 ' + (parseInt(year, 10) - 1911) + ' 年沒有請假或加班紀錄可以匯出。'); return; }
   const head = ['年份(民國)','月份','姓名','員工編號','部門','車場']
-    .concat(types).concat(['加班費時數','總計(天)','總計(小時)']);
+    .concat(types).concat(OT_COL_NAMES).concat(['總計(天)','總計(小時)']);
   whDownloadCsv('請假統計_民國' + (parseInt(year, 10) - 1911) + '年_分月', head, out);
 }
 
