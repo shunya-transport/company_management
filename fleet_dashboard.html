@@ -1317,15 +1317,6 @@
 </div>
 
     <div class="card">
-      <h2>車輛保養清單<span class="count-badge" id="maint_due_count"></span></h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>車號</th><th>保養標準車型</th><th>項目</th><th>狀態</th><th>說明</th></tr></thead>
-          <tbody id="maintDueBody"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
       <h2>板架打油到期提醒<span class="count-badge" id="maint_grease_count"></span></h2>
       <div class="toolbar"><select id="maint_grease_filter">
         <option value="all">逾期+即將到期</option><option value="overdue">已逾期</option>
@@ -1361,10 +1352,10 @@
     <datalist id="vendorList"></datalist>
 
     <div class="card">
-      <h2>輪軸保養清單</h2>
+      <h2>輪軸保養紀錄清單<span class="count-badge" id="axle_rec_count"></span></h2>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>項目</th><th>頻率</th><th>最後紀錄</th><th>備註</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>軸別</th><th>保養日期</th><th>里程</th><th></th></tr></thead>
           <tbody id="maintScheduleTableBody"></tbody>
         </table>
       </div>
@@ -6903,14 +6894,24 @@ function mmGapCell(part){
   const r = part.remaining;
   const cls = part.status === 'red' ? 'red' : (part.status === 'amber' ? 'amber' : 'green');
   const txt = r <= 0 ? ('已超出 ' + mmKm(-r)) : ('還有 ' + mmKm(r));
-  return `<td><span class="pill ${cls}">${txt}</span></td>`;
+  // 原本「車輛保養清單」的說明文字（下次保養里程、月均、預估到期月）
+  // 併過來掛在 title 上 —— 資料不會消失，但不用多開一欄把表撐寬。
+  const tip = part.text ? ` title="${esc(part.text)}"` : '';
+  return `<td><span class="pill ${cls}"${tip}>${txt}</span></td>`;
 }
 function renderMaintMileageCard(){
   const body = document.getElementById('mmTableBody');
   if(!body) return;
   const rows = mmVisibleRows();
   const cEl = document.getElementById('mm_count');
-  if(cEl) cEl.textContent = rows.length + ' 台';
+  // 併掉「車輛保養清單」之後，那張表的「幾項需注意」也要留在這裡，
+  // 不然合併就等於少了一個一眼看出輕重的數字。
+  if(cEl){
+    const _need = rows.reduce((n, r) => n
+      + ((r.small && (r.small.status === 'red' || r.small.status === 'amber')) ? 1 : 0)
+      + ((r.large && (r.large.status === 'red' || r.large.status === 'amber')) ? 1 : 0), 0);
+    cEl.textContent = rows.length + ' 台' + (_need ? '・' + _need + ' 項需注意' : '');
+  }
   body.innerHTML = rows.length ? rows.map(r => {
     const month = r.mrow ? String(r.mrow.log_date || '').slice(0, 7) : '';
     const curCell = (r.cur == null)
@@ -7373,28 +7374,26 @@ function renderFleetTable(){
     </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有待賣出的車輛</td></tr>`;
 }
 
+// 這張表原本同時列「輪軸保養排程」與「輪軸保養紀錄」兩種東西，
+// 而排程那半，上面的「輪軸保養到期提醒」已經完整列過，還多了預估、剩餘、狀態，
+// 等於同一批資料要看兩次。115/09/07 併掉：這裡只留真正的輪軸保養紀錄，
+// 跟上面的「輪軸保養紀錄」表單成對，排程的刪除搬到到期提醒那張表上。
 function renderMaintenanceTables(){
   const msBody = document.getElementById('maintScheduleTableBody');
   const msEmpty = document.getElementById('maintScheduleEmpty');
-  const rows2 = [
-    ...STATE.maintSchedules.filter(s => s.maintenance_type==='輪軸保養').map(s => ({
-      plate:s.plate, item:s.maintenance_type,
-      freq: `${s.frequency_km?s.frequency_km+'km ':''}${s.frequency_months?s.frequency_months+'個月':''}`,
-      last: `${s.last_service_date||''}${s.last_service_mileage?' / '+s.last_service_mileage+'km':''}`,
-      notes:s.notes||'', kind:'schedule', id:s.id
-    })),
-    ...STATE.axleRecords.slice().sort((a,b)=>String(b.service_date||'').localeCompare(String(a.service_date||''))).map(a => ({
-      plate:a.plate, item:`輪軸保養(第${a.axle_no}軸)`, freq:'', last:`${a.service_date}${a.mileage?' / '+a.mileage+'km':''}`,
-      notes:'', kind:'axle', id:a.id
-    }))
-  ];
+  if(!msBody) return;
+  const rows2 = (STATE.axleRecords || []).slice()
+    .sort((a,b)=>String(b.service_date||'').localeCompare(String(a.service_date||'')));
+  const cnt = document.getElementById('axle_rec_count');
+  if(cnt) cnt.textContent = `共 ${rows2.length} 筆`;
   if(rows2.length===0){
-    msBody.innerHTML=''; msEmpty.style.display='block';
+    msBody.innerHTML=''; if(msEmpty) msEmpty.style.display='block';
   }else{
-    msEmpty.style.display='none';
-    msBody.innerHTML = rows2.map(r => `
-      <tr><td>${esc(r.plate)}</td><td>${esc(r.item)}</td><td>${esc(r.freq)}</td><td>${esc(r.last)}</td><td class="muted">${esc(r.notes)}</td>
-      <td><button class="del-btn" data-del-${r.kind}="${r.id}">刪除</button></td></tr>`).join('');
+    if(msEmpty) msEmpty.style.display='none';
+    msBody.innerHTML = rows2.map(a => `
+      <tr><td>${esc(a.plate)}</td><td>第 ${esc(a.axle_no)} 軸</td><td>${esc(a.service_date||'')}</td>
+      <td>${(a.mileage!=null && a.mileage!=='') ? esc(Number(a.mileage).toLocaleString('en-US')) + ' km' : '—'}</td>
+      <td><button class="del-btn" data-del-axle="${a.id}">刪除</button></td></tr>`).join('');
   }
 }
 
@@ -11691,19 +11690,50 @@ function duePassFilter(d, filter){
   }
   return d.status==='red' || d.status==='amber';
 }
+// 板架打油：以前這裡只看 maintSchedules（保養排程），
+// 但「板架管理 → 板架打油狀態總表」是從車輛清單推的（在役 ＋ 會打油的車型，
+// 查不到排程就用車型預設週期）。兩邊算法不同，答案就可能不一樣 ——
+// 離線測試時一邊 117 台、一邊 0 筆。
+// 115/09/07 使用者要求把重疊的表併掉：這裡改成吃跟狀態總表同一組數字，
+// 到期提醒＝狀態總表裡紅黃的那些，兩張表從此不會打架，也就不必兩張都看。
+// 輪軸保養維持原本從保養排程算，沒有第二套算法要對。
 function dueAlertsFor(type, filter){
-  return STATE.maintSchedules.filter(s => s.maintenance_type===type)
-    .map(s => { const d=scheduleDueStatus(s); return {plate:s.plate, status:d.status, last:d.last, next:d.next, remain:d.remain, dd:d.dd, sortKey:d.sortKey}; })
-    .filter(d => duePassFilter(d, filter||'all'))
-    .sort((a,b)=> a.sortKey-b.sortKey);
+  let base;
+  if(type === '打油'){
+    const seen = new Set();
+    base = greaseEligibleVehicles().map(v => {
+      const r = greaseRowFor(v);
+      seen.add(String(r.plate));
+      return {plate:r.plate, id:null, status:r.d.status, last:r.d.last, next:r.d.next,
+              remain:r.d.remain, dd:r.d.dd, sortKey:r.d.sortKey};
+    });
+    // 保養排程裡若有不在上面名單內的板架（已退場、或車型被改過），照樣列出來，
+    // 不讓既有資料無聲消失。
+    STATE.maintSchedules
+      .filter(s => s.maintenance_type === '打油' && !seen.has(String(s.plate)))
+      .forEach(s => {
+        const d = scheduleDueStatus(s);
+        base.push({plate:s.plate, id:s.id, status:d.status, last:d.last, next:d.next,
+                   remain:d.remain, dd:d.dd, sortKey:d.sortKey});
+      });
+  }else{
+    base = STATE.maintSchedules.filter(s => s.maintenance_type===type)
+      .map(s => { const d=scheduleDueStatus(s); return {plate:s.plate, id:s.id, status:d.status, last:d.last, next:d.next, remain:d.remain, dd:d.dd, sortKey:d.sortKey}; });
+  }
+  return base.filter(d => duePassFilter(d, filter||'all')).sort((a,b)=> a.sortKey-b.sortKey);
 }
-function renderDueAlertTable(containerId, countId, type, filter){
+// opts.del = true 時多一欄刪除（只有車輛維護分頁的「輪軸保養到期提醒」會傳）。
+// 原因：舊的輪軸保養【排程】以前列在下面的「輪軸保養清單」裡，
+// 跟這張表是同一批資料，要看兩次。清單那半併掉之後，
+// 排程的刪除就搬到這裡，功能才不會少。總覽那張是純提醒，刻意不給刪除。
+function renderDueAlertTable(containerId, countId, type, filter, opts){
+  const withDel = !!(opts && opts.del);
   const alerts=dueAlertsFor(type, filter);
   const cEl=document.getElementById(countId); if(cEl) cEl.textContent=`${alerts.length} 項`;
   const el=document.getElementById(containerId); if(!el) return;
   const label={red:'已逾期',amber:'即將到期',green:'正常',gray:'資料不足'};
-  el.innerHTML = alerts.length ? `<div class="table-scroll" style="max-height:340px;"><table><thead><tr><th>車號</th><th>上次</th><th>預估</th><th>剩餘</th><th>狀態</th></tr></thead><tbody>`+
-    alerts.map(d=>`<tr><td>${esc(d.plate)}</td><td class="muted">${esc(d.last)}</td><td>${esc(d.next)}</td><td>${esc(d.remain)}</td><td><span class="pill ${d.status}">${label[d.status]}</span></td></tr>`).join('')+`</tbody></table></div>`
+  el.innerHTML = alerts.length ? `<div class="table-scroll" style="max-height:340px;"><table><thead><tr><th>車號</th><th>上次</th><th>預估</th><th>剩餘</th><th>狀態</th>${withDel?'<th></th>':''}</tr></thead><tbody>`+
+    alerts.map(d=>`<tr><td>${esc(d.plate)}</td><td class="muted">${esc(d.last)}</td><td>${esc(d.next)}</td><td>${esc(d.remain)}</td><td><span class="pill ${d.status}">${label[d.status]}</span></td>${withDel?`<td>${d.id!=null?`<button class="del-btn" data-del-schedule="${d.id}">刪除</button>`:'<span class="muted">—</span>'}</td>`:''}</tr>`).join('')+`</tbody></table></div>`
     : '<div class="empty">目前沒有符合條件的項目</div>';
 }
 function renderDueReminders(){
@@ -11712,7 +11742,7 @@ function renderDueReminders(){
   renderDueAlertTable('overviewGreaseAlerts','overview_grease_count','打油','all');
   renderDueAlertTable('maintGreaseAlerts','maint_grease_count','打油', gf);
   renderDueAlertTable('overviewAxleAlerts','overview_axle_count','輪軸保養','all');
-  renderDueAlertTable('maintAxleAlerts','maint_axle_count','輪軸保養', af);
+  renderDueAlertTable('maintAxleAlerts','maint_axle_count','輪軸保養', af, {del:true});
 }
 ['maint_grease_filter','maint_axle_filter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', renderDueReminders); });
 
@@ -12110,29 +12140,10 @@ if(_grBody) _grBody.addEventListener('click', greaseBodyClick);
 const _grPendBody = document.getElementById('greasePendingBody');
 if(_grPendBody) _grPendBody.addEventListener('click', greaseBodyClick);
 
-function renderMaintDueTable(){
-  const rows = [];
-  STATE.vehicles.forEach(v => {
-    if(isRetiredVehicle(v)) return;
-    const items = [];
-    // 小保/大保(沿用既有計算,不影響總覽)
-    if(v.maintenance_model){ computeMaintenanceDue(v).forEach(d => items.push(d)); }
-    items.forEach(d => rows.push({plate:v.plate, model:v.maintenance_model||'—', label:d.label, status:d.status, text:d.text}));
-  });
-  const order = {red:0, amber:1, green:2, gray:3};
-  rows.sort((a,b) => (order[a.status]-order[b.status]) || String(a.plate).localeCompare(String(b.plate)));
-  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'資料不足'};
-  const need = rows.filter(r => r.status==='red' || r.status==='amber').length;
-  document.getElementById('maint_due_count').textContent = `共 ${rows.length} 項・${need} 項需注意`;
-  document.getElementById('maintDueBody').innerHTML = rows.map(r => `
-    <tr>
-      <td>${esc(r.plate)}</td>
-      <td>${esc(r.model)}</td>
-      <td>${esc(r.label)}</td>
-      <td><span class="pill ${r.status}">${label[r.status]}</span></td>
-      <td class="muted">${esc(r.text)}</td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty">目前沒有保養資料</td></tr>`;
-}
+// 「車輛保養清單」已經併進「車輛管理 → 保養里程總覽」（115/09/07）。
+// 兩張表跑的是同一支 computeMaintenanceDue，這張是一行一項目、
+// 那張是一行一台車而且多了現在里程、週期、建議里程、差距與篩選匯出，
+// 完整涵蓋這張，所以整張拿掉，它獨有的「N 項需注意」與說明文字補到那邊去了。
 
 function renderInternalYearStatus(){
   const filter = document.getElementById('internal_status_filter').value;
@@ -13053,7 +13064,6 @@ function renderAll(){
   renderUreaStockTable();
   renderUreaStockInTable();
   renderAdminStaticTables();
-  renderMaintDueTable();
   renderInsuranceLedger();
   renderAccessCardLedger();
   renderLeaveLedger();
@@ -16906,17 +16916,22 @@ document.getElementById('axle_add').addEventListener('click', async () => {
 });
 
 document.getElementById('maintScheduleTableBody').addEventListener('click', async (e) => {
-  const sId = e.target.getAttribute('data-del-schedule');
   const aId = e.target.getAttribute('data-del-axle');
-  if(sId){
-    STATE.maintSchedules = STATE.maintSchedules.filter(s => String(s.id) !== sId);
-    await saveState('maintenance_schedules', STATE.maintSchedules, true);
-    renderAll();
-  }else if(aId){
-    STATE.axleRecords = STATE.axleRecords.filter(a => String(a.id) !== aId);
-    await saveState('axle_maintenance_records', STATE.axleRecords, true);
-    renderAll();
-  }
+  if(!aId) return;
+  STATE.axleRecords = STATE.axleRecords.filter(a => String(a.id) !== aId);
+  await saveState('axle_maintenance_records', STATE.axleRecords, true);
+  renderAll();
+});
+
+// 輪軸保養【排程】的刪除搬到到期提醒上（排程那半已經從下面的清單拿掉了）。
+// 排程不是手動新增的，刪掉就沒有了，所以多問一句。
+document.getElementById('maintAxleAlerts').addEventListener('click', async (e) => {
+  const sId = e.target.getAttribute('data-del-schedule');
+  if(!sId) return;
+  if(!confirm('確定要刪除這筆輪軸保養排程嗎？刪掉之後這台車就不會再出現輪軸保養到期提醒。')) return;
+  STATE.maintSchedules = STATE.maintSchedules.filter(s => String(s.id) !== sId);
+  await saveState('maintenance_schedules', STATE.maintSchedules, true);
+  renderAll();
 });
 
 
