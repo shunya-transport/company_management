@@ -129,20 +129,27 @@
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
   .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
   .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
-  /* 外訓證照時效總表／受訓紀錄清單：欄位一律不換行。
+  /* 外訓證照總表（原本的受訓紀錄清單＋外訓證照時效總表）：欄位一律不換行。
      名字被拆成「魏夆／亦」兩行、證書字號拆一半都很難讀，
      寧可整張表左右捲動（外層 .table-scroll 本來就是 overflow:auto）也不要折行。 */
-  table.cert-table{font-size:13px;}
-  table.cert-table th{padding:10px 10px;font-size:12.5px;white-space:nowrap;}
-  table.cert-table td{padding:9px 10px;white-space:nowrap;vertical-align:middle;}
+  table.cert-table{font-size:12.5px;}
+  table.cert-table th{padding:9px 7px;font-size:12px;white-space:nowrap;}
+  table.cert-table td{padding:8px 7px;white-space:nowrap;vertical-align:middle;}
   /* 備註（覆驗履歷）與複訓報名是自由輸入的長字串，硬要整段攤平會把表撐到很寬。
      這兩欄裁掉超出的部分改成「…」，滑鼠移上去仍看得到全文（兩個函式都帶 title）。 */
-  table.cert-table .cell-clip{display:inline-block;max-width:260px;overflow:hidden;
+  table.cert-table .cell-clip{display:inline-block;max-width:210px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
   table.cert-table tbody tr:hover{background:rgba(13,27,44,.03);}
+  /* 編輯中的日期輸入框做窄一點：合併後欄位變成 9 欄，
+     再讓兩個日期輸入框各占 135px 的話整張表會超出卡片寬度，
+     儲存／取消就得左右捲才按得到。
+     （試過把最後一欄 position:sticky 釘在右邊，但這張表是 border-collapse:collapse，
+       Chromium 對 td 的 sticky 在這個情況下無效，那一欄會整片空白，所以不用那招。） */
+  table.cert-table input[type="date"]{width:118px;font-size:12px;padding:4px 6px;}
+  table.cert-table .edit-wrap label{font-size:11.5px;}
   /* 只有「修改中」那一列的到期日格子可以折行：
      日期輸入 + 兩個勾選框擠成一行會把表撐寬，儲存／取消就被推出畫面。 */
-  table.cert-table td .edit-wrap{display:inline-block;white-space:normal;max-width:230px;line-height:2;}
+  table.cert-table td .edit-wrap{display:inline-block;white-space:normal;max-width:126px;line-height:1.9;}
   .table-scroll{max-height:520px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
   .table-scroll table{margin:0;}
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
@@ -242,9 +249,9 @@
           <button class="btn" id="tf_add">新增受訓紀錄</button>
         </div>
         <div class="card">
-          <h2>受訓紀錄清單</h2>
+          <h2>外訓證照總表<span class="count-badge" id="training_count"></span></h2>
           <div class="toolbar">
-            <input id="training_search" placeholder="搜尋人員/訓練項目">
+            <input id="training_search" placeholder="搜尋人員/訓練項目/證書字號">
             <select id="training_status_filter">
               <option value="all">全部狀態</option>
               <option value="hold">暫不外訓</option>
@@ -255,10 +262,14 @@
               <option value="green">正常</option>
               <option value="gray">長期有效</option>
             </select>
+            <select id="training_sort" title="到期日：誰快過期一目瞭然。人員：同一個人身上的證照排在一起。">
+              <option value="expiry">依到期日（快到期的排前面）</option>
+              <option value="person">依人員（同一個人排在一起）</option>
+            </select>
           </div>
           <div class="table-scroll">
             <table class="cert-table">
-              <thead><tr><th>人員</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日<span class="muted" style="font-weight:400;">（下次覆驗）</span></th><th>狀態</th><th>備註（覆驗履歷）</th><th></th></tr></thead>
+              <thead><tr><th>人員</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日<span class="muted" style="font-weight:400;">（下次覆驗）</span></th><th>狀態</th><th>複訓報名</th><th>備註（覆驗履歷）</th><th></th></tr></thead>
               <tbody id="trainingTableBody"></tbody>
             </table>
           </div>
@@ -287,27 +298,6 @@
             <table>
               <thead><tr><th>上課日期</th><th>天數</th><th>人員</th><th>訓練項目</th><th>上課地點</th><th>辦理協會</th><th>這張證到期日</th><th></th></tr></thead>
               <tbody id="rtBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="card">
-          <h2>外訓證照時效總表<span class="count-badge" id="external_status_count"></span></h2>
-          <div class="toolbar">
-            <select id="external_status_filter">
-              <option value="all">全部狀態</option>
-              <option value="hold">暫不外訓</option>
-              <option value="red">已逾期</option>
-              <option value="soon30">30天內到期</option>
-              <option value="soon60">60天內到期</option>
-              <option value="amber">90天內到期</option>
-              <option value="green">正常</option>
-              <option value="gray">長期有效</option>
-            </select>
-          </div>
-          <div class="table-scroll">
-            <table class="cert-table">
-              <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>複訓報名</th><th>狀態</th><th></th></tr></thead>
-              <tbody id="externalStatusBody"></tbody>
             </table>
           </div>
         </div>
@@ -1165,14 +1155,26 @@ function renderTypeSelect(){
   if(current && Array.from(sel.options).some(o => o.value === current)) sel.value = current;
   renderTfHint();
 }
-let editingTrainingExpiryId = null;
+// ===== 外訓證照總表（原本的「受訓紀錄清單」＋「外訓證照時效總表」合併）=====
+// 115/09/07 使用者：「那把那二張表統整成一張表」。
+// 兩張表本來就是同一份 STATE.trainings、同樣的筆數，只是能力被拆成兩半：
+//   受訓紀錄清單     ── 有搜尋、有備註（覆驗履歷）欄、能刪除
+//   外訓證照時效總表 ── 依到期日排序、有複訓報名欄、能就地改發證日期與到期日
+// 要看一個人的證照得在同一頁上下對照兩次。合併之後兩邊的能力一項都沒少。
+// ★ 排序做成下拉：兩張表原本的順序各有用處 ——
+//   到期日是「誰快過期」，人員是「這個人身上有哪幾張證」，只留一種等於少一個功能。
 function renderTrainingTable(){
   const body = document.getElementById('trainingTableBody');
+  if(!body) return;
   const emptyEl = document.getElementById('trainingEmpty');
   const q = document.getElementById('training_search').value.trim();
   const statusFilter = document.getElementById('training_status_filter').value;
-  let rows = STATE.trainings;
-  if(q) rows = rows.filter(t => (t.employee_name||'').includes(q) || (t.type_name||'').includes(q));
+  const sortBy = (document.getElementById('training_sort') || {}).value || 'expiry';
+  let rows = STATE.trainings.slice();
+  // 證書字號也能搜：手上只有一張證的時候要反查是誰的
+  if(q) rows = rows.filter(t => (t.employee_name||'').includes(q)
+                             || (t.type_name||'').includes(q)
+                             || (t.cert_no||'').includes(q));
   if(statusFilter!=='all') rows = rows.filter(t => {
     if(statusFilter==='soon30' || statusFilter==='soon60'){
       if(t.on_hold || t.no_expiry || !t.expiry_date) return false;
@@ -1181,31 +1183,49 @@ function renderTrainingTable(){
     }
     return certStatusCode(t)===statusFilter;
   });
+  // 沒填到期日的用 '9999' 墊底，永遠排最後，不會擋在最快到期的那幾筆前面
+  const byExpiry = (a,b) => String(a.expiry_date||'9999').localeCompare(String(b.expiry_date||'9999'));
+  rows.sort(sortBy==='person'
+    ? (a,b) => String(a.employee_name||'').localeCompare(String(b.employee_name||''), 'zh-Hant') || byExpiry(a,b)
+    : byExpiry);
+  const cnt = document.getElementById('training_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
   if(rows.length===0){
-    body.innerHTML = STATE.trainings.length===0 ? '' : `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
-    emptyEl.style.display = STATE.trainings.length===0 ? 'block' : 'none';
+    body.innerHTML = STATE.trainings.length===0 ? '' : `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
+    if(emptyEl) emptyEl.style.display = STATE.trainings.length===0 ? 'block' : 'none';
     return;
   }
-  emptyEl.style.display='none';
+  if(emptyEl) emptyEl.style.display='none';
   body.innerHTML = rows.map(t => {
-    const editing = String(editingTrainingExpiryId) === String(t.id);
+    const editing = String(editingExternalId) === String(t.id);
+    const issueCell = editing
+      ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
+      : esc(t.issue_date||'—');
     const expiryCell = editing
-      ? `<input type="date" id="train_exp_input_${t.id}" value="${esc(t.expiry_date||'')}" style="width:140px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="train_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="train_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label>`
+      ? `<span class="edit-wrap"><input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label></span>`
       : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')) + (t.on_hold ? ' <span class="muted">（暫不外訓）</span>' : '');
     const actionCell = editing
-      ? `<button class="name-link" data-save-expiry="${t.id}">儲存</button> <button class="del-btn" data-cancel-expiry="${t.id}">取消</button>`
-      : `<button class="name-link" data-edit-expiry="${t.id}">改到期日</button> <button class="del-btn" data-del-training="${t.id}">刪除</button>`;
+      ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
+      : `<button class="name-link" data-edit-ext="${t.id}">修改</button> <button class="del-btn" data-del-training="${t.id}">刪除</button>`;
     return `<tr>
       <td>${esc(t.employee_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td>${esc(t.cert_no||'')}</td>
-      <td>${esc(t.issue_date||'')}</td>
+      <td>${issueCell}</td>
       <td>${expiryCell}</td>
       <td>${certStatusPill(t)}</td>
+      <td>${retrainCell(t)}</td>
       <td>${certNoteCell(t)}</td>
       <td>${actionCell}</td>
     </tr>`;
   }).join('');
+  // 編輯中那一列會多出兩個日期輸入框，表會比卡片寬（實測 1146 → 1219），
+  // 「儲存／取消」剛好落在可視範圍外，看起來像按鈕不見了。
+  // 進入編輯就自動捲到最右邊；取消／存檔之後表縮回去，捲軸會自己歸零。
+  // （原本想把最後一欄 position:sticky 釘在右邊，但這張表是 border-collapse:collapse，
+  //   Chromium 在這個情況下對 td 的 sticky 無效，實測那一欄會整片空白。）
+  const sc = body.closest('.table-scroll');
+  if(sc && editingExternalId) sc.scrollLeft = sc.scrollWidth;
 }
 // ===== 複訓報名 =====
 // 報名跟發證是兩件事：報名當下只知道哪幾天上課、在哪裡上、哪個協會辦的，
@@ -1312,70 +1332,15 @@ function renderRetrainTable(){
     </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有人報名複訓。</td></tr>`;
 }
 let editingExternalId = null;
+// 「外訓證照時效總表」已經併進上面那張「外訓證照總表」，這支只剩下轉呼叫。
+// 函式名刻意留著：三個儀表板的 renderAll() 內容不一樣，但都會呼叫這一支，
+// 複訓清單掛在這裡重畫，三邊才會一致。
 function renderExternalStatusTable(){
-  const filter = document.getElementById('external_status_filter').value;
-  let rows = STATE.trainings.map(t => ({...t, s: certStatusCode(t)}))
-    .sort((a,b) => (a.expiry_date||'9999').localeCompare(b.expiry_date||'9999'));
-  if(filter !== 'all') rows = rows.filter(r => {
-    if(filter==='soon30' || filter==='soon60'){
-      if(r.on_hold || r.no_expiry || !r.expiry_date) return false;
-      const dd = daysUntil(r.expiry_date);
-      return dd>=0 && dd<=(filter==='soon30'?30:60);
-    }
-    return r.s === filter;
-  });
-  document.getElementById('external_status_count').textContent = `共 ${rows.length} 筆`;
-  document.getElementById('externalStatusBody').innerHTML = rows.map(t => {
-    const editing = String(editingExternalId) === String(t.id);
-    const issueCell = editing
-      ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
-      : esc(t.issue_date||'—');
-    const expiryCell = editing
-      ? `<span class="edit-wrap"><input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label></span>`
-      : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')) + (t.on_hold ? ' <span class="muted">（暫不外訓）</span>' : '');
-    const actionCell = editing
-      ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
-      : `<button class="name-link" data-edit-ext="${t.id}">修改</button>`;
-    return `<tr>
-      <td>${esc(t.employee_name)}</td>
-      <td>${esc(t.type_name)}</td>
-      <td>${esc(t.cert_no||'')}</td>
-      <td>${issueCell}</td>
-      <td>${expiryCell}</td>
-      <td>${retrainCell(t)}</td>
-      <td>${certStatusPill(t)}</td>
-      <td>${actionCell}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
-  // 三個儀表板的 renderAll() 內容不一樣，但都會呼叫這一支，
-  // 所以複訓清單掛在這裡重畫，三邊才會一致。
+  renderTrainingTable();
   renderRetrainTable();
   renderOverviewRetrain();
 }
 
-document.getElementById('externalStatusBody').addEventListener('click', async (e) => {
-  const editId = e.target.getAttribute('data-edit-ext');
-  if(editId){ editingExternalId = editId; renderExternalStatusTable(); return; }
-  const cancelId = e.target.getAttribute('data-cancel-ext');
-  if(cancelId){ editingExternalId = null; renderExternalStatusTable(); return; }
-  const saveId = e.target.getAttribute('data-save-ext');
-  if(saveId){
-    const rec = STATE.trainings.find(t => String(t.id) === saveId);
-    if(rec){
-      const noExp = document.getElementById('ext_noexp_'+saveId).checked;
-      const onHold = !!(document.getElementById('ext_hold_'+saveId) || {}).checked;
-      rec.issue_date = document.getElementById('ext_issue_'+saveId).value || null;
-      rec.no_expiry = noExp ? 1 : 0;
-      // 暫不外訓不會把到期日清掉，之後恢復外訓還看得到原本卡在哪一天
-      rec.on_hold = onHold ? 1 : 0;
-      rec.expiry_date = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
-      await saveState('employee_trainings', STATE.trainings, true);
-    }
-    editingExternalId = null;
-    renderAll();
-    return;
-  }
-});
 
 // ============ 訓練紀錄 ============
 function renderInternalLogSelects(){
@@ -2015,7 +1980,10 @@ document.getElementById('tf_add').addEventListener('click', async () => {
 
 document.getElementById('training_search').addEventListener('input', renderTrainingTable);
 document.getElementById('training_status_filter').addEventListener('change', renderTrainingTable);
-document.getElementById('external_status_filter').addEventListener('change', renderExternalStatusTable);
+document.getElementById('training_sort').addEventListener('change', renderTrainingTable);
+// 合併後修改／儲存／取消／刪除全在同一張表上，事件也集中在這裡。
+// （原本拆在兩張表上，時效總表那個 tbody 已經不存在了，
+//   舊的事件不移過來會在頁面載入時就丟錯。）
 document.getElementById('trainingTableBody').addEventListener('click', async (e) => {
   const delId = e.target.getAttribute('data-del-training');
   if(delId){
@@ -2024,23 +1992,24 @@ document.getElementById('trainingTableBody').addEventListener('click', async (e)
     renderAll();
     return;
   }
-  const editId = e.target.getAttribute('data-edit-expiry');
-  if(editId){ editingTrainingExpiryId = editId; renderTrainingTable(); return; }
-  const cancelId = e.target.getAttribute('data-cancel-expiry');
-  if(cancelId){ editingTrainingExpiryId = null; renderTrainingTable(); return; }
-  const saveId = e.target.getAttribute('data-save-expiry');
+  const editId = e.target.getAttribute('data-edit-ext');
+  if(editId){ editingExternalId = editId; renderTrainingTable(); return; }
+  const cancelId = e.target.getAttribute('data-cancel-ext');
+  if(cancelId){ editingExternalId = null; renderTrainingTable(); return; }
+  const saveId = e.target.getAttribute('data-save-ext');
   if(saveId){
     const rec = STATE.trainings.find(t => String(t.id) === saveId);
     if(rec){
-      const noExp = document.getElementById('train_noexp_'+saveId).checked;
-      const onHold = !!(document.getElementById('train_hold_'+saveId) || {}).checked;
-      const val = document.getElementById('train_exp_input_'+saveId).value;
+      const noExp = document.getElementById('ext_noexp_'+saveId).checked;
+      const onHold = !!(document.getElementById('ext_hold_'+saveId) || {}).checked;
+      rec.issue_date = document.getElementById('ext_issue_'+saveId).value || null;
       rec.no_expiry = noExp ? 1 : 0;
+      // 暫不外訓不會把到期日清掉，之後恢復外訓還看得到原本卡在哪一天
       rec.on_hold = onHold ? 1 : 0;
-      rec.expiry_date = noExp ? null : (val || null);
+      rec.expiry_date = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
       await saveState('employee_trainings', STATE.trainings, true);
     }
-    editingTrainingExpiryId = null;
+    editingExternalId = null;
     renderAll();
     return;
   }
