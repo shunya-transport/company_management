@@ -2128,6 +2128,24 @@
     </div>
 
     <div class="card">
+      <h2>車輛使用明細（工時）<span class="count-badge" id="vu_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">比照績效檔的「車輛使用明細 (工時)」。資料是每日工時紀錄裡有掛車號的那些，跟「工時統計」是同一批數字。同一個人同一天同一台車有兩筆（跨班）會加總成一列。</div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>月份<select id="vu_period"></select></label>
+        <label>搜尋車號<input id="vu_plate" placeholder="輸入車號"></label>
+        <label>搜尋人員<input id="vu_name" placeholder="輸入姓名"></label>
+      </div>
+      <div class="table-scroll">
+        <table class="km-table">
+          <thead><tr><th>日期</th><th>車輛使用人員</th><th>車號</th><th class="km-num">總工時</th></tr></thead>
+          <tbody id="vuBody"></tbody>
+          <tfoot id="vuFoot"></tfoot>
+        </table>
+      </div>
+      <button class="btn ghost no-print" id="vu_export" style="margin-top:10px;">匯出 CSV</button>
+    </div>
+
+    <div class="card">
       <h2>平均公里數（季）</h2>
       <div class="muted" style="margin-bottom:10px;">同一個年度與篩選條件，換算成每季合計與每月平均，方便比較車輛之間的使用強度。</div>
       <div class="table-scroll">
@@ -2354,7 +2372,7 @@
       <div class="stat-row" id="whKpi" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px;"></div>
       <div class="table-scroll" style="max-height:600px;">
         <table>
-          <thead><tr><th>司機</th><th>區別</th><th style="text-align:right;">出勤天數</th><th style="text-align:right;">休假天數</th><th style="text-align:right;">總工時</th><th style="text-align:right;">日均工時</th><th style="text-align:right;">最高單日</th><th style="text-align:right;">最長連續出勤</th><th style="text-align:right;">連續累計最高</th><th>狀態</th></tr></thead>
+          <thead><tr><th>司機</th><th>區別</th><th style="text-align:right;">出勤天數</th><th style="text-align:right;">休假天數</th><th style="text-align:right;">總工時</th><th style="text-align:right;">日均工時</th><th style="text-align:right;">最高單日</th><th style="text-align:right;">最長連續出勤</th><th style="text-align:right;">連續累計最高</th><th>狀態</th><th>車隊</th></tr></thead>
           <tbody id="whDriverBody"></tbody>
           <tfoot id="whDriverFoot"></tfoot>
         </table>
@@ -13622,11 +13640,85 @@ function renderMileageTrend(){
   }
 }
 
+// ===== 車輛使用明細（工時）=====
+// 使用者要的是績效檔裡那張「車輛使用明細 (工時)」：日期／車輛使用人員／車號／總工時。
+// 資料【不另外建一份】—— 就是每日工時紀錄裡有掛車號的那些，
+// 跟「工時統計 → 每日工時明細」是同一批數字，不會兩邊對不起來。
+function vuRows(){
+  const p  = (document.getElementById('vu_period') || {}).value || 'all';
+  const kw = String(((document.getElementById('vu_plate') || {}).value || '')).trim().toUpperCase();
+  const nm = String(((document.getElementById('vu_name')  || {}).value || '')).trim();
+  const by = {};
+  whAll().forEach(r => {
+    const plate = String(r.plate || '').trim();
+    if(!plate) return;                       // 沒掛車號的（休假、內勤）不列，這張表講的是車
+    if(p !== 'all' && whPeriodKey(r) !== p) return;
+    const date = String(r.work_date || '').slice(0, 10);
+    const name = String(r.driver_name || '').trim();
+    const k = date + '|' + name + '|' + plate;
+    // 同一人同一天同一台車若有兩筆（跨班），工時加總成一列 —— 所以欄位叫「總工時」
+    const o = by[k] = by[k] || {date: date, name: name, plate: plate, hours: 0};
+    o.hours += whNum(r.work_hours);
+  });
+  return Object.values(by)
+    .filter(o => !kw || o.plate.toUpperCase().indexOf(kw) >= 0)
+    .filter(o => !nm || o.name.includes(nm))
+    // 比照績效檔：日期由舊排到新，同一天再照車號
+    .sort((a, b) => String(a.date).localeCompare(String(b.date))
+                 || String(a.plate).localeCompare(String(b.plate)));
+}
+function renderVuSelect(){
+  const sel = document.getElementById('vu_period');
+  if(!sel) return;
+  const keys = whPeriodKeys();
+  const keep = sel.value;
+  sel.innerHTML = '<option value="all">全部月份</option>' +
+    keys.map(k => `<option value="${k}">${whPeriodText(k)}</option>`).join('');
+  if(keys.includes(keep)) sel.value = keep;
+  else if(keys.length) sel.value = keys[0];   // 預設帶最新的月份，跟績效檔一樣一次看一個月
+}
+function renderVehicleUsage(){
+  const tb = document.getElementById('vuBody');
+  if(!tb) return;
+  const rows = vuRows();
+  const cnt = document.getElementById('vu_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
+  tb.innerHTML = rows.map(o => `<tr>
+      <td>${esc(o.date)}</td>
+      <td style="font-weight:600;">${esc(o.name)}</td>
+      <td>${esc(o.plate)}</td>
+      <td class="km-num">${whRound(o.hours, 1)}</td>
+    </tr>`).join('') || `<tr><td colspan="4" class="empty">這個條件下沒有車輛使用紀錄</td></tr>`;
+  const foot = document.getElementById('vuFoot');
+  if(foot){
+    const sum = rows.reduce((n, o) => n + o.hours, 0);
+    const plates = new Set(rows.map(o => o.plate)).size;
+    foot.innerHTML = rows.length
+      ? `<tr style="font-weight:700;background:#FBF5EC;"><td colspan="2">合計 ${rows.length} 筆</td><td>${plates} 台車</td><td class="km-num">${whRound(sum, 1)}</td></tr>`
+      : '';
+  }
+}
+['vu_period', 'vu_plate', 'vu_name'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener(id === 'vu_period' ? 'change' : 'input', renderVehicleUsage);
+});
+{
+  const _vuEx = document.getElementById('vu_export');
+  if(_vuEx) _vuEx.addEventListener('click', () => {
+    const p = (document.getElementById('vu_period') || {}).value || 'all';
+    whDownloadCsv('車輛使用明細_工時_' + (p === 'all' ? '全部月份' : whPeriodText(p).replace(/\s/g, '')),
+      ['日期', '車輛使用人員', '車號', '總工時'],
+      vuRows().map(o => [o.date, o.name, o.plate, whRound(o.hours, 1)]));
+  });
+}
+
 function renderMileageAll(){
   if(!document.getElementById('ml_year')) return;
   renderMileageSelects();
   renderMileageStatTable();
   renderMileageTrend();
+  renderVuSelect();
+  renderVehicleUsage();
 }
 document.getElementById('ml_year').addEventListener('change', renderMileageStatTable);
 document.getElementById('ml_base').addEventListener('change', renderMileageStatTable);
@@ -15578,6 +15670,19 @@ function whIsNextDay(a, b){
   return Math.round((db - da) / 86400000) === 1;
 }
 
+// 這位司機是哪個車隊的？
+// 優先用他【自己最近一筆有填的】每日工時紀錄的車隊分類 ——
+// 工時檔是按月匯入的，車隊會跟著當月實際跑的走；
+// 工時紀錄沒填才回頭查人員資料的「所屬車隊」（在職找不到會再找離職名冊）。
+function whTeamOf(o){
+  const days = (o && o.days) || [];
+  for(let i = days.length - 1; i >= 0; i--){
+    const t = String(days[i].fleet_group || '').trim();
+    if(t) return t;
+  }
+  const e = whEmpOf(o && o.name);
+  return (e && String(e.fleet_team || '').trim()) || '';
+}
 function whDriverSummary(rows){
   const by = {};
   rows.forEach(r => {
@@ -15639,8 +15744,9 @@ function renderWhDrivers(){
       <td style="text-align:right;${o.maxCont >= lim.contDays ? 'color:var(--amber);font-weight:600;' : ''}">${o.maxCont}</td>
       <td style="text-align:right;${o.maxCum > lim.cont ? 'color:var(--red);font-weight:600;' : ''}">${o.maxCum.toFixed(1)}</td>
       <td style="white-space:nowrap;">${flags.join(' ')}</td>
+      <td style="white-space:nowrap;">${esc(whTeamOf(o)) || '<span class="muted">—</span>'}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="10" class="empty">這個條件下沒有工時資料</td></tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">這個條件下沒有工時資料</td></tr>`;
 
   const sum = list.reduce((s,o) => ({ work:s.work+o.work, rest:s.rest+o.rest, hours:s.hours+o.hours }), {work:0,rest:0,hours:0});
   document.getElementById('whDriverFoot').innerHTML = list.length
@@ -15650,7 +15756,7 @@ function renderWhDrivers(){
         <td style="text-align:right;">${sum.rest}</td>
         <td style="text-align:right;">${sum.hours.toFixed(1)}</td>
         <td style="text-align:right;">${sum.work ? (sum.hours/sum.work).toFixed(1) : '—'}</td>
-        <td colspan="4"></td></tr>`
+        <td colspan="5"></td></tr>`
     : '';
 
   // KPI
@@ -15969,9 +16075,9 @@ if(document.getElementById('wh_period')){
   document.getElementById('wh_export_driver').addEventListener('click', () => {
     const p = whSelPeriod();
     whDownloadCsv('司機工時彙總_' + whPeriodText(p).replace(/\s/g,''),
-      ['司機','區別','出勤天數','休假天數','總工時','日均工時','最高單日','最長連續出勤','連續累計最高'],
+      ['司機','區別','出勤天數','休假天數','總工時','日均工時','最高單日','最長連續出勤','連續累計最高','車隊'],
       whDriverRows().map(o => [o.name, o.region, o.work, o.rest, o.hours.toFixed(1), o.avg.toFixed(1),
-                               o.maxDay.toFixed(1), o.maxCont, o.maxCum.toFixed(1)]));
+                               o.maxDay.toFixed(1), o.maxCont, o.maxCum.toFixed(1), whTeamOf(o)]));
   });
 
   document.getElementById('wh_export_vio').addEventListener('click', () =>
