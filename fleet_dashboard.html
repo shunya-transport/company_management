@@ -1605,6 +1605,7 @@
           <tfoot><tr id="leaveStatFoot" style="font-weight:700;background:rgba(201,154,86,.08);"></tr></tfoot>
         </table>
       </div>
+      <button class="btn ghost no-print" id="lvstat_export" style="margin-top:10px;">匯出 CSV</button>
     </div>
 
     <div class="card">
@@ -2117,24 +2118,6 @@
     </div>
 
     <div class="card">
-      <h2>車輛使用明細（工時）<span class="count-badge" id="vu_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">比照績效檔的「車輛使用明細 (工時)」。資料是每日工時紀錄裡有掛車號的那些，跟「工時統計」是同一批數字。同一個人同一天同一台車有兩筆（跨班）會加總成一列。</div>
-      <div class="form-grid" style="margin-bottom:10px;">
-        <label>月份<select id="vu_period"></select></label>
-        <label>搜尋車號<input id="vu_plate" placeholder="輸入車號"></label>
-        <label>搜尋人員<input id="vu_name" placeholder="輸入姓名"></label>
-      </div>
-      <div class="table-scroll">
-        <table class="km-table">
-          <thead><tr><th>日期</th><th>車輛使用人員</th><th>車號</th><th class="km-num">總工時</th></tr></thead>
-          <tbody id="vuBody"></tbody>
-          <tfoot id="vuFoot"></tfoot>
-        </table>
-      </div>
-      <button class="btn ghost no-print" id="vu_export" style="margin-top:10px;">匯出 CSV</button>
-    </div>
-
-    <div class="card">
       <h2>平均公里數（季）</h2>
       <div class="muted" style="margin-bottom:10px;">同一個年度與篩選條件，換算成每季合計與每月平均，方便比較車輛之間的使用強度。</div>
       <div class="table-scroll">
@@ -2220,6 +2203,24 @@
         </table>
       </div>
       <div class="muted" style="margin-top:8px;">為避免畫面過重，這裡最多顯示最新 300 筆，可用搜尋或月份縮小範圍。<b>「匯出工時」匯出的是目前搜尋／月份條件下的<u>全部</u>筆數，不受 300 筆限制</b>，欄位比畫面更完整（含員工編號、隔日下班註記）。</div>
+    </div>
+
+    <div class="card">
+      <h2>車輛使用明細（工時）<span class="count-badge" id="vu_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">比照績效檔的「車輛使用明細 (工時)」。資料是每日工時紀錄裡有掛車號的那些，跟「工時統計」是同一批數字。同一個人同一天同一台車有兩筆（跨班）會加總成一列。</div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>月份<select id="vu_period"></select></label>
+        <label>搜尋車號<input id="vu_plate" placeholder="輸入車號"></label>
+        <label>搜尋人員<input id="vu_name" placeholder="輸入姓名"></label>
+      </div>
+      <div class="table-scroll">
+        <table class="km-table">
+          <thead><tr><th>日期</th><th>車輛使用人員</th><th>車號</th><th class="km-num">總工時</th></tr></thead>
+          <tbody id="vuBody"></tbody>
+          <tfoot id="vuFoot"></tfoot>
+        </table>
+      </div>
+      <button class="btn ghost no-print" id="vu_export" style="margin-top:10px;">匯出 CSV</button>
     </div>
 
     <div class="card">
@@ -12938,17 +12939,22 @@ function renderLeaveStatSelects(){
     const currentYear = todayISO().slice(0,4);
     if(!years.includes(currentYear)) years.unshift(currentYear);
     yearSel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
-    monthSel.innerHTML = '<option value="all">(全部)</option>' + Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+    // 只寫「8」看起來像編號，加個「月」字才知道那是月份篩選
+    monthSel.innerHTML = '<option value="all">(全部月份)</option>' + Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1} 月</option>`).join('');
     const regions = [...new Set(STATE.employees.map(e=>e.region).filter(Boolean))];
     regionSel.innerHTML = '<option value="all">(全部)</option>' + regions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
   }
 }
 
-function renderLeaveStatTable(){
+// 請假統計表的計算抽出來，畫面與「匯出 CSV」【共用同一份】。
+// 兩邊各算一次遲早會對不起來 —— 這張表已經因為「days 欄在存檔時就四捨五入」
+// 出過一次錯（曾渝芬 115 年事假 14 天顯示成 13.9），不想再來一次。
+// 所以這裡一樣全程累加【時數】，只在要輸出的時候除以 8 四捨五入一次。
+function leaveStatData(){
   const year = document.getElementById('lvstat_year').value;
   const month = document.getElementById('lvstat_month').value;
   const region = document.getElementById('lvstat_region').value;
-  if(!year) return;
+  if(!year) return null;
 
   const inPeriod = (dateStr) => {
     if(!dateStr) return false;
@@ -12979,36 +12985,42 @@ function renderLeaveStatTable(){
   const people = peopleIds.map(id => STATE.employees.find(e=>e.id===id)).filter(Boolean)
     .sort((a,b)=>(a.employee_no||'').localeCompare(b.employee_no||''));
 
+  const colHours = {};
+  leaveTypes.forEach(t => colHours[t] = 0);
+  let otTotal = 0, grandHours = 0;
+  const rows = people.map(e => {
+    let rowHours = 0;
+    const hours = leaveTypes.map(t => {
+      const h = leaveRows.filter(r => r.employee_id === e.id && (r.leave_type||'').trim() === t)
+                         .reduce((s,r) => s + leaveHours(r), 0);
+      if(h){ colHours[t] += h; rowHours += h; }
+      return h;
+    });
+    const otSum = fmt2(otRows.filter(r => r.employee_id === e.id && r.settlement_type === '加班費')
+                             .reduce((s,r) => s + (parseFloat(r.hours)||0), 0));
+    otTotal = fmt2(otTotal + (otSum||0));
+    grandHours += rowHours;
+    return {emp:e, hours:hours, otSum:otSum, rowHours:rowHours};
+  });
+  return {year:year, month:month, region:region, kw:kw, leaveTypes:leaveTypes,
+          rows:rows, colHours:colHours, otTotal:otTotal, grandHours:grandHours};
+}
+
+function renderLeaveStatTable(){
+  const D = leaveStatData();
+  if(!D) return;
+  const leaveTypes = D.leaveTypes, kw = D.kw;
+  const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
+
   const headCells = ['<th style="position:sticky;left:0;background:#FBF5EC;z-index:2;">姓名</th>']
     .concat(leaveTypes.map(t=>`<th style="text-align:center;">${esc(t)}</th>`))
     .concat(['<th style="text-align:center;">加班費時數</th>','<th style="text-align:center;">總計(天)</th>']);
   document.getElementById('leaveStatHead').innerHTML = headCells.join('');
 
-  // ★ 一律用「時數」欄算，不要加資料庫的 days 欄。
-  //   days 是存進去時就四捨五入到小數第一位的（1 小時存 0.1、0.5 小時也存 0.1、
-  //   2 小時存 0.3、3.5 小時存 0.4），一筆一筆加起來誤差會累積。
-  //   曾渝芬 115 年事假實際 112 小時＝14.00 天，加 days 欄只會得到 13.9。
-  //   系統其他地方（清單的天數欄、特休剩餘、補休）用的都是 leaveHours()，
-  //   這張表原本是唯一的例外，所以只有它對不起來。
-  //   作法：全程累加【時數】，只在要顯示的時候除以 8 並四捨五入一次。
-  const colHours = {};
-  leaveTypes.forEach(t=>colHours[t]=0);
-  let otTotal = 0, grandHours = 0;
-  const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
-
-  const bodyRows = people.map(e => {
-    let rowHours = 0;
-    const cells = leaveTypes.map(t => {
-      const h = leaveRows.filter(r=>r.employee_id===e.id && (r.leave_type||'').trim()===t)
-                         .reduce((s,r)=>s+leaveHours(r),0);
-      if(h){ colHours[t] += h; rowHours += h; }
-      const sum = toDays(h);
-      return `<td style="text-align:center;"${h ? ` title="${fmt2(h)} 小時"` : ''}>${sum||''}</td>`;
-    });
-    const otSum = fmt2(otRows.filter(r=>r.employee_id===e.id && r.settlement_type==='加班費').reduce((s,r)=>s+(parseFloat(r.hours)||0),0));
-    otTotal = fmt2(otTotal + (otSum||0));
-    grandHours += rowHours;
-    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(e.name)}</td>${cells.join('')}<td style="text-align:center;">${otSum||''}</td><td style="text-align:center;font-weight:700;"${rowHours ? ` title="${fmt2(rowHours)} 小時"` : ''}>${toDays(rowHours)||''}</td></tr>`;
+  const bodyRows = D.rows.map(o => {
+    const cells = o.hours.map(h =>
+      `<td style="text-align:center;"${h ? ` title="${fmt2(h)} 小時"` : ''}>${toDays(h)||''}</td>`);
+    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(o.emp.name)}</td>${cells.join('')}<td style="text-align:center;">${o.otSum||''}</td><td style="text-align:center;font-weight:700;"${o.rowHours ? ` title="${fmt2(o.rowHours)} 小時"` : ''}>${toDays(o.rowHours)||''}</td></tr>`;
   });
   // 查無資料時，如果那個名字其實是離職的人，直接講明白 ——
   // 這張表目前只列在職人員（上面 people 那段的 .filter(Boolean) 會把離職者濾掉），
@@ -13027,10 +13039,32 @@ function renderLeaveStatTable(){
   document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+3}" class="empty">${emptyMsg}</td></tr>`;
 
   const footCells = ['<td style="position:sticky;left:0;background:rgba(201,154,86,.08);">總計</td>']
-    .concat(leaveTypes.map(t=>`<td style="text-align:center;"${colHours[t] ? ` title="${fmt2(colHours[t])} 小時"` : ''}>${toDays(colHours[t])||''}</td>`))
-    .concat([`<td style="text-align:center;">${otTotal||''}</td>`,
-             `<td style="text-align:center;"${grandHours ? ` title="${fmt2(grandHours)} 小時"` : ''}>${toDays(grandHours)||''}</td>`]);
+    .concat(leaveTypes.map(t=>`<td style="text-align:center;"${D.colHours[t] ? ` title="${fmt2(D.colHours[t])} 小時"` : ''}>${toDays(D.colHours[t])||''}</td>`))
+    .concat([`<td style="text-align:center;">${D.otTotal||''}</td>`,
+             `<td style="text-align:center;"${D.grandHours ? ` title="${fmt2(D.grandHours)} 小時"` : ''}>${toDays(D.grandHours)||''}</td>`]);
   document.getElementById('leaveStatFoot').innerHTML = bodyRows.length ? footCells.join('') : '';
+}
+
+// 匯出的就是畫面上那張表：同樣的年份／月份／車場／姓名條件，
+// 同樣的假別欄位、同樣的總計列，數字也是同一份 leaveStatData() 算出來的。
+function leaveStatExport(){
+  const D = leaveStatData();
+  if(!D || !D.rows.length){ alert('這個條件下沒有資料可以匯出。'); return; }
+  const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
+  const head = ['姓名','員工編號','部門','車場']
+    .concat(D.leaveTypes).concat(['加班費時數','總計(天)','總計(小時)']);
+  const rows = D.rows.map(o => [o.emp.name, o.emp.employee_no||'', o.emp.dept_name||'', o.emp.region||'']
+    .concat(o.hours.map(h => toDays(h)||''))
+    .concat([o.otSum||'', toDays(o.rowHours)||'', fmt2(o.rowHours)||'']));
+  rows.push(['總計','','','']
+    .concat(D.leaveTypes.map(t => toDays(D.colHours[t])||''))
+    .concat([D.otTotal||'', toDays(D.grandHours)||'', fmt2(D.grandHours)||'']));
+  const roc = (parseInt(D.year,10) - 1911);
+  const name = '請假統計_民國' + roc + '年'
+             + (D.month === 'all' ? '全年' : D.month + '月')
+             + (D.region === 'all' ? '' : '_' + D.region)
+             + (D.kw ? '_' + D.kw : '');
+  whDownloadCsv(name, head, rows);
 }
 
 function renderAll(){
@@ -13935,8 +13969,6 @@ function renderMileageAll(){
   renderMileageSelects();
   renderMileageStatTable();
   renderMileageTrend();
-  renderVuSelect();
-  renderVehicleUsage();
 }
 document.getElementById('ml_year').addEventListener('change', renderMileageStatTable);
 document.getElementById('ml_base').addEventListener('change', renderMileageStatTable);
@@ -14341,6 +14373,7 @@ document.getElementById('lvgrid_month').addEventListener('change', renderLeaveGr
 document.getElementById('lvstat_year').addEventListener('change', renderLeaveStatTable);
 document.getElementById('lvstat_month').addEventListener('change', renderLeaveStatTable);
 document.getElementById('lvstat_region').addEventListener('change', renderLeaveStatTable);
+document.getElementById('lvstat_export').addEventListener('click', leaveStatExport);
 {
   const _ls = document.getElementById('lvstat_search');
   if(_ls) _ls.addEventListener('input', renderLeaveStatTable);
@@ -16334,6 +16367,10 @@ function renderWorkHourAll(){
   renderWhSelects();
   renderWhMonthly();
   renderWhInputTable();
+  // 「車輛使用明細（工時）」115/09/07 從車輛里程統計搬到這一頁 ——
+  // 跟上面的每日工時明細是同一批資料的兩個角度，放一起比較好對。
+  renderVuSelect();
+  renderVehicleUsage();
   renderWhDrivers();
   renderWhViolations();
 }
