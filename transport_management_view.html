@@ -3697,8 +3697,14 @@ async function enrichDenormalizedFields(){
     tax_id: v.tax_id || '', category: v.category || '', region: v.region || '', address: v.address || ''
   }));
 
+  // 離職的人也要放進來 —— 訓練紀錄不會跟著離職刪掉，
+  // 只查在職名冊的話，離職同仁的證照姓名欄會變成空白
+  // （115/09/07 使用者看到「怎麼有人的名字不見了」就是這個）。
+  // 在職優先：先鋪歷史再鋪在職，同一個編號會被在職的蓋過去。
   const empById = {};
+  (STATE.employeesHistory || []).forEach(e => { empById[e.id] = e; });
   STATE.employees.forEach(e => { empById[e.id] = e; });
+  const activeEmpIds = new Set((STATE.employees || []).map(e => String(e.id)));
   const vehById = {};
   STATE.vehicles.forEach(v => { vehById[v.id] = v; });
   const lesseeById = {};
@@ -3709,6 +3715,7 @@ async function enrichDenormalizedFields(){
   STATE.trainings.forEach(t => {
     const emp = empById[t.employee_id];
     t.employee_name = emp ? emp.name : (t.employee_name || '');
+    t.employee_left = !activeEmpIds.has(String(t.employee_id));   // 已經離職的標一下
     t.type_name = typeById[t.type_id] || t.type_name || '';
     t.cert_no = t.cert_no ?? t.certificate_no ?? '';
   });
@@ -4213,9 +4220,11 @@ function renderOverview(){
   }else{
     document.getElementById('trainingAlerts').innerHTML = `<div class="table-scroll" style="max-height:280px;"><table><thead><tr><th>人員</th><th>訓練項目</th><th>到期日</th><th>狀態</th></tr></thead><tbody>` +
       alerts.map(t => {
-        if(!t.expiry_date) return `<tr><td>${esc(t.employee_name)}</td><td>${esc(t.type_name)}</td><td>—</td><td><span class="pill gray">未記錄效期</span></td></tr>`;
+        // 離職的人不會從提醒裡消失，但要標出來，不然會不知道為什麼要幫他排複訓
+        const _left = t.employee_left ? ' <span class="pill gray">已離職</span>' : '';
+        if(!t.expiry_date) return `<tr><td>${esc(t.employee_name)}${_left}</td><td>${esc(t.type_name)}</td><td>—</td><td><span class="pill gray">未記錄效期</span></td></tr>`;
         const s = statusOf(t.expiry_date, 90);
-        return `<tr><td>${esc(t.employee_name)}</td><td>${esc(t.type_name)}</td><td>${esc(t.expiry_date)}${t.notes==='依訓練類型效期年限推算'?' <span class="muted">(推算)</span>':''}</td><td><span class="pill ${s}">${statusLabel(t.expiry_date,90)}</span></td></tr>`;
+        return `<tr><td>${esc(t.employee_name)}${_left}</td><td>${esc(t.type_name)}</td><td>${esc(t.expiry_date)}${t.notes==='依訓練類型效期年限推算'?' <span class="muted">(推算)</span>':''}</td><td><span class="pill ${s}">${statusLabel(t.expiry_date,90)}</span></td></tr>`;
       }).join('') + `</tbody></table></div>`;
   }
 
