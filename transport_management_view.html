@@ -155,6 +155,20 @@
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
   .form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-2);font-weight:600;}
   .empty{color:var(--text-3);text-align:center;padding:28px 0;font-size:13px;}
+  /* 外訓證照時效總表／受訓紀錄清單：欄位一律不換行。
+     名字被拆成「魏夆／亦」兩行、證書字號拆一半都很難讀，
+     寧可整張表左右捲動（外層 .table-scroll 本來就是 overflow:auto）也不要折行。 */
+  table.cert-table{font-size:13px;}
+  table.cert-table th{padding:10px 10px;font-size:12.5px;white-space:nowrap;}
+  table.cert-table td{padding:9px 10px;white-space:nowrap;vertical-align:middle;}
+  /* 備註（覆驗履歷）與複訓報名是自由輸入的長字串，硬要整段攤平會把表撐到很寬。
+     這兩欄裁掉超出的部分改成「…」，滑鼠移上去仍看得到全文（兩個函式都帶 title）。 */
+  table.cert-table .cell-clip{display:inline-block;max-width:260px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
+  table.cert-table tbody tr:hover{background:rgba(13,27,44,.03);}
+  /* 只有「修改中」那一列的到期日格子可以折行：
+     日期輸入 + 兩個勾選框擠成一行會把表撐寬，儲存／取消就被推出畫面。 */
+  table.cert-table td .edit-wrap{display:inline-block;white-space:normal;max-width:230px;line-height:2;}
   .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
   .table-scroll table{margin:0;}
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
@@ -1158,7 +1172,7 @@
         </select>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="cert-table">
           <thead><tr><th>人員</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日<span class="muted" style="font-weight:400;">（下次覆驗）</span></th><th>狀態</th><th>備註（覆驗履歷）</th><th></th></tr></thead>
           <tbody id="trainingTableBody"></tbody>
         </table>
@@ -1207,7 +1221,7 @@
         </select>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="cert-table">
           <thead><tr><th>姓名</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日</th><th>複訓報名</th><th>狀態</th><th></th></tr></thead>
           <tbody id="externalStatusBody"></tbody>
         </table>
@@ -4406,7 +4420,8 @@ function certNoteCell(t){
   const lines = raw.split('\n').filter(x => x.trim());
   const last = lines[lines.length - 1] || '';
   const more = lines.length > 1 ? `　<span style="opacity:.7;">（另 ${lines.length - 1} 筆）</span>` : '';
-  return `<span class="muted" title="${esc(raw)}" style="font-size:12px;">${esc(last)}${more}</span>`;
+  // cell-clip：超出欄寬就變「…」，不折行；全文靠 title 提示看
+  return `<span class="muted cell-clip" title="${esc(raw)}" style="font-size:12px;">${esc(last)}${more}</span>`;
 }
 function renderTypeSelect(){
   const sel = document.getElementById('tf_type');
@@ -11805,7 +11820,8 @@ function retrainCell(t){
   if(t.class_location) bits.push(t.class_location);
   if(t.class_org) bits.push(t.class_org);
   const all = bits.join('／');
-  return '<span style="font-size:12px;" title="' + esc(all) + '">' + esc(all) + '</span>';
+  // cell-clip：日期／地點／協會串起來很長，裁掉超出的部分，全文看 title
+  return '<span class="cell-clip" style="font-size:12px;" title="' + esc(all) + '">' + esc(all) + '</span>';
 }
 // 兩個下拉每次重畫都要跟著人員異動，但不能把使用者選到一半的值弄掉
 function rtFillSelects(){
@@ -11895,7 +11911,7 @@ function renderExternalStatusTable(){
       ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
       : esc(t.issue_date||'—');
     const expiryCell = editing
-      ? `<input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label>`
+      ? `<span class="edit-wrap"><input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label></span>`
       : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')) + (t.on_hold ? ' <span class="muted">（暫不外訓）</span>' : '');
     const actionCell = editing
       ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
