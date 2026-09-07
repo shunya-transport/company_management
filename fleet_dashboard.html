@@ -12560,10 +12560,49 @@ function alyYearList(){
   if(!ys.includes(cur)) ys.push(cur);
   return ys.sort((a, b) => b - a);
 }
+// 這一年度該有哪些人：在職的全部，加上該年度離職的（不然那一年的結算會少人）
+function alyPeopleFor(yr){
+  return (STATE.employees || []).slice()
+    .concat((STATE.employeesHistory || [])
+      .filter(h => alyD10(h.resign_date).slice(0, 4) === String(yr + 1911)));
+}
+// 單一個人的即時計算。資料庫還沒有那個年度時整張表都靠它，
+// 資料庫有那個年度時則只用來補「匯入之後才報到」的人。
+function alyCalcRow(e, yr){
+  const ad = (yr + 1911) + '-12-31';
+  const hire = alyD10(e.hire_date);
+  const rng = hire ? leaveYearRange(hire, ad) : null;
+  const periodStart = rng ? rng.start : '';
+  const calcEnd = periodStart ? alyPrevDay(periodStart) : '';
+  const prior = alyPriorYearsOf(e);
+  const calcStart = (hire && prior) ? alyShiftYears(hire, prior) : hire;
+  const exact = alyYearsBetween(calcStart, calcEnd);
+  const seniority = (exact == null) ? '' : Math.max(0, Math.floor(exact));
+  let days = null;
+  const appr = annualLeaveApprovedFor(e, yr);
+  if(appr){ days = appr.days; }
+  else if(exact != null && (STATE.annualLeaveTiers || []).length){
+    days = 0;
+    STATE.annualLeaveTiers.forEach(t => { if(exact >= t.min_years) days = t.leave_days; });
+  }
+  const used = hire ? annualLeaveUsed(e.id, hire, rng ? rng.end : null) : null;
+  const remaining = (days == null || used == null) ? '' : fmt2(days - used);
+  return {
+    year: yr, name: e.name || '', no: e.employee_no || '',
+    yard: e.region || '', dept: e.dept_name || '', position: e.position_name || '',
+    hire: hire, prior: (prior == null ? '' : prior),
+    prevUnused: '',                       // ← 上年度未休算不出來，留白不猜
+    resign: alyD10(e.resign_date), periodStart: periodStart,
+    calcStart: calcStart, calcEnd: calcEnd,
+    seniority: seniority, days: (days == null ? '' : days),
+    remaining: remaining, used: (used == null ? '' : used),
+    key: (yr + 1911) + (e.name || ''), calc: true
+  };
+}
 function alyRowsFor(yr){
   const stored = (STATE.annualLeaveYearly || []).filter(a => Number(a.year_roc) === Number(yr));
   if(stored.length){
-    return {src:'db', rows: stored.slice().sort((a, b) => Number(a.id) - Number(b.id)).map(a => ({
+    const rows = stored.slice().sort((a, b) => Number(a.id) - Number(b.id)).map(a => ({
       year: a.year_roc, name: a.employee_name_raw || '', no: a.employee_no || '',
       yard: a.yard || '', dept: a.dept_name || '', position: a.position_name || '',
       hire: alyD10(a.hire_date), prior: alyNum(a.prior_years), prevUnused: alyNum(a.prev_year_unused),
@@ -12571,45 +12610,28 @@ function alyRowsFor(yr){
       calcStart: alyD10(a.calc_start), calcEnd: alyD10(a.calc_end),
       seniority: alyNum(a.seniority), days: alyNum(a.leave_days),
       remaining: alyNum(a.remaining_days), used: alyNum(a.used_days),
-      key: a.setting_key || ''
-    }))};
+      key: a.setting_key || '', calc: false
+    }));
+    // 資料庫那份是匯入當下的快照，之後才報到的人不在裡面
+    // （使用者 115/09/07：「員編已經 D0161 了」，清冊卻停在 D0158）。
+    // 把人員管理有、這份沒有的人用同一支函式算出來接在後面，依工號排序。
+    // 比對方式跟系統其他地方一致：先比工號，工號對不到再比姓名。
+    const hasNo = new Set(rows.map(r => String(r.no || '').trim()).filter(Boolean));
+    const hasName = new Set(rows.map(r => String(r.name || '').trim()).filter(Boolean));
+    const extra = alyPeopleFor(yr)
+      .filter(e => {
+        const no = String(e.employee_no || '').trim();
+        if(no) return !hasNo.has(no);
+        return !hasName.has(String(e.name || '').trim());
+      })
+      .map(e => alyCalcRow(e, yr))
+      .sort((a, b) => String(a.no).localeCompare(String(b.no)));
+    return {src:'db', rows: rows.concat(extra), added: extra.length};
   }
-  // 資料庫還沒有這個年度 —— 用現有資料即時算
-  const ad = (yr + 1911) + '-12-31';
-  const people = (STATE.employees || []).slice()
-    // 該年度離職的人也要在，不然那一年的結算會少人
-    .concat((STATE.employeesHistory || []).filter(h => alyD10(h.resign_date).slice(0, 4) === String(yr + 1911)));
-  const rows = people.map(e => {
-    const hire = alyD10(e.hire_date);
-    const rng = hire ? leaveYearRange(hire, ad) : null;
-    const periodStart = rng ? rng.start : '';
-    const calcEnd = periodStart ? alyPrevDay(periodStart) : '';
-    const prior = alyPriorYearsOf(e);
-    const calcStart = (hire && prior) ? alyShiftYears(hire, prior) : hire;
-    const exact = alyYearsBetween(calcStart, calcEnd);
-    const seniority = (exact == null) ? '' : Math.max(0, Math.floor(exact));
-    let days = null;
-    const appr = annualLeaveApprovedFor(e, yr);
-    if(appr){ days = appr.days; }
-    else if(exact != null && (STATE.annualLeaveTiers || []).length){
-      days = 0;
-      STATE.annualLeaveTiers.forEach(t => { if(exact >= t.min_years) days = t.leave_days; });
-    }
-    const used = hire ? annualLeaveUsed(e.id, hire, rng ? rng.end : null) : null;
-    const remaining = (days == null || used == null) ? '' : fmt2(days - used);
-    return {
-      year: yr, name: e.name || '', no: e.employee_no || '',
-      yard: e.region || '', dept: e.dept_name || '', position: e.position_name || '',
-      hire: hire, prior: (prior == null ? '' : prior),
-      prevUnused: '',                       // ← 上年度未休算不出來，留白不猜
-      resign: alyD10(e.resign_date), periodStart: periodStart,
-      calcStart: calcStart, calcEnd: calcEnd,
-      seniority: seniority, days: (days == null ? '' : days),
-      remaining: remaining, used: (used == null ? '' : used),
-      key: (yr + 1911) + (e.name || '')
-    };
-  }).sort((a, b) => String(a.no).localeCompare(String(b.no)));
-  return {src:'calc', rows: rows};
+  // 資料庫還沒有這個年度 —— 整張表都用現有資料即時算
+  const rows = alyPeopleFor(yr).map(e => alyCalcRow(e, yr))
+    .sort((a, b) => String(a.no).localeCompare(String(b.no)));
+  return {src:'calc', rows: rows, added: 0};
 }
 // 「已休計算到」幾月底。沒指定的話：當年度算到這個月底，過去的年度算到 12 月底。
 function alyUptoISO(yrRoc, overrideMonth){
@@ -12649,6 +12671,31 @@ function alyApplyLive(D, overrideMonth){
     if(r.resign && r.resign.slice(0, 4) === adYear && r.calcEnd && r.calcEnd < r.resign){
       r.dbCalcEnd = r.calcEnd;
       r.calcEnd = r.resign;
+      // ★ 截止日往後移了，年資與特休日數【一定要跟著重算】——
+      //   只改截止日不改年資，那一列就自己跟自己矛盾了。
+      //   吳瑞仕：起算 110/03/08、115/08/31 離職＝5.48 年，級距表給 15 天；
+      //           只改截止日的話會停在資料庫算到 114/12/31 的 4 年／14 天。
+      //   杜固樺：114/04/14 到職、同日離職＝1.38 年，同理應該是 7 天。
+      //   級距用的是資料庫的 annual_leave_tiers（公司自己的年資級距表），
+      //   不是我另外定義的數字。
+      const _exact = alyYearsBetween(r.calcStart, r.calcEnd);
+      if(_exact != null){
+        r.exactYears = _exact;
+        r.dbSeniority = r.seniority;
+        r.seniority = Math.max(0, Math.floor(_exact));
+        if((STATE.annualLeaveTiers || []).length){
+          let _d = 0;
+          STATE.annualLeaveTiers.forEach(t => { if(_exact >= t.min_years) _d = t.leave_days; });
+          r.dbDays = r.days;
+          r.days = _d;
+          // 特休日數換了，剩餘天數一定要跟著換算，否則「日數 15、已休 1、剩餘 13」
+          // 這種自己打架的列會跑出來（下面若能即時重算已休，會再算一次覆蓋掉）。
+          if(r.used !== '' && r.used != null){
+            r.dbRemaining = r.remaining;
+            r.remaining = fmt2(Number(r.days) - Number(r.used));
+          }
+        }
+      }
     }
     if(!e.hire_date) return;
     const onboard = active.some(x => x.id === e.id);
@@ -12720,6 +12767,8 @@ function renderAnnualLeaveYearly(){
   if(note){
     note.innerHTML = D.src === 'db'
       ? `民國 ${D.year} 年度：直接取自資料庫的曆年特休統計（當初從請假登錄系統匯入的原始數字，沒有再算過）。`
+        + (D.added ? `<br>另外 <b>${D.added}</b> 位是那份匯入之後才報到的，人員管理裡有、資料庫那份沒有，`
+                   + `已用現有資料即時算出來接在最後面並標「新進」——<b>那幾列是系統推估，不是人事核定的數字</b>。` : '')
       : `民國 ${D.year} 年度：<b>資料庫還沒有這一年的結算</b>（${alyStoredYearsText()}），以下是用現有的到職日、假單即時算出來的。<b>「上年度未休」算不出來，一律留白</b>，要正確的數字請把最新的請假登錄系統檔案匯進資料庫。`;
     const nLeft = D.rows.filter(r => r.left).length;
     const nSync = D.rows.filter(r => r.resign && String(r.resign) !== String(r.dbResign || '')).length;
@@ -12728,12 +12777,12 @@ function renderAnnualLeaveYearly(){
     const nLive = D.rows.filter(r => r.live).length;
     note.innerHTML += `<br>「已休天數／剩餘天數」已用假單重算到 <b>${esc(alyROC(D.upto))}</b>`
       + `（${nLive} / ${D.rows.length} 人重算成功；對不到人或假單掛不到員工編號的保留資料庫原值，數字後面沒有星號）。`
-      + `核定的「特休日數」不動，仍以資料庫為準。`;
+      + `核定的「特休日數」原則上不動、仍以資料庫為準；只有「離職日這次才補進來、年資計算截止日跟著往後移」的那幾位，年資與特休日數會照公司的年資級距表重算（那幾格有星號）。`;
   }
   body.innerHTML = D.rows.map((r, i) => `<tr>
       <td class="km-num">${i + 1}</td>
       <td class="km-num">${esc(r.year)}</td>
-      <td style="font-weight:600;">${esc(r.name)}</td>
+      <td style="font-weight:600;">${esc(r.name)}${(D.src === 'db' && r.calc) ? ' <span class="pill gray" title="資料庫那份匯入之後才報到，這一列是用現有資料即時算的，不是人事核定的數字">新進</span>' : ''}</td>
       <td>${esc(r.no)}</td>
       <td>${esc(r.yard)}</td>
       <td>${esc(r.dept)}</td>
@@ -12744,9 +12793,9 @@ function renderAnnualLeaveYearly(){
       <td>${alyResignCell(r)}</td>
       <td>${esc(r.periodStart)}</td>
       <td>${esc(r.calcStart)}</td>
-      <td>${esc(r.calcEnd)}</td>
-      <td class="km-num">${esc(r.seniority)}</td>
-      <td class="km-num">${esc(r.days)}</td>
+      <td>${alyRecalcCell(r, 'calcEnd', 'dbCalcEnd')}</td>
+      <td class="km-num">${alyRecalcCell(r, 'seniority', 'dbSeniority')}</td>
+      <td class="km-num">${alyRecalcCell(r, 'days', 'dbDays')}</td>
       <td class="km-num">${alyLiveCell(r, 'remaining')}</td>
       <td class="km-num">${alyLiveCell(r, 'used')}</td>
     </tr>`).join('') || `<tr><td colspan="18" class="empty">這個條件下沒有資料</td></tr>`;
@@ -12762,6 +12811,15 @@ function alyROC(iso){
 // 滑鼠移上去看得到原本匯入的值 —— 不要無聲把匯入的數字換掉。
 // 離職日：資料庫沒有、靠人員管理補上的會標一個小點；
 // 兩邊都有而且不一樣時也標出來，並在提示裡寫原本匯入的是哪一天。
+// 因為離職日補進來、年資計算截止日往後移而重算過的欄位：標一個星號，
+// 提示裡寫原本匯入的值與實際年資，不要無聲換掉人事核定的數字。
+function alyRecalcCell(r, field, dbField){
+  const v = r[field], db = r[dbField];
+  if(db === undefined || String(v) === String(db)) return esc(v);
+  const yrTxt = (r.exactYears != null) ? `，起算日到離職日實際 ${fmt2(r.exactYears)} 年` : '';
+  return `<span title="資料庫匯入時是 ${esc(db === '' || db == null ? '（空白）' : db)}；離職日補進來之後，年資計算截止日改成 ${esc(alyROC(r.calcEnd))}${yrTxt}，這一格是照公司的年資級距表重算的">`
+       + `${esc(v)}<span class="muted" style="font-size:10px;">＊</span></span>`;
+}
 function alyResignCell(r){
   if(!r.resign) return '';
   if(String(r.resign) === String(r.dbResign || '')) return esc(r.resign);
@@ -12794,11 +12852,12 @@ function alyExportByMonth(){
       if(cum != null) prev[key] = cum;
       out.push([yr, m, r.name, r.no, r.yard, r.dept, r.position, alyROC(r.hire),
                 r.days, thisMonth, (cum == null ? '' : cum), r.remaining,
-                r.live ? '假單重算' : '資料庫原值']);
+                r.live ? '假單重算' : '資料庫原值',
+                (D.src === 'db' && !r.calc) ? '資料庫' : '系統推算']);
     });
   }
   const head = ['年份(民國)','月份','姓名','工號','區別','部門','職稱','到職日',
-                '特休日數','當月休(天)','累計已休(天)','剩餘天數','已休來源'];
+                '特休日數','當月休(天)','累計已休(天)','剩餘天數','已休來源','特休日數來源'];
   whDownloadCsv('特別假統計_民國' + yr + '年_分月', head, out);
 }
 function alyExport(){
@@ -12806,11 +12865,12 @@ function alyExport(){
   if(!D.rows.length){ alert('這個條件下沒有資料可以匯出。'); return; }
   const head = ['列印編號','年份','姓名','工號','區別','部門','職稱','到職日','復職前累計年資',
                 '上年度未休','離職日','休假期間起','年資計算起算日','年資計算截止日',
-                '特休年資','特休日數','剩餘天數','已休天數','設定'];
+                '特休年資','特休日數','剩餘天數','已休天數','設定','資料來源'];
   const rows = D.rows.map((r, i) => [i + 1, r.year, r.name, r.no, r.yard, r.dept, r.position,
     alyROC(r.hire), r.prior, r.prevUnused, alyROC(r.resign), alyROC(r.periodStart),
     alyROC(r.calcStart), alyROC(r.calcEnd),
-    r.seniority, r.days, r.remaining, r.used, r.key]);
+    r.seniority, r.days, r.remaining, r.used, r.key,
+    (D.src === 'db' && !r.calc) ? '資料庫' : '系統推算']);
   whDownloadCsv('特別假統計_民國' + D.year + '年_已休計算到' + String(D.upto).slice(5, 7) + '月'
                 + (D.src === 'db' ? '' : '_系統推算'), head, rows);
 }
