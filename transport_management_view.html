@@ -557,6 +557,38 @@
     </div>
 
     <div class="card">
+      <h2>門禁卡完整清冊<span class="count-badge" id="card_ledger_count"></span></h2>
+      <div class="toolbar">
+        <input id="card_search" placeholder="搜尋姓名或卡號">
+        <select id="card_scope_filter">
+          <option value="inuse">未繳回（現職＋離職＋廠商）</option>
+          <option value="current">僅現職人員</option>
+          <option value="left">僅已離職（卡還沒繳回）</option>
+          <option value="outsider">僅非員工/廠商</option>
+          <option value="returned">僅已繳回</option>
+          <option value="all">全部（含已繳回）</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>姓名</th><th>職稱</th><th>區域</th><th>卡號</th><th>工號</th><th>可通行門禁</th><th>狀態</th></tr></thead>
+          <tbody id="cardLedgerBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>離職歷史</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>員工編號</th><th>姓名</th><th>部門</th><th>離職日</th><th>離職原因</th><th></th></tr></thead>
+          <tbody id="staffHistoryBody"></tbody>
+        </table>
+      </div>
+      <div id="staffHistoryEmpty" class="empty" style="display:none;">目前沒有離職歷史紀錄</div>
+    </div>
+
+    <div class="card">
       <h2>新增勞健保投保資料</h2>
       <div class="form-grid">
         <label>人員
@@ -602,36 +634,6 @@
           <tbody id="companyInsuredCountBody"></tbody>
         </table>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>門禁卡完整清冊<span class="count-badge" id="card_ledger_count"></span></h2>
-      <div class="toolbar">
-        <input id="card_search" placeholder="搜尋姓名或卡號">
-        <select id="card_scope_filter">
-          <option value="all">全部</option>
-          <option value="current">僅現職人員</option>
-          <option value="left">僅已離職</option>
-          <option value="outsider">僅非員工/廠商</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>姓名</th><th>職稱</th><th>區域</th><th>卡號</th><th>工號</th><th>可通行門禁</th><th>狀態</th></tr></thead>
-          <tbody id="cardLedgerBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>離職歷史</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>員工編號</th><th>姓名</th><th>部門</th><th>離職日</th><th>離職原因</th><th></th></tr></thead>
-          <tbody id="staffHistoryBody"></tbody>
-        </table>
-      </div>
-      <div id="staffHistoryEmpty" class="empty" style="display:none;">目前沒有離職歷史紀錄</div>
     </div>
   </div>
 
@@ -1722,6 +1724,11 @@
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年度（民國）<select id="aly_year"></select></label>
         <label>已休計算到<select id="aly_upto"></select></label>
+        <label>在職狀態<select id="aly_status">
+          <option value="all">全部</option>
+          <option value="active">僅在職</option>
+          <option value="left">僅離職</option>
+        </select></label>
         <label>車場<select id="aly_yard"><option value="all">(全部)</option></select></label>
         <label>姓名<input id="aly_search" placeholder="打幾個字就好" autocomplete="off"></label>
       </div>
@@ -12098,10 +12105,18 @@ function renderAccessCardLedger(){
   const scopeF = document.getElementById('card_scope_filter').value;
   let rows = (STATE.accessCardRoster || []).map(r => ({r, info: cardHolderInfo(r)}));
   if(q) rows = rows.filter(x => (x.r.name||'').includes(q) || (x.r.card_no||'').includes(q));
+  // 已繳回的卡片預設不列出來（使用者 115/09/07 要求）。
+  // ★ 不是刪資料 —— 「誰用過這張卡、什麼時候繳回」還要查得到，
+  //   所以只是不列，下拉選「僅已繳回」或「全部」隨時看得到。
+  const _returned = rows.filter(x => x.info.key === 'returned').length;
+  if(scopeF === 'inuse' || !scopeF) rows = rows.filter(x => x.info.key !== 'returned');
+  if(scopeF === 'returned') rows = rows.filter(x => x.info.key === 'returned');
   if(scopeF === 'current')  rows = rows.filter(x => x.info.key === 'current');
   if(scopeF === 'left')     rows = rows.filter(x => x.info.key === 'left');
   if(scopeF === 'outsider') rows = rows.filter(x => x.info.key === 'outsider');
-  document.getElementById('card_ledger_count').textContent = `共 ${rows.length} 筆`;
+  const _hidden = (scopeF === 'all' || scopeF === 'returned') ? 0 : _returned;
+  document.getElementById('card_ledger_count').textContent =
+    `共 ${rows.length} 筆` + (_hidden ? `　（另有 ${_hidden} 張已繳回沒有列出）` : '');
   document.getElementById('cardLedgerBody').innerHTML = rows.map(({r, info}) => `
     <tr>
       <td>${esc(r.name||'')}</td>
@@ -12250,18 +12265,35 @@ function alyApplyLive(D, overrideMonth){
   D.upto = upto;
   const active = STATE.employees || [];
   const pool = active.concat(STATE.employeesHistory || []);
+  const adYear = String(D.year + 1911);
   D.rows.forEach(r => {
-    r.dbUsed = r.used; r.dbRemaining = r.remaining; r.live = false; r._upto = upto;
+    r.dbUsed = r.used; r.dbRemaining = r.remaining; r.dbResign = r.resign;
+    r.live = false; r._upto = upto; r.left = !!r.resign;
     const e = pool.find(x =>
       (r.no && x.employee_no && String(x.employee_no).trim() === String(r.no).trim())
       || (r.name && String(x.name || '').trim() === String(r.name).trim()));
-    if(!e || !e.hire_date) return;
+    if(!e) return;
+    // 離職日以【人員管理／離職歷史】為準 —— 資料庫那份是匯入當下的快照，
+    // 匯進來之後才離職的人（115/08/31 走的那幾位就是）上面會是空的，看起來像還在職。
+    const rz = alyD10(e.resign_date);
+    if(rz){ r.resign = rz; r.left = true; }
+    // 已離職者的「年資計算截止日」＝離職日，這是資料庫那份自己的慣例
+    // （匯入的資料裡，沈明逸 115/06/30 離職、截止日就是 115/06/30）。
+    // 只往前對齊到離職日，資料庫本來就填對的不會被動到。
+    if(r.resign && r.resign.slice(0, 4) === adYear && r.calcEnd && r.calcEnd < r.resign){
+      r.dbCalcEnd = r.calcEnd;
+      r.calcEnd = r.resign;
+    }
+    if(!e.hire_date) return;
     const onboard = active.some(x => x.id === e.id);
     // 離職的人要先確認他的假單真的掛得到員工編號，否則重算會得到 0
     const linked = onboard || (STATE.leaveRecords || []).some(x => x.employee_id === e.id);
     if(!linked) return;
-    const used = annualLeaveUsed(e.id, alyD10(e.hire_date), upto);
+    // 人都走了還往後算是錯的：截止點取「選的月底」與「離職日」較早的那個
+    const cut = (r.resign && r.resign < upto) ? r.resign : upto;
+    const used = annualLeaveUsed(e.id, alyD10(e.hire_date), cut);
     if(used == null) return;
+    r._upto = cut;
     r.used = used;
     r.remaining = (r.days === '' || r.days == null) ? '' : fmt2(Number(r.days) - used);
     r.live = true;
@@ -12277,7 +12309,12 @@ function alyVisible(overrideMonth){
   out.year = yr;
   out.rows = out.rows.filter(r => (yard === 'all' || r.yard === yard))
                      .filter(r => !kw || String(r.name).indexOf(kw) >= 0);
-  return alyApplyLive(out, overrideMonth);
+  alyApplyLive(out, overrideMonth);
+  // 在職狀態要在連動完離職日之後才篩，不然剛補上離職日的人會漏掉
+  const st = ((document.getElementById('aly_status') || {}).value) || 'all';
+  if(st === 'active') out.rows = out.rows.filter(r => !r.left);
+  if(st === 'left')   out.rows = out.rows.filter(r => r.left);
+  return out;
 }
 // 資料庫裡到底有哪幾個年度的結算，一律【現查現說】。
 // 原本這句話裡的年度區間是寫死的 —— 之後把新的年度匯進去，那句就變成錯的，
@@ -12318,6 +12355,10 @@ function renderAnnualLeaveYearly(){
     note.innerHTML = D.src === 'db'
       ? `民國 ${D.year} 年度：直接取自資料庫的曆年特休統計（當初從請假登錄系統匯入的原始數字，沒有再算過）。`
       : `民國 ${D.year} 年度：<b>資料庫還沒有這一年的結算</b>（${alyStoredYearsText()}），以下是用現有的到職日、假單即時算出來的。<b>「上年度未休」算不出來，一律留白</b>，要正確的數字請把最新的請假登錄系統檔案匯進資料庫。`;
+    const nLeft = D.rows.filter(r => r.left).length;
+    const nSync = D.rows.filter(r => r.resign && String(r.resign) !== String(r.dbResign || '')).length;
+    note.innerHTML += `<br>這個條件下共 <b>${nLeft}</b> 位已離職（離職日以「人員管理／離職歷史」為準，已休只算到離職日為止）`
+      + (nSync ? `，其中 <b>${nSync}</b> 位是資料庫那份匯入時還沒有離職日、這次才帶進來的` : '') + `。`;
     const nLive = D.rows.filter(r => r.live).length;
     note.innerHTML += `<br>「已休天數／剩餘天數」已用假單重算到 <b>${esc(alyROC(D.upto))}</b>`
       + `（${nLive} / ${D.rows.length} 人重算成功；對不到人或假單掛不到員工編號的保留資料庫原值，數字後面沒有星號）。`
@@ -12334,7 +12375,7 @@ function renderAnnualLeaveYearly(){
       <td>${esc(r.hire)}</td>
       <td class="km-num">${esc(r.prior)}</td>
       <td class="km-num">${esc(r.prevUnused)}</td>
-      <td>${esc(r.resign)}</td>
+      <td>${alyResignCell(r)}</td>
       <td>${esc(r.periodStart)}</td>
       <td>${esc(r.calcStart)}</td>
       <td>${esc(r.calcEnd)}</td>
@@ -12353,6 +12394,15 @@ function alyROC(iso){
 }
 // 重算過而且跟資料庫原值不一樣的，數字後面標一個小星號，
 // 滑鼠移上去看得到原本匯入的值 —— 不要無聲把匯入的數字換掉。
+// 離職日：資料庫沒有、靠人員管理補上的會標一個小點；
+// 兩邊都有而且不一樣時也標出來，並在提示裡寫原本匯入的是哪一天。
+function alyResignCell(r){
+  if(!r.resign) return '';
+  if(String(r.resign) === String(r.dbResign || '')) return esc(r.resign);
+  const was = r.dbResign ? ('資料庫匯入時是 ' + r.dbResign) : '資料庫匯入時是空白（那時還沒離職）';
+  return `<span title="${esc(was)}，這裡以人員管理／離職歷史為準">${esc(r.resign)}`
+       + `<span class="muted" style="font-size:10px;">＊</span></span>`;
+}
 function alyLiveCell(r, field){
   const v = r[field];
   const db = (field === 'used') ? r.dbUsed : r.dbRemaining;
@@ -12398,7 +12448,7 @@ function alyExport(){
   whDownloadCsv('特別假統計_民國' + D.year + '年_已休計算到' + String(D.upto).slice(5, 7) + '月'
                 + (D.src === 'db' ? '' : '_系統推算'), head, rows);
 }
-['aly_year','aly_upto','aly_yard','aly_search'].forEach(id => {
+['aly_year','aly_upto','aly_status','aly_yard','aly_search'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener(id === 'aly_search' ? 'input' : 'change', renderAnnualLeaveYearly);
 });
