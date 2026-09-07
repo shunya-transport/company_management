@@ -1578,7 +1578,10 @@
             <option value="特休">特休</option>
             <option value="公假">公假</option>
             <option value="婚假">婚假</option>
-            <option value="喪假">喪假</option>
+            <option value="喪假">喪假（未分親等）</option>
+            <option value="喪假-父母配偶">喪假－父母／養父母／繼父母／配偶（8日）</option>
+            <option value="喪假-祖父母子女">喪假－祖父母／子女／配偶之父母（6日）</option>
+            <option value="喪假-曾祖父母兄弟姊妹">喪假－曾祖父母／兄弟姊妹／配偶之祖父母（3日）</option>
             <option value="產假">產假</option>
             <option value="陪產假">陪產假</option>
             <option value="特別事假">特別事假</option>
@@ -1603,6 +1606,8 @@
         </label>
         <label>備註<input id="lv_notes" placeholder="選填"></label>
       </div>
+      <input type="hidden" id="lv_hours_shadow" value="0">
+      <div id="lv_quota_hint" style="font-size:12.5px;line-height:1.9;margin:-4px 0 12px;"></div>
       <button class="btn" id="lv_add">新增請假登錄</button>
     </div>
 
@@ -2412,7 +2417,7 @@
       <div class="stat-row" id="whKpi" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px;"></div>
       <div class="table-scroll" style="max-height:600px;">
         <table>
-          <thead><tr><th>司機</th><th>區別</th><th style="text-align:right;">出勤天數</th><th style="text-align:right;">休假天數</th><th style="text-align:right;">總工時</th><th style="text-align:right;">日均工時</th><th style="text-align:right;">最高單日</th><th style="text-align:right;">最長連續出勤</th><th style="text-align:right;">連續累計最高</th><th>狀態</th><th>車隊</th></tr></thead>
+          <thead><tr><th>司機</th><th>區別</th><th style="text-align:right;">出勤天數</th><th style="text-align:right;">休假天數</th><th style="text-align:right;" title="教育訓練不計入出勤天數與總工時（出勤代碼 N，跟休假同一碼）">教育訓練</th><th style="text-align:right;">總工時</th><th style="text-align:right;">日均工時</th><th style="text-align:right;">最高單日</th><th style="text-align:right;">最長連續出勤</th><th style="text-align:right;">連續累計最高</th><th>狀態</th><th>車隊</th></tr></thead>
           <tbody id="whDriverBody"></tbody>
           <tfoot id="whDriverFoot"></tfoot>
         </table>
@@ -12688,6 +12693,9 @@ async function saveLeaveEdit(){
     rec.employee_id = empId;
     rec.employee_name_raw = emp.name;
   }
+  // 法定上限防呆（改的這一筆要排除自己，不然會重複計算）
+  if(!leaveQuotaConfirm(keep ? rec.employee_id : parseInt(sel.value),
+                        document.getElementById('lve_type').value, start, hours, rec.id)) return;
   rec.reg_no     = regNo || null;
   rec.leave_type = document.getElementById('lve_type').value;
   rec.start_date = start;
@@ -13060,7 +13068,8 @@ function leaveStatData(overrideMonth){
   };
   const empMatches = (empId) => {
     if(region==='all') return true;
-    const emp = STATE.employees.find(e=>e.id===empId);
+    // 離職的人也要查得到，不然選了車場之後那個月他就整個不見
+    const emp = findEmployeeAnywhere(empId);
     return emp && emp.region === region;
   };
 
@@ -13078,7 +13087,12 @@ function leaveStatData(overrideMonth){
 
   const leaveTypes = [...new Set(leaveRows.map(r=>(r.leave_type||'').trim()).filter(Boolean))];
   const peopleIds = [...new Set([...leaveRows.map(r=>r.employee_id), ...otRows.map(r=>r.employee_id)].filter(Boolean))];
-  const people = peopleIds.map(id => STATE.employees.find(e=>e.id===id)).filter(Boolean)
+  // ★ 離職的人一定要列進來 —— 8/31 離職的人，8 月的薪水還是要算。
+  //   舊版只查在職名冊（STATE.employees），人一離職那個月就整個查不到了
+  //   （使用者 115/09/07 回報：吳瑞仕 8/31 離職，8 月就拉不到他的資料）。
+  const _activeIds = new Set((STATE.employees || []).map(e => String(e.id)));
+  const people = peopleIds.map(id => findEmployeeAnywhere(id)).filter(Boolean)
+    .map(e => Object.assign({}, e, {_left: !_activeIds.has(String(e.id))}))
     .sort((a,b)=>(a.employee_no||'').localeCompare(b.employee_no||''));
 
   const colHours = {};
@@ -13122,22 +13136,15 @@ function renderLeaveStatTable(){
       `<td style="text-align:center;"${h ? ` title="${fmt2(h)} 小時"` : ''}>${toDays(h)||''}</td>`);
     const otCells = OT_COL_KEYS.map(k =>
       `<td style="text-align:center;${k === 'none' && o.ot[k] ? 'color:var(--amber);font-weight:600;' : ''}${k === 'total' ? 'font-weight:600;' : ''}">${o.ot[k]||''}</td>`).join('');
-    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(o.emp.name)}</td>${cells.join('')}${otCells}<td style="text-align:center;font-weight:700;"${o.rowHours ? ` title="${fmt2(o.rowHours)} 小時"` : ''}>${toDays(o.rowHours)||''}</td></tr>`;
+    const _leftTag = o.emp._left
+      ? ` <span class="pill gray" title="離職日 ${esc(o.emp.resign_date||'')}">已離職</span>` : '';
+    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;">${esc(o.emp.name)}${_leftTag}</td>${cells.join('')}${otCells}<td style="text-align:center;font-weight:700;"${o.rowHours ? ` title="${fmt2(o.rowHours)} 小時"` : ''}>${toDays(o.rowHours)||''}</td></tr>`;
   });
   // 查無資料時，如果那個名字其實是離職的人，直接講明白 ——
   // 這張表目前只列在職人員（上面 people 那段的 .filter(Boolean) 會把離職者濾掉），
   // 不說的話會以為是搜尋壞了。
   let emptyMsg = '此期間沒有請假或加班紀錄';
-  if(!bodyRows.length && kw){
-    const gone = (STATE.employeesHistory || []).filter(h => String(h.name || '').indexOf(kw) >= 0);
-    const here = (STATE.employees || []).some(e => String(e.name || '').indexOf(kw) >= 0);
-    if(gone.length && !here){
-      emptyMsg = '「' + esc(kw) + '」找不到。' + esc(gone.map(h => h.name).join('、'))
-               + ' 已經離職，這張統計表目前只列在職人員。';
-    }else{
-      emptyMsg = '「' + esc(kw) + '」在這個期間沒有請假或加班紀錄。';
-    }
-  }
+  if(!bodyRows.length && kw) emptyMsg = '「' + esc(kw) + '」在這個期間沒有請假或加班紀錄。';
   document.getElementById('leaveStatBody').innerHTML = bodyRows.join('') || `<tr><td colspan="${leaveTypes.length+8}" class="empty">${emptyMsg}</td></tr>`;
 
   const footCells = ['<td style="position:sticky;left:0;background:rgba(201,154,86,.08);">總計</td>']
@@ -13153,13 +13160,14 @@ function leaveStatExport(){
   const D = leaveStatData();
   if(!D || !D.rows.length){ alert('這個條件下沒有資料可以匯出。'); return; }
   const toDays = h => fmt2(h / LEAVE_HOURS_PER_DAY);
-  const head = ['姓名','員工編號','部門','車場']
+  const head = ['姓名','員工編號','部門','車場','離職日']
     .concat(D.leaveTypes).concat(OT_COL_NAMES).concat(['總計(天)','總計(小時)']);
-  const rows = D.rows.map(o => [o.emp.name, o.emp.employee_no||'', o.emp.dept_name||'', o.emp.region||'']
+  const rows = D.rows.map(o => [o.emp.name, o.emp.employee_no||'', empOrgName(o.emp,'dept'), o.emp.region||'',
+                                (o.emp._left ? (o.emp.resign_date||'已離職') : '')]
     .concat(o.hours.map(h => toDays(h)||''))
     .concat(OT_COL_KEYS.map(k => o.ot[k]||''))
     .concat([toDays(o.rowHours)||'', fmt2(o.rowHours)||'']));
-  rows.push(['總計','','','']
+  rows.push(['總計','','','','']
     .concat(D.leaveTypes.map(t => toDays(D.colHours[t])||''))
     .concat(OT_COL_KEYS.map(k => D.otSums[k]||''))
     .concat([toDays(D.grandHours)||'', fmt2(D.grandHours)||'']));
@@ -13192,14 +13200,15 @@ function leaveStatExportByMonth(){
       const byType = {};
       D.leaveTypes.forEach((t, i) => byType[t] = o.hours[i]);
       out.push([parseInt(year, 10) - 1911, m, o.emp.name, o.emp.employee_no || '',
-                o.emp.dept_name || '', o.emp.region || '']
+                empOrgName(o.emp, 'dept'), o.emp.region || '',
+                (o.emp._left ? (o.emp.resign_date || '已離職') : '')]
         .concat(types.map(t => toDays(byType[t] || 0) || ''))
         .concat(OT_COL_KEYS.map(k => o.ot[k] || ''))
         .concat([toDays(o.rowHours) || '', fmt2(o.rowHours) || '']));
     });
   });
   if(!out.length){ alert('民國 ' + (parseInt(year, 10) - 1911) + ' 年沒有請假或加班紀錄可以匯出。'); return; }
-  const head = ['年份(民國)','月份','姓名','員工編號','部門','車場']
+  const head = ['年份(民國)','月份','姓名','員工編號','部門','車場','離職日']
     .concat(types).concat(OT_COL_NAMES).concat(['總計(天)','總計(小時)']);
   whDownloadCsv('請假統計_民國' + (parseInt(year, 10) - 1911) + '年_分月', head, out);
 }
@@ -14611,6 +14620,8 @@ document.getElementById('lv_add').addEventListener('click', async () => {
       + '請假通常以半小時為單位（0.5、1、1.5、…）。\n'
       + '如果你想填的是「天」，1 天請填 8、半天請填 4、1 小時請填 1。\n\n確定要用 '
       + hours + ' 小時存檔嗎？')) return;
+  // 法定上限防呆：超過才問，這是警告不是硬擋
+  if(!leaveQuotaConfirm(empId, document.getElementById('lv_type').value, start, hours)) return;
   STATE.leaveRecords.push({
     id: nextId(STATE.leaveRecords), employee_id: empId,
     leave_type: document.getElementById('lv_type').value,
@@ -14624,13 +14635,169 @@ document.getElementById('lv_add').addEventListener('click', async () => {
   updateLeaveDaysHint();
   renderAll();
 });
+// ===== 請假的法定上限防呆 =====
+// 依勞工請假規則、勞動基準法、性別平等工作法。
+// ★ 這是【警告】不是硬擋：超過上限不代表不能請，常見的是超過的部分不給薪、
+//   或改請別的假別，硬擋會擋掉合法的情形。
+// ★ 只寫得出法源的才設限。公假、公傷假依實際需要沒有法定日數上限；
+//   生日假、特別事假、無薪假、接種／防疫假、曠職、其他屬公司自訂 —— 一律不設限，
+//   不自己編一個數字出來。
+const LEAVE_QUOTA = {
+  '事假':       {days:14, law:'勞工請假規則第7條',       merge:['家庭照顧假'], note:'家庭照顧假併入事假計算'},
+  '病假':       {days:30, law:'勞工請假規則第4條',       note:'未住院普通傷病假一年 30 日（住院另有規定，這裡只提醒這一條）'},
+  '家庭照顧假': {days:7,  law:'性別平等工作法第20條',    note:'併入事假 14 日計算'},
+  '產檢假':     {days:7,  law:'性別平等工作法第15條'},
+  '陪產假':     {days:7,  law:'性別平等工作法第15條',    note:'陪產檢及陪產假合計 7 日'},
+  '婚假':       {days:8,  law:'勞工請假規則第2條',       note:'自結婚之日前十日起三個月內請畢'},
+  // 喪假依親等分三級（勞工請假規則第 3 條），而且是「一次喪事」的額度、
+  // 應於死亡之日起百日內請畢，所以用 event100：同一種喪假、起始日相差 100 天以內算同一次。
+  '喪假':                     {days:8, scope:'event100', law:'勞工請假規則第3條',
+                               note:'這一筆沒有分親等，用最寬的 8 日提醒；建議改選下面分親等的選項'},
+  '喪假-父母配偶':            {days:8, scope:'event100', law:'勞工請假規則第3條',
+                               note:'父母、養父母、繼父母、配偶喪亡，喪假八日，應於死亡之日起百日內請畢'},
+  '喪假-祖父母子女':          {days:6, scope:'event100', law:'勞工請假規則第3條',
+                               note:'祖父母、子女、配偶之父母、配偶之養父母或繼父母喪亡，喪假六日'},
+  '喪假-曾祖父母兄弟姊妹':    {days:3, scope:'event100', law:'勞工請假規則第3條',
+                               note:'曾祖父母、兄弟姊妹、配偶之祖父母喪亡，喪假三日'},
+  '產假':       {days:56, law:'勞動基準法第50條',        note:'分娩前後合計八星期'},
+  '生理假':     {days:null, monthDays:1, law:'性別平等工作法第14條',
+                 note:'每月得請 1 日；全年逾 3 日的部分併入病假 30 日計算'}
+};
+// 某人某一年某個假別已經請掉幾天（含法定的併計）
+function leaveQuotaUsed(empId, type, year, excludeId, refDate){
+  const q0 = LEAVE_QUOTA[type];
+  // 喪假是「一次喪事」的額度，不是一年幾天：法規要求死亡之日起百日內請畢，
+  // 系統無從知道是哪一次喪事，所以用「起始日相差 100 天以內」當成同一次。
+  const sameEvent = (r) => {
+    if(!refDate || !r.start_date) return true;
+    const d = Math.abs(new Date(String(r.start_date).slice(0,10) + 'T00:00:00')
+                     - new Date(String(refDate).slice(0,10) + 'T00:00:00')) / 86400000;
+    return d <= 100;
+  };
+  const sumOf = (t, ym) => (STATE.leaveRecords || [])
+    .filter(r => r.employee_id === empId
+              && String(r.leave_type || '').trim() === t
+              && ((q0 && q0.scope === 'event100')
+                    ? sameEvent(r)
+                    : String(r.start_date || '').slice(0, ym ? 7 : 4) === (ym || String(year)))
+              && String(r.id) !== String(excludeId))
+    .reduce((s, r) => s + leaveDaysOf(r), 0);
+  let used = sumOf(type);
+  const q = LEAVE_QUOTA[type];
+  if(q && q.merge) q.merge.forEach(t => { used += sumOf(t); });
+  // 生理假全年逾 3 日的部分併入病假（性別平等工作法第 14 條）
+  if(type === '病假'){
+    const men = sumOf('生理假');
+    if(men > 3) used += (men - 3);
+  }
+  return fmt2(used);
+}
+// 回傳 null＝這個假別沒有法定上限；否則回傳這次登錄之後的用量與是否超過
+function leaveQuotaCheck(empId, type, startDate, addHours, excludeId){
+  if(!empId || !type) return null;
+  const year = String(startDate || todayISO()).slice(0, 4);
+  const ym   = String(startDate || todayISO()).slice(0, 7);
+  const addD = fmt2((parseFloat(addHours) || 0) / LEAVE_HOURS_PER_DAY);
+
+  // 特休：上限就是他當年度核定（或依年資推算）的天數，用系統既有的算法
+  if(type === '特休'){
+    const emp = findEmployeeAnywhere(empId);
+    if(!emp || !emp.hire_date) return null;
+    const appr = annualLeaveApprovedFor(emp, Number(year) - 1911);
+    const limit = appr ? appr.days : currentPeriodLeaveDays(emp.hire_date);
+    if(limit == null) return null;
+    const used = fmt2(annualLeaveUsed(empId, emp.hire_date) - (excludeId ? 0 : 0));
+    const after = fmt2(used + addD);
+    return {label:'特休', unit:'天', limit:limit, used:used, add:addD, after:after,
+            over:after > limit, law:'依年資／當年度核定天數', note:''};
+  }
+  // 補休：上限是他已經賺到的補休時數（加班換來的）
+  if(type === '補休'){
+    const earned = compHoursEarned(empId);
+    const used = fmt2(compHoursUsed(empId) - 0);
+    const after = fmt2(used + (parseFloat(addHours) || 0));
+    return {label:'補休', unit:'小時', limit:earned, used:used, add:fmt2(parseFloat(addHours)||0),
+            after:after, over:after > earned, law:'加班換補休的時數', note:'補休不能超過已經賺到的時數'};
+  }
+  const q = LEAVE_QUOTA[type];
+  if(!q) return null;
+  // 生理假：法規是「每月一日」，所以看的是這一個月
+  if(q.days == null && q.monthDays){
+    const usedM = fmt2(leaveQuotaUsed(empId, type, year, excludeId) * 0 +
+      (STATE.leaveRecords || [])
+        .filter(r => r.employee_id === empId && String(r.leave_type||'').trim() === type
+                  && String(r.start_date||'').slice(0,7) === ym && String(r.id) !== String(excludeId))
+        .reduce((s, r) => s + leaveDaysOf(r), 0));
+    const afterM = fmt2(usedM + addD);
+    const usedY = leaveQuotaUsed(empId, type, year, excludeId);
+    return {label:type, unit:'天', limit:q.monthDays, used:usedM, add:addD, after:afterM,
+            over:afterM > q.monthDays, law:q.law,
+            note:(q.note || '') + `（本月已 ${usedM} 天、今年累計 ${fmt2(usedY + addD)} 天）`};
+  }
+  const used = leaveQuotaUsed(empId, type, year, excludeId, startDate);
+  const after = fmt2(used + addD);
+  return {label:type, unit:'天', limit:q.days, used:used, add:addD, after:after,
+          over:after > q.days, law:q.law,
+          note:(q.note || '') + (q.scope === 'event100' ? '；累計的是這次喪事（起訖日相差 100 天內）的，不是全年' : '')};
+}
+// 畫面上的即時提示（不擋，只講）
+function renderLeaveQuotaHint(empSelId, typeSelId, startId, hoursId, outId, excludeId){
+  const out = document.getElementById(outId);
+  if(!out) return;
+  const empId = parseInt((document.getElementById(empSelId) || {}).value);
+  const type  = (document.getElementById(typeSelId) || {}).value;
+  const start = (document.getElementById(startId) || {}).value;
+  const hRaw  = (document.getElementById(hoursId) || {}).value;
+  const hours = (hRaw === '' || hRaw == null) ? 0 : parseFloat(hRaw);
+  const c = leaveQuotaCheck(empId, type, start, hours, excludeId);
+  if(!c){
+    out.innerHTML = type
+      ? `<span class="muted">「${esc(type)}」沒有法定日數上限（或屬公司自訂），不做上限提醒。</span>` : '';
+    return;
+  }
+  const cls = c.over ? 'red' : (c.after >= c.limit * 0.8 ? 'amber' : 'green');
+  out.innerHTML = `<span class="pill ${cls}">${esc(c.label)} ${c.after}／${c.limit} ${esc(c.unit)}</span>`
+    + ` <span class="muted">已用 ${c.used}${c.add ? '，這次 +' + c.add : ''} ${esc(c.unit)}`
+    + `（${esc(c.law)}${c.note ? '；' + esc(c.note) : ''}）</span>`
+    + (c.over ? ` <b style="color:var(--red);">已超過上限</b>` : '');
+}
+// 存檔前的確認（超過才問，沒超過直接過）
+function leaveQuotaConfirm(empId, type, startDate, hours, excludeId){
+  const c = leaveQuotaCheck(empId, type, startDate, hours, excludeId);
+  if(!c || !c.over) return true;
+  const emp = findEmployeeAnywhere(empId);
+  return confirm('⚠️ 超過法定上限\n\n'
+    + (emp ? emp.name + '　' : '') + type + '\n'
+    + '已請 ' + c.used + ' ' + c.unit + '，這次 +' + c.add + ' ' + c.unit
+    + '，合計 ' + c.after + ' ' + c.unit + '，上限 ' + c.limit + ' ' + c.unit + '。\n'
+    + '（' + c.law + (c.note ? '；' + c.note : '') + '）\n\n'
+    + '超過上限不一定不能請 —— 可能是超過的部分不給薪、或要改請其他假別。\n'
+    + '確定還是要照這樣存檔嗎？');
+}
 function updateLeaveDaysHint(){
   const el = document.getElementById('lv_hours'), out = document.getElementById('lv_days_hint');
-  if(!el || !out) return;
-  const h = parseFloat(el.value);
-  out.textContent = isNaN(h) ? '—' : (Math.round(h / LEAVE_HOURS_PER_DAY * 100) / 100).toFixed(2);
+  if(el && out){
+    const h = parseFloat(el.value);
+    out.textContent = isNaN(h) ? '—' : (Math.round(h / LEAVE_HOURS_PER_DAY * 100) / 100).toFixed(2);
+  }
+  // 時數留空＝依起訖日整天計，提示要用同一套算法，不然畫面跟存檔會對不起來
+  let _h = parseFloat((document.getElementById('lv_hours') || {}).value);
+  if(isNaN(_h)){
+    const s1 = (document.getElementById('lv_start') || {}).value;
+    const s2 = (document.getElementById('lv_end') || {}).value || s1;
+    if(s1){
+      const d1 = new Date(s1 + 'T00:00:00'), d2 = new Date(s2 + 'T00:00:00');
+      _h = (Math.round((d2 - d1) / 86400000) + 1) * LEAVE_HOURS_PER_DAY;
+    }else _h = 0;
+  }
+  const _hid = document.getElementById('lv_hours_shadow');
+  if(_hid) _hid.value = isNaN(_h) ? 0 : _h;
+  renderLeaveQuotaHint('lv_emp', 'lv_type', 'lv_start', 'lv_hours_shadow', 'lv_quota_hint');
 }
-document.getElementById('lv_hours').addEventListener('input', updateLeaveDaysHint);
+['lv_hours','lv_emp','lv_type','lv_start','lv_end'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', updateLeaveDaysHint);
+});
 document.getElementById('lv_search').addEventListener('input', renderLeaveTable);
 document.getElementById('lv_type_filter').addEventListener('change', renderLeaveTable);
 document.getElementById('leaveTableBody').addEventListener('click', async (e) => {
@@ -16318,10 +16485,21 @@ function whFilteredDaily(){
   return whAll().filter(r => (p === 'all' || whPeriodKey(r) === p) && (rg === 'all' || whRegionOf(r) === rg));
 }
 
+// 教育訓練不計入出勤（115/09/07 使用者要求，選定「完全比照休假」）。
+// 績效檔裡教育訓練的出勤代碼就是 N、跟休假同一碼，但這邊原本只看 day_status === '休'，
+// 所以訓練日被當成出勤，天數、工時、連續出勤、違規判定全部含進去了。
+// ★ 判斷用【出勤類別的文字】，不是用出勤代碼 —— N 碼是休假跟教育訓練共用的，分不出來。
+function whIsTraining(r){
+  return String((r && r.attend_type) || '').indexOf('教育訓練') >= 0;
+}
+// 這一天算不算出勤：休假與教育訓練都不算
+function whIsOffDuty(r){
+  return !r || r.day_status === '休' || whIsTraining(r);
+}
 function whMaxConsecutive(days){
   let best = 0, cur = 0, prevDate = null;
   days.forEach(r => {
-    if(r.day_status === '休'){ cur = 0; prevDate = r.work_date; return; }
+    if(whIsOffDuty(r)){ cur = 0; prevDate = r.work_date; return; }
     if(prevDate && !whIsNextDay(prevDate, r.work_date)) cur = 0;
     cur++; if(cur > best) best = cur;
     prevDate = r.work_date;
@@ -16354,8 +16532,10 @@ function whDriverSummary(rows){
     const k = (r.driver_name||'');
     const o = by[k] = by[k] || { region:whRegionOf(r), name:r.driver_name||'', employee_id:r.employee_id||null,
                                  left:whIsLeft(r.driver_name), leftDate:whLeftDate(r.driver_name),
-                                 work:0, rest:0, hours:0, maxDay:0, maxDayDate:'', maxCum:0, days:[] };
+                                 work:0, rest:0, train:0, hours:0, maxDay:0, maxDayDate:'', maxCum:0, days:[] };
     o.days.push(r);
+    // 教育訓練另外算一欄，不進出勤天數也不進總工時（跟休假一樣不計）
+    if(whIsTraining(r)){ o.train++; return; }
     if(r.day_status === '休'){ o.rest++; return; }
     o.work++;
     const h = whNum(r.work_hours);
@@ -16403,6 +16583,7 @@ function renderWhDrivers(){
       <td>${esc(o.region) || '<span class="muted">—</span>'}</td>
       <td style="text-align:right;">${o.work}</td>
       <td style="text-align:right;">${o.rest}</td>
+      <td style="text-align:right;${o.train ? '' : 'color:var(--text-3);'}">${o.train || ''}</td>
       <td style="text-align:right;font-weight:600;${(monthly && o.hours > lim.month) ? 'color:var(--red);' : ''}">${o.hours.toFixed(1)}</td>
       <td style="text-align:right;">${o.avg.toFixed(1)}</td>
       <td style="text-align:right;${o.maxDay > lim.day ? 'color:var(--red);font-weight:600;' : ''}" title="${esc(o.maxDayDate)}">${o.maxDay.toFixed(1)}</td>
@@ -16413,12 +16594,13 @@ function renderWhDrivers(){
     </tr>`;
   }).join('') || `<tr><td colspan="11" class="empty">這個條件下沒有工時資料</td></tr>`;
 
-  const sum = list.reduce((s,o) => ({ work:s.work+o.work, rest:s.rest+o.rest, hours:s.hours+o.hours }), {work:0,rest:0,hours:0});
+  const sum = list.reduce((s,o) => ({ work:s.work+o.work, rest:s.rest+o.rest, train:s.train+(o.train||0), hours:s.hours+o.hours }), {work:0,rest:0,train:0,hours:0});
   document.getElementById('whDriverFoot').innerHTML = list.length
     ? `<tr style="font-weight:700;background:#FBF5EC;">
         <td colspan="2">合計 ${list.length} 人</td>
         <td style="text-align:right;">${sum.work}</td>
         <td style="text-align:right;">${sum.rest}</td>
+        <td style="text-align:right;">${sum.train || ''}</td>
         <td style="text-align:right;">${sum.hours.toFixed(1)}</td>
         <td style="text-align:right;">${sum.work ? (sum.hours/sum.work).toFixed(1) : '—'}</td>
         <td colspan="5"></td></tr>`
@@ -16470,7 +16652,8 @@ function whRuns(){
     };
     let prevDate = null;
     days.forEach(r => {
-      if(r.day_status === '休'){ flush(); prevDate = r.work_date; return; }
+      // 訓練日視同休假，連續出勤在這裡斷開
+      if(whIsOffDuty(r)){ flush(); prevDate = r.work_date; return; }
       if(prevDate && !whIsNextDay(prevDate, r.work_date)) flush();
       run.push(r); prevDate = r.work_date;
     });
@@ -16490,7 +16673,7 @@ function whViolations(){
   whAll().forEach(r => {
     const h = whNum(r.work_hours);
     const g = whRegionOf(r);
-    if(r.day_status !== '休' && h > lim.day && inScope(r.year_roc, r.month, g)){
+    if(!whIsOffDuty(r) && h > lim.day && inScope(r.year_roc, r.month, g)){
       list.push({ type:'單日超時', name:r.driver_name||'', region:g, period:r.work_date||'',
                   sortKey:r.work_date||'', value:h, std:lim.day, over:h - lim.day,
                   note:`${r.clock_in||''}～${r.clock_out||''}${r.overnight?'(隔日)':''}，休息 ${whNum(r.rest_hours).toFixed(1)}H` });
@@ -16500,7 +16683,7 @@ function whViolations(){
   // 2. 月總工時超標
   const byDM = {};
   whAll().forEach(r => {
-    if(r.day_status === '休') return;
+    if(whIsOffDuty(r)) return;
     const k = [r.driver_name||'', r.year_roc, r.month].join('｜');
     const o = byDM[k] = byDM[k] || { region:whRegionOf(r), name:r.driver_name||'', yr:r.year_roc, mo:r.month, hours:0, days:0 };
     o.hours += whNum(r.work_hours); o.days++;
@@ -16578,7 +16761,9 @@ function renderWhInputTable(){
       <td style="white-space:nowrap;">${esc(r.work_date||'')}</td>
       <td style="white-space:nowrap;font-weight:600;">${esc(r.driver_name||'')}${whIsLeft(r.driver_name)?' <span class="pill gray">離職</span>':''}</td>
       <td>${esc(whRegionOf(r)) || '<span class="muted">—</span>'}</td>
-      <td><span class="pill ${r.day_status==='休'?'gray':'green'}">${esc(r.day_status||'')}</span></td>
+      <td>${whIsTraining(r)
+        ? '<span class="pill gray" title="教育訓練不計入出勤天數與總工時">教育訓練</span>'
+        : `<span class="pill ${r.day_status==='休'?'gray':'green'}">${esc(r.day_status||'')}</span>`}</td>
       <td style="white-space:nowrap;">${r.attend_type?esc(r.attend_type):'<span class="muted">—</span>'}</td>
       <td>${esc(r.clock_in||'')}</td>
       <td>${esc(r.clock_out||'')}${r.overnight?' <span class="muted">(隔日)</span>':''}</td>
@@ -16744,8 +16929,8 @@ if(document.getElementById('wh_period')){
   document.getElementById('wh_export_driver').addEventListener('click', () => {
     const p = whSelPeriod();
     whDownloadCsv('司機工時彙總_' + whPeriodText(p).replace(/\s/g,''),
-      ['司機','區別','出勤天數','休假天數','總工時','日均工時','最高單日','最長連續出勤','連續累計最高','車隊'],
-      whDriverRows().map(o => [o.name, o.region, o.work, o.rest, o.hours.toFixed(1), o.avg.toFixed(1),
+      ['司機','區別','出勤天數','休假天數','教育訓練','總工時','日均工時','最高單日','最長連續出勤','連續累計最高','車隊'],
+      whDriverRows().map(o => [o.name, o.region, o.work, o.rest, o.train || 0, o.hours.toFixed(1), o.avg.toFixed(1),
                                o.maxDay.toFixed(1), o.maxCont, o.maxCum.toFixed(1), whTeamOf(o)]));
   });
 
