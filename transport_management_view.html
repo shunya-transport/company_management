@@ -5723,7 +5723,9 @@ function renderStaffTable(){
   }else{
     hempty.style.display='none';
     hbody.innerHTML = visible.map(e => `
-      <tr><td>${esc(e.employee_no)}</td><td>${esc(e.name)}</td><td>${esc(empOrgName(e, 'dept'))}</td>
+      <tr><td>${esc(e.employee_no)}</td>
+      <td><button class="name-link" data-view-staff="${e.id}" title="看他在職期間的完整資料">${esc(e.name)}</button></td>
+      <td>${esc(empOrgName(e, 'dept'))}</td>
       <td>${esc(e.resign_date||'')}</td><td>${esc(e.resign_reason||'')}</td>
       <td><button class="name-link" data-rehire-staff="${e.id}">復職</button></td></tr>`).join('');
   }
@@ -8565,7 +8567,10 @@ function checklistSummary(empId){
 }
 
 function openStaffModal(empId){
-  const e = STATE.employees.find(x => x.id === empId);
+  // 在職找不到就去離職歷史找 —— 離職之後一樣要看得到他在職時的
+  // 勞健保、證照、訓練、請假、物品領用（那些紀錄離職時刻意都保留著）。
+  const e = STATE.employees.find(x => x.id === empId)
+         || (STATE.employeesHistory || []).find(x => x.id === empId);
   if(!e) return;
   renderStaffModalView(e);
   document.getElementById('staffModal').classList.add('show');
@@ -12223,7 +12228,11 @@ function alyCalcRow(e, yr){
   const remaining = (days == null || used == null) ? '' : fmt2(days - used);
   return {
     year: yr, name: e.name || '', no: e.employee_no || '',
-    yard: e.region || '', dept: e.dept_name || '', position: e.position_name || '',
+    // 部門／職稱不能直接讀 dept_name / position_name ——
+    // 離職歷史那一列通常只有 dept_id / position_id（名稱是 join 給畫面看的，
+    // 資料庫裡沒有那幾欄，離職時就被濾掉了），直接讀會是空白（郭信宏 D0161 就是）。
+    // empOrgName 會先看名稱、沒有再用 id 去對照表換，離職歷史那張表本來就這樣做。
+    yard: e.region || '', dept: empOrgName(e, 'dept'), position: empOrgName(e, 'position'),
     hire: hire, prior: (prior == null ? '' : prior),
     prevUnused: '',                       // ← 上年度未休算不出來，留白不猜
     resign: alyD10(e.resign_date), periodStart: periodStart,
@@ -15254,6 +15263,13 @@ document.getElementById('staffTableBody').addEventListener('click', async (e) =>
   document.getElementById('resignModal').classList.add('show');
 });
 
+// 繳回清單的「全部勾選／全部取消」（清單是每次開視窗才畫的，所以綁在外層）
+document.getElementById('rs_impact').addEventListener('click', (e) => {
+  const all = e.target.id === 'rs_eq_all', none = e.target.id === 'rs_eq_none';
+  if(!all && !none) return;
+  document.querySelectorAll('#rs_impact .rs-eq').forEach(cb => cb.checked = all);
+});
+
 document.getElementById('resignModalClose').addEventListener('click', () => document.getElementById('resignModal').classList.remove('show'));
 document.getElementById('resignModalCancel').addEventListener('click', () => document.getElementById('resignModal').classList.remove('show'));
 document.getElementById('resignModal').addEventListener('click', (e) => {
@@ -15299,12 +15315,53 @@ function resignImpactOf(emp){
     ot:      cnt(STATE.overtimeRecords,   x => x.employee_id === id)
   };
 }
+// 離職時手上的配備清單：一件一列，預設勾「已繳回」。
+// 勾了 → 標記歸還並在配備管理產生「退回」異動，數量加回庫存。
+// 沒勾 → 一樣標記歸還（他確實不再持有），但不產生庫存異動 ——
+//        領用時扣掉的就扣掉了，等同報廢。
+function resignEquipItems(emp){
+  return (STATE.employeeEquipment || [])
+    .filter(x => x.employee_id === emp.id && x.status === '使用中');
+}
+function resignEquipChecklistHtml(emp){
+  const items = resignEquipItems(emp);
+  if(!items.length) return '<div class="muted" style="margin-bottom:8px;">他手上目前沒有登記領用中的配備。</div>';
+  const rows = items.map(x => {
+    const type = (STATE.equipmentTypes || []).find(t => t.id === x.type_id);
+    const size = x.stock_item_id ? sizeOfStockItem(x.stock_item_id) : '';
+    // 沒有連結庫存品項的，勾了也不會加回庫存，要講清楚，不然會以為進庫存了
+    const linkTxt = x.stock_item_id
+      ? '<span class="pill green">會加回庫存</span>'
+      : '<span class="pill gray" title="這筆領用當初沒有連結庫存品項，所以繳回也不會有庫存異動">無庫存連結</span>';
+    return `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="rs-eq" data-rs-eq="${x.id}" checked style="width:auto;"></td>
+      <td>${esc(type ? type.name : '')}${size ? '（' + esc(size) + '）' : ''}</td>
+      <td class="muted">${esc(x.item_detail || '')}</td>
+      <td style="text-align:right;">${x.quantity ?? 1}</td>
+      <td class="muted">${esc(x.issue_date || '')}</td>
+      <td>${linkTxt}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="margin-bottom:12px;">
+      <b>持有配備 ${items.length} 件 — 請勾選<u>實際有繳回</u>的</b>
+      <div class="muted">勾起來的會加回「配備管理」的庫存；<b>沒勾的視同報廢，不計入庫存</b>，
+        品項細節會註記「離職未歸還」，以後查得到是哪一件。</div>
+      <div style="margin:6px 0;">
+        <button class="btn ghost" type="button" id="rs_eq_all" style="padding:4px 10px;font-size:12px;">全部勾選</button>
+        <button class="btn ghost" type="button" id="rs_eq_none" style="padding:4px 10px;font-size:12px;">全部取消</button>
+      </div>
+      <div class="table-scroll" style="max-height:220px;">
+        <table><thead><tr><th style="width:44px;">繳回</th><th>品項</th><th>細節</th><th style="text-align:right;">數量</th><th>領用日</th><th>庫存</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
+}
 function renderResignImpact(emp){
   const el = document.getElementById('rs_impact');
   if(!el) return;
   const i = resignImpactOf(emp);
   const line = (label, n, unit) => n ? `<li>${label} <b>${n}</b> ${unit}</li>` : '';
-  const back = [line('配備領用（使用中）', i.equip, '件'), line('公務機', i.phone, '支'),
+  const back = [line('公務機', i.phone, '支'),
                 line('儀器', i.instr, '台'), line('門禁卡', i.card, '張'), line('分機', i.ext, '線')]
                 .filter(Boolean).join('');
   const gone = line('必繳文件檢核', i.check, '項');
@@ -15312,7 +15369,8 @@ function renderResignImpact(emp){
                 line('請假紀錄', i.leave, '筆'), line('加班紀錄', i.ot, '筆')].filter(Boolean).join('');
   el.innerHTML = `
     <div style="font-size:12.5px;line-height:1.7;">
-      ${back ? `<div style="margin-bottom:8px;"><b>會收回（標記歸還，紀錄留著）</b><ul style="margin:2px 0 0;padding-left:20px;">${back}</ul></div>` : ''}
+      ${resignEquipChecklistHtml(emp)}
+      ${back ? `<div style="margin-bottom:8px;"><b>會收回歸位（一台一號的東西，不進消耗品庫存）</b><ul style="margin:2px 0 0;padding-left:20px;">${back}</ul></div>` : ''}
       ${gone ? `<div style="margin-bottom:8px;color:var(--red);"><b>會清除</b><ul style="margin:2px 0 0;padding-left:20px;">${gone}</ul></div>` : ''}
       ${keep ? `<div class="muted"><b>完整保留</b><ul style="margin:2px 0 0;padding-left:20px;">${keep}</ul>投保異動、駕照、工時、訓練紀錄也都保留。</div>` : ''}
     </div>`;
@@ -15328,9 +15386,35 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
   // 不先做的話，資料庫的外鍵會用 SET NULL 直接把持有人清掉，
   // 「誰用過這支門號、這張卡」就查不到了。
   const _touched = new Set();
+  // 配備：照視窗上勾選的結果處理。
+  //   有勾 → 標記歸還，並產生一筆「退回」庫存異動把數量加回去。
+  //   沒勾 → 一樣標記歸還（他確實不再持有），但不產生庫存異動 ——
+  //          領用時扣掉的就扣掉了，等同報廢，並在細節註記，以後查得到。
+  const _returnedBack = new Set(
+    Array.from(document.querySelectorAll('#rs_impact .rs-eq'))
+      .filter(cb => cb.checked).map(cb => String(cb.getAttribute('data-rs-eq'))));
   (STATE.employeeEquipment || []).forEach(x => {
-    if(x.employee_id === emp.id && x.status === '使用中'){
-      x.status = '已歸還'; x.return_date = resignDate; _touched.add('employee_equipment');
+    if(x.employee_id !== emp.id || x.status !== '使用中') return;
+    const kept = _returnedBack.has(String(x.id));
+    x.status = '已歸還'; x.return_date = resignDate; _touched.add('employee_equipment');
+    if(kept){
+      if(x.stock_item_id){
+        const _tid = nextId(STATE.stockTransactions.map(t => ({id: t.transaction_id})));
+        STATE.stockTransactions.push({
+          id: _tid, transaction_id: _tid, item_id: x.stock_item_id,
+          transaction_type: '退回', quantity: x.quantity || 1,
+          transaction_date: resignDate, employee_id: emp.id,
+          notes: `離職繳回入庫（${emp.name} ${resignDate} 離職／物品領用紀錄 #${x.id}）`
+        });
+        _touched.add('stock_transactions');
+      }
+    }else{
+      // employee_equipment 沒有 notes 欄（多送一個欄位 PostgREST 會擋掉整批），
+      // 所以註記寫在 item_detail。
+      const mark = '［離職未歸還，視同報廢］';
+      if(String(x.item_detail || '').indexOf(mark) < 0){
+        x.item_detail = (x.item_detail ? x.item_detail + ' ' : '') + mark;
+      }
     }
   });
   (STATE.companyPhones || []).forEach(x => {
@@ -15376,6 +15460,7 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
   // 順序很重要：子表要先存好（東西已歸還、卡已收回），最後才刪員工那一列。
   // 反過來的話會被外鍵擋住，或是被資料庫搶先清掉持有人。
   if(_touched.has('employee_equipment')) await saveState('employee_equipment', STATE.employeeEquipment, true);
+  if(_touched.has('stock_transactions'))  await saveState('stock_transactions', STATE.stockTransactions, true);
   if(_touched.has('company_phones'))     await saveState('company_phones', STATE.companyPhones, true);
   if(_touched.has('instruments'))        await saveState('instruments', STATE.instruments, true);
   if(_touched.has('office_extensions'))  await saveState('office_extensions', STATE.officeExtensions, true);
@@ -15391,6 +15476,8 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
 });
 
 document.getElementById('staffHistoryBody').addEventListener('click', async (e) => {
+  const viewId = e.target.getAttribute('data-view-staff');
+  if(viewId){ openStaffModal(parseInt(viewId)); return; }
   const id = e.target.getAttribute('data-rehire-staff');
   if(!id) return;
   const emp = STATE.employeesHistory.find(x => String(x.id) === id);
