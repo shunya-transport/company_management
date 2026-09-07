@@ -12603,6 +12603,17 @@ function alyVisible(){
                      .filter(r => !kw || String(r.name).indexOf(kw) >= 0);
   return out;
 }
+// 資料庫裡到底有哪幾個年度的結算，一律【現查現說】。
+// 原本這句話裡的年度區間是寫死的 —— 之後把新的年度匯進去，那句就變成錯的，
+// 而且萬一資料庫其實少了中間某一年也看不出來。
+function alyStoredYearsText(){
+  const ys = [...new Set((STATE.annualLeaveYearly || [])
+    .map(a => Number(a.year_roc)).filter(Boolean))].sort((a, b) => a - b);
+  if(!ys.length) return '資料庫目前沒有任何年度的結算';
+  // 連號就寫成區間，跳號就一個一個列出來，不要含糊帶過
+  const seq = ys.every((y, i) => i === 0 || y === ys[i - 1] + 1);
+  return '資料庫目前有 ' + ((seq && ys.length > 1) ? (ys[0] + '～' + ys[ys.length - 1]) : ys.join('、'));
+}
 function renderAnnualLeaveYearly(){
   const body = document.getElementById('alyBody');
   if(!body) return;
@@ -12625,7 +12636,7 @@ function renderAnnualLeaveYearly(){
   if(note){
     note.innerHTML = D.src === 'db'
       ? `民國 ${D.year} 年度：直接取自資料庫的曆年特休統計（當初從請假登錄系統匯入的原始數字，沒有再算過）。`
-      : `民國 ${D.year} 年度：<b>資料庫還沒有這一年的結算</b>（目前只有 110～114），以下是用現有的到職日、假單即時算出來的。<b>「上年度未休」算不出來，一律留白</b>，要正確的數字請把最新的請假登錄系統檔案匯進資料庫。`;
+      : `民國 ${D.year} 年度：<b>資料庫還沒有這一年的結算</b>（${alyStoredYearsText()}），以下是用現有的到職日、假單即時算出來的。<b>「上年度未休」算不出來，一律留白</b>，要正確的數字請把最新的請假登錄系統檔案匯進資料庫。`;
   }
   body.innerHTML = D.rows.map((r, i) => `<tr>
       <td class="km-num">${i + 1}</td>
