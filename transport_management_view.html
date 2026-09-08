@@ -422,7 +422,6 @@
     <div class="content">
 
   <div id="overview" class="panel active">
-    <div class="stat-row" id="statRow"></div>
     <div class="card">
       <h2>電動板車預約<span class="count-badge" id="overview_booking_count"></span>
         <button class="btn ghost" style="float:right;padding:4px 12px;font-size:12px;"
@@ -571,17 +570,19 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>姓名</th><th>職稱</th><th>區域</th><th>卡號</th><th>工號</th><th>可通行門禁</th><th>狀態</th></tr></thead>
+          <thead><tr><th>姓名</th><th>職稱</th><th>區域</th><th>卡號</th><th>工號</th><th>可通行門禁</th><th>狀態</th><th></th></tr></thead>
           <tbody id="cardLedgerBody"></tbody>
         </table>
       </div>
+      <button class="btn ghost no-print" id="card_purge_left" style="margin-top:10px;"
+              title="把清冊裡對得到「離職歷史」的那幾列整列刪掉；刪之前會先把名字列出來讓你確認">清除已離職人員的卡片</button>
     </div>
 
     <div class="card">
       <h2>離職歷史</h2>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>員工編號</th><th>姓名</th><th>部門</th><th>離職日</th><th>離職原因</th><th></th></tr></thead>
+          <thead><tr><th>員工編號</th><th>姓名</th><th>部門</th><th>到職日</th><th>離職日</th><th>服務年資</th><th>離職原因</th><th></th></tr></thead>
           <tbody id="staffHistoryBody"></tbody>
         </table>
       </div>
@@ -4246,12 +4247,9 @@ function renderOverview(){
     const s = statusOf(addOneMonth(l.inspection_expiry), 30);
     if(s==='red') overdue++; else if(s==='amber') soon++; else if(s==='green') normal++; else missing++;
   });
-  document.getElementById('statRow').innerHTML = `
-    <div class="stat-card"><div class="n">${active.length}</div><div class="l">共出租板架數</div></div>
-    <div class="stat-card red"><div class="n">${overdue}</div><div class="l">已逾期</div></div>
-    <div class="stat-card amber"><div class="n">${soon}</div><div class="l">30天內到期</div></div>
-    <div class="stat-card green"><div class="n">${normal}</div><div class="l">正常</div></div>
-  `;
+  // 總覽上面那四格出租統計 115/09/08 拿掉了（使用者要求），
+  // 下面「依承租方彙總」跟板架管理分頁看得到同樣的東西。
+  // overdue / soon / normal 這幾個變數留著沒關係，下面的彙總還在用同一組判斷。
 
   const byLessee = {};
   active.forEach(l => {
@@ -4525,6 +4523,22 @@ const REF_NAME2ID = { dept:{}, position:{}, company:{} };
 // 所以顯示離職者的公司別／部門／職稱時，要用編號反查。
 const REF_ID2NAME = { dept:{}, position:{}, company:{} };
 // 取顯示用的名稱：身上有名稱就用（在職人員都有），沒有就用編號反查（離職者）。
+// 服務年資（到職～離職）。離職之後特休天數沒有意義，改看年資 ——
+// 以後復職要合併計算年資時，這是直接要用的數字。
+function tenureText(hireISO, untilISO){
+  const h = String(hireISO || '').slice(0, 10);
+  if(!h) return '';
+  const u = String(untilISO || todayISO()).slice(0, 10);
+  const a = new Date(h + 'T00:00:00'), b = new Date(u + 'T00:00:00');
+  if(isNaN(a.getTime()) || isNaN(b.getTime()) || b < a) return '';
+  let y = b.getFullYear() - a.getFullYear();
+  let m = b.getMonth() - a.getMonth();
+  let d = b.getDate() - a.getDate();
+  if(d < 0){ m -= 1; d += new Date(b.getFullYear(), b.getMonth(), 0).getDate(); }
+  if(m < 0){ y -= 1; m += 12; }
+  const yrs = (b - a) / (365.25 * 86400000);
+  return y + ' 年 ' + m + ' 個月 ' + d + ' 天（' + yrs.toFixed(2) + ' 年）';
+}
 function empOrgName(e, kind){
   if(!e) return '';
   const F = { dept:      ['dept_name',     'dept_id'],
@@ -5731,7 +5745,10 @@ function renderStaffTable(){
       <tr><td>${esc(e.employee_no)}</td>
       <td><button class="name-link" data-view-staff="${e.id}" title="看他在職期間的完整資料">${esc(e.name)}</button></td>
       <td>${esc(empOrgName(e, 'dept'))}</td>
-      <td>${esc(e.resign_date||'')}</td><td>${esc(e.resign_reason||'')}</td>
+      <td>${esc(e.hire_date||'')}</td>
+      <td>${esc(e.resign_date||'')}</td>
+      <td title="未來復職要合併年資時用這個數字">${esc(tenureText(e.hire_date, e.resign_date) || '—')}</td>
+      <td>${esc(e.resign_reason||'')}</td>
       <td><button class="name-link" data-rehire-staff="${e.id}">復職</button></td></tr>`).join('');
   }
 }
@@ -8600,13 +8617,15 @@ function renderStaffModalView(e){
       <dt>身分證字號</dt><dd>${esc(e.id_number||'—')}</dd>
       <dt>出生日期</dt><dd>${esc(e.birth_date||'—')}</dd>
       <dt>到職日</dt><dd>${esc(e.hire_date||'—')}</dd>
+      ${_left ? `<dt>服務年資</dt><dd>${esc(tenureText(e.hire_date, e.resign_date) || '—（無到職日資料）')}
+        <div class="muted" style="font-size:11px;">到職 ${esc(e.hire_date||'—')} ～ 離職 ${esc(e.resign_date||'—')}；未來復職要合併年資時用這個數字。</div></dd>` : `
       <dt>特休天數</dt><dd>${(() => {
         const d = currentPeriodLeaveDays(e.hire_date);
         if(d===null) return '—（無到職日資料）';
         const used = annualLeaveUsed(e.id, e.hire_date);
         const remaining = fmt2(d - used);
         return `共 ${d} 天（年資約 ${tenureYears(e.hire_date).toFixed(1)} 年）已用 ${used} 天，<b>剩 ${remaining} 天（約 ${(remaining*8).toFixed(2)} 小時）</b>`;
-      })()}</dd>
+      })()}</dd>`}
       <dt>復職日期</dt><dd>${esc(e.rehire_date||'—')}</dd>
       <dt>手機</dt><dd>${esc(e.phone||'—')}</dd>
       <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
@@ -12136,7 +12155,47 @@ function renderAccessCardLedger(){
       <td>${esc(r.employee_no||'')}</td>
       <td class="muted">${esc(r.gates||'—')}</td>
       <td><span class="pill ${info.cls}">${esc(info.text)}</span></td>
-    </tr>`).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的紀錄</td></tr>`;
+      <td><button class="del-btn" data-del-card="${esc(r.card_no || '')}" data-del-card-name="${esc(r.name || '')}">刪除</button></td>
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
+}
+
+// 門禁卡清冊：整列刪除。
+// 115/09/08 使用者決定「我們公司的人離職就刪除」，所以這張表不再是永久保存的清冊。
+// 用卡號＋姓名定位，不用陣列索引 —— 清單是篩選過的，用索引會刪錯人。
+async function cardLedgerDelete(cardNo, name){
+  const rows = (STATE.accessCardRoster || []);
+  const hit = rows.filter(r => String(r.card_no || '') === String(cardNo)
+                            && String(r.name || '') === String(name));
+  if(!hit.length){ alert('找不到這一列，畫面可能不是最新的，請重新整理。'); return; }
+  if(!confirm('確定要刪除門禁卡清冊這一列嗎？\n\n'
+    + name + '　卡號 ' + cardNo + '\n\n'
+    + '刪掉之後這一列就不在清冊上了（個人門禁卡紀錄 access_cards 那邊仍留著繳回日，歷史還查得到）。')) return;
+  STATE.accessCardRoster = rows.filter(r => !(String(r.card_no || '') === String(cardNo)
+                                           && String(r.name || '') === String(name)));
+  await saveState('access_card_roster', STATE.accessCardRoster, true);
+  renderAll();
+}
+// 一次清掉所有「對得到離職歷史」的列。刪之前先把名字列出來。
+async function cardLedgerPurgeLeft(){
+  const rows = (STATE.accessCardRoster || []);
+  const gone = rows.filter(r => cardHolderInfo(r).key === 'left');
+  if(!gone.length){ alert('清冊裡沒有對得到離職歷史的人員，不用清。'); return; }
+  const names = gone.map(r => (r.name || '(無姓名)') + '　' + (r.card_no || '')).join('\n');
+  if(!confirm('要把下面這 ' + gone.length + ' 列從門禁卡清冊刪掉嗎？\n\n' + names
+    + '\n\n（個人門禁卡紀錄 access_cards 那邊仍留著繳回日，歷史還查得到。）')) return;
+  const del = new Set(gone.map(r => String(r.card_no || '') + '｜' + String(r.name || '')));
+  STATE.accessCardRoster = rows.filter(r => !del.has(String(r.card_no || '') + '｜' + String(r.name || '')));
+  await saveState('access_card_roster', STATE.accessCardRoster, true);
+  renderAll();
+}
+document.getElementById('cardLedgerBody').addEventListener('click', (e) => {
+  const no = e.target.getAttribute('data-del-card');
+  if(no === null) return;
+  cardLedgerDelete(no, e.target.getAttribute('data-del-card-name') || '');
+});
+{
+  const _pg = document.getElementById('card_purge_left');
+  if(_pg) _pg.addEventListener('click', cardLedgerPurgeLeft);
 }
 
 // 當年度公司核定的特休（來自請假系統巨集檔「特休統計」那張表）。
@@ -15605,9 +15664,22 @@ document.getElementById('resignModalConfirm').addEventListener('click', async ()
     STATE.accessCards = STATE.accessCards.filter(x => x.employee_id !== emp.id);
     _touched.add('access_cards');
   }
-  (STATE.accessCardRoster || []).forEach(x => {
-    if(x.employee_id === emp.id){ x.employee_id = null; _touched.add('access_card_roster'); }
-  });
+  // 門禁卡【清冊】：115/09/08 起，我們公司的人離職就把那一列刪掉
+  //（使用者要求。原本是只填繳回日、整列留著）。
+  // 「誰用過這張卡」沒有完全消失 —— 上面的 access_cards（個人門禁卡紀錄）
+  // 仍然只填繳回日、整列留著，歷史還查得到。
+  // 比對一樣用編號、工號、姓名三種，因為清冊裡有一部分列當初沒掛 employee_id。
+  {
+    const _before = (STATE.accessCardRoster || []).length;
+    STATE.accessCardRoster = (STATE.accessCardRoster || []).filter(x => {
+      const no = String(x.employee_no || '').trim();
+      const hit = (x.employee_id === emp.id)
+               || (no && emp.employee_no && no === String(emp.employee_no).trim())
+               || (!x.employee_id && !no && String(x.name || '').trim() === String(emp.name || '').trim());
+      return !hit;
+    });
+    if(STATE.accessCardRoster.length !== _before) _touched.add('access_card_roster');
+  }
   // 必繳文件檢核：人走了這份檢核就沒意義，前端一併移除
   // （資料庫那邊也設了 ON DELETE CASCADE，兩邊一致）
   if((STATE.docChecklist || []).some(x => x.employee_id === emp.id)){
