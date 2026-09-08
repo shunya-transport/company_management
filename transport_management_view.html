@@ -4015,32 +4015,14 @@ async function saveState(key, value, shared){
       //   舊寫法是把整個陣列每一列都 upsert 回去，等於拿這個分頁開啟當下的內容
       //   覆蓋整張表：只要有同事的分頁停在舊資料上，他隨手存個檔，就會把別人
       //   這段時間改過的東西默默還原回去，而且兩邊都不會有任何錯誤訊息。
-      const payload = buildUpsertPayload(key, value);
-      // 只寫一列時，先問雲端有沒有人搶在前面改過同一個欄位；有的話跳出來讓人決定
-      if(payload.length === 1){
-        const _go = await writeConflictOK(key, map, payload[0]);
+      const _plan = buildWritePlan(key, value);
+      // 只改一列時，先問雲端有沒有人搶在前面改過同一個欄位；有的話跳出來讓人決定
+      const _lone = loneUpdateObj(map, _plan);
+      if(_lone){
+        const _go = await writeConflictOK(key, map, _lone);
         if(!_go) throw new Error('已取消存檔，雲端資料未變更');
       }
-      // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致(否則回 PGRST102)
-      // 作法:按「欄位組合」分群,各群分別送出。不補 null,讓資料庫自己套用預設值
-      // (補 null 會踩到 created_at 這類 NOT NULL 欄位,造成 23502 錯誤)
-      const _groups = new Map();
-      payload.forEach(o => {
-        const sig = Object.keys(o).sort().join('|');
-        if(!_groups.has(sig)) _groups.set(sig, []);
-        _groups.get(sig).push(o);
-      });
-      const CHUNK = 500;
-      for(const _group of _groups.values()){
-        for(let i=0; i<_group.length; i+=CHUNK){
-          const chunk = _group.slice(i, i+CHUNK);
-          await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
-            method:'POST',
-            headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
-            body: JSON.stringify(chunk)
-          });
-        }
-      }
+      await flushWrites(key, map, _plan);
     }
     // 找出資料庫裡有、但目前清單已經沒有的ID（代表使用者刪除過），只刪這些，不整表清空。
     // ★ 一定要用會分頁的 supaFetchAll。PostgREST 一次最多回 1000 筆，
@@ -4163,31 +4145,77 @@ async function writeConflictOK(key, map, obj){
     return true;
   }
 }
-// 把一份清單整理成要送出去的 upsert 內容。
-// 有基準（LAST_GOOD，也就是「這個分頁認得的雲端內容」）時，只挑真的變了的列，
-// 而且每一列只送變了的欄位；沒有基準時退回原本的整份寫入，行為跟以前一樣。
-function buildUpsertPayload(key, list){
+// 把一份清單整理成「要新增哪幾列、要改哪幾列的哪幾欄」。
+// 有基準（LAST_GOOD，也就是「這個分頁認得的雲端內容」）時只挑真的變了的列；
+// 沒有基準時整列寫回去，行為跟以前一樣。
+function buildWritePlan(key, list){
   const map = TABLE_MAP[key];
-  if(!map) return [];
+  const plan = { inserts: [], updates: [] };
+  if(!map) return plan;
   const strip = COMPUTED_FIELDS[key] || [];
   const hasBase = Array.isArray(LAST_GOOD[key]);
-  const out = [];
+  const fullRow = item => {
+    const {id, ...rest} = item;
+    strip.forEach(f => delete rest[f]);
+    return Object.assign({[map.pk]: item.id}, rest);
+  };
   (list || []).forEach(item => {
     if(!item) return;
-    let body;
     const d = hasBase ? rowDiffForSave(key, item) : null;
-    if(d){
-      if(!Object.keys(d).length) return;      // 這一列沒改到，不用送
-      body = Object.assign({}, d);
-    }else{
-      const {id, ...rest} = item;             // 新增的列（或沒有基準）→ 整列寫進去
-      body = rest;
-    }
+    if(!d){ plan.inserts.push(fullRow(item)); return; }   // 新增的列（或沒有基準）
+    const body = Object.assign({}, d);
     strip.forEach(f => delete body[f]);
-    if(!Object.keys(body).length) return;
-    out.push(Object.assign({[map.pk]: item.id}, body));
+    if(!Object.keys(body).length) return;                 // 這一列沒改到，不用送
+    plan.updates.push({ id: item.id, body: body, full: fullRow(item) });
   });
-  return out;
+  return plan;
+}
+function writePlanSize(plan){ return plan.inserts.length + plan.updates.length; }
+async function postUpsert(map, rows){
+  // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致（否則回 PGRST102），
+  // 所以按「欄位組合」分群，各群分別送出。不補 null，讓資料庫自己套用預設值。
+  const groups = new Map();
+  rows.forEach(o => {
+    const sig = Object.keys(o).sort().join('|');
+    if(!groups.has(sig)) groups.set(sig, []);
+    groups.get(sig).push(o);
+  });
+  for(const g of groups.values()){
+    for(let i = 0; i < g.length; i += 500){
+      await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
+        method: 'POST',
+        headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify(g.slice(i, i + 500))
+      });
+    }
+  }
+}
+// ★ 既有資料一律用 PATCH 改，不能用 upsert 只送「改到的欄位」：
+//   PostgREST 的 upsert 是 INSERT ... ON CONFLICT DO UPDATE，
+//   PostgreSQL 會先檢查 NOT NULL 才判斷有沒有衝突，
+//   所以少送 plate_number 這種 NOT NULL 欄位就會被擋下來（23502），
+//   即使那一列早就存在、實際上只是要更新其中一個欄位。
+//   一次要改很多列時（匯入之類）改用整列 upsert，省請求數。
+const PATCH_MAX = 60;
+async function flushWrites(key, map, plan){
+  if(plan.inserts.length) await postUpsert(map, plan.inserts);
+  if(!plan.updates.length) return;
+  if(plan.updates.length > PATCH_MAX){
+    await postUpsert(map, plan.updates.map(u => u.full));
+    return;
+  }
+  for(const u of plan.updates){
+    await supaFetch(`${map.table}?${map.pk}=eq.${encodeURIComponent(u.id)}`, {
+      method: 'PATCH',
+      headers: {'Prefer':'return=minimal'},
+      body: JSON.stringify(u.body)
+    });
+  }
+}
+// 只寫一列、而且是「改既有資料」時，才值得先跟雲端對一次有沒有人搶先改過
+function loneUpdateObj(map, plan){
+  if(plan.inserts.length || plan.updates.length !== 1) return null;
+  return Object.assign({[map.pk]: plan.updates[0].id}, plan.updates[0].body);
 }
 async function saveRows(key, rows, whole){
   const map = TABLE_MAP[key];
@@ -4208,32 +4236,18 @@ async function saveRows(key, rows, whole){
       throw new Error('必填欄位未填：' + _bad.names.join('，'));
     }
   }
-  const payload = buildUpsertPayload(key, list);
-  if(!payload.length) return;
-  if(payload.length === 1){
-    const go = await writeConflictOK(key, map, payload[0]);
+  const plan = buildWritePlan(key, list);
+  if(!writePlanSize(plan)) return;
+  const _lone = loneUpdateObj(map, plan);
+  if(_lone){
+    const go = await writeConflictOK(key, map, _lone);
     if(!go){
       if(whole) rollbackAfterFail(key, whole);
       throw new Error('已取消存檔，雲端資料未變更');
     }
   }
   try{
-    // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致，所以按欄位組合分群
-    const groups = new Map();
-    payload.forEach(o => {
-      const sig = Object.keys(o).sort().join('|');
-      if(!groups.has(sig)) groups.set(sig, []);
-      groups.get(sig).push(o);
-    });
-    for(const g of groups.values()){
-      for(let i = 0; i < g.length; i += 500){
-        await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
-          method: 'POST',
-          headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
-          body: JSON.stringify(g.slice(i, i + 500))
-        });
-      }
-    }
+    await flushWrites(key, map, plan);
     if(whole) rememberGood(key, whole);
   }catch(err){
     console.error('saveRows failed for', key, err);
