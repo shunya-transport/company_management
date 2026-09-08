@@ -943,6 +943,12 @@
           <option value="ok">只看可派車</option>
           <option value="hold">只看暫停使用</option>
         </select>
+        <select id="selfuse_loc_filter" title="拿貨櫃運送最後一趟的目的地，跟板架現在登記的位置比對">
+          <option value="all">全部（不比對貨櫃運送）</option>
+          <option value="diff">只看位置與貨櫃運送不符</option>
+          <option value="stay">只看板架不該留在目的地（出口櫃／還空櫃）</option>
+          <option value="none">只看貨櫃運送查無紀錄</option>
+        </select>
         <select id="selfuse_filter">
           <option value="all">全部驗車狀態</option>
           <option value="overdue">已逾期</option>
@@ -955,10 +961,12 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>車號</th><th>調度狀態</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>驗車狀態</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>調度狀態</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>貨櫃運送最後一趟</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>驗車狀態</th><th></th></tr></thead>
           <tbody id="selfUseTrailerBody"></tbody>
         </table>
       </div>
+      <button class="btn ghost no-print" id="selfuse_sync_loc" style="margin-top:10px;"
+              title="拿貨櫃運送最後一趟的目的地更新板架位置；出口櫃、還空櫃不會動，因為板架不會留在那裡">依貨櫃運送更新位置</button>
     </div>
     <div class="card">
       <h2>租賃清單</h2>
@@ -5028,7 +5036,114 @@ async function toggleHold(id){
   renderAll();
 }
 let selfUseCompanyFilterInit = false;
+// ===== 貨櫃運送 × 板架位置 =====
+// 司機的貨櫃檢查表（container_inspections）每一趟都有「板架」與「目的地」，
+// 但板架管理的位置是 vehicles.current_location，只有人手動改才會變 ——
+// 兩邊從來沒有連動過（115/09/08 使用者問的就是這件事）。
+//
+// ★ 不能無腦同步。貨櫃種類決定了板架會不會跟著留在目的地：
+//     進口櫃、領空櫃、轉運櫃 → 板架載著櫃子到目的地，板架就在那裡
+//     出口櫃、還空櫃         → 櫃子留在碼頭／櫃場，板架不會留在那裡
+//   所以後面兩種只提醒、不自動帶入。
+const CONTAINER_TRAILER_STAYS = {
+  '進口櫃': true, '領空櫃': true, '轉運櫃': true,
+  '出口櫃': false, '還空櫃': false
+};
+// 板架欄是司機自己打的自由文字，去掉英數以外的字元再比（KLM-2102／klm2102／KLM 2102 都算同一台）
+function clNormPlate(v){ return String(v == null ? '' : v).toUpperCase().replace(/[^0-9A-Z]/g, ''); }
+let _clTrailerIndex = null;
+function clTrailerIndex(){
+  if(_clTrailerIndex) return _clTrailerIndex;
+  const m = {};
+  (typeof clRows === 'function' ? clRows() : []).forEach(r => {
+    const k = clNormPlate(r.trailer_no);
+    if(!k) return;
+    const key = String(r.inspect_date || '') + '|' + String(r.inspection_id || 0).padStart(12, '0');
+    if(!m[k] || key > m[k]._k) m[k] = Object.assign({_k: key}, r);
+  });
+  _clTrailerIndex = m;
+  return m;
+}
+function trailerLastLeg(plate){
+  const k = clNormPlate(plate);
+  return k ? (clTrailerIndex()[k] || null) : null;
+}
+// 這台板架的位置跟貨櫃運送對不對得起來
+function trailerLegState(v){
+  const leg = trailerLastLeg(v && v.plate);
+  if(!leg) return {leg:null, key:'none'};
+  const stays = CONTAINER_TRAILER_STAYS[String(leg.container_kind || '').trim()];
+  const same = String(v.current_location || '').trim() !== ''
+            && String(v.current_location || '').trim() === String(leg.destination || '').trim();
+  if(stays === false) return {leg:leg, key:'stay', stays:false};      // 出口櫃／還空櫃
+  if(same) return {leg:leg, key:'same', stays:stays};
+  return {leg:leg, key:(stays === true ? 'diff' : 'unknown'), stays:stays};
+}
+function trailerLegCell(v){
+  const st = trailerLegState(v);
+  if(!st.leg) return '<span class="muted">貨櫃運送查無這台</span>';
+  const l = st.leg;
+  const head = `${esc(String(l.inspect_date || '').slice(0,10))}　${esc(l.container_no || '')}`
+             + `${l.container_kind ? '（' + esc(l.container_kind) + '）' : ''}`;
+  const path = `<div class="muted" style="font-size:11.5px;">${esc(l.origin || '?')} → <b>${esc(l.destination || '?')}</b></div>`;
+  let tag = '';
+  if(st.key === 'same') tag = ' <span class="pill green">相符</span>';
+  else if(st.key === 'stay') tag = ' <span class="pill gray" title="櫃子留在目的地，板架不會留在那裡，請按「修改」自己填實際位置">板架不會留在目的地</span>';
+  else if(st.key === 'unknown') tag = ' <span class="pill gray" title="這一趟沒填貨櫃種類，判斷不出板架有沒有跟著留在目的地">種類未填</span>'
+                                    + ` <button class="name-link" data-adopt-leg="${v.id}">帶入</button>`;
+  else tag = ' <span class="pill amber">可帶入</span>'
+           + ` <button class="name-link" data-adopt-leg="${v.id}">帶入</button>`;
+  return `<div style="font-size:12px;white-space:nowrap;">${head}${tag}</div>${path}`;
+}
+// 單台帶入
+async function trailerAdoptLeg(vehId){
+  const v = STATE.vehicles.find(x => String(x.id) === String(vehId));
+  const st = v ? trailerLegState(v) : null;
+  if(!v || !st || !st.leg){ alert('這台板架在貨櫃運送裡查不到最後一趟。'); return; }
+  const l = st.leg;
+  let msg = v.plate + ' 的目前位置要改成「' + (l.destination || '') + '」嗎？\n\n'
+    + '依據：' + String(l.inspect_date || '').slice(0,10) + '　' + (l.container_no || '')
+    + '（' + (l.container_kind || '未填種類') + '）　'
+    + (l.origin || '?') + ' → ' + (l.destination || '?') + '\n'
+    + '現在登記的是：' + (v.current_location || '（未設定）');
+  if(st.stays === false){
+    msg += '\n\n⚠️ 這是「' + l.container_kind + '」——櫃子留在目的地，板架通常不會留在那裡。';
+  }else if(st.stays == null){
+    msg += '\n\n（這一趟沒填貨櫃種類，判斷不出板架有沒有跟著留在目的地，請自己確認。）';
+  }
+  if(!confirm(msg)) return;
+  v.current_location = String(l.destination || '').trim();
+  v.location_updated_at = new Date().toISOString();
+  await saveState('roster_vehicles', STATE.vehicles, true);
+  renderAll();
+}
+// 批次：只處理「板架會跟著留在目的地」而且位置不一致的那些
+async function trailerSyncAllLegs(){
+  const cand = [], skip = [];
+  (STATE.vehicles || []).forEach(v => {
+    if(v.vehicle_category !== '板架' || isRetiredVehicle(v)) return;
+    const st = trailerLegState(v);
+    if(!st.leg) return;
+    if(st.key === 'diff') cand.push({v: v, leg: st.leg});
+    else if(st.key === 'stay' || st.key === 'unknown') skip.push({v: v, leg: st.leg, why: st.key});
+  });
+  const skipTxt = skip.length
+    ? '\n\n另外有 ' + skip.length + ' 台不會動：\n'
+      + skip.map(x => '　' + x.v.plate + '　'
+          + (x.why === 'stay' ? (x.leg.container_kind + '，板架不會留在目的地') : '沒填貨櫃種類')).join('\n')
+      + '\n請按那幾列的「修改」自己填實際位置。'
+    : '';
+  if(!cand.length){ alert('沒有可以自動帶入的板架。' + skipTxt); return; }
+  const list = cand.map(x => '　' + x.v.plate + '：'
+      + (x.v.current_location || '（未設定）') + ' → ' + (x.leg.destination || '')).join('\n');
+  if(!confirm('要依貨櫃運送更新這 ' + cand.length + ' 台板架的位置嗎？\n\n' + list + skipTxt)) return;
+  const now = new Date().toISOString();
+  cand.forEach(x => { x.v.current_location = String(x.leg.destination || '').trim(); x.v.location_updated_at = now; });
+  await saveState('roster_vehicles', STATE.vehicles, true);
+  renderAll();
+}
 function renderSelfUseTrailers(){
+  _clTrailerIndex = null;   // 每次重畫都重建索引，資料換了才不會用到舊的
   // 租出去但仍由我們調度的（dispatch_mode='本公司調度'）也要出現在自用板架，
   // 因為車在我們手上、逐日要登記使用業主與位置。租約照舊算在承租方頭上。
   const leasedPlates = new Set(STATE.leases
@@ -5049,9 +5164,17 @@ function renderSelfUseTrailers(){
   const statusFilter = document.getElementById('selfuse_filter') ? document.getElementById('selfuse_filter').value : 'all';
   const holdFilter = document.getElementById('selfuse_hold_filter')
       ? document.getElementById('selfuse_hold_filter').value : 'all';
+  const locFilter = document.getElementById('selfuse_loc_filter')
+      ? document.getElementById('selfuse_loc_filter').value : 'all';
   rows = rows.filter(v => {
     if(q && !(v.plate||'').includes(q)) return false;
     if(companyFilter!=='all' && v.company_name!==companyFilter) return false;
+    if(locFilter !== 'all'){
+      const st = trailerLegState(v);
+      if(locFilter === 'diff' && !(st.key === 'diff' || st.key === 'unknown')) return false;
+      if(locFilter === 'stay' && st.key !== 'stay') return false;
+      if(locFilter === 'none' && st.key !== 'none') return false;
+    }
     if(holdFilter === 'hold' && !isOnHold(v)) return false;
     if(holdFilter === 'ok'   &&  isOnHold(v)) return false;
     if(statusFilter!=='all'){
@@ -5101,13 +5224,14 @@ function renderSelfUseTrailers(){
       <td>${leaseCell}</td>
       <td>${partyCell}</td>
       <td>${locCell}</td>
+      <td>${trailerLegCell(v)}</td>
       <td class="muted">${esc((v.location_updated_at||'').slice(0,16).replace('T',' '))}</td>
       <td>${esc(inspectionExpiry)}</td>
       <td>${esc(grace||'—')}</td>
       <td>${statusPill}</td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="12" class="empty">目前沒有自用板架</td></tr>`;
+  }).join('') || `<tr><td colspan="13" class="empty">目前沒有自用板架</td></tr>`;
   // 使用業主的輸入建議：已經填過的值 ＋ 租賃清單的承租方
   const _pl = document.getElementById('selfUsePartyList');
   if(_pl){
@@ -15168,6 +15292,8 @@ document.getElementById('selfUseTrailerBody').addEventListener('click', async (e
     renderSelfUseTrailers();
     return;
   }
+  const adoptBtn = e.target.closest('[data-adopt-leg]');
+  if(adoptBtn){ await trailerAdoptLeg(adoptBtn.getAttribute('data-adopt-leg')); return; }
   if(saveBtn){
     const id = saveBtn.getAttribute('data-save-location');
     const v = STATE.vehicles.find(x => String(x.id) === String(id));
@@ -15183,6 +15309,14 @@ document.getElementById('selfUseTrailerBody').addEventListener('click', async (e
   }
 });
 
+['selfuse_loc_filter'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', renderSelfUseTrailers);
+});
+{
+  const _sy = document.getElementById('selfuse_sync_loc');
+  if(_sy) _sy.addEventListener('click', trailerSyncAllLegs);
+}
 document.getElementById('training_search').addEventListener('input', renderTrainingTable);
 document.getElementById('training_status_filter').addEventListener('change', renderTrainingTable);
 
