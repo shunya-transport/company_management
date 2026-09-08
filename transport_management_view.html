@@ -179,14 +179,16 @@
   /* 自用板架目前位置：欄位很多，硬塞成 100% 寬會把車號、車型、公司別壓成一字一行。
      改成讓表格自己撐開、整張左右捲動，每一格都不折行，列高就降下來了。
      公司別與車型太長的用「…」收掉，滑鼠移上去看得到全名。 */
-  table.selfuse-table{width:auto;min-width:100%;font-size:12.5px;}
-  table.selfuse-table th{padding:9px 9px;font-size:11.5px;}
-  table.selfuse-table td{padding:7px 9px;white-space:nowrap;vertical-align:middle;line-height:1.5;}
+  table.selfuse-table{width:auto;min-width:100%;font-size:12px;}
+  table.selfuse-table th{padding:8px 5px;font-size:11.5px;}
+  table.selfuse-table td{padding:6px 5px;white-space:nowrap;vertical-align:middle;line-height:1.45;}
   table.selfuse-table td.plate{font-weight:700;}
-  table.selfuse-table .clip{display:inline-block;max-width:112px;overflow:hidden;
+  table.selfuse-table .clip{display:inline-block;max-width:96px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
   table.selfuse-table .hold-wrap{display:inline-block;white-space:nowrap;}
-  table.selfuse-table .hold-wrap .name-link{margin-left:6px;}
+  table.selfuse-table .hold-wrap .name-link{margin-left:5px;}
+  /* 62 台一次全列出來太長，維持在框內捲動；但高度放寬，一屏能看到的列數多一點 */
+  .selfuse-scroll{max-height:640px;}
   .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
   .table-scroll table{margin:0;}
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
@@ -965,9 +967,9 @@
           <option value="unset">未設定</option>
         </select>
       </div>
-      <div class="table-scroll">
+      <div class="table-scroll selfuse-scroll">
         <table class="selfuse-table">
-          <thead><tr><th>車號</th><th>調度狀態</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>貨櫃運送最後一趟</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>驗車狀態</th><th></th></tr></thead>
+          <thead><tr><th>車號</th><th>調度狀態</th><th title="完整車型滑鼠移到欄位上看">車型</th><th title="完整公司名稱滑鼠移到欄位上看">公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>貨櫃運送最後一趟</th><th>最後更新</th><th>驗車到期</th><th title="驗車到期之後還有一個月寬限期，這是寬限的最後一天">寬限到期</th><th>驗車狀態</th><th></th></tr></thead>
           <tbody id="selfUseTrailerBody"></tbody>
         </table>
       </div>
@@ -5182,6 +5184,23 @@ let editingLocationId = null;
 const HOLD_ON = '暫停使用';
 const HOLD_REASONS = ['維修中', '待驗車', '輪胎待換', '事故待處理', '客戶留置', '停用中'];
 function isOnHold(v){ return String((v && v.dispatch_hold) || '') === HOLD_ON; }
+// 這張表欄位多，公司別只留前兩個字（順亞／利福），滑鼠移上去看得到全名
+function coShort2(n){ return String(n == null ? '' : n).trim().slice(0, 2); }
+// 驗車狀態在這張表用短寫法：「244天」「逾期12天」，欄位才不會被撐寬
+function statusLabelShort(dateStr){
+  if(!dateStr) return '未填';
+  const d = daysUntil(dateStr);
+  if(d < 0) return '逾期' + (-d) + '天';
+  if(d === 0) return '今日';
+  return d + '天';
+}
+// 車型同理：板架幾乎都是「營業半拖車-貨櫃架」，只留橫線後面那一段就分得出來
+function vtypeShort2(t){
+  const s = String(t == null ? '' : t).trim();
+  if(!s) return '';
+  const i = s.lastIndexOf('-');
+  return i >= 0 ? s.slice(i + 1) : s.replace(/^營業/, '');
+}
 function holdPill(v){
   if(!isOnHold(v)) return '<span class="pill green">可派車</span>';
   const why = String(v.dispatch_hold_reason || '').trim();
@@ -5256,7 +5275,7 @@ function trailerLegCell(v){
   const l = st.leg;
   const head = `${esc(String(l.inspect_date || '').slice(0,10))}　${esc(l.container_no || '')}`
              + `${l.container_kind ? '（' + esc(l.container_kind) + '）' : ''}`;
-  const path = `<div class="muted" style="font-size:11.5px;">${esc(l.origin || '?')} → <b>${esc(l.destination || '?')}</b></div>`;
+  const path = `${esc(l.origin || '?')} → <b>${esc(l.destination || '?')}</b>`;
   let tag = '';
   if(st.key === 'same') tag = ' <span class="pill green">相符</span>';
   else if(st.key === 'stay') tag = ' <span class="pill gray" title="櫃子留在目的地，板架不會留在那裡，請按「修改」自己填實際位置">板架不會留在目的地</span>';
@@ -5264,7 +5283,8 @@ function trailerLegCell(v){
                                     + ` <button class="name-link" data-adopt-leg="${v.id}">帶入</button>`;
   else tag = ' <span class="pill amber">可帶入</span>'
            + ` <button class="name-link" data-adopt-leg="${v.id}">帶入</button>`;
-  return `<div style="font-size:12px;white-space:nowrap;">${head}${tag}</div>${path}`;
+  return `<div style="font-size:11.5px;white-space:nowrap;">${head}</div>`
+       + `<div class="muted" style="font-size:11.5px;white-space:nowrap;">${path}${tag}</div>`;
 }
 // 單台帶入
 async function trailerAdoptLeg(vehId){
@@ -5386,17 +5406,19 @@ function renderSelfUseTrailers(){
     const docStatus = vehicleDocStatus(v.id, '驗車');
     const inspectionExpiry = docStatus ? docStatus.expiry : '—';
     const grace = docStatus ? docStatus.grace : null;
-    const statusPill = docStatus ? `<span class="pill ${docStatus.status}">${statusLabel(grace,30)}</span>` : `<span class="pill gray">未設定</span>`;
+    const statusPill = docStatus
+      ? `<span class="pill ${docStatus.status}" title="${esc(statusLabel(grace,30))}">${statusLabelShort(grace)}</span>`
+      : `<span class="pill gray">未設定</span>`;
     return `<tr${isOnHold(v) ? ' style="background:var(--red-bg);"' : ''}>
       <td class="plate">${esc(v.plate)}</td>
-      <td><span class="hold-wrap">${holdPill(v)}<button class="name-link" data-hold="${v.id}">${isOnHold(v) ? '改回可派車' : '設為暫停'}</button></span></td>
-      <td><span class="clip" title="${esc(v.vehicle_type||'')}">${esc(v.vehicle_type||'')}</span></td>
-      <td><span class="clip" title="${esc(v.company_name||'')}">${esc(v.company_name||'')}</span></td>
+      <td><span class="hold-wrap">${holdPill(v)}<button class="name-link" data-hold="${v.id}" title="${isOnHold(v) ? '改回可派車' : '設為暫停使用'}">${isOnHold(v) ? '恢復' : '暫停'}</button></span></td>
+      <td><span class="clip" title="${esc(v.vehicle_type||'')}">${esc(vtypeShort2(v.vehicle_type))}</span></td>
+      <td><span title="${esc(v.company_name||'')}">${esc(coShort2(v.company_name))}</span></td>
       <td>${leaseCell}</td>
       <td>${partyCell}</td>
       <td>${locCell}</td>
       <td>${trailerLegCell(v)}</td>
-      <td class="muted">${esc((v.location_updated_at||'').slice(0,16).replace('T',' '))}</td>
+      <td class="muted">${esc((v.location_updated_at||'').slice(0,10))}</td>
       <td>${esc(inspectionExpiry)}</td>
       <td>${esc(grace||'—')}</td>
       <td>${statusPill}</td>
