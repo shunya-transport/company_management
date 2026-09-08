@@ -339,24 +339,18 @@
       position:static!important;margin:0!important;padding:0!important;background:#fff!important;}
     html.ci-printing #ciPrintRoot *{visibility:visible!important;}
   }
-/* ===== 唯讀版：隱藏車輛管理/車輛維護/外訓証照的新增、編輯、刪除功能 ===== */
+/* ===== 唯讀版：隱藏車輛管理／車輛維護的新增、編輯、刪除功能 =====
+   人員証照及訓練這一頁改成可以編輯，所以不列在下面 */
 #fleet .card:has(#vf_add),
 #fleet .card:has(#vi_add),
 #maintenance .card:has(#mr_add),
 #maintenance .card:has(#tire_add),
-#maintenance .card:has(#axle_add),
-#trainings .card:has(#tf_add),
-#trainings .card:has(#rt_add){
-  display: none !important;
-}
-/* 外訓證照時效總表那顆「修改」也要藏：這一頁只能看，不能改 */
-#trainings .name-link{
+#maintenance .card:has(#axle_add){
   display: none !important;
 }
 #fleet .del-btn,
 #maintenance .del-btn,
 #maintEditModal .del-btn,
-#trainings .del-btn,
 #vehicleModalEditBtn,
 #medKitModal .del-btn,
 #medKitModal h4,
@@ -398,7 +392,7 @@
       <button data-tab="leases">板架管理</button>
       <button data-tab="container">貨櫃運送</button>
       <button data-tab="repair">設備報修</button>
-      <button data-tab="trainings">外訓証照</button>
+      <button data-tab="trainings">人員証照及訓練</button>
       <button data-tab="mileage">車輛里程統計</button>
       <button data-tab="workhour">工時統計</button>
       <button data-tab="contacts">通訊錄</button>
@@ -414,7 +408,7 @@
     <header class="banner">
       <p class="hero-kicker">Shun Ya Transportation</p>
       <h1>運輸管理資料庫</h1>
-      <div class="sub">總覽 ・ 車輛管理 ・ 車輛維護 ・ 板架管理 ・ 外訓證照追蹤 — 總覽/車輛管理/車輛維護/外訓證照僅供查詢；板架管理可正常新增與編輯</div>
+      <div class="sub">總覽 ・ 車輛管理 ・ 車輛維護 ・ 板架管理 ・ 貨櫃運送 ・ 人員証照及訓練 — 車輛管理與車輛維護僅供查詢；板架管理、貨櫃運送、人員証照及訓練可新增與編輯</div>
     </header>
     <div id="storageWarning" style="display:none;background:#FBEAE9;color:#B3261E;padding:12px 20px;text-align:center;font-size:13px;font-weight:600;">
       ⚠️ 目前無法連線到雲端資料庫——請檢查網路連線，若持續發生請聯絡管理員確認 Supabase 專案是否正常運作。
@@ -556,6 +550,16 @@
     </div>
 
     <div class="card">
+      <h2>各行號投保人數</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>行號</th><th>投保人數</th></tr></thead>
+          <tbody id="companyInsuredCountBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>門禁卡完整清冊<span class="count-badge" id="card_ledger_count"></span></h2>
       <div class="toolbar">
         <input id="card_search" placeholder="搜尋姓名或卡號">
@@ -627,15 +631,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>各行號投保人數</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>行號</th><th>投保人數</th></tr></thead>
-          <tbody id="companyInsuredCountBody"></tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
   <div id="fleet" class="panel">
@@ -1064,6 +1059,7 @@
       <div class="muted" style="margin-bottom:10px;">資料來自司機自己填的貨櫃檢查表。每個櫃號取<b>最新一筆</b>的「目的地」當作目前位置。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>貨櫃櫃號<input id="cl_cno" placeholder="打幾碼就好，例：HYCU" autocomplete="off"></label>
+        <label>板架號<input id="cl_tno" placeholder="打幾碼就好，例：303E（不分大小寫、有沒有橫線都可以）" autocomplete="off"></label>
       </div>
       <div id="cl_where"></div>
       <div class="table-scroll" style="max-height:420px;">
@@ -1227,6 +1223,95 @@
           <tbody id="rtBody"></tbody>
         </table>
       </div>
+    </div>
+    <div style="margin:26px 0 18px;border-top:2px solid var(--border);padding-top:8px;font-size:13px;font-weight:700;color:var(--text-3);letter-spacing:.08em;">內部訓練紀錄</div>
+    <div class="card">
+      <h2>新增內訓紀錄</h2>
+      <div class="form-grid">
+        <label>類別
+          <select id="il_stage">
+            <option value="在職">在職</option>
+            <option value="職前">職前</option>
+          </select>
+        </label>
+        <label>內訓項目
+          <select id="il_course"></select>
+        </label>
+        <label>編號<input id="il_code" placeholder="例：110-001"></label>
+        <label>受訓日期<input id="il_date" type="date"></label>
+        <label>時數<input id="il_hours" type="number" step="0.5" placeholder="例：2"></label>
+        <label>訓練單位
+          <select id="il_unit"></select>
+        </label>
+        <label>評核方式
+          <select id="il_eval">
+            <option value="筆試">筆試</option>
+            <option value="實作">實作</option>
+            <option value="觀察上課情形">觀察上課情形</option>
+            <option value="筆試/實作">筆試/實作</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+        <label>結果
+          <select id="il_result">
+            <option value="合格">合格</option>
+            <option value="不合格">不合格</option>
+          </select>
+        </label>
+        <label>備註<input id="il_notes" placeholder="選填"></label>
+      </div>
+      <label style="display:block;font-size:12px;color:var(--text-2);font-weight:500;margin-bottom:6px;">
+        人員（可複選，勾選多人即可批次新增同一筆內訓紀錄）
+      </label>
+      <div class="toolbar">
+        <input id="il_emp_search" placeholder="搜尋姓名或員工編號" style="flex:1;">
+        <button class="btn ghost" id="il_emp_all">全選</button>
+        <button class="btn ghost" id="il_emp_none">清除</button>
+        <span class="muted" id="il_emp_count"></span>
+      </div>
+      <div class="table-scroll" style="max-height:220px;margin-bottom:14px;">
+        <div id="il_emp_list" style="padding:8px 12px;"></div>
+      </div>
+      <button class="btn" id="il_add">新增內訓紀錄</button>
+    </div>
+
+
+    <div class="card">
+      <h2>本年度（民國115年）內訓完成狀況<span class="count-badge" id="internal_year_count"></span></h2>
+      <div class="toolbar">
+        <select id="internal_status_filter">
+          <option value="all">全部人員</option>
+          <option value="done">今年已受訓</option>
+          <option value="none">今年尚無紀錄</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>姓名</th><th>部門</th><th>今年受訓次數</th><th>最近一次日期</th><th>本年度完成課程</th><th>狀態</th></tr></thead>
+          <tbody id="internalYearBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
+      <div class="toolbar">
+        <input id="log_search" placeholder="搜尋姓名或課程名稱">
+        <select id="log_year_filter"><option value="all">全部年份</option></select>
+        <select id="log_result_filter">
+          <option value="all">全部結果</option>
+          <option value="合格">合格</option>
+          <option value="不合格">不合格</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>受訓日期</th><th>編號</th><th>姓名</th><th>部門</th><th>課程內容</th><th>時數</th><th>訓練單位</th><th>評核</th><th>結果</th><th></th></tr></thead>
+          <tbody id="trainingLogBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b>
+        <button class="btn ghost" id="tl_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
   </div>
 
@@ -1475,97 +1560,6 @@
         </table>
       </div>
       <div class="muted" style="margin-top:8px;">請到「車輛管理」點車號進入編輯，指定該車套用哪一個保養標準車型，系統會依此自動估算下次保養里程。</div>
-    </div>
-  </div>
-
-  <div id="trainrecord" class="panel">
-    <div class="card">
-      <h2>新增內訓紀錄</h2>
-      <div class="form-grid">
-        <label>類別
-          <select id="il_stage">
-            <option value="在職">在職</option>
-            <option value="職前">職前</option>
-          </select>
-        </label>
-        <label>內訓項目
-          <select id="il_course"></select>
-        </label>
-        <label>編號<input id="il_code" placeholder="例：110-001"></label>
-        <label>受訓日期<input id="il_date" type="date"></label>
-        <label>時數<input id="il_hours" type="number" step="0.5" placeholder="例：2"></label>
-        <label>訓練單位
-          <select id="il_unit"></select>
-        </label>
-        <label>評核方式
-          <select id="il_eval">
-            <option value="筆試">筆試</option>
-            <option value="實作">實作</option>
-            <option value="觀察上課情形">觀察上課情形</option>
-            <option value="筆試/實作">筆試/實作</option>
-            <option value="其他">其他</option>
-          </select>
-        </label>
-        <label>結果
-          <select id="il_result">
-            <option value="合格">合格</option>
-            <option value="不合格">不合格</option>
-          </select>
-        </label>
-        <label>備註<input id="il_notes" placeholder="選填"></label>
-      </div>
-      <label style="display:block;font-size:12px;color:var(--text-2);font-weight:500;margin-bottom:6px;">
-        人員（可複選，勾選多人即可批次新增同一筆內訓紀錄）
-      </label>
-      <div class="toolbar">
-        <input id="il_emp_search" placeholder="搜尋姓名或員工編號" style="flex:1;">
-        <button class="btn ghost" id="il_emp_all">全選</button>
-        <button class="btn ghost" id="il_emp_none">清除</button>
-        <span class="muted" id="il_emp_count"></span>
-      </div>
-      <div class="table-scroll" style="max-height:220px;margin-bottom:14px;">
-        <div id="il_emp_list" style="padding:8px 12px;"></div>
-      </div>
-      <button class="btn" id="il_add">新增內訓紀錄</button>
-    </div>
-
-
-    <div class="card">
-      <h2>本年度（民國115年）內訓完成狀況<span class="count-badge" id="internal_year_count"></span></h2>
-      <div class="toolbar">
-        <select id="internal_status_filter">
-          <option value="all">全部人員</option>
-          <option value="done">今年已受訓</option>
-          <option value="none">今年尚無紀錄</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>姓名</th><th>部門</th><th>今年受訓次數</th><th>最近一次日期</th><th>本年度完成課程</th><th>狀態</th></tr></thead>
-          <tbody id="internalYearBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
-      <div class="toolbar">
-        <input id="log_search" placeholder="搜尋姓名或課程名稱">
-        <select id="log_year_filter"><option value="all">全部年份</option></select>
-        <select id="log_result_filter">
-          <option value="all">全部結果</option>
-          <option value="合格">合格</option>
-          <option value="不合格">不合格</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>受訓日期</th><th>編號</th><th>姓名</th><th>部門</th><th>課程內容</th><th>時數</th><th>訓練單位</th><th>評核</th><th>結果</th><th></th></tr></thead>
-          <tbody id="trainingLogBody"></tbody>
-        </table>
-      </div>
-      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b>
-        <button class="btn ghost" id="tl_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
   </div>
 
@@ -6969,8 +6963,10 @@ function renderContainerWhere(){
   const body = document.getElementById('clWhereBody');
   if(!body) return;
   const q = ((document.getElementById('cl_cno') || {}).value || '').trim().toUpperCase();
+  const qt = clNormPlate(((document.getElementById('cl_tno') || {}).value || '').trim());
   let list = clLatestByContainer();
   if(q) list = list.filter(r => String(r.container_no).toUpperCase().includes(q));
+  if(qt) list = list.filter(r => clNormPlate(r.trailer_no).includes(qt));
   body.innerHTML = list.slice(0, 400).map(r => `<tr>
       <td class="c-nw"><b>${esc(r.container_no)}</b></td>
       <td class="c-nw"><b>${esc(r.destination || '—')}</b></td>
@@ -6980,11 +6976,39 @@ function renderContainerWhere(){
       <td class="c-name">${esc(r.shipper || '')}</td>
       <td class="c-nw">${esc(r.origin || '')}</td>
       <td class="c-name">${esc(r.inspector || '')}</td>
-    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合的櫃號。</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合的資料。</td></tr>`;
 
   // 只命中一個櫃號時，把它的移動軌跡整條列出來
   const box = document.getElementById('cl_where');
   if(!box) return;
+
+  // 只用板架號查、而且只對到一支板架時，把這支板架跑過的櫃子整條列出來
+  if(!q && qt){
+    const hits = clRows().filter(r => clNormPlate(r.trailer_no).includes(qt));
+    const keys = [...new Set(hits.map(r => clNormPlate(r.trailer_no)))];
+    if(keys.length === 1 && hits.length){
+      const legs = hits.slice().sort((a, b) => String(a.inspect_date || '').localeCompare(String(b.inspect_date || ''))
+                                            || (a.inspection_id || 0) - (b.inspection_id || 0));
+      const last = legs[legs.length - 1];
+      const kind = String(last.container_kind || '').trim();
+      const stays = CONTAINER_TRAILER_STAYS[kind];
+      const note = stays === false
+        ? '<span style="color:var(--danger);font-weight:700;">這一趟是' + esc(kind) + '，板架不會留在目的地，請以板架管理裡登記的位置為準。</span>'
+        : (stays === true
+            ? '板架應該就停在最後一趟的目的地。'
+            : '最後一趟沒有填貨櫃種類，判斷不了板架有沒有留在目的地。');
+      box.innerHTML = `<div style="background:var(--gold-bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:15px;font-weight:700;">板架 ${esc(last.trailer_no || '')}　最後一趟：<span style="color:var(--navy-700);">${esc(last.destination || '（沒填目的地）')}</span></div>
+        <div class="muted" style="margin:4px 0 8px;">${esc(String(last.inspect_date||'').slice(0,10))}　${esc(last.container_no||'')}${kind ? '（' + esc(kind) + '）' : ''}　共 ${legs.length} 趟　${note}</div>
+        <div style="font-size:12.5px;line-height:1.9;">
+          ${legs.slice(-30).map(l => `${esc(String(l.inspect_date||'').slice(0,10))}　${esc(l.container_no||'')}${l.container_kind ? '（' + esc(l.container_kind) + '）' : ''}　${esc(l.origin||'?')} → <b>${esc(l.destination||'?')}</b>　${esc(l.plate||'')}　${esc(l.inspector||'')}`).join('<br>')}
+        </div>
+        ${legs.length > 30 ? '<div class="muted" style="margin-top:6px;">只列最近 30 趟。</div>' : ''}
+      </div>`;
+      return;
+    }
+  }
+
   if(q && list.length === 1){
     const cno = list[0].container_no;
     const legs = clRows().filter(r => String(r.container_no).toUpperCase() === String(cno).toUpperCase())
@@ -13643,6 +13667,8 @@ if(document.getElementById('cbRosterBody')){
   const _m = document.getElementById('cl_month');
   const _s = document.getElementById('cl_search');
   const _c = document.getElementById('cl_cno');
+  const _t = document.getElementById('cl_tno');
+  if(_t) _t.addEventListener('input', renderContainerWhere);
   if(_m) _m.addEventListener('change', renderContainerLedger);
   if(_s) _s.addEventListener('input', renderContainerLedger);
   if(_c) _c.addEventListener('input', renderContainerWhere);

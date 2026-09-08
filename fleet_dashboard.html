@@ -324,8 +324,7 @@
       <button data-tab="fleet">車輛管理</button>
       <button data-tab="maintenance">車輛維護</button>
       <button data-tab="leases">板架管理</button>
-      <button data-tab="trainings">外訓証照</button>
-      <button data-tab="trainrecord">訓練紀錄</button>
+      <button data-tab="trainings">人員証照及訓練</button>
       <button data-tab="admin">行政資料</button>
       <button data-tab="fuelToll">運輸費用</button>
       <button data-tab="mileage">車輛里程統計</button>
@@ -472,6 +471,16 @@
     </div>
 
     <div class="card">
+      <h2>各行號投保人數</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>行號</th><th>投保人數</th></tr></thead>
+          <tbody id="companyInsuredCountBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>門禁卡完整清冊<span class="count-badge" id="card_ledger_count"></span></h2>
       <div class="toolbar">
         <input id="card_search" placeholder="搜尋姓名或卡號">
@@ -543,15 +552,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>各行號投保人數</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>行號</th><th>投保人數</th></tr></thead>
-          <tbody id="companyInsuredCountBody"></tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
   <div id="fleet" class="panel">
@@ -1121,6 +1121,95 @@
         </table>
       </div>
     </div>
+    <div style="margin:26px 0 18px;border-top:2px solid var(--border);padding-top:8px;font-size:13px;font-weight:700;color:var(--text-3);letter-spacing:.08em;">內部訓練紀錄</div>
+    <div class="card">
+      <h2>新增內訓紀錄</h2>
+      <div class="form-grid">
+        <label>類別
+          <select id="il_stage">
+            <option value="在職">在職</option>
+            <option value="職前">職前</option>
+          </select>
+        </label>
+        <label>內訓項目
+          <select id="il_course"></select>
+        </label>
+        <label>編號<input id="il_code" placeholder="例：110-001"></label>
+        <label>受訓日期<input id="il_date" type="date"></label>
+        <label>時數<input id="il_hours" type="number" step="0.5" placeholder="例：2"></label>
+        <label>訓練單位
+          <select id="il_unit"></select>
+        </label>
+        <label>評核方式
+          <select id="il_eval">
+            <option value="筆試">筆試</option>
+            <option value="實作">實作</option>
+            <option value="觀察上課情形">觀察上課情形</option>
+            <option value="筆試/實作">筆試/實作</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+        <label>結果
+          <select id="il_result">
+            <option value="合格">合格</option>
+            <option value="不合格">不合格</option>
+          </select>
+        </label>
+        <label>備註<input id="il_notes" placeholder="選填"></label>
+      </div>
+      <label style="display:block;font-size:12px;color:var(--text-2);font-weight:500;margin-bottom:6px;">
+        人員（可複選，勾選多人即可批次新增同一筆內訓紀錄）
+      </label>
+      <div class="toolbar">
+        <input id="il_emp_search" placeholder="搜尋姓名或員工編號" style="flex:1;">
+        <button class="btn ghost" id="il_emp_all">全選</button>
+        <button class="btn ghost" id="il_emp_none">清除</button>
+        <span class="muted" id="il_emp_count"></span>
+      </div>
+      <div class="table-scroll" style="max-height:220px;margin-bottom:14px;">
+        <div id="il_emp_list" style="padding:8px 12px;"></div>
+      </div>
+      <button class="btn" id="il_add">新增內訓紀錄</button>
+    </div>
+
+
+    <div class="card">
+      <h2>本年度（民國115年）內訓完成狀況<span class="count-badge" id="internal_year_count"></span></h2>
+      <div class="toolbar">
+        <select id="internal_status_filter">
+          <option value="all">全部人員</option>
+          <option value="done">今年已受訓</option>
+          <option value="none">今年尚無紀錄</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>姓名</th><th>部門</th><th>今年受訓次數</th><th>最近一次日期</th><th>本年度完成課程</th><th>狀態</th></tr></thead>
+          <tbody id="internalYearBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
+      <div class="toolbar">
+        <input id="log_search" placeholder="搜尋姓名或課程名稱">
+        <select id="log_year_filter"><option value="all">全部年份</option></select>
+        <select id="log_result_filter">
+          <option value="all">全部結果</option>
+          <option value="合格">合格</option>
+          <option value="不合格">不合格</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>受訓日期</th><th>編號</th><th>姓名</th><th>部門</th><th>課程內容</th><th>時數</th><th>訓練單位</th><th>評核</th><th>結果</th><th></th></tr></thead>
+          <tbody id="trainingLogBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b>
+        <button class="btn ghost" id="tl_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
+    </div>
   </div>
 
   <div id="maintenance" class="panel">
@@ -1368,97 +1457,6 @@
         </table>
       </div>
       <div class="muted" style="margin-top:8px;">請到「車輛管理」點車號進入編輯，指定該車套用哪一個保養標準車型，系統會依此自動估算下次保養里程。</div>
-    </div>
-  </div>
-
-  <div id="trainrecord" class="panel">
-    <div class="card">
-      <h2>新增內訓紀錄</h2>
-      <div class="form-grid">
-        <label>類別
-          <select id="il_stage">
-            <option value="在職">在職</option>
-            <option value="職前">職前</option>
-          </select>
-        </label>
-        <label>內訓項目
-          <select id="il_course"></select>
-        </label>
-        <label>編號<input id="il_code" placeholder="例：110-001"></label>
-        <label>受訓日期<input id="il_date" type="date"></label>
-        <label>時數<input id="il_hours" type="number" step="0.5" placeholder="例：2"></label>
-        <label>訓練單位
-          <select id="il_unit"></select>
-        </label>
-        <label>評核方式
-          <select id="il_eval">
-            <option value="筆試">筆試</option>
-            <option value="實作">實作</option>
-            <option value="觀察上課情形">觀察上課情形</option>
-            <option value="筆試/實作">筆試/實作</option>
-            <option value="其他">其他</option>
-          </select>
-        </label>
-        <label>結果
-          <select id="il_result">
-            <option value="合格">合格</option>
-            <option value="不合格">不合格</option>
-          </select>
-        </label>
-        <label>備註<input id="il_notes" placeholder="選填"></label>
-      </div>
-      <label style="display:block;font-size:12px;color:var(--text-2);font-weight:500;margin-bottom:6px;">
-        人員（可複選，勾選多人即可批次新增同一筆內訓紀錄）
-      </label>
-      <div class="toolbar">
-        <input id="il_emp_search" placeholder="搜尋姓名或員工編號" style="flex:1;">
-        <button class="btn ghost" id="il_emp_all">全選</button>
-        <button class="btn ghost" id="il_emp_none">清除</button>
-        <span class="muted" id="il_emp_count"></span>
-      </div>
-      <div class="table-scroll" style="max-height:220px;margin-bottom:14px;">
-        <div id="il_emp_list" style="padding:8px 12px;"></div>
-      </div>
-      <button class="btn" id="il_add">新增內訓紀錄</button>
-    </div>
-
-
-    <div class="card">
-      <h2>本年度（民國115年）內訓完成狀況<span class="count-badge" id="internal_year_count"></span></h2>
-      <div class="toolbar">
-        <select id="internal_status_filter">
-          <option value="all">全部人員</option>
-          <option value="done">今年已受訓</option>
-          <option value="none">今年尚無紀錄</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>姓名</th><th>部門</th><th>今年受訓次數</th><th>最近一次日期</th><th>本年度完成課程</th><th>狀態</th></tr></thead>
-          <tbody id="internalYearBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
-      <div class="toolbar">
-        <input id="log_search" placeholder="搜尋姓名或課程名稱">
-        <select id="log_year_filter"><option value="all">全部年份</option></select>
-        <select id="log_result_filter">
-          <option value="all">全部結果</option>
-          <option value="合格">合格</option>
-          <option value="不合格">不合格</option>
-        </select>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>受訓日期</th><th>編號</th><th>姓名</th><th>部門</th><th>課程內容</th><th>時數</th><th>訓練單位</th><th>評核</th><th>結果</th><th></th></tr></thead>
-          <tbody id="trainingLogBody"></tbody>
-        </table>
-      </div>
-      <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b>
-        <button class="btn ghost" id="tl_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
   </div>
 
