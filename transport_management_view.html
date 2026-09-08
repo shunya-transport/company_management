@@ -2627,6 +2627,36 @@
     </div>
 
     <div class="card">
+      <h2>登記領用（扣庫存）</h2>
+      <div class="muted" style="margin-bottom:10px;">
+        直接把庫存品項發給人或掛上車。存檔時會同時寫進「人員管理 → 物品」或「車輛管理 → 車用物品」，並自動從庫存扣掉。<br>
+        歸還一樣到那兩個地方按「歸還」，庫存會自動補回來。
+      </div>
+      <div class="form-grid">
+        <label>領用對象
+          <select id="iss_target">
+            <option value="emp">人員</option>
+            <option value="veh">車輛</option>
+          </select>
+        </label>
+        <label id="iss_emp_wrap">人員
+          <select id="iss_emp"></select>
+        </label>
+        <label id="iss_veh_wrap" style="display:none;">車輛
+          <select id="iss_veh"></select>
+        </label>
+        <label>品項
+          <select id="iss_item"></select>
+        </label>
+        <label>數量<input id="iss_qty" type="number" min="1" value="1"></label>
+        <label>領用日期<input id="iss_date" type="date"></label>
+        <label>備註<input id="iss_notes" placeholder="選填"></label>
+      </div>
+      <button class="btn" id="iss_add">登記領用</button>
+      <span class="muted" id="iss_msg" style="margin-left:10px;"></span>
+    </div>
+
+    <div class="card">
       <h2>異動歷史<span class="count-badge" id="st_count"></span></h2>
       <div class="toolbar"><input id="st_search" placeholder="搜尋品項名稱"></div>
       <div class="table-scroll">
@@ -5798,12 +5828,15 @@ function updateStockSizeHints(){
   if(!sel || !dl) return;
   const typeId = parseInt(sel.value);
   const t = STATE.equipmentTypes.find(x => x.id === typeId);
-  const list = (t && t.category === UNIFORM_CAT) ? sizeListOf(typeId) : [];
+  // 制服看類別、其他（滅火器這種）看有沒有在 SIZE_SETS 登記規格
+  const list = !t ? [] : (SIZE_SETS[t.name] || (t.category === UNIFORM_CAT ? SIZE_ORDER : []));
   dl.innerHTML = list.map(s => `<option value="${esc(s)}"></option>`).join('');
   const inp = document.getElementById('si_size');
   if(inp) inp.placeholder = list.length ? ('例：' + list[0] + '、' + list[list.length - 1]) : '例：M、42';
 }
 function renderStockSelects(){
+  issFillSelects();
+  issToggleTarget();
   document.getElementById('si_type').innerHTML = STATE.equipmentTypes.map(t => `<option value="${t.id}">${esc(t.name)}${t.category?'（'+esc(t.category)+'）':''}</option>`).join('');
   updateStockSizeHints();
   document.getElementById('st_item').innerHTML = STATE.stockItems.map(i => {
@@ -8693,8 +8726,12 @@ function closeLicenseModal(){ document.getElementById('licenseModal').classList.
 const UNIFORM_CAT = '制服類';
 const SIZE_ORDER = ['M','L','XL','2XL','3XL','4XL'];   // 預設清單（一般制服／防焰衣）
 const SIZE_SETS = {
-  '防焰褲': ['32','34','36','38','40','42','44','46','48','50']
+  '防焰褲': ['32','34','36','38','40','42','44','46','48','50'],
+  // 滅火器依藥劑重量分四種規格，庫存要分開算才知道哪一種不夠
+  '滅火器': ['20P','10P','5P','3P']
 };
+// 車上固定用哪一種規格：掛車用配備時先幫忙選好，要換再自己改
+const VEHICLE_DEFAULT_SIZE = { '滅火器': '10P' };
 function sizeListOf(typeId){
   const t = STATE.equipmentTypes.find(x => x.id === typeId);
   return (t && SIZE_SETS[t.name]) || SIZE_ORDER;
@@ -13788,6 +13825,7 @@ function renderAll(){
   renderIcTable();
   renderStockItemsTable();
   renderStockTxTable();
+  issFillSelects();          // 領用卡片的人員／車輛／品項下拉要跟著資料變動
   renderInstrumentsTable();
   renderCalibrationTable();
   renderCompanyInsuredCount();
@@ -14122,6 +14160,14 @@ document.getElementById('stockItemsBody').addEventListener('click', async (e) =>
   }
 });
 
+{
+  const _t = document.getElementById('iss_target');
+  if(_t) _t.addEventListener('change', issToggleTarget);
+  const _a = document.getElementById('iss_add');
+  if(_a) _a.addEventListener('click', issAdd);
+  const _i = document.getElementById('iss_item');
+  if(_i) _i.addEventListener('change', () => issMsg(''));
+}
 document.getElementById('st_add').addEventListener('click', async () => {
   const itemId = parseInt(document.getElementById('st_item').value);
   const date = document.getElementById('st_date').value;
@@ -16401,7 +16447,124 @@ function updateVeqStockItemOptions(){
           return `<option value="${i.item_id}">${esc(i.size || '（無尺寸）')} — 目前庫存 ${level}</option>`;
         }).join('');
     if(hint) hint.textContent = '這個配備有在管庫存，掛上車時會自動從庫存扣除，歸還時自動補回。';
+    // 車上固定用的規格先幫忙選好（滅火器一律 10P）
+    const _dftName = (STATE.equipmentTypes.find(x => x.id === typeId) || {}).name;
+    const _dft = VEHICLE_DEFAULT_SIZE[_dftName];
+    if(_dft){
+      const hit = matches.find(i => String(i.size || '').toUpperCase() === _dft);
+      if(hit){
+        sel.value = String(hit.item_id);
+        if(hint) hint.textContent += '　車上固定用 ' + _dft + '，已經先選好了。';
+      }
+    }
   }
+}
+// ===== 配備管理裡的「登記領用（扣庫存）」 =====
+// 原本只有「人員管理 → 物品」和「車輛管理 → 車用物品」兩個入口能扣庫存，
+// 配備管理這一頁只能進貨與報廢，管庫存的人要發東西還得先去別的分頁找人或找車。
+// 這裡開一個直接的入口，寫進去的資料跟那兩個入口完全一樣（同一張表、同一種庫存異動），
+// 所以人員／車輛那邊照樣看得到，歸還也照原本的流程走。
+function issFillSelects(){
+  const tSel = document.getElementById('iss_target');
+  if(!tSel) return;
+  const eSel = document.getElementById('iss_emp');
+  if(eSel){
+    const keep = eSel.value;
+    eSel.innerHTML = (STATE.employees || [])
+      .map(x => `<option value="${x.id}">${esc(x.name)}（${esc(x.employee_no || '')}）</option>`).join('')
+      || '<option value="">尚無在職人員</option>';
+    if([...eSel.options].some(o => o.value === keep)) eSel.value = keep;
+  }
+  const vSel = document.getElementById('iss_veh');
+  if(vSel){
+    const keep = vSel.value;
+    vSel.innerHTML = (STATE.vehicles || []).filter(v => !isRetiredVehicle(v))
+      .slice().sort((a, b) => String(a.plate || '').localeCompare(String(b.plate || '')))
+      .map(v => `<option value="${v.id}">${esc(v.plate)}</option>`).join('')
+      || '<option value="">尚無車輛</option>';
+    if([...vSel.options].some(o => o.value === keep)) vSel.value = keep;
+  }
+  const iSel = document.getElementById('iss_item');
+  if(iSel){
+    const keep = iSel.value;
+    iSel.innerHTML = (STATE.stockItems || []).slice()
+      .sort((a, b) => {
+        const ta = (STATE.equipmentTypes.find(t => t.id === a.type_id) || {}).name || '';
+        const tb = (STATE.equipmentTypes.find(t => t.id === b.type_id) || {}).name || '';
+        return ta.localeCompare(tb, 'zh-Hant') || (sizeRank(a.size, a.type_id) - sizeRank(b.size, b.type_id));
+      })
+      .map(i => {
+        const t = STATE.equipmentTypes.find(x => x.id === i.type_id);
+        return `<option value="${i.item_id}">${esc(t ? t.name : '')}${i.size ? '（' + esc(i.size) + '）' : ''}`
+             + ` — 目前庫存 ${computeStockLevel(i.item_id)}</option>`;
+      }).join('') || '<option value="">尚未建立庫存品項</option>';
+    if([...iSel.options].some(o => o.value === keep)) iSel.value = keep;
+  }
+  const dt = document.getElementById('iss_date');
+  if(dt && !dt.value) dt.value = todayISO();
+}
+function issToggleTarget(){
+  const t = (document.getElementById('iss_target') || {}).value || 'emp';
+  const e = document.getElementById('iss_emp_wrap');
+  const v = document.getElementById('iss_veh_wrap');
+  if(e) e.style.display = (t === 'emp') ? '' : 'none';
+  if(v) v.style.display = (t === 'veh') ? '' : 'none';
+}
+function issMsg(text, bad){
+  const el = document.getElementById('iss_msg');
+  if(!el) return;
+  el.textContent = text || '';
+  el.style.color = bad ? 'var(--red)' : 'var(--green)';
+}
+async function issAdd(){
+  const itemId = parseInt((document.getElementById('iss_item') || {}).value);
+  const item = (STATE.stockItems || []).find(i => i.item_id === itemId);
+  if(!item){ issMsg('請先在上面「新增庫存品項」建立品項，才有東西可以發。', true); return; }
+  const qty = parseInt(document.getElementById('iss_qty').value) || 0;
+  if(qty <= 0){ issMsg('數量要大於 0。', true); return; }
+  const level = computeStockLevel(itemId);
+  if(qty > level && !confirm('目前庫存只有 ' + level + '，這一筆要領 ' + qty + ' 個，庫存會變成負數。\n\n'
+      + '（通常代表進貨還沒登記）確定要繼續嗎？')) return;
+  const date = document.getElementById('iss_date').value || todayISO();
+  const notes = document.getElementById('iss_notes').value.trim();
+  const type = STATE.equipmentTypes.find(x => x.id === item.type_id);
+  const detail = (type ? type.name : '') + (item.size ? ' ' + item.size : '');
+  const target = (document.getElementById('iss_target') || {}).value || 'emp';
+  let who = '';
+  try{
+    if(target === 'emp'){
+      const empId = parseInt(document.getElementById('iss_emp').value);
+      const emp = (STATE.employees || []).find(x => x.id === empId);
+      if(!emp){ issMsg('請選領用人。', true); return; }
+      who = emp.name;
+      const rid = nextId(STATE.employeeEquipment);
+      STATE.employeeEquipment.push({
+        id: rid, employee_id: empId, type_id: item.type_id, stock_item_id: itemId,
+        item_detail: detail, quantity: qty, issue_date: date, return_date: null, status: '使用中'
+      });
+      veqAddStockTx(itemId, '領用', qty, date,
+        '配備管理登記領用：' + who + '（物品領用紀錄 #' + rid + '）' + (notes ? '／' + notes : ''));
+      await saveState('employee_equipment', STATE.employeeEquipment, true);
+      await saveState('stock_transactions', STATE.stockTransactions, true);
+    }else{
+      const vid = parseInt(document.getElementById('iss_veh').value);
+      const veh = (STATE.vehicles || []).find(x => x.id === vid);
+      if(!veh){ issMsg('請選車輛。', true); return; }
+      who = veh.plate;
+      const rid = nextId(STATE.vehicleEquipment);
+      STATE.vehicleEquipment.push({
+        id: rid, vehicle_id: vid, type_id: item.type_id, stock_item_id: itemId,
+        item_detail: detail, quantity: qty, issue_date: date, return_date: null, status: '使用中'
+      });
+      veqAddStockTx(itemId, '領用', qty, date,
+        '配備管理登記領用：' + who + '（車用領用紀錄 #' + rid + '）' + (notes ? '／' + notes : ''));
+      await saveState('vehicle_equipment', STATE.vehicleEquipment, true);
+      await saveState('stock_transactions', STATE.stockTransactions, true);
+    }
+  }catch(e){ return; }   // saveState 失敗時已經有提示與還原
+  document.getElementById('iss_notes').value = '';
+  issMsg('已登記：' + detail + ' × ' + qty + ' → ' + who + '，這個品項庫存剩 ' + computeStockLevel(itemId) + '。');
+  renderAll();
 }
 function veqAddStockTx(itemId, kind, qty, date, note){
   const tid = nextId((STATE.stockTransactions || []).map(t => ({id: t.transaction_id})));
