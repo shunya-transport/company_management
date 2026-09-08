@@ -926,6 +926,9 @@
         <label>驗車到期日<input id="lf_exp" type="date"></label>
         <label>承租方
           <select id="lf_lessee"></select>
+          <span style="font-size:11px;font-weight:400;color:var(--text-3);">
+            沒有這一家？<button type="button" class="name-link" id="lf_lessee_add">新增承租方</button>
+          </span>
         </label>
         <label>狀態
           <select id="lf_status"><option value="租賃中">租賃中</option><option value="已歸還">已歸還</option></select>
@@ -4616,7 +4619,33 @@ function renderOverview(){
 
 function renderLesseeSelect(){
   const sel = document.getElementById('lf_lessee');
-  sel.innerHTML = STATE.lessees.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('') + `<option value="__new__">+ 新增承租方...</option>`;
+  const keep = sel.value;
+  sel.innerHTML = STATE.lessees.slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'))
+      .map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')
+    + `<option value="__new__">+ 新增承租方...</option>`;
+  if([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+// 承租方原本只能在「新增租賃紀錄」的下拉裡順手建，
+// 還沒有租約要先建廠商就沒地方建。這裡開一個獨立入口。
+async function lesseeAddStandalone(){
+  const name = String(prompt('請輸入新的承租方名稱：') || '').trim();
+  if(!name) return;
+  const dup = (STATE.lessees || []).find(l => String(l.name || '').trim() === name);
+  if(dup){
+    alert('「' + name + '」已經在承租方清單裡了，直接從下拉選就可以。');
+    const sel = document.getElementById('lf_lessee');
+    if(sel) sel.value = String(dup.id);
+    return;
+  }
+  const newId = nextId(STATE.lessees);
+  STATE.lessees.push({ id: newId, name: name, lessee_name: name });
+  try{ await saveState('lessees', STATE.lessees, true); }catch(e){ return; }
+  renderLesseeSelect();
+  const sel = document.getElementById('lf_lessee');
+  if(sel) sel.value = String(newId);
+  renderAll();
+  alert('已新增承租方「' + name + '」。');
 }
 function renderEmpSelect(){
   const sel = document.getElementById('tf_emp');
@@ -5837,6 +5866,7 @@ function computeStockLevel(itemId){
     if(t.item_id !== itemId) return;
     // 「車場發出」＝東西早就從倉庫撥出去了，這一步只是從車場交到人手上，倉庫的數字不能再動
     if(t.transaction_type === TX_FROM_YARD) return;
+    if(t.transaction_type === '盤點') return;      // 只是記錄盤點日期，不影響數量
     if(t.transaction_type==='進貨' || t.transaction_type==='退回' || t.transaction_type===TX_YARD_BACK) level += t.quantity;
     else level -= t.quantity;
   });
@@ -5869,7 +5899,9 @@ function renderStockSelects(){
 }
 
 function lastStocktakeDate(itemId){
-  const txs = STATE.stockTransactions.filter(t => t.item_id===itemId && (t.notes||'').includes('盤點調整'))
+  // 「盤點調整」是有差額的那種，「盤點確認」是數量相符的那種，兩種都算盤點過
+  const txs = STATE.stockTransactions.filter(t => t.item_id===itemId
+      && ((t.notes||'').includes('盤點') || t.transaction_type === '盤點'))
     .sort((a,b)=>(b.transaction_date||'').localeCompare(a.transaction_date||''));
   return txs.length ? txs[0].transaction_date : null;
 }
@@ -5887,7 +5919,7 @@ function renderStockItemsTable(){
     const isEditing = String(editingStockTakeId) === String(i.item_id);
     const stocktakeCell = isEditing
       ? `<input type="date" id="stocktake_date_${i.item_id}" value="${esc(lastDate||todayISO())}" style="width:130px;">
-         <input type="number" id="stocktake_qty_${i.item_id}" value="${level}" style="width:70px;" placeholder="實際數量">
+         <input type="number" id="stocktake_qty_${i.item_id}" value="${level}" min="0" style="width:70px;" placeholder="實際數量" title="實際點到幾個就填幾個，點完是 0 就填 0">
          <button class="name-link" data-save-stocktake="${i.item_id}">存</button>
          <button class="name-link" data-cancel-stocktake="${i.item_id}">取消</button>`
       : `${lastDate ? esc(lastDate) : '<span class="muted">尚未盤點</span>'} <button class="name-link" data-edit-stocktake="${i.item_id}">盤點</button>`;
@@ -5920,7 +5952,7 @@ function renderStockTxTable(){
     const emp = STATE.employees.find(e => e.id === t.employee_id)
              || findEmployeeAnywhere(t.employee_id);
     const sign = (t.transaction_type==='進貨'||t.transaction_type==='退回'||t.transaction_type===TX_YARD_BACK) ? '+'
-               : (t.transaction_type===TX_FROM_YARD ? '' : '-');
+               : ((t.transaction_type===TX_FROM_YARD || t.transaction_type==='盤點') ? '' : '-');
     return `<tr>
       <td>${esc(t.transaction_date||'')}</td>
       <td>${esc(type?type.name:'')}${item&&item.size?'（'+esc(item.size)+'）':''}</td>
@@ -14120,6 +14152,10 @@ document.querySelectorAll('nav button').forEach(btn => {
 document.getElementById('lease_filter').addEventListener('change', renderLeaseTable);
 document.getElementById('lease_search').addEventListener('input', renderLeaseTable);
 document.getElementById('lease_lessee_filter').addEventListener('change', renderLeaseTable);
+{
+  const _la = document.getElementById('lf_lessee_add');
+  if(_la) _la.addEventListener('click', lesseeAddStandalone);
+}
 document.getElementById('selfuse_search').addEventListener('input', renderSelfUseTrailers);
 document.getElementById('selfuse_company_filter').addEventListener('change', renderSelfUseTrailers);
 document.getElementById('selfuse_filter').addEventListener('change', renderSelfUseTrailers);
@@ -14169,17 +14205,25 @@ document.getElementById('stockItemsBody').addEventListener('click', async (e) =>
     const date = document.getElementById(`stocktake_date_${saveId}`).value;
     const actualQty = parseInt(document.getElementById(`stocktake_qty_${saveId}`).value);
     if(!date || isNaN(actualQty)){ alert('請填寫盤點日期與實際數量'); return; }
+    if(actualQty < 0){ alert('實際數量不能是負數'); return; }
     const currentLevel = computeStockLevel(itemId);
     const diff = actualQty - currentLevel;
-    if(diff !== 0){
-      STATE.stockTransactions.push({
-        id: nextId(STATE.stockTransactions), item_id: itemId,
-        transaction_type: diff > 0 ? '進貨' : '報廢',
-        quantity: Math.abs(diff), transaction_date: date,
-        notes: `盤點調整（原${currentLevel} → 實際${actualQty}）`
-      });
-      await saveState('stock_transactions', STATE.stockTransactions, true);
-    }
+    // ★ 差額是 0（例如系統是 0、實際點完也是 0）以前完全不寫紀錄，
+    //   結果盤點日期一直是「尚未盤點」，看起來像沒辦法把 0 打上去。
+    //   現在數量相符也會留一筆數量 0 的「盤點」，只記日期、不動庫存。
+    STATE.stockTransactions.push(diff !== 0
+      ? {
+          id: nextId(STATE.stockTransactions), item_id: itemId,
+          transaction_type: diff > 0 ? '進貨' : '報廢',
+          quantity: Math.abs(diff), transaction_date: date,
+          notes: `盤點調整（原${currentLevel} → 實際${actualQty}）`
+        }
+      : {
+          id: nextId(STATE.stockTransactions), item_id: itemId,
+          transaction_type: '盤點', quantity: 0, transaction_date: date,
+          notes: `盤點確認（實際${actualQty}，與系統相符）`
+        });
+    await saveState('stock_transactions', STATE.stockTransactions, true);
     editingStockTakeId = null;
     renderAll();
   }
