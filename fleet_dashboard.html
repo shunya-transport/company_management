@@ -172,6 +172,17 @@
   /* 只有「修改中」那一列的到期日格子可以折行：
      日期輸入 + 兩個勾選框擠成一行會把表撐寬，儲存／取消就被推出畫面。 */
   table.cert-table td .edit-wrap{display:inline-block;white-space:normal;max-width:126px;line-height:1.9;}
+  /* 自用板架目前位置：欄位很多，硬塞成 100% 寬會把車號、車型、公司別壓成一字一行。
+     改成讓表格自己撐開、整張左右捲動，每一格都不折行，列高就降下來了。
+     公司別與車型太長的用「…」收掉，滑鼠移上去看得到全名。 */
+  table.selfuse-table{width:auto;min-width:100%;font-size:12.5px;}
+  table.selfuse-table th{padding:9px 9px;font-size:11.5px;}
+  table.selfuse-table td{padding:7px 9px;white-space:nowrap;vertical-align:middle;line-height:1.5;}
+  table.selfuse-table td.plate{font-weight:700;}
+  table.selfuse-table .clip{display:inline-block;max-width:112px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
+  table.selfuse-table .hold-wrap{display:inline-block;white-space:nowrap;}
+  table.selfuse-table .hold-wrap .name-link{margin-left:6px;}
   .table-scroll{max-height:480px;overflow:auto;border:1px solid rgba(13,27,44,.08);border-radius:15px;background:rgba(255,255,255,.75);}
   .table-scroll table{margin:0;}
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
@@ -948,7 +959,7 @@
         </select>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="selfuse-table">
           <thead><tr><th>車號</th><th>調度狀態</th><th>車型</th><th>公司別</th><th>租約</th><th>使用業主</th><th>目前位置</th><th>最後更新</th><th>驗車到期</th><th>最後時效<span class="muted">（含1個月寬限）</span></th><th>驗車狀態</th><th></th></tr></thead>
           <tbody id="selfUseTrailerBody"></tbody>
         </table>
@@ -5248,10 +5259,10 @@ function renderSelfUseTrailers(){
     const grace = docStatus ? docStatus.grace : null;
     const statusPill = docStatus ? `<span class="pill ${docStatus.status}">${statusLabel(grace,30)}</span>` : `<span class="pill gray">未設定</span>`;
     return `<tr${isOnHold(v) ? ' style="background:var(--red-bg);"' : ''}>
-      <td>${esc(v.plate)}</td>
-      <td>${holdPill(v)}<div><button class="name-link" data-hold="${v.id}">${isOnHold(v) ? '改回可派車' : '設為暫停'}</button></div></td>
-      <td>${esc(v.vehicle_type||'')}</td>
-      <td>${esc(v.company_name||'')}</td>
+      <td class="plate">${esc(v.plate)}</td>
+      <td><span class="hold-wrap">${holdPill(v)}<button class="name-link" data-hold="${v.id}">${isOnHold(v) ? '改回可派車' : '設為暫停'}</button></span></td>
+      <td><span class="clip" title="${esc(v.vehicle_type||'')}">${esc(v.vehicle_type||'')}</span></td>
+      <td><span class="clip" title="${esc(v.company_name||'')}">${esc(v.company_name||'')}</span></td>
       <td>${leaseCell}</td>
       <td>${partyCell}</td>
       <td>${locCell}</td>
