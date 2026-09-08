@@ -3813,12 +3813,16 @@ async function saveState(key, value, shared){
   try{
     // 先寫入/更新目前的資料(upsert)，確保新資料真的進去了，才進行後續刪除，避免寫入失敗時舊資料被砍空
     if(value && value.length > 0){
-      const stripFields = COMPUTED_FIELDS[key] || [];
-      const payload = value.map(item => {
-        const {id, ...rest} = item;
-        stripFields.forEach(f => delete rest[f]);
-        return {[map.pk]: id, ...rest};
-      });
+      // ★ 只送「真的改到的列、改到的欄位」。
+      //   舊寫法是把整個陣列每一列都 upsert 回去，等於拿這個分頁開啟當下的內容
+      //   覆蓋整張表：只要有同事的分頁停在舊資料上，他隨手存個檔，就會把別人
+      //   這段時間改過的東西默默還原回去，而且兩邊都不會有任何錯誤訊息。
+      const payload = buildUpsertPayload(key, value);
+      // 只寫一列時，先問雲端有沒有人搶在前面改過同一個欄位；有的話跳出來讓人決定
+      if(payload.length === 1){
+        const _go = await writeConflictOK(key, map, payload[0]);
+        if(!_go) throw new Error('已取消存檔，雲端資料未變更');
+      }
       // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致(否則回 PGRST102)
       // 作法:按「欄位組合」分群,各群分別送出。不補 null,讓資料庫自己套用預設值
       // (補 null 會踩到 created_at 這類 NOT NULL 欄位,造成 23502 錯誤)
@@ -3848,12 +3852,25 @@ async function saveState(key, value, shared){
     //   分頁一定要指定 order，不然每一頁的順序不保證一致，會漏抓或重複。
     // ★ 這裡的範圍一定要跟 safeGet 一樣。少了它，兩年以外的舊資料會被當成
     //   「清單裡沒有＝使用者刪掉了」而整批清空。
-    const existingRows = await supaFetchAll(
-      `${map.table}?select=${map.pk}${loadWindowFilter(key)}&order=${map.pk}.asc`);
+    // ★ 只有「這個分頁原本看得到、現在不見了」的 id 才算是使用者刪掉的。
+    //   雲端在我們載入之後才多出來的資料（同事剛新增的那幾筆），這個分頁根本沒有，
+    //   舊寫法會把它們一起當成「使用者刪掉了」清掉。
+    //   另外，這一趟完全沒有刪除時就不必去撈全表的 id，省一次大查詢。
     const currentIds = new Set((value||[]).map(item => String(item.id)));
+    const knownIds = Array.isArray(LAST_GOOD[key])
+      ? new Set(LAST_GOOD[key].map(r => String(r.id)))
+      : null;
+    const removedHere = knownIds
+      ? [...knownIds].filter(id => !currentIds.has(id))
+      : null;
+    const existingRows = (removedHere && removedHere.length === 0)
+      ? []
+      : await supaFetchAll(
+          `${map.table}?select=${map.pk}${loadWindowFilter(key)}&order=${map.pk}.asc`);
     const idsToDelete = (existingRows||[])
       .map(r => r[map.pk])
-      .filter(pk => !currentIds.has(String(pk)));
+      .filter(pk => !currentIds.has(String(pk)))
+      .filter(pk => !knownIds || knownIds.has(String(pk)));
     if(idsToDelete.length > 0){
       // 保險:一次要刪掉超過5筆且佔全表一半以上,先跳出確認,避免整表誤刪
       // 保險線改嚴：原本要「超過 5 筆且佔全表一半」才問，少抓三成完全擋不住。
@@ -3885,6 +3902,151 @@ async function saveState(key, value, shared){
   }
 }
 
+// ===== 只寫「改到的那一列、那幾欄」 =====
+// saveState 會把整個陣列 upsert 回雲端，等於用「這個分頁開啟當下的內容」覆蓋整張表。
+// 只要有同事的分頁停在舊資料上，他隨手改一台車的位置，就會把別人這段時間改過的
+// 東西默默還原回去（車輛從「待賣出」改回車輛清單，隔天又自己跑回去，就是這樣來的）。
+// saveRows 只送「這一列跟載入時比起來真的變了的欄位」：沒動到的列、沒動到的欄位
+// 完全不碰，兩個人同時在不同地方作業就不會互相蓋掉。
+// 刪除仍然要走 saveState —— 只有它會去比對雲端多出來的 id 並刪除。
+function cmpVal(v){
+  if(v === null || v === undefined) return '';
+  if(typeof v === 'object'){ try{ return JSON.stringify(v); }catch(e){ return String(v); } }
+  return String(v);
+}
+function rowDiffForSave(key, item){
+  const base = (LAST_GOOD[key] || []).find(r => String(r.id) === String(item.id));
+  if(!base) return null;                       // 沒有基準（剛新增的那一列）→ 整列寫進去
+  // 畫面用的計算欄位（車號、廠商名稱那些）本來就不會寫進資料庫，比對時直接跳過
+  const skip = new Set(['id'].concat(COMPUTED_FIELDS[key] || []));
+  const out = {};
+  Object.keys(item).forEach(k => {
+    if(skip.has(k)) return;
+    if(cmpVal(item[k]) !== cmpVal(base[k])) out[k] = item[k];
+  });
+  return out;
+}
+// 每一份清單是用哪個 key 讀進來的（loadState 裡的 _kick 會登記），
+// 補值做完之後要靠它把「雲端最後確認過的樣子」重記一次。
+const STATE_KEY_OF = {};
+function refreshAllBaselines(){
+  Object.keys(STATE_KEY_OF).forEach(prop => {
+    const key = STATE_KEY_OF[prop];
+    if(!key || LOAD_FAILED.has(key)) return;
+    if(Array.isArray(STATE[prop])) rememberGood(key, STATE[prop]);
+  });
+}
+// 存單筆之前先問雲端：這一列有沒有人搶在前面改過同一個欄位？
+// 有的話把兩邊的值攤出來讓人決定，不要默默覆蓋。檢查本身失敗就照原流程存，不擋人。
+async function writeConflictOK(key, map, obj){
+  try{
+    const pk = obj[map.pk];
+    const cols = Object.keys(obj).filter(k => k !== map.pk && k !== 'location_updated_at');
+    if(!cols.length) return true;
+    const base = (LAST_GOOD[key] || []).find(r => String(r.id) === String(pk));
+    if(!base) return true;
+    const cur = await supaFetch(`${map.table}?${map.pk}=eq.${encodeURIComponent(pk)}` +
+                                `&select=${encodeURIComponent([map.pk].concat(cols).join(','))}`);
+    const row = cur && cur[0];
+    if(!row) return true;
+    const show = v => (v === null || v === undefined || v === '') ? '（空白）' : String(v);
+    const clash = cols.filter(c => {
+      const a = row[c] == null ? '' : String(row[c]);
+      const b = base[c] == null ? '' : String(base[c]);
+      const mine = obj[c] == null ? '' : String(obj[c]);
+      return a !== b && a !== mine;          // 雲端跟我載入時不一樣，而且也不是我要存的值
+    });
+    if(!clash.length) return true;
+    return confirm('這一筆在你開啟頁面之後，已經有人在雲端改過了：\n\n'
+      + clash.map(c => '　' + c + '：雲端目前 ' + show(row[c]) + '，你要改成 ' + show(obj[c])).join('\n')
+      + '\n\n要用你的內容蓋過去嗎？\n（按「取消」就不存檔，重新整理後可以看到同事改的內容）');
+  }catch(e){
+    console.warn('存檔前的衝突檢查略過：', e);
+    return true;
+  }
+}
+// 把一份清單整理成要送出去的 upsert 內容。
+// 有基準（LAST_GOOD，也就是「這個分頁認得的雲端內容」）時，只挑真的變了的列，
+// 而且每一列只送變了的欄位；沒有基準時退回原本的整份寫入，行為跟以前一樣。
+function buildUpsertPayload(key, list){
+  const map = TABLE_MAP[key];
+  if(!map) return [];
+  const strip = COMPUTED_FIELDS[key] || [];
+  const hasBase = Array.isArray(LAST_GOOD[key]);
+  const out = [];
+  (list || []).forEach(item => {
+    if(!item) return;
+    let body;
+    const d = hasBase ? rowDiffForSave(key, item) : null;
+    if(d){
+      if(!Object.keys(d).length) return;      // 這一列沒改到，不用送
+      body = Object.assign({}, d);
+    }else{
+      const {id, ...rest} = item;             // 新增的列（或沒有基準）→ 整列寫進去
+      body = rest;
+    }
+    strip.forEach(f => delete body[f]);
+    if(!Object.keys(body).length) return;
+    out.push(Object.assign({[map.pk]: item.id}, body));
+  });
+  return out;
+}
+async function saveRows(key, rows, whole){
+  const map = TABLE_MAP[key];
+  if(!map) return;
+  const list = (rows || []).filter(Boolean);
+  if(!list.length) return;
+  if(LOAD_FAILED.has(key)){
+    if(whole) rollbackAfterFail(key, whole);
+    alert('「' + key + '」這份資料在開啟頁面時沒有讀取成功，目前畫面上是內建備援資料。\n\n'
+        + '為了避免覆蓋雲端的正確資料，這次不會存檔。\n請先重新整理頁面，確認上方紅色警告消失後再操作。');
+    throw new Error('資料未成功載入，已阻止存檔以保護雲端資料');
+  }
+  {
+    const _bad = checkRequired(map.table, list);
+    if(_bad){
+      if(whole) rollbackAfterFail(key, whole);
+      alert('資料不完整，沒有存檔。\n\n缺少必填欄位：\n' + _bad.names.join('\n'));
+      throw new Error('必填欄位未填：' + _bad.names.join('，'));
+    }
+  }
+  const payload = buildUpsertPayload(key, list);
+  if(!payload.length) return;
+  if(payload.length === 1){
+    const go = await writeConflictOK(key, map, payload[0]);
+    if(!go){
+      if(whole) rollbackAfterFail(key, whole);
+      throw new Error('已取消存檔，雲端資料未變更');
+    }
+  }
+  try{
+    // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致，所以按欄位組合分群
+    const groups = new Map();
+    payload.forEach(o => {
+      const sig = Object.keys(o).sort().join('|');
+      if(!groups.has(sig)) groups.set(sig, []);
+      groups.get(sig).push(o);
+    });
+    for(const g of groups.values()){
+      for(let i = 0; i < g.length; i += 500){
+        await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
+          method: 'POST',
+          headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
+          body: JSON.stringify(g.slice(i, i + 500))
+        });
+      }
+    }
+    if(whole) rememberGood(key, whole);
+  }catch(err){
+    console.error('saveRows failed for', key, err);
+    const _rolled = whole ? rollbackAfterFail(key, whole) : false;
+    showStorageWarning('「' + key + '」存檔失敗：' + (err && err.message ? err.message : err));
+    alert('無法儲存資料到雲端資料庫，這次完全沒有寫入。\n\n錯誤訊息：' + (err && err.message ? err.message : err)
+        + (_rolled ? '\n\n畫面已經還原成雲端目前的內容。' : ''));
+    throw err;
+  }
+}
+
 async function loadState(){
   // ★ 這些雲端資料彼此獨立，所以【全部一起發出去】，最後再一次收回來。
   //   以前是一支一支 await，等於幾十趟網路來回排隊跑，光是等待就要好幾秒。
@@ -3894,7 +4056,7 @@ async function loadState(){
   //   讀取失敗不會在這裡爆掉：safeGet 自己接住，改用備援資料並列入 LOAD_FAILED，
   //   存檔那一關照樣會被擋下來。
   const _P = {};
-  const _kick = (prop, args) => { _P[prop] = safeGet.apply(null, args); };
+  const _kick = (prop, args) => { STATE_KEY_OF[prop] = args[0]; _P[prop] = safeGet.apply(null, args); };
   _kick('leases', ['trailer_leases', SEED.trailer_leases, true]);
   _kick('lessees', ['lessees', SEED.lessees, true]);
   _kick('trainings', ['employee_trainings', SEED.trainings || [], true]);
@@ -3972,6 +4134,10 @@ async function loadState(){
   STATE.adminAnnualPlan = SEED.admin_annual_plan || [];
   STATE.refRewardTypes = SEED.ref_reward_types || [];
   await enrichDenormalizedFields();
+  // ★ 車號、廠商名稱、是否離職這些是讀完之後才貼上去的，
+  //   而「雲端最後確認過的樣子」是在貼之前記下來的，兩份對不起來。
+  //   不重記一次的話，之後每次存檔都會把每一列都當成「有改過」而整份送出去。
+  refreshAllBaselines();
 }
 
 // ===== 電動板車預約（唯讀）=====
@@ -5189,7 +5355,7 @@ async function toggleHold(id){
     v.dispatch_hold_reason = String(why).trim() || null;
     v.dispatch_hold_since = todayISO();
   }
-  await saveState('roster_vehicles', STATE.vehicles, true);
+  await saveRows('roster_vehicles', [v], STATE.vehicles);
   renderAll();
 }
 let selfUseCompanyFilterInit = false;
@@ -6014,7 +6180,7 @@ async function saveTrailerSizeInline(el){
   v.trailer_size = val;
   el.style.background = val ? '' : 'var(--amber-bg)';
   try{
-    await saveState('roster_vehicles', STATE.vehicles, true);
+    await saveRows('roster_vehicles', [v], STATE.vehicles);
     refreshTrailerSizeList();
   }catch(e){ /* saveState 失敗時已經有還原機制與提示，這裡不再重複跳窗 */ }
 }
@@ -6306,7 +6472,7 @@ function renderVehicleModalEdit(v){
       });
       if(returnedCount>0){ await saveState('vehicle_equipment', STATE.vehicleEquipment, true); }
     }
-    await saveState('roster_vehicles', STATE.vehicles, true);
+    await saveRows('roster_vehicles', [v], STATE.vehicles);
     renderAll();
     renderVehicleModalView(v);
   }
@@ -15354,7 +15520,7 @@ document.getElementById('lf_add').addEventListener('click', async () => {
   const _lv = (STATE.vehicles || []).find(x => x.plate === plate);
   if(_lv && _lsz && (_lv.trailer_size || '') !== _lsz){
     _lv.trailer_size = _lsz;
-    await saveState('roster_vehicles', STATE.vehicles, true);
+    await saveRows('roster_vehicles', [_lv], STATE.vehicles);
     refreshTrailerSizeList();
   }
   ['lf_plate','lf_vtype','lf_exp','lf_notes'].forEach(id=>document.getElementById(id).value='');
@@ -15385,7 +15551,7 @@ document.getElementById('leaseTableBody').addEventListener('keydown', async (e) 
     if(v){
       v.current_location = e.target.value.trim();
       v.location_updated_at = new Date().toISOString();
-      await saveState('roster_vehicles', STATE.vehicles, true);
+      await saveRows('roster_vehicles', [v], STATE.vehicles);
     }
     editingLeaseLocationId = null;
     renderAll();
@@ -15417,7 +15583,7 @@ document.getElementById('leaseTableBody').addEventListener('click', async (e) =>
     if(v && input){
       v.current_location = input.value.trim();
       v.location_updated_at = new Date().toISOString();
-      await saveState('roster_vehicles', STATE.vehicles, true);
+      await saveRows('roster_vehicles', [v], STATE.vehicles);
     }
     editingLeaseLocationId = null;
     renderAll();
@@ -15431,7 +15597,7 @@ document.getElementById('selfUseTrailerBody').addEventListener('keydown', async 
     if(!v) return;
     v.current_location = e.target.value.trim();
     v.location_updated_at = new Date().toISOString();
-    await saveState('roster_vehicles', STATE.vehicles, true);
+    await saveRows('roster_vehicles', [v], STATE.vehicles);
     editingLocationId = null;
     renderAll();
   }
@@ -15463,7 +15629,7 @@ document.getElementById('selfUseTrailerBody').addEventListener('click', async (e
     if(party) v.used_by_party = party.value.trim() || null;
     v.current_location = input.value.trim();
     v.location_updated_at = new Date().toISOString();
-    await saveState('roster_vehicles', STATE.vehicles, true);
+    await saveRows('roster_vehicles', [v], STATE.vehicles);
     editingLocationId = null;
     renderAll();
   }
@@ -17449,7 +17615,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
   const _newV = STATE.vehicles[STATE.vehicles.length - 1];
   const _badCo = applyVehicleCompany(_newV, document.getElementById('vf_company').value);
   if(_badCo){ STATE.vehicles.pop(); vehicleCompanyWarn(_badCo); return; }
-  await saveState('roster_vehicles', STATE.vehicles, true);
+  await saveRows('roster_vehicles', [_newV], STATE.vehicles);
   ['vf_plate','vf_type','vf_brand','vf_model','vf_mfg','vf_chassis','vf_engine','vf_load','vf_purchase','vf_fuel_card','vf_etc','vf_company','vf_base'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
