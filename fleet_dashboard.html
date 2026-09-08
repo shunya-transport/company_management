@@ -154,12 +154,17 @@
   /* 外訓證照總表（原本的受訓紀錄清單＋外訓證照時效總表）：欄位一律不換行。
      名字被拆成「魏夆／亦」兩行、證書字號拆一半都很難讀，
      寧可整張表左右捲動（外層 .table-scroll 本來就是 overflow:auto）也不要折行。 */
-  table.cert-table{font-size:12.5px;}
-  table.cert-table th{padding:9px 7px;font-size:12px;white-space:nowrap;}
-  table.cert-table td{padding:8px 7px;white-space:nowrap;vertical-align:middle;}
+  table.cert-table{font-size:12px;}
+  table.cert-table th{padding:8px 5px;font-size:11.5px;white-space:nowrap;}
+  table.cert-table td{padding:7px 5px;white-space:nowrap;vertical-align:middle;}
+  /* 證書字號與訓練項目是最長的兩欄，裁掉超出的部分，全文看滑鼠提示 */
+  table.cert-table .clip-item{display:inline-block;max-width:130px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
+  table.cert-table .clip-cert{display:inline-block;max-width:158px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
   /* 備註（覆驗履歷）與複訓報名是自由輸入的長字串，硬要整段攤平會把表撐到很寬。
      這兩欄裁掉超出的部分改成「…」，滑鼠移上去仍看得到全文（兩個函式都帶 title）。 */
-  table.cert-table .cell-clip{display:inline-block;max-width:210px;overflow:hidden;
+  table.cert-table .cell-clip{display:inline-block;max-width:108px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
   table.cert-table tbody tr:hover{background:rgba(13,27,44,.03);}
   /* 編輯中的日期輸入框做窄一點：合併後欄位變成 9 欄，
@@ -1103,7 +1108,7 @@
       </div>
       <div class="table-scroll">
         <table class="cert-table">
-          <thead><tr><th>人員</th><th>訓練項目</th><th>證書字號</th><th>發證日期</th><th>到期日<span class="muted" style="font-weight:400;">（下次覆驗）</span></th><th>狀態</th><th>複訓報名</th><th>備註（覆驗履歷）</th><th></th></tr></thead>
+          <thead><tr><th>人員</th><th title="完整名稱滑鼠移到欄位上看">訓練項目</th><th title="完整證號滑鼠移到欄位上看">證書字號</th><th>發證日期</th><th title="下次覆驗日">到期日</th><th>狀態</th><th>複訓報名</th><th title="換證履歷，滑鼠移到欄位上看全文">備註</th><th></th></tr></thead>
           <tbody id="trainingTableBody"></tbody>
         </table>
       </div>
@@ -1133,6 +1138,26 @@
         <table>
           <thead><tr><th>上課日期</th><th>天數</th><th>人員</th><th>訓練項目</th><th>上課地點</th><th>辦理協會</th><th>這張證到期日</th><th></th></tr></thead>
           <tbody id="rtBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>外訓歷史<span class="count-badge" id="exth_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">每一次報名、上課與換證的紀錄，含已離職人員。來源是證照紀錄本身與備註裡的換證履歷。</div>
+      <div class="toolbar">
+        <input id="exth_search" placeholder="搜尋人員/訓練項目/證書字號">
+        <select id="exth_year"><option value="all">全部年份</option></select>
+        <select id="exth_event">
+          <option value="all">全部事件</option>
+          <option value="報名">只看報名／上課</option>
+          <option value="換證">只看取得／換證</option>
+        </select>
+        <button class="btn ghost no-print" id="exth_csv">匯出 CSV</button>
+      </div>
+      <div class="table-scroll" style="max-height:440px;">
+        <table class="cert-table">
+          <thead><tr><th>日期</th><th>人員</th><th>訓練項目</th><th>事件</th><th>上課日期</th><th>上課地點</th><th>辦理協會</th><th>證書字號</th><th>到期日</th></tr></thead>
+          <tbody id="exthBody"></tbody>
         </table>
       </div>
     </div>
@@ -5546,8 +5571,8 @@ function renderTrainingTable(){
       : `<button class="name-link" data-edit-ext="${t.id}">修改</button> <button class="del-btn" data-del-training="${t.id}">刪除</button>`;
     return `<tr>
       <td>${esc(t.employee_name)}</td>
-      <td>${esc(t.type_name)}</td>
-      <td>${esc(t.cert_no||'')}</td>
+      <td><span class="clip-item" title="${esc(t.type_name||'')}">${esc(t.type_name)}</span></td>
+      <td><span class="clip-cert" title="${esc(t.cert_no||'')}">${esc(t.cert_no||'')}</span></td>
       <td>${issueCell}</td>
       <td>${expiryCell}</td>
       <td>${certStatusPill(t)}</td>
@@ -6582,7 +6607,9 @@ const EQCHK_HEAD = ['年月','檢查日期\n時間戳記','車號','檢查人員
 // 第 7~24 欄（索引 6~23）對到配備管理裡的品項名稱；濾毒罐與滅火器改放證件到期日。
 const EQCHK_MAP = {6:'半罩式防毒面具', 8:'C級防護衣', 9:'耐酸鹼手套', 10:'警示帶', 11:'指揮棒',
   12:'急救箱（醫藥箱）', 14:'輪檔', 15:'三角錐', 16:'連結環', 17:'拖救帶', 18:'防震墊',
-  19:'車鉤/閂門/固定栓', 20:'第五輪聯結器總成', 21:'吊裝環', 22:'防爆板手', 23:'貨櫥剪'};
+  19:'車鉤/閂門/固定栓', 20:'第五輪聯結器總成',
+  // 「吊裝環」已改名為「連桿」。兩個名字都收，這樣資料庫改名前後都對得到。
+  21:['連桿','吊裝環'], 22:'防爆板手', 23:'貨櫥剪'};
 
 // 這張檢查表要拉的車：在役、不是待賣出、不是報廢繳銷、而且是營業車。
 // 堆高機／夾櫃機／公務車不在這張表的範圍，車型不是「營業」開頭的一律不拉。
@@ -6616,7 +6643,8 @@ function eqchkExport(){
     const a = new Array(26).fill('');
     a[0] = ym; a[2] = v.plate || ''; a[4] = v.base_location || ''; a[5] = eqchkType(v);
     Object.keys(EQCHK_MAP).forEach(k => {
-      const i = Number(k), tid = typeId[EQCHK_MAP[k]];
+      const i = Number(k);
+      const tid = [].concat(EQCHK_MAP[k]).map(nm => typeId[nm]).find(v => v != null);
       if(tid == null) return;
       const e = (STATE.vehicleEquipment || [])
         .find(x => x.vehicle_id === v.id && String(x.type_id) === String(tid) && x.status === '使用中');
@@ -7576,7 +7604,7 @@ function renderFleetTable(){
       <td>${esc(v.base_location||'')}</td>
       <td>${esc(v.status)}</td>
       ${fleetMileageCell(v.plate)}
-      <td><button class="name-link" data-edit-vequip="${v.id}">車用物品 (${STATE.vehicleEquipment.filter(x=>x.vehicle_id===v.id && x.status==='使用中').length})</button></td>
+      <td><button class="name-link" data-edit-vequip="${v.id}">車用物品 (${STATE.vehicleEquipment.filter(x=>x.vehicle_id===v.id && x.status==='使用中' && veqHasQty(x)).length})</button></td>
       <td><button class="name-link" data-edit-doc="${v.id}|滅火器">滅火器 (${STATE.vehicleDocuments.filter(x=>x.vehicle_id===v.id && x.doc_type==='滅火器').length})</button></td>
       <td><button class="name-link" data-edit-doc="${v.id}|濾毒罐">濾毒罐 (${STATE.vehicleDocuments.filter(x=>x.vehicle_id===v.id && x.doc_type==='濾毒罐').length})</button></td>
       <td><button class="name-link" data-edit-medkit="${v.id}">醫藥箱 (${STATE.medicalKitItems.filter(x=>x.vehicle_id===v.id).length})</button></td>
@@ -8039,8 +8067,10 @@ function openEquipModal(empId){
 function closeEquipModal(){ document.getElementById('equipModal').classList.remove('show'); }
 
 let currentVequipVehicleId = null;
+// 數量 0 的不列出來：那代表這台車其實沒有這樣東西，列著只會讓人以為有
+function veqHasQty(x){ return Number(x && x.quantity != null ? x.quantity : 1) !== 0; }
 function renderVequipModalBody(){
-  const rows = STATE.vehicleEquipment.filter(x => x.vehicle_id === currentVequipVehicleId);
+  const rows = STATE.vehicleEquipment.filter(x => x.vehicle_id === currentVequipVehicleId && veqHasQty(x));
   document.getElementById('vequipModalBody').innerHTML = rows.map(x => {
     const type = STATE.equipmentTypes.find(t => t.id === x.type_id);
     const statusCls = x.status==='使用中' ? 'green' : x.status==='已歸還' ? 'gray' : 'red';
@@ -12540,7 +12570,7 @@ function renderRtHint(){
 function renderOverviewRetrain(){
   const box = document.getElementById('ovRetrain');
   if(!box) return;
-  const rows = (STATE.trainings || []).filter(isRetrainBooked)
+  const rows = (STATE.trainings || []).filter(t => rtStillOpen(t) && !rtIsPast(t))
     .sort((a, b) => String(a.class_start_date || '').localeCompare(String(b.class_start_date || '')));
   const cnt = document.getElementById('ov_rt_count');
   if(cnt) cnt.textContent = rows.length ? `共 ${rows.length} 筆` : '';
@@ -12556,16 +12586,26 @@ function renderOverviewRetrain(){
       </tr>`).join('') + `</tbody></table></div>`
     : `<div class="empty">目前沒有人報名複訓上課</div>`;
 }
+// 這張清單只列「還在職、而且這一梯還沒結案」的報名：
+// 離職的人（課上完就離職了）不該一直掛在上面；
+// 上課日期已經過去的排到最後並標「待補證號」，補進新證號時 pushRenewNote 會自動清掉這一梯。
+function rtStillOpen(t){ return isRetrainBooked(t) && !t.employee_left; }
+function rtIsPast(t){
+  const d = daysUntil(t.class_end_date || t.class_start_date);
+  return d !== null && d < 0;
+}
 function renderRetrainTable(){
   const body = document.getElementById('rtBody');
   if(!body) return;
   rtFillSelects();
-  const rows = (STATE.trainings || []).filter(isRetrainBooked)
-    .sort((a, b) => String(a.class_start_date || '').localeCompare(String(b.class_start_date || '')));
+  const rows = (STATE.trainings || []).filter(rtStillOpen)
+    .sort((a, b) => (rtIsPast(a) - rtIsPast(b))
+                 || String(a.class_start_date || '').localeCompare(String(b.class_start_date || '')));
   const cnt = document.getElementById('rt_count');
-  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
-  body.innerHTML = rows.map(t => `<tr>
-      <td>${esc(rtDateText(t))} ${rtPill(t)}</td>
+  const _past = rows.filter(rtIsPast).length;
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆` + (_past ? `／待補證號 ${_past} 筆` : '');
+  body.innerHTML = rows.map(t => `<tr${rtIsPast(t) ? ' style="background:var(--amber-bg);"' : ''}>
+      <td>${esc(rtDateText(t))} ${rtIsPast(t) ? '<span class="pill amber" title="課已經上完了，等新證號打進「新增受訓紀錄」就會自動從這張清單消失">已上課，待補證號</span>' : rtPill(t)}</td>
       <td>${rtDays(t)}</td>
       <td>${esc(t.employee_name || '')}</td>
       <td>${esc(t.type_name || '')}</td>
@@ -12579,10 +12619,118 @@ let editingExternalId = null;
 // 「外訓證照時效總表」已經併進上面那張「外訓證照總表」，這支只剩下轉呼叫。
 // 函式名刻意留著：三個儀表板的 renderAll() 內容不一樣，但都會呼叫這一支，
 // 複訓清單掛在這裡重畫，三邊才會一致。
+// ===== 外訓歷史 =====
+// 換證的時候 pushRenewNote() 會把「舊證＋那一梯複訓」寫成一行備註再清空報名欄位，
+// 所以歷史其實分散在三個地方：現在掛著的報名、目前這一張證、備註裡的換證履歷。
+// 這裡把三者攤平成一張表，離職的人也留著，才看得出誰在什麼時候上過什麼課。
+function parseRenewNote(line){
+  const m = /^【(\d{4}-\d{2}-\d{2}) 換證】舊：(.*)$/.exec(String(line || '').trim());
+  if(!m) return null;
+  const rest = m[2];
+  const out = { date: m[1], cert_no: '', issue: '', expiry: '', cls: '' };
+  const ci = rest.indexOf('複訓 ');
+  const head = ci >= 0 ? rest.slice(0, ci) : rest;
+  if(ci >= 0) out.cls = rest.slice(ci + 3).trim();
+  head.split('／').forEach(p => {
+    p = String(p).trim();
+    if(p.indexOf('證號 ') === 0) out.cert_no = p.slice(3);
+    else if(p.indexOf('發證 ') === 0) out.issue = p.slice(3);
+    else if(p.indexOf('到期 ') === 0) out.expiry = p.slice(3);
+  });
+  return out;
+}
+function extHistoryRows(){
+  const out = [];
+  (STATE.trainings || []).forEach(t => {
+    const who = t.employee_name || '';
+    const left = !!t.employee_left;
+    const item = t.type_name || '';
+    if(t.class_start_date){
+      out.push({ date: t.class_start_date, who: who, left: left, item: item, kind: '報名',
+                 event: rtIsPast(t) ? '已上課，待補證號' : '已報名，還沒上課',
+                 span: rtDateText(t), loc: t.class_location || '', org: t.class_org || '',
+                 cert: '', expiry: '' });
+    }
+    if(t.issue_date){
+      // 發證日期欄在舊資料裡有「欠」「暫不複訓」這種文字，不是日期就不要放進日期欄，
+      // 原文照樣寫在事件裡，這樣既不會亂排序也不會把資料弄丟。
+      const _d = /^\d{4}-\d{2}-\d{2}$/.test(String(t.issue_date)) ? String(t.issue_date) : '';
+      out.push({ date: _d, who: who, left: left, item: item, kind: '換證',
+                 event: '取得證照（目前這張）' + (_d ? '' : '　發證日期：' + t.issue_date),
+                 span: '', loc: '', org: '',
+                 cert: t.cert_no || '',
+                 expiry: t.no_expiry ? '長期有效' : (t.expiry_date || '') });
+    }
+    String(t.notes || '').split('\n').forEach(line => {
+      const r = parseRenewNote(line);
+      if(!r) return;
+      const c = r.cls ? r.cls.split('／') : [];
+      const _rd = /^\d{4}-\d{2}-\d{2}$/.test(String(r.issue)) ? String(r.issue) : r.date;
+      out.push({ date: _rd, who: who, left: left, item: item, kind: '換證',
+                 event: '舊證（' + r.date + ' 換掉）', span: c[0] || '',
+                 loc: c[1] || '', org: c[2] || '',
+                 cert: r.cert_no, expiry: r.expiry });
+    });
+  });
+  // 沒有日期的排最後，不要卡在最新的紀錄前面
+  return out.sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1)
+                         || String(b.date || '').localeCompare(String(a.date || '')));
+}
+let exthYearsInit = false;
+function renderExtHistory(){
+  const body = document.getElementById('exthBody');
+  if(!body) return;
+  let rows = extHistoryRows();
+  if(!exthYearsInit){
+    const sel = document.getElementById('exth_year');
+    if(sel){
+      const ys = [...new Set(rows.map(r => String(r.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+      sel.innerHTML = '<option value="all">全部年份</option>' + ys.map(y => `<option value="${y}">${y}</option>`).join('');
+      exthYearsInit = true;
+    }
+  }
+  const q = ((document.getElementById('exth_search') || {}).value || '').trim();
+  const yf = ((document.getElementById('exth_year') || {}).value) || 'all';
+  const ef = ((document.getElementById('exth_event') || {}).value) || 'all';
+  if(q) rows = rows.filter(r => (r.who + r.item + r.cert).includes(q));
+  if(yf !== 'all') rows = rows.filter(r => String(r.date || '').slice(0, 4) === yf);
+  if(ef !== 'all') rows = rows.filter(r => r.kind === ef);
+  const cnt = document.getElementById('exth_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
+  body.innerHTML = rows.slice(0, 600).map(r => `<tr>
+      <td>${esc(r.date || '—')}</td>
+      <td>${esc(r.who)}${r.left ? ' <span class="pill gray">已離職</span>' : ''}</td>
+      <td><span class="clip-item" title="${esc(r.item)}">${esc(r.item)}</span></td>
+      <td>${esc(r.event)}</td>
+      <td>${esc(r.span || '—')}</td>
+      <td>${esc(r.loc || '—')}</td>
+      <td>${esc(r.org || '—')}</td>
+      <td><span class="clip-cert" title="${esc(r.cert)}">${esc(r.cert || '—')}</span></td>
+      <td>${esc(r.expiry || '—')}</td>
+    </tr>`).join('') || `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
+}
+function extHistoryCsv(){
+  const q = ((document.getElementById('exth_search') || {}).value || '').trim();
+  const yf = ((document.getElementById('exth_year') || {}).value) || 'all';
+  const ef = ((document.getElementById('exth_event') || {}).value) || 'all';
+  let rows = extHistoryRows();
+  if(q) rows = rows.filter(r => (r.who + r.item + r.cert).includes(q));
+  if(yf !== 'all') rows = rows.filter(r => String(r.date || '').slice(0, 4) === yf);
+  if(ef !== 'all') rows = rows.filter(r => r.kind === ef);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csvLines(
+    ['日期','人員','在職狀態','訓練項目','事件','上課日期','上課地點','辦理協會','證書字號','到期日'],
+    rows.map(r => [r.date || '', r.who, r.left ? '已離職' : '在職', r.item, r.event,
+                   r.span || '', r.loc || '', r.org || '', r.cert || '', r.expiry || '']))],
+    {type:'text/csv;charset=utf-8'}));
+  a.download = '外訓歷史_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
 function renderExternalStatusTable(){
   renderTrainingTable();
   renderRetrainTable();
   renderOverviewRetrain();
+  renderExtHistory();
 }
 
 
@@ -15781,6 +15929,14 @@ document.getElementById('tf_add').addEventListener('click', async () => {
     renderAll();
     renderRtHint();
   });
+})();
+(function(){
+  ['exth_search','exth_year','exth_event'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(id === 'exth_search' ? 'input' : 'change', renderExtHistory);
+  });
+  const _csv = document.getElementById('exth_csv');
+  if(_csv) _csv.addEventListener('click', extHistoryCsv);
 })();
 (function(){
   const _body = document.getElementById('rtBody');
