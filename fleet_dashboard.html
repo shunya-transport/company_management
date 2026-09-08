@@ -2138,7 +2138,7 @@
 
     <div class="card">
       <h2>車用尿素月統計</h2>
-      <div class="muted" style="margin-bottom:10px;">車場選「全部」就各場並排比較；月份選定一個月，就看那個月各場分別用多少。（較上月變化超過 ±20% 會標色）</div>
+      <div class="muted" style="margin-bottom:10px;">車場選「全部」就各場並排比較；月份選定一個月，就看那個月各場分別用多少。（較上月變化超過 ±20% 會標色）<br>金額＝使用量 × 11.05 元／公升，只在這張表換算。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>車場
           <select id="ur_stats_region">
@@ -11961,6 +11961,8 @@ function renderUreaStatsMonths(months){
   return sel.value;
 }
 
+// 車用尿素單價（元／公升）。只用在「車用尿素月統計」那張表的金額欄。
+const UREA_UNIT_PRICE = 11.05;
 function renderUreaStats(){
   const head = document.getElementById('ureaStatsHead');
   const body = document.getElementById('ureaStatsBody');
@@ -11991,6 +11993,9 @@ function renderUreaStats(){
     return {count:s.count + c.count, quantity:s.quantity + c.quantity, cost:s.cost + c.cost};
   }, {count:0, quantity:0, cost:0});
   const money = v => '$' + Math.round(v).toLocaleString('en-US');
+  // 尿素金額不是逐筆登錄的（登錄檔的金額欄大多空白），這張統計表一律用單價換算。
+  // 單價要改就改這一個數字。
+  const amt = q => money((Number(q) || 0) * UREA_UNIT_PRICE);
   const prevOf = m => months[months.indexOf(m) + 1];   // months 是新到舊，下一個就是上個月
   const TOTAL_STYLE = ' style="font-weight:600;background:var(--ivory-200);"';
 
@@ -12007,11 +12012,11 @@ function renderUreaStats(){
     const rows = yards.map(r => {
       const c = cell(month, r), p = pm ? cell(pm, r) : null;
       return `<tr><td>${esc(r)}</td><td>${c.count}</td><td>${ureaQty(c.quantity)}</td>
-        <td>${money(c.cost)}</td><td>${changePill(c.quantity, p ? p.quantity : null)}</td></tr>`;
+        <td>${amt(c.quantity)}</td><td>${changePill(c.quantity, p ? p.quantity : null)}</td></tr>`;
     });
     const t = sum(month, yards), pt = pm ? sum(pm, yards) : null;
     rows.push(`<tr${TOTAL_STYLE}><td>全部車場合計</td><td>${t.count}</td><td>${ureaQty(t.quantity)}</td>
-      <td>${money(t.cost)}</td><td>${changePill(t.quantity, pt ? pt.quantity : null)}</td></tr>`);
+      <td>${amt(t.quantity)}</td><td>${changePill(t.quantity, pt ? pt.quantity : null)}</td></tr>`);
     body.innerHTML = rows.join('');
     return;
   }
@@ -12026,7 +12031,7 @@ function renderUreaStats(){
       const pm = prevOf(m), pt = pm ? sum(pm, yards) : null;
       return `<tr><td>${esc(m)}</td>`
         + yards.map(r => `<td>${ureaQty(cell(m, r).quantity)}</td>`).join('')
-        + `<td><b>${ureaQty(t.quantity)}</b></td><td>${money(t.cost)}</td>
+        + `<td><b>${ureaQty(t.quantity)}</b></td><td>${amt(t.quantity)}</td>
            <td>${changePill(t.quantity, pt ? pt.quantity : null)}</td></tr>`;
     }).join('');
     return;
@@ -12039,7 +12044,7 @@ function renderUreaStats(){
     const c = cell(m, region);
     const pm = prevOf(m), p = pm ? cell(pm, region) : null;
     return `<tr><td>${esc(m)}</td><td>${c.count}</td><td>${ureaQty(c.quantity)}</td>
-      <td>${money(c.cost)}</td><td>${changePill(c.quantity, p ? p.quantity : null)}</td></tr>`;
+      <td>${amt(c.quantity)}</td><td>${changePill(c.quantity, p ? p.quantity : null)}</td></tr>`;
   }).join('') || `<tr><td colspan="5" class="empty">這個車場尚無尿素登錄資料</td></tr>`;
 }
 
