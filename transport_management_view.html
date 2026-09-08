@@ -2554,6 +2554,30 @@
         </table>
       </div>
     </div>
+
+    <div class="card no-print">
+      <h2>血壓／酒測量測紀錄表</h2>
+      <div class="muted" style="margin-bottom:10px;">A4 橫式、一週一張。人員名單依區域與範圍自動帶入，產生後可直接列印或存成圖片。</div>
+      <div class="form-grid">
+        <label>表單類型
+          <select id="form_type">
+            <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
+            <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
+          </select>
+        </label>
+        <label id="form_emp_wrap" style="display:none;">人員
+          <select id="form_emp"></select>
+        </label>
+        <label id="form_purpose_wrap" style="display:none;">用途<input id="form_purpose"></label>
+      </div>
+      <div class="form-grid" id="form_extra"></div>
+      <button class="btn" id="form_generate">產生表單</button>
+      <button class="btn ghost no-print" id="form_print" style="display:none;">列印</button>
+      <button class="btn ghost no-print" id="form_png" style="display:none;">下載圖片（PNG）</button>
+      <button class="btn ghost no-print" id="form_export_csv" style="display:none;">匯出 Excel（CSV）</button>
+    </div>
+
+    <div id="printArea"></div>
   </div>
 
   <div id="stock" class="panel">
@@ -2696,42 +2720,6 @@
     </div>
   </div>
 
-  <div id="forms" class="panel">
-    <div class="card no-print">
-      <h2>選擇表單</h2>
-      <div class="form-grid">
-        <label>表單類型
-          <select id="form_type">
-            <option value="equipment_list">物品領用清單</option>
-            <option value="pension_contribution">勞健保提撥計算表</option>
-            <option value="personal_leave">個人請假清單</option>
-            <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
-            <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
-            <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
-            <option value="employer_ins_el">僱主險（團保）名冊 — 已加保人員（EL 格式）</option>
-            <option value="employer_ins_en">僱主險（團保）名冊 — 全體在職人員（EN 格式）</option>
-            <option value="contact_roster">人員通訊資料（依區別分組）</option>
-            <option value="phone_signoff">公務機領用簽收表</option>
-            <option value="phone_pool">待領用門號清單</option>
-            <option value="ext_list">桌機分機表</option>
-            <option value="stocktake_vehicle">車用物品盤點表</option>
-            <option value="stocktake_staff">人員物品盤點表</option>
-          </select>
-        </label>
-        <label>人員
-          <select id="form_emp"></select>
-        </label>
-        <label>用途（在職證明用）<input id="form_purpose" placeholder="例：辦理信用卡使用"></label>
-      </div>
-      <div class="form-grid" id="form_extra"></div>
-      <button class="btn" id="form_generate">產生表單</button>
-      <button class="btn ghost no-print" id="form_print" style="display:none;">列印</button>
-      <button class="btn ghost no-print" id="form_png" style="display:none;">下載圖片（PNG）</button>
-      <button class="btn ghost no-print" id="form_export_csv" style="display:none;">匯出 Excel（CSV）</button>
-    </div>
-
-    <div id="printArea"></div>
-  </div>
 </div>
     </div>
   </div>
