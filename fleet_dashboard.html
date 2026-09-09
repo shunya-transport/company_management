@@ -3926,6 +3926,48 @@ function checkRequired(table, rows){
   const names = [...new Set(bad.flat())].map(k => FIELD_LABELS[k] || k);
   return { count: bad.length, names: names };
 }
+// ===== 一次操作到底寫了哪幾張表 =====
+// 這套系統一個動作常常要連寫好幾張表：新增人員＝人員主檔＋必繳文件＋門禁卡；
+// 離職＝物品歸還＋庫存＋公務機＋儀器＋分機＋門禁卡＋必繳文件＋離職歷史＋人員主檔＋勞健保。
+// PostgREST 沒有跨表交易，中間任何一步失敗，前面已經寫進去的不會自己退回去，
+// 就留下一半的資料 —— 而畫面上只會跳一個錯誤碼，沒人知道哪些已經進去、還缺什麼。
+// （李東憲那次就是這樣：人員主檔寫好了，必繳文件被擋下來，看起來像新增成功。）
+// 這裡記下每一次操作成功寫入的表，失敗時一起講清楚，才知道要補哪幾項。
+const KEY_LABELS = {
+  roster_employees:'人員主檔', roster_employees_history:'離職歷史', doc_checklist:'必繳文件',
+  access_cards:'門禁卡', access_card_roster:'門禁卡清冊', insurance_changes:'勞健保異動',
+  employee_equipment:'物品領用', vehicle_equipment:'車用配備', stock_transactions:'庫存異動',
+  stock_items:'庫存品項', employee_trainings:'外訓證照', training_log:'內訓紀錄',
+  leave_records:'請假', overtime_records:'加班', roster_vehicles:'車輛主檔',
+  vehicle_documents:'車輛證件', vehicle_insurance:'車輛保險', vehicle_mileage_logs:'里程',
+  fuel_logs:'加油', maint_records:'維修保養', maintenance_schedules:'保養排程',
+  grease_records:'打油', axle_maintenance_records:'輪軸保養', tire_records:'輪胎',
+  tire_service_orders:'輪胎作業單', tire_service_tires:'輪胎作業單明細',
+  tire_service_charges:'輪胎作業單費用', trailer_leases:'板架租賃', lessees:'承租方',
+  company_phones:'公務機', instruments:'儀器', calibration_records:'校驗紀錄',
+  medical_exam_records:'體檢', medical_kit_items:'醫藥箱', office_extensions:'桌機分機',
+  office_locations:'車場電話', pension_elections:'勞退提繳', admin_rewards:'獎懲',
+  admin_tolls:'國道通行費', urea_logs:'車用尿素', urea_stock_in:'尿素進貨',
+  urea_stock_opening:'尿素期初', work_hour_monthly:'月度工時', work_hour_daily:'每日工時',
+  vehicle_equipment_transfers:'配備移轉', emission_test_records:'排煙檢測',
+  container_inspections:'貨櫃檢查表', annual_leave_yearly:'曆年特休', medical_kit:'醫藥箱'
+};
+function keyLabel(k){ return KEY_LABELS[k] || k; }
+let SAVE_TRAIL = [];
+// 每一次按鍵或按滑鼠都重新開始記錄，「這一次操作」的範圍才抓得準
+document.addEventListener('click', () => { SAVE_TRAIL = []; }, true);
+document.addEventListener('keydown', (e) => { if(e.key === 'Enter') SAVE_TRAIL = []; }, true);
+function saveTrailNote(key){
+  const done = [...new Set(SAVE_TRAIL.filter(k => k !== key))].map(keyLabel);
+  let s = '\n\n【這一次操作卡在「' + keyLabel(key) + '」】';
+  if(done.length){
+    s += '\n這一次已經寫進雲端的有：' + done.join('、')
+       + '\n這幾項不會自己還原，請到對應的頁面確認內容，缺的部分再補一次。';
+  }else{
+    s += '\n這是第一步就失敗，沒有任何東西被寫進去，可以放心重來。';
+  }
+  return s;
+}
 // 資料庫回來的錯誤碼翻成白話，不然畫面上只有一串英文，看不出下一步該做什麼
 function dbErrorHint(err){
   const m = String((err && err.message) || err || '');
@@ -4018,14 +4060,15 @@ async function saveState(key, value, shared){
       await supaFetch(`${map.table}?${map.pk}=in.(${idsToDelete.join(',')})`, { method:'DELETE' });
     }
     rememberGood(key, value);   // 這一份已經跟雲端一致了，下次失敗就還原成這個樣子
+    SAVE_TRAIL.push(key);
   }catch(err){
     console.error('saveState failed for', key, err);
     // 把清單還原成雲端目前的樣子。沒還原的話，剛才那一筆會留在畫面上，
     // 排除問題後再按一次儲存就會變成兩筆。
     const _rolled = rollbackAfterFail(key, value);
     showStorageWarning('「' + key + '」存檔失敗:' + (err && err.message ? err.message : err));
-    alert('無法儲存資料到雲端資料庫，這次完全沒有寫入。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
-          dbErrorHint(err) +
+    alert('這一張表沒有存進雲端資料庫（這一筆完全沒有寫入）。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
+          saveTrailNote(key) + dbErrorHint(err) +
           (_rolled ? '\n\n下面的清單已經還原成雲端目前的內容，不會多出一筆。' : '') +
           '\n\n您剛才填在表單欄位裡的內容仍在畫面上，請「不要重新整理」，先排除問題後再按一次儲存。');
     throw err;
@@ -4199,12 +4242,13 @@ async function saveRows(key, rows, whole){
   try{
     await flushWrites(key, map, plan);
     if(whole) rememberGood(key, whole);
+    SAVE_TRAIL.push(key);
   }catch(err){
     console.error('saveRows failed for', key, err);
     const _rolled = whole ? rollbackAfterFail(key, whole) : false;
     showStorageWarning('「' + key + '」存檔失敗：' + (err && err.message ? err.message : err));
-    alert('無法儲存資料到雲端資料庫，這次完全沒有寫入。\n\n錯誤訊息：' + (err && err.message ? err.message : err)
-        + dbErrorHint(err)
+    alert('這一張表沒有存進雲端資料庫（這一筆完全沒有寫入）。\n\n錯誤訊息：' + (err && err.message ? err.message : err)
+        + saveTrailNote(key) + dbErrorHint(err)
         + (_rolled ? '\n\n畫面已經還原成雲端目前的內容。' : ''));
     throw err;
   }
