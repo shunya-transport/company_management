@@ -1155,11 +1155,15 @@
           <option value="報名">只看報名／上課</option>
           <option value="換證">只看取得／換證</option>
         </select>
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;">
+          <input type="checkbox" id="exth_left" style="width:auto;margin:0;"> 不看已離職人員
+        </label>
         <button class="btn ghost no-print" id="exth_csv">匯出 CSV</button>
       </div>
+      <div class="muted" style="margin:-4px 0 10px;font-size:12px;">已離職人員的紀錄右邊有「刪除」可以整筆清掉；在職人員請到上面的「外訓證照總表」修改。</div>
       <div class="table-scroll" style="max-height:440px;">
         <table class="cert-table">
-          <thead><tr><th>日期</th><th>人員</th><th>訓練項目</th><th>事件</th><th>上課日期</th><th>上課地點</th><th>辦理協會</th><th>證書字號</th><th>到期日</th></tr></thead>
+          <thead><tr><th>日期</th><th>人員</th><th>訓練項目</th><th>事件</th><th>上課日期</th><th>上課地點</th><th>辦理協會</th><th>證書字號</th><th>到期日</th><th></th></tr></thead>
           <tbody id="exthBody"></tbody>
         </table>
       </div>
@@ -3980,6 +3984,24 @@ function dbErrorHint(err){
     return '\n\n【這是「找不到對應資料」的錯誤】這一筆掛在一個已經不存在的人或車底下，請確認選的人員／車號還在清單裡。';
   if(m.indexOf('PGRST204') >= 0)
     return '\n\n【這是「欄位不存在」的錯誤】程式送了一個資料庫沒有的欄位，通常代表有一段 SQL 還沒執行。';
+  // 23514＝資料庫欄位上有一條「只准填這幾種」的白名單，而畫面上送出的值不在裡面。
+  // 幾乎都是畫面先加了新選項、資料庫的白名單還沒放寬造成的，所以直接把要跑的 SQL 講出來。
+  if(m.indexOf('23514') >= 0){
+    const _c = /constraint "([^"]+)"/.exec(m);
+    const _n = _c ? _c[1] : '';
+    let s = '\n\n【這是「資料庫不認得這個選項」的錯誤】'
+          + '\n這一欄在資料庫裡有一份允許值清單，畫面上送出的值還沒被列進去，所以整筆被擋下來。';
+    if(_n) s += '\n（規則名稱：' + _n + '）';
+    if(_n.indexOf('transaction_type') >= 0 || m.indexOf('stock_transactions') >= 0){
+      s += '\n\n這一項是「盤點」和車場的三種異動（撥至車場／車場發出／車場退回）'
+         + '\n資料庫還沒放行。請把 SQL_154_庫存異動類型放行.sql 貼到'
+         + '\nSupabase → SQL Editor 執行一次，之後就正常了。'
+         + '\n（在那之前，進貨、報廢、領用、退回這幾種還是可以照常使用。）';
+    }else{
+      s += '\n請把這個規則名稱告訴管理者，需要在資料庫端把新的值加進允許清單。';
+    }
+    return s;
+  }
   return '';
 }
 async function saveState(key, value, shared){
@@ -12858,10 +12880,11 @@ function extHistoryRows(){
     const left = !!t.employee_left;
     const item = t.type_name || '';
     if(t.class_start_date){
+      // act：這一列真正對應到資料庫的哪一筆、哪一段，刪除時才知道要動什麼
       out.push({ date: t.class_start_date, who: who, left: left, item: item, kind: '報名',
                  event: rtIsPast(t) ? '已上課，待補證號' : '已報名，還沒上課',
                  span: rtDateText(t), loc: t.class_location || '', org: t.class_org || '',
-                 cert: '', expiry: '' });
+                 cert: '', expiry: '', act: { tid: t.id, mode: 'book', li: -1 } });
     }
     if(t.issue_date){
       // 發證日期欄在舊資料裡有「欠」「暫不複訓」這種文字，不是日期就不要放進日期欄，
@@ -12871,9 +12894,10 @@ function extHistoryRows(){
                  event: '取得證照（目前這張）' + (_d ? '' : '　發證日期：' + t.issue_date),
                  span: '', loc: '', org: '',
                  cert: t.cert_no || '',
-                 expiry: t.no_expiry ? '長期有效' : (t.expiry_date || '') });
+                 expiry: t.no_expiry ? '長期有效' : (t.expiry_date || ''),
+                 act: { tid: t.id, mode: 'cert', li: -1 } });
     }
-    String(t.notes || '').split('\n').forEach(line => {
+    String(t.notes || '').split('\n').forEach((line, li) => {
       const r = parseRenewNote(line);
       if(!r) return;
       const c = r.cls ? r.cls.split('／') : [];
@@ -12881,7 +12905,8 @@ function extHistoryRows(){
       out.push({ date: _rd, who: who, left: left, item: item, kind: '換證',
                  event: '舊證（' + r.date + ' 換掉）', span: c[0] || '',
                  loc: c[1] || '', org: c[2] || '',
-                 cert: r.cert_no, expiry: r.expiry });
+                 cert: r.cert_no, expiry: r.expiry,
+                 act: { tid: t.id, mode: 'note', li: li } });
     });
   });
   // 沒有日期的排最後，不要卡在最新的紀錄前面
@@ -12904,9 +12929,11 @@ function renderExtHistory(){
   const q = ((document.getElementById('exth_search') || {}).value || '').trim();
   const yf = ((document.getElementById('exth_year') || {}).value) || 'all';
   const ef = ((document.getElementById('exth_event') || {}).value) || 'all';
+  const showLeft = !(document.getElementById('exth_left') || {}).checked;
   if(q) rows = rows.filter(r => (r.who + r.item + r.cert).includes(q));
   if(yf !== 'all') rows = rows.filter(r => String(r.date || '').slice(0, 4) === yf);
   if(ef !== 'all') rows = rows.filter(r => r.kind === ef);
+  if(!showLeft) rows = rows.filter(r => !r.left);
   const cnt = document.getElementById('exth_count');
   if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
   body.innerHTML = rows.slice(0, 600).map(r => `<tr>
@@ -12919,7 +12946,44 @@ function renderExtHistory(){
       <td>${esc(r.org || '—')}</td>
       <td><span class="clip-cert" title="${esc(r.cert)}">${esc(r.cert || '—')}</span></td>
       <td>${esc(r.expiry || '—')}</td>
-    </tr>`).join('') || `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
+      <td>${(r.left && r.act)
+            ? `<button class="del-btn" data-exth-del="${r.act.tid}|${r.act.mode}|${r.act.li}">刪除</button>`
+            : '<span class="muted">—</span>'}</td>
+    </tr>`).join('') || `<tr><td colspan="10" class="empty">沒有符合條件的紀錄</td></tr>`;
+}
+// 離職人員的外訓紀錄可以在這裡刪掉。刪的是資料庫裡真正的那一段，不是只把畫面藏起來：
+//   報名 → 只清掉這一梯的上課日期／地點／協會，證照本身留著
+//   取得證照 → 整筆證照紀錄刪除（連同備註裡的換證履歷）
+//   舊證 → 只刪備註裡的那一行換證履歷
+// 在職人員不給刪，避免手滑；要刪在職的請到上面的「外訓證照總表」。
+async function exthDelete(tid, mode, li){
+  const t = (STATE.trainings || []).find(x => String(x.id) === String(tid));
+  if(!t){ alert('找不到這一筆紀錄，請重新整理再試。'); return; }
+  if(!t.employee_left){ alert('這是在職人員的紀錄，這裡不開放刪除。\n要修改請到上面的「外訓證照總表」。'); return; }
+  const who = t.employee_name || '';
+  const item = t.type_name || '';
+  if(mode === 'book'){
+    if(!confirm('要清掉 ' + who + ' 的「' + item + '」這一梯複訓報名嗎？\n\n'
+              + '只會清掉上課日期、地點、辦理協會，證照本身的資料不動。')) return;
+    t.class_start_date = null; t.class_end_date = null;
+    t.class_location = null;  t.class_org = null;
+  }else if(mode === 'cert'){
+    if(!confirm('要刪掉 ' + who + ' 的「' + item + '」整筆證照紀錄嗎？\n\n'
+              + '證號、發證日、到期日，連同備註裡的換證履歷都會一起消失。\n'
+              + '他日後如果復職，這張證就接不回來了。')) return;
+    STATE.trainings = STATE.trainings.filter(x => String(x.id) !== String(tid));
+  }else if(mode === 'note'){
+    const lines = String(t.notes || '').split('\n');
+    const idx = parseInt(li);
+    if(!(idx >= 0 && idx < lines.length)){ alert('這一行換證履歷已經不在了，請重新整理。'); return; }
+    if(!confirm('要刪掉這一行換證履歷嗎？\n\n' + lines[idx])) return;
+    lines.splice(idx, 1);
+    t.notes = lines.join('\n').trim() || null;
+  }else{
+    return;
+  }
+  try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
+  renderAll();
 }
 function extHistoryCsv(){
   const q = ((document.getElementById('exth_search') || {}).value || '').trim();
@@ -16180,6 +16244,15 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   });
   const _csv = document.getElementById('exth_csv');
   if(_csv) _csv.addEventListener('click', extHistoryCsv);
+  const _lf = document.getElementById('exth_left');
+  if(_lf) _lf.addEventListener('change', renderExtHistory);
+  const _tb = document.getElementById('exthBody');
+  if(_tb) _tb.addEventListener('click', async (e) => {
+    const v = e.target && e.target.getAttribute ? e.target.getAttribute('data-exth-del') : null;
+    if(!v) return;
+    const p = v.split('|');
+    await exthDelete(p[0], p[1], p[2]);
+  });
 })();
 (function(){
   const _body = document.getElementById('rtBody');
