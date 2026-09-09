@@ -1209,6 +1209,10 @@
           <option value="expiry">依到期日（快到期的排前面）</option>
           <option value="person">依人員（同一個人排在一起）</option>
         </select>
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;">
+          <input type="checkbox" id="training_left_only" style="width:auto;margin:0;"> 只看已離職人員
+        </label>
+        <button class="btn ghost no-print" id="training_del_left" style="display:none;">刪除已離職人員的紀錄</button>
       </div>
       <div class="table-scroll">
         <table class="cert-table">
@@ -5701,6 +5705,8 @@ function renderTrainingTable(){
   const statusFilter = document.getElementById('training_status_filter').value;
   const sortBy = (document.getElementById('training_sort') || {}).value || 'expiry';
   let rows = STATE.trainings.slice();
+  updateDelLeftBtn();
+  if((document.getElementById('training_left_only') || {}).checked) rows = rows.filter(t => t.employee_left);
   // 證書字號也能搜：手上只有一張證的時候要反查是誰的
   if(q) rows = rows.filter(t => (t.employee_name||'').includes(q)
                              || (t.type_name||'').includes(q)
@@ -5738,7 +5744,7 @@ function renderTrainingTable(){
       ? `<button class="name-link" data-save-ext="${t.id}">儲存</button> <button class="del-btn" data-cancel-ext="${t.id}">取消</button>`
       : `<button class="name-link" data-edit-ext="${t.id}">修改</button> <button class="del-btn" data-del-training="${t.id}">刪除</button>`;
     return `<tr>
-      <td>${esc(t.employee_name)}</td>
+      <td>${esc(t.employee_name)}${t.employee_left ? ' <span class="pill gray">已離職</span>' : ''}</td>
       <td><span class="clip-item" title="${esc(t.type_name||'')}">${esc(t.type_name)}</span></td>
       <td><span class="clip-cert" title="${esc(t.cert_no||'')}">${esc(t.cert_no||'')}</span></td>
       <td>${issueCell}</td>
@@ -16150,12 +16156,48 @@ document.getElementById('tf_add').addEventListener('click', async () => {
 })();
 
 
+// ===== 離職人員直接從清冊上清掉 =====
+// 這張清冊回答的是「現在誰手上有哪張證、什麼時候到期」。人都走了還一直列在上面，
+// 到期提醒和複訓報名會被他們洗版，數量也對不起來。
+// 刪掉之後下面的「外訓歷史」會跟著一起消失 —— 歷史是從這份紀錄長出來的，不是另一份備份。
+function leftTrainings(){ return (STATE.trainings || []).filter(t => t.employee_left); }
+function updateDelLeftBtn(){
+  const b = document.getElementById('training_del_left');
+  if(!b) return;
+  const n = leftTrainings().length;
+  b.textContent = '刪除已離職人員的紀錄（' + n + ' 筆）';
+  b.style.display = n === 0 ? 'none' : '';
+}
+async function deleteLeftTrainings(){
+  const rows = leftTrainings();
+  if(!rows.length){ alert('目前清冊上沒有已離職人員的紀錄。'); return; }
+  const who = [...new Set(rows.map(t => t.employee_name || '（無姓名）'))];
+  if(!confirm('要把這 ' + rows.length + ' 筆已離職人員的外訓證照紀錄全部刪掉嗎？\n\n'
+            + '共 ' + who.length + ' 人：' + who.join('、') + '\n\n'
+            + '下面的「外訓歷史」也會跟著一起消失。這些人日後如果復職，證照要重新登記。')) return;
+  const ids = new Set(rows.map(t => String(t.id)));
+  STATE.trainings = STATE.trainings.filter(t => !ids.has(String(t.id)));
+  try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
+  renderAll();
+}
+{
+  const _dl = document.getElementById('training_del_left');
+  if(_dl) _dl.addEventListener('click', deleteLeftTrainings);
+  const _lo = document.getElementById('training_left_only');
+  if(_lo) _lo.addEventListener('change', renderTrainingTable);
+}
+
 // 合併後修改／儲存／取消／刪除全在同一張表上，事件也集中在這裡。
 // （原本拆在兩張表上，時效總表那個 tbody 已經不存在了，
 //   舊的事件不移過來會在頁面載入時就丟錯。）
 document.getElementById('trainingTableBody').addEventListener('click', async (e) => {
   const delId = e.target.getAttribute('data-del-training');
   if(delId){
+    // 以前點一下就直接刪掉，沒有問過，手滑一次就要重打證號和日期
+    const _t = STATE.trainings.find(x => String(x.id) === delId);
+    if(_t && !confirm('要刪掉 ' + (_t.employee_name || '') + ' 的「' + (_t.type_name || '') + '」嗎？\n\n'
+                    + '證號 ' + (_t.cert_no || '（空白）') + '，到期日 ' + (_t.expiry_date || '（空白）') + '\n'
+                    + '連同備註裡的換證履歷會一起消失。')) return;
     STATE.trainings = STATE.trainings.filter(t => String(t.id) !== delId);
     await saveState('employee_trainings', STATE.trainings, true);
     renderAll();
