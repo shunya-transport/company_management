@@ -3042,6 +3042,21 @@ function maxRefIdEverywhere(field){
   });
   return m;
 }
+// 撞號警報：同一個內部編號同時掛著在職的人與離職歷史的人，
+// 代表有人用舊版的檔案建過新人。這種情況畫面會把兩個人的資料混在一起
+// （新人身上會冒出前一個人的證照、複訓報名、領用紀錄），一定要先處理。
+function warnDuplicateEmployeeIds(){
+  const bar = document.getElementById('storageWarning');
+  if(bar && bar.style.display === 'block') return;   // 已經有更急的載入失敗警告就不要蓋掉
+  const hist = new Map();
+  (STATE.employeesHistory || []).forEach(h => { if(h && h.id != null) hist.set(String(h.id), h); });
+  const dup = (STATE.employees || []).filter(e => e && hist.has(String(e.id)));
+  if(!dup.length) return;
+  const txt = dup.map(e => (e.name || '') + '（' + (e.employee_no || '') + '）'
+      + ' 跟已離職的 ' + ((hist.get(String(e.id)) || {}).name || '') + ' 共用同一個內部編號').join('；');
+  showStorageWarning('編號重複：' + txt
+    + '。這兩個人的證照、複訓、領用、勞健保會混在一起，請先聯絡管理員處理，不要在他們身上新增資料。');
+}
 function nextEmployeeId(){
   return Math.max(maxIdIn(STATE.employees),
                   maxIdIn(STATE.employeesHistory),
@@ -4286,6 +4301,7 @@ async function loadState(){
   //   而「雲端最後確認過的樣子」是在貼之前記下來的，兩份對不起來。
   //   不重記一次的話，之後每次存檔都會把每一列都當成「有改過」而整份送出去。
   refreshAllBaselines();
+  warnDuplicateEmployeeIds();
 }
 
 // ===== 電動板車預約（唯讀）=====
