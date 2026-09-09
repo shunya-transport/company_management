@@ -16280,11 +16280,25 @@ document.getElementById('sf_add').addEventListener('click', async () => {
       gates: cardGates, employee_id: newEmpId
     });
   }
+  // ★ 這裡是分成好幾次寫入的：人員主檔、必繳文件、門禁卡。
+  //   中間任何一步失敗，前面已經寫進去的不會退回去（沒有跨表的交易），
+  //   結果就是「人建好了，但必繳文件是空的」——這種半套狀態如果沒講，
+  //   之後只會看到人在清單上，完全不知道還缺什麼。
   await saveState('roster_employees', STATE.employees, true);
-  await saveState('doc_checklist', STATE.docChecklist, true);
+  const _halfDone = [];
+  try{
+    await saveState('doc_checklist', STATE.docChecklist, true);
+  }catch(e){ _halfDone.push('必繳文件'); }
   if(cardNo){
-    await saveState('access_cards', STATE.accessCards, true);
-    await saveState('access_card_roster', STATE.accessCardRoster, true);
+    try{
+      await saveState('access_cards', STATE.accessCards, true);
+      await saveState('access_card_roster', STATE.accessCardRoster, true);
+    }catch(e){ _halfDone.push('門禁卡'); }
+  }
+  if(_halfDone.length){
+    alert(name + ' 的人員主檔已經建立了，但「' + _halfDone.join('」與「')
+        + '」沒有存進去（上面那個錯誤訊息就是原因）。\n\n'
+        + '請到「人員管理 → 在職人員清單」點他的名字，把這幾項補登一次。');
   }
   ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('sf_empins_status').checked = false;
