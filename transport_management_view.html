@@ -3217,24 +3217,23 @@ function maxIdIn(arr, field){
   });
   return m;
 }
+// 掃 STATE 裡「每一份清單」的這個欄位，不寫死表名 —— 以後多接一張表也自動涵蓋
+function maxRefIdEverywhere(field){
+  let m = 0;
+  Object.keys(STATE).forEach(k => {
+    const a = STATE[k];
+    if(Array.isArray(a)) m = Math.max(m, maxIdIn(a, field));
+  });
+  return m;
+}
 function nextEmployeeId(){
-  let m = Math.max(maxIdIn(STATE.employees), maxIdIn(STATE.employeesHistory));
-  [STATE.docChecklist, STATE.accessCards, STATE.accessCardRoster, STATE.trainings,
-   STATE.employeeEquipment, STATE.insuranceChanges, STATE.insuranceMonthly,
-   STATE.leaveRecords, STATE.overtimeRecords, STATE.trainingLog, STATE.internalTrainings,
-   STATE.medicalExamRecords, STATE.pensionElections, STATE.adminRewards,
-   STATE.leaveLedger, STATE.annualLeaveYearly, STATE.driverLicenses, STATE.stockTransactions]
-    .forEach(a => { m = Math.max(m, maxIdIn(a, 'employee_id')); });
-  return m + 1;
+  return Math.max(maxIdIn(STATE.employees),
+                  maxIdIn(STATE.employeesHistory),
+                  maxRefIdEverywhere('employee_id')) + 1;
 }
 function nextVehicleId(){
-  let m = maxIdIn(STATE.vehicles);
-  [STATE.vehicleDocuments, STATE.vehicleEquipment, STATE.vehicleInsurance,
-   STATE.mileageLogs, STATE.fuelLogs, STATE.maintRecords, STATE.maintSchedules,
-   STATE.greaseRecords, STATE.axleRecords, STATE.tireRecords, STATE.adminTolls,
-   STATE.leases, STATE.emissionRecords, STATE.ureaLogs, STATE.containerInspections]
-    .forEach(a => { m = Math.max(m, maxIdIn(a, 'vehicle_id')); });
-  return m + 1;
+  return Math.max(maxIdIn(STATE.vehicles),
+                  maxRefIdEverywhere('vehicle_id')) + 1;
 }
 
 // ===== 門禁卡：發卡與通行權限 =====
