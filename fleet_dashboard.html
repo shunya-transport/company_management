@@ -3016,6 +3016,42 @@ function statusLabel(dateStr, soonDays){
 }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+// ===== 編號配發：不能只看眼前這一份清單 =====
+// nextId(STATE.employees) 只看在職名冊。但離職的人是從 employees 整列刪掉、搬到
+// employees_history 的，而他名下的必繳文件、證照、領用、勞健保紀錄全部留著（刻意保留，
+// 復職要接回來）。所以只要離職的剛好是編號最大的那一位，下一個新人就會拿到同一個編號：
+//   * employee_document_checklist 有 (employee_id, item_id) 唯一鍵 → 直接 23505 存不進去
+//   * 就算沒撞到唯一鍵，新人也會「繼承」前一個人的證照與領用紀錄
+//   * 那個人日後復職，兩個人會變成同一個編號
+// 車輛主檔永久刪除之後再新增車輛，也是一樣的坑（里程、保養、保險都掛 vehicle_id）。
+// 解法：配編號時把所有還留著這個編號的地方都算進去，取真正的最大值。
+function maxIdIn(arr, field){
+  let m = 0;
+  (arr || []).forEach(x => {
+    const v = Number(x && (field ? x[field] : x.id));
+    if(!isNaN(v) && v > m) m = v;
+  });
+  return m;
+}
+function nextEmployeeId(){
+  let m = Math.max(maxIdIn(STATE.employees), maxIdIn(STATE.employeesHistory));
+  [STATE.docChecklist, STATE.accessCards, STATE.accessCardRoster, STATE.trainings,
+   STATE.employeeEquipment, STATE.insuranceChanges, STATE.insuranceMonthly,
+   STATE.leaveRecords, STATE.overtimeRecords, STATE.trainingLog, STATE.internalTrainings,
+   STATE.medicalExamRecords, STATE.pensionElections, STATE.adminRewards,
+   STATE.leaveLedger, STATE.annualLeaveYearly, STATE.driverLicenses, STATE.stockTransactions]
+    .forEach(a => { m = Math.max(m, maxIdIn(a, 'employee_id')); });
+  return m + 1;
+}
+function nextVehicleId(){
+  let m = maxIdIn(STATE.vehicles);
+  [STATE.vehicleDocuments, STATE.vehicleEquipment, STATE.vehicleInsurance,
+   STATE.mileageLogs, STATE.fuelLogs, STATE.maintRecords, STATE.maintSchedules,
+   STATE.greaseRecords, STATE.axleRecords, STATE.tireRecords, STATE.adminTolls,
+   STATE.leases, STATE.emissionRecords, STATE.ureaLogs, STATE.containerInspections]
+    .forEach(a => { m = Math.max(m, maxIdIn(a, 'vehicle_id')); });
+  return m + 1;
+}
 
 // ===== 門禁卡：發卡與通行權限 =====
 // 公司目前實際在用的門禁點就這五個，發卡時直接勾選，不用自己打字避免打錯對不上
@@ -3876,6 +3912,20 @@ function checkRequired(table, rows){
   const names = [...new Set(bad.flat())].map(k => FIELD_LABELS[k] || k);
   return { count: bad.length, names: names };
 }
+// 資料庫回來的錯誤碼翻成白話，不然畫面上只有一串英文，看不出下一步該做什麼
+function dbErrorHint(err){
+  const m = String((err && err.message) || err || '');
+  if(m.indexOf('23505') >= 0)
+    return '\n\n【這是「重覆」的錯誤】資料庫裡已經有一筆一模一樣的資料了。'
+         + '\n常見原因是同一個人、同一個項目被登記了兩次。請先重新整理頁面看看那一筆是不是已經存在。';
+  if(m.indexOf('23502') >= 0)
+    return '\n\n【這是「必填欄位空白」的錯誤】有一個資料庫規定不能空白的欄位沒有值，請檢查表單有沒有漏填。';
+  if(m.indexOf('23503') >= 0)
+    return '\n\n【這是「找不到對應資料」的錯誤】這一筆掛在一個已經不存在的人或車底下，請確認選的人員／車號還在清單裡。';
+  if(m.indexOf('PGRST204') >= 0)
+    return '\n\n【這是「欄位不存在」的錯誤】程式送了一個資料庫沒有的欄位，通常代表有一段 SQL 還沒執行。';
+  return '';
+}
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
@@ -3961,6 +4011,7 @@ async function saveState(key, value, shared){
     const _rolled = rollbackAfterFail(key, value);
     showStorageWarning('「' + key + '」存檔失敗:' + (err && err.message ? err.message : err));
     alert('無法儲存資料到雲端資料庫，這次完全沒有寫入。\n\n錯誤訊息：' + (err && err.message ? err.message : err) +
+          dbErrorHint(err) +
           (_rolled ? '\n\n下面的清單已經還原成雲端目前的內容，不會多出一筆。' : '') +
           '\n\n您剛才填在表單欄位裡的內容仍在畫面上，請「不要重新整理」，先排除問題後再按一次儲存。');
     throw err;
@@ -4139,6 +4190,7 @@ async function saveRows(key, rows, whole){
     const _rolled = whole ? rollbackAfterFail(key, whole) : false;
     showStorageWarning('「' + key + '」存檔失敗：' + (err && err.message ? err.message : err));
     alert('無法儲存資料到雲端資料庫，這次完全沒有寫入。\n\n錯誤訊息：' + (err && err.message ? err.message : err)
+        + dbErrorHint(err)
         + (_rolled ? '\n\n畫面已經還原成雲端目前的內容。' : ''));
     throw err;
   }
@@ -7800,11 +7852,11 @@ function renderMaintenanceTables(){
 
 let currentChecklistEmpId = null;
 function getChecklistStatus(empId, itemId){
-  const rec = STATE.docChecklist.find(c => c.employee_id === empId && c.item_id === itemId);
+  const rec = STATE.docChecklist.find(c => String(c.employee_id) === String(empId) && String(c.item_id) === String(itemId));
   return rec ? rec.status : '未繳交';
 }
 function getChecklistDate(empId, itemId){
-  const rec = STATE.docChecklist.find(c => c.employee_id === empId && c.item_id === itemId);
+  const rec = STATE.docChecklist.find(c => String(c.employee_id) === String(empId) && String(c.item_id) === String(itemId));
   return rec ? (rec.submitted_date || '') : '';
 }
 function openChecklistModal(empId){
@@ -7832,7 +7884,10 @@ async function saveChecklist(){
   statusSelects.forEach(sel => {
     const itemId = parseInt(sel.getAttribute('data-item-id'));
     const status = sel.value;
-    let rec = STATE.docChecklist.find(c => c.employee_id === currentChecklistEmpId && c.item_id === itemId);
+    // 用字串比對：編號在不同來源可能是數字或字串，型別不一致會找不到既有那一列，
+    // 結果又開一列新的，然後撞唯一鍵
+    let rec = STATE.docChecklist.find(c =>
+      String(c.employee_id) === String(currentChecklistEmpId) && String(c.item_id) === String(itemId));
     if(rec){ rec.status = status; }
     else{ STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: currentChecklistEmpId, item_id: itemId, status}); }
   });
@@ -16158,7 +16213,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     document.getElementById('sf_position').value,
     document.getElementById('sf_company').value);
   if(_orgBad.length){ orgWarn(_orgBad); return; }
-  const newEmpId = nextId(STATE.employees);
+  const newEmpId = nextEmployeeId();   // 不能用 nextId(STATE.employees)：會撞到離職者留下的舊資料
   STATE.employees.push({
     id: newEmpId, employee_no: no, name,
     dept_id: _org.dept_id, dept_name: _org.dept_name,
@@ -16187,7 +16242,13 @@ document.getElementById('sf_add').addEventListener('click', async () => {
   });
   document.querySelectorAll('#sf_checklist .new-cl-status').forEach(sel => {
     const itemId = parseInt(sel.getAttribute('data-new-item-id'));
-    STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: newEmpId, item_id: itemId, status: sel.value, submitted_date: sel.value === '已繳交' ? todayISO() : null});
+    const _date = sel.value === '已繳交' ? todayISO() : null;
+    // 再保險一層：萬一這個編號以前真的被用過（舊資料還留著），就改既有那一列，
+    // 不要再開一列，免得撞到 (employee_id, item_id) 的唯一鍵。
+    const _old = (STATE.docChecklist || []).find(c =>
+      String(c.employee_id) === String(newEmpId) && String(c.item_id) === String(itemId));
+    if(_old){ _old.status = sel.value; _old.submitted_date = _date; }
+    else STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: newEmpId, item_id: itemId, status: sel.value, submitted_date: _date});
   });
   // 入職發卡：個人通行點 + 門禁卡完整清冊，兩邊一起寫，才不會清冊漏人
   if(cardNo){
@@ -18138,7 +18199,7 @@ document.getElementById('vf_add').addEventListener('click', async () => {
   if(!plate){ alert('請輸入車號'); return; }
   if(STATE.vehicles.some(v=>v.plate===plate)){ alert('這個車號已經存在'); return; }
   STATE.vehicles.push({
-    id: nextId(STATE.vehicles), plate, plate_number: plate,
+    id: nextVehicleId(), plate, plate_number: plate,
     trailer_size: document.getElementById('vf_trailer_size').value.trim() || null,
     vehicle_category: document.getElementById('vf_category').value,
     vehicle_type: document.getElementById('vf_type').value.trim(),
