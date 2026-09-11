@@ -1415,6 +1415,21 @@ function neUpdatePreview(){
         ? `<br><span style="color:var(--accent-dark);">稅前 <strong>${money(sp.base)}</strong>　稅額 <strong>${money(sp.tax)}</strong>　合計 <strong>${money(sp.gross)}</strong> 元</span>`
         : '');
 }
+// 日期落在未來就問一次。不硬擋（極少數情況可能真的要這樣記），但要按第二次才會過。
+// pairs 長這樣：[['發生日', '2026-12-31'], ['實際收付日', null]]
+function accFutureOK(pairs){
+  const bad = (pairs || []).filter(p => p[1] && /^\d{4}-\d{2}-\d{2}$/.test(String(p[1]).slice(0,10))
+                                        && String(p[1]).slice(0,10) > todayISO());
+  if(!bad.length) return true;
+  return confirm('【日期填在未來】\n\n'
+    + bad.map(p => '　' + p[0] + '：' + String(p[1]).slice(0,10)).join('\n')
+    + '\n\n今天是 ' + todayISO() + '。'
+    + '\n這兩個日期記的都是「已經發生的事」，填成未來的日期會讓月結、'
+    + '\n收支表與帳戶餘額對不起來。'
+    + '\n\n如果那是「還沒付、預定哪天付」，請改填在「預計收付日」，'
+    + '\n狀態留在掛帳中，等真的付了再入帳。'
+    + '\n\n確定就是這樣要存嗎？');
+}
 function neReadForm(){
   const s = subByCode(document.getElementById('ne_subject').value);
   const acc = accById(document.getElementById('ne_account').value);
@@ -1459,6 +1474,10 @@ async function neAdd(settled){
   if(row.invoice_no && !invDupConfirm(row.invoice_no, null, row.voucher_no)){ toast('ne_msg','已取消，沒有存檔'); return; }
   row.status = settled ? '已收付' : '掛帳中';
   row.settle_date = settled ? (row.due_date || row.entry_date) : null;
+  // 「直接入帳」會拿預計收付日當實際收付日，預計收付日填未來的時候就會生出未來的收付日
+  if(!accFutureOK([['發生日', row.entry_date], ['實際收付日', row.settle_date]])){
+    toast('ne_msg','已取消，沒有存檔'); return;
+  }
   if(settled) row.settled_by = CURRENT_USER || null;
   const btns = ['ne_add_pending','ne_add_settled'];
   btns.forEach(b => document.getElementById(b).disabled = true);
@@ -1662,7 +1681,8 @@ function renderPending(){
   const t = todayISO();
   document.getElementById('pdBody').innerHTML = rows.map(e => {
     const late = e.due_date && e.due_date < t;
-    return `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td>
+    const _fut = e.entry_date && String(e.entry_date).slice(0,10) > t;
+    return `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}${_fut ? ' <span class="pill red" title="發生日填在未來，請確認是不是年份打錯">未來</span>' : ''}</td>
       <td>${e.due_date ? (late ? `<span class="pill red">${esc(e.due_date)}</span>` : esc(e.due_date)) : '<span class="muted">未定</span>'}</td>
       <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
       <td>${esc(e.counterparty)}</td>
@@ -1981,6 +2001,7 @@ async function confirmSettle(){
   const d = document.getElementById('sm_date').value;
   if(!accId){ toast('sm_msg','請選收付帳戶'); return; }
   if(!d){ toast('sm_msg','請填實際收付日'); return; }
+  if(!accFutureOK([['實際收付日', d]])){ toast('sm_msg','已取消，沒有存檔'); return; }
   const _inv = document.getElementById('sm_invoice').value.trim();
   if(_inv && !invDupConfirm(_inv, e.entry_id, e.voucher_no)){ toast('sm_msg','已取消，沒有存檔'); return; }
   const acc = accById(accId);
@@ -2033,6 +2054,8 @@ async function saveEdit(){
   if(e.status === '已收付' && !acc){ toast('em_msg','已收付的帳一定要有收付帳戶'); return; }
   const _inv = document.getElementById('em_invoice').value.trim();
   if(_inv && !invDupConfirm(_inv, e.entry_id, e.voucher_no)){ toast('em_msg','已取消，沒有存檔'); return; }
+  if(!accFutureOK([['發生日', document.getElementById('em_date').value || e.entry_date],
+                   ['實際收付日', settle]])){ toast('em_msg','已取消，沒有存檔'); return; }
   try{
     const saved = await sbUpdate('acc_entries', 'entry_id', e.entry_id, {
       subject_code: s ? s.code : null, subject_name: s ? s.name : null,
