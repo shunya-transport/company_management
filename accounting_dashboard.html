@@ -1515,6 +1515,17 @@ function statusPill(s){
 
 // ---------- 掛帳中 ----------
 let PD_OVERDUE = false, PD_HIDDEN_NODATE = 0, PD_HIDDEN_OUT = 0;
+// 「已載入幾筆／雲端共幾筆」以前只在完全沒下條件時才顯示，一打字就被蓋掉 ——
+// 偏偏「怎麼搜都搜不到」的時候，最需要先確認的就是資料到底有沒有整份載進來。
+// 現在不管有沒有篩選都掛在後面。
+function pdLoadNote(){
+  const c = LOAD_COUNTS['acc_entries'] || {};
+  const got = c.got != null ? c.got : STATE.entries.length;
+  return '　<span class="muted">（記帳資料已載入 ' + got + ' 筆'
+       + (c.total != null ? ' ／ 雲端共 ' + c.total + ' 筆' : '') + '）</span>'
+       + (c.total != null && c.got < c.total
+           ? '　<span class="pill red">資料沒載完整，畫面會少一段，請重新整理</span>' : '');
+}
 // 搜尋比對的欄位集中在這裡，統計「別的分頁還有幾筆」時才會跟清單用同一套標準
 function pdKwHit(e, kw){
   return [e.voucher_no, e.counterparty, e.description, e.invoice_no,
@@ -1587,31 +1598,41 @@ function renderPending(){
       note.innerHTML = '目前條件：' + esc(parts.join('　')) + '　共 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）'
         + (_hid ? '　<span class="pill amber">其他條件都符合、只被期間擋住的還有 ' + _hid + ' 筆（' + _why.join('、') + '）</span>'
                 + ' <button class="btn ghost tiny" id="pd_dropRange">清掉期間，' + (rows.length + _hid) + ' 筆一起看</button>' : '')
-        + '　上面四張卡與匯出 CSV 都只算這 ' + rows.length + ' 筆。';
+        + '　上面四張卡與匯出 CSV 都只算這 ' + rows.length + ' 筆。' + pdLoadNote();
     }else if(filtering){
-      note.innerHTML = '目前條件：篩選後 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）';
+      note.innerHTML = '目前條件：篩選後 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）' + pdLoadNote();
     }else{
       // 沒下任何條件時也把筆數寫出來，才看得出資料是不是整份都在
-      const _c = LOAD_COUNTS['acc_entries'] || {};
-      note.innerHTML = '掛帳中共 <strong>' + allCnt + '</strong> 筆'
-        + '　<span class="muted">（記帳資料已載入 ' + (_c.got != null ? _c.got : STATE.entries.length) + ' 筆'
-        + (_c.total != null ? ' ／ 雲端共 ' + _c.total + ' 筆' : '') + '）</span>'
-        + (_c.total != null && _c.got < _c.total
-            ? '　<span class="pill red">資料沒載完整，畫面會少一段，請重新整理</span>' : '')
+      note.innerHTML = '掛帳中共 <strong>' + allCnt + '</strong> 筆' + pdLoadNote()
         + '　<span class="muted">沒填預計收付日的會照發生日排在同一條時間軸上，那一格顯示「未定」。</span>';
     }
-    // 這個分頁只放「掛帳中」。搜出來的筆數比預期少，很多時候是那幾筆早就收付掉了，
-    // 或是被併成主列的稅額。與其讓人以為資料不見，直接把它們在哪裡講出來。
+    // 這個分頁只放「掛帳中」。搜出來的筆數比預期少，通常是下面三種之一，
+    // 但畫面上一種都看不出來，只好一筆一筆去猜。乾脆每次搜尋都把帳算給人看：
+    //   a) 那幾筆早就收付掉了，在「已收付」分頁
+    //   b) 被併成主列的 5% 稅額，本來就不單獨顯示
+    //   c) 整份資料裡根本沒有 —— 那就是還沒登錄，或是名稱登成別的寫法
     const _kw = (document.getElementById('pd_search').value || '').trim().toLowerCase();
     if(_kw){
-      const _n = (st) => STATE.entries.filter(e => e.status === st && !isMergedTax(e) && pdKwHit(e, _kw)).length;
-      const _settled = _n('已收付'), _void = _n('已作廢');
-      const _tax = STATE.entries.filter(e => isMergedTax(e) && pdKwHit(e, _kw)).length;
-      const _p = [];
-      if(_settled) _p.push('「已收付」分頁 ' + _settled + ' 筆');
-      if(_void) _p.push('已作廢 ' + _void + ' 筆');
-      if(_tax) _p.push('併進主列的稅額 ' + _tax + ' 筆');
-      if(_p.length) note.innerHTML += '<br><span class="muted">「' + esc(_kw) + '」在這個分頁以外還有：' + _p.join('、') + '</span>';
+      const _hitAll = STATE.entries.filter(e => pdKwHit(e, _kw));
+      const _n = (st) => _hitAll.filter(e => e.status === st && !isMergedTax(e)).length;
+      const _pend = _n('掛帳中'), _settled = _n('已收付'), _void = _n('已作廢');
+      const _tax = _hitAll.filter(e => isMergedTax(e)).length;
+      if(!_hitAll.length){
+        note.innerHTML += '<br><span class="pill red">整份記帳資料裡完全找不到「' + esc(_kw) + '」</span>'
+          + '<span class="muted">　不是被篩選擋掉的。可能還沒登錄，或是當初登成別的寫法'
+          + '（全名／簡稱／中間有空格都會搜不到）。先確認上面「已載入 ／ 雲端共」兩個數字一樣，'
+          + '再試短一點的關鍵字。</span>';
+      }else{
+        const _p = ['掛帳中 ' + _pend + ' 筆'];
+        if(_settled) _p.push('已收付 ' + _settled + ' 筆');
+        if(_void) _p.push('已作廢 ' + _void + ' 筆');
+        if(_tax) _p.push('併進主列的稅額 ' + _tax + ' 筆');
+        note.innerHTML += '<br><span class="muted">「' + esc(_kw) + '」在整份記帳資料裡共 '
+          + _hitAll.length + ' 筆：' + _p.join('、')
+          + (_pend > rows.length ? '　<strong>掛帳中的 ' + _pend + ' 筆裡，目前的期間條件只讓 '
+                                 + rows.length + ' 筆顯示出來。</strong>' : '')
+          + '</span>';
+      }
     }
   }
   document.getElementById('pdStatRow').innerHTML =
