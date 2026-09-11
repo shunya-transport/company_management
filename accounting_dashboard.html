@@ -423,6 +423,10 @@
       <button class="btn ghost tiny" id="pd_thisyear">今年</button>
       <button class="btn ghost tiny" id="pd_overdue">只看逾期</button>
       <button class="btn ghost tiny" id="pd_clear">清除條件</button>
+      <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;"
+             title="同一張傳票的 5% 稅列平常會併進主列、不單獨佔一行。打開就會全部列出來，跟直接在資料庫查到的筆數一致。">
+        <input type="checkbox" id="pd_show_tax" style="width:auto;margin:0;"> 連 5% 稅列一起列出
+      </label>
     </div>
     <div class="muted" id="pdRangeNote" style="margin-bottom:8px;"></div>
     <div class="table-scroll">
@@ -864,7 +868,9 @@ function accountStats(){
 function pendingTotals(rows){
   let inc = 0, exp = 0, overdue = 0;
   const t = todayISO();
-  const list = rows || STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e));
+  // grossAmt(主列) 已經把它的稅算進去了，所以稅列一定要排除，
+  // 不然「連 5% 稅列一起列出」打開的時候稅會被加兩次。
+  const list = (rows || STATE.entries.filter(e => e.status === '掛帳中')).filter(e => !isMergedTax(e));
   list.forEach(e => {
     const amt = grossAmt(e);
     if(e.direction === '收入') inc += amt; else exp += amt;
@@ -1527,7 +1533,10 @@ function pdLoadNote(){
   const merged = (STATE.entries || []).filter(e => e.status === '掛帳中' && isMergedTax(e)).length;
   return '　<span class="muted">（記帳資料已載入 ' + got + ' 筆'
        + (c.total != null ? ' ／ 雲端共 ' + c.total + ' 筆' : '')
-       + (merged ? '；掛帳中另有 ' + merged + ' 筆 5% 稅列已併進主列，金額算在主列的稅額欄，不單獨列一行' : '')
+       + (merged ? '；掛帳中另有 ' + merged + ' 筆 5% 稅列'
+                 + ((document.getElementById('pd_show_tax') || {}).checked
+                     ? '已經一起列在下面了（標「稅列」的那些），上面四張卡的金額不含它們，避免重複計算'
+                     : '併進主列，金額算在主列的稅額欄，不單獨列一行；要看它們請勾「連 5% 稅列一起列出」') : '')
        + '）</span>'
        + (c.total != null && c.got < c.total
            ? '　<span class="pill red">資料沒載完整，畫面會少一段，請重新整理</span>' : '');
@@ -1547,7 +1556,10 @@ function pendingRows(){
   const from = document.getElementById('pd_from').value;
   const to = document.getElementById('pd_to').value;
   const t = todayISO();
-  let rows = STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e));
+  // 稅列平常併進主列不單獨顯示，所以直接在資料庫查 status='掛帳中' 的筆數會比畫面多。
+  // 對帳時需要看到那幾筆，開關打開就全部列出來。
+  const showTax = !!(document.getElementById('pd_show_tax') || {}).checked;
+  let rows = STATE.entries.filter(e => e.status === '掛帳中' && (showTax || !isMergedTax(e)));
   if(dir) rows = rows.filter(e => e.direction === dir);
   // 帳戶：選了就只看這個帳戶要收／要付的。「未指定」的那些用 __none__ 挑出來對。
   if(acc === '__none__') rows = rows.filter(e => !e.account_id);
@@ -1653,7 +1665,8 @@ function renderPending(){
     return `<tr><td>${esc(e.voucher_no)}</td><td>${esc(e.entry_date)}</td>
       <td>${e.due_date ? (late ? `<span class="pill red">${esc(e.due_date)}</span>` : esc(e.due_date)) : '<span class="muted">未定</span>'}</td>
       <td>${dirPill(e.direction)}</td><td>${subjCell(e)}</td>
-      <td>${esc(e.counterparty)}</td><td>${esc(e.description)}</td>
+      <td>${esc(e.counterparty)}</td>
+      <td>${isMergedTax(e) ? '<span class="pill gray" title="這一列是同一張傳票的 5% 稅，平常併進主列顯示">稅列</span> ' : ''}${esc(e.description)}</td>
       <td>${e.account_name ? esc(e.account_name) : '<span class="muted">未指定</span>'}</td>
       <td>${esc(e.invoice_no)}</td>${amtCells(e)}
       <td>${e.source === '零用金' ? '<span class="pill amber">零用金</span>' : '<span class="pill gray">會計</span>'}</td>
@@ -2160,6 +2173,10 @@ function bindEvents(){
   document.getElementById('ne_clear').addEventListener('click', neClear);
 
   ['pd_search','pd_dir','pd_account','pd_sort','pd_datefield','pd_from','pd_to'].forEach(id => document.getElementById(id).addEventListener('input', renderPending));
+  {
+    const _stx = document.getElementById('pd_show_tax');
+    if(_stx) _stx.addEventListener('change', renderPending);
+  }
   document.getElementById('pd_thismonth').addEventListener('click', () => {
     document.getElementById('pd_from').value = monthStart(); document.getElementById('pd_to').value = monthEnd(); renderPending();
   });
@@ -2182,6 +2199,7 @@ function bindEvents(){
   });
   document.getElementById('pd_clear').addEventListener('click', () => {
     ['pd_search','pd_from','pd_to'].forEach(id => document.getElementById(id).value = '');
+    const _stx = document.getElementById('pd_show_tax'); if(_stx) _stx.checked = false;
     document.getElementById('pd_dir').value = '';
     document.getElementById('pd_account').value = '';
     document.getElementById('pd_datefield').value = 'due';
