@@ -5779,9 +5779,11 @@ function renderTrainingTable(){
   if(emptyEl) emptyEl.style.display='none';
   body.innerHTML = rows.map(t => {
     const editing = String(editingExternalId) === String(t.id);
+    const _dprob = certDateProblem(t);
     const issueCell = editing
       ? `<input type="date" id="ext_issue_${t.id}" value="${esc(t.issue_date||'')}" style="width:135px;">`
-      : esc(t.issue_date||'—');
+      : esc(t.issue_date||'—')
+        + (_dprob ? ` <span class="pill red" title="${esc(_dprob)}　請確認是不是把民國年當成西元年，或把到期日填進發證日">日期怪</span>` : '');
     const expiryCell = editing
       ? `<span class="edit-wrap"><input type="date" id="ext_exp_${t.id}" value="${esc(t.expiry_date||'')}" style="width:135px;"> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_noexp_${t.id}" ${t.no_expiry?'checked':''}> 長期有效</label> <label style="font-size:12px;white-space:nowrap;"><input type="checkbox" id="ext_hold_${t.id}" ${t.on_hold?'checked':''}> 暫不外訓</label></span>`
       : (t.no_expiry ? '長期有效' : esc(t.expiry_date||'—')) + (t.on_hold ? ' <span class="muted">（暫不外訓）</span>' : '');
@@ -12879,6 +12881,29 @@ function parseRenewNote(line){
   });
   return out;
 }
+// 存檔前問一次。民國 118 年打成西元就是 2029，日期欄位收得下、資料庫也收得下，
+// 但那是三年後才發的證，等到有人在外訓歷史看到才發現，已經不知道原本該是哪一天。
+function certDateOK(issue, expiry, who){
+  const p = certDateProblem({ issue_date: issue, expiry_date: expiry });
+  if(!p) return true;
+  return confirm('【日期怪怪的】' + who + '\n\n' + p
+    + '\n　發證日期：' + (issue || '（空白）')
+    + '\n　到期日　：' + (expiry || '（空白）')
+    + '\n\n最常見的原因是把民國年當成西元年（民國 118 年 → 2029 年），'
+    + '\n或是把到期日填進了發證日期欄。'
+    + '\n\n確定就是這樣要存嗎？');
+}
+// 發證日期不可能晚於今天，到期日也不可能早於發證日。
+// 這兩種都是民國／西元換算多算或少算一輪造成的，而且不會有任何錯誤訊息 ——
+// 只會在外訓歷史照日期排序時，冒出 119 年、118 年這種還沒到的年份。
+function certDateProblem(t){
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  const i = String((t && t.issue_date) || '');
+  const x = String((t && t.expiry_date) || '');
+  if(ISO.test(i) && i > todayISO()) return '發證日期比今天還晚';
+  if(ISO.test(i) && ISO.test(x) && x < i) return '到期日比發證日還早';
+  return '';
+}
 function extHistoryRows(){
   const out = [];
   (STATE.trainings || []).forEach(t => {
@@ -12897,6 +12922,7 @@ function extHistoryRows(){
       // 原文照樣寫在事件裡，這樣既不會亂排序也不會把資料弄丟。
       const _d = /^\d{4}-\d{2}-\d{2}$/.test(String(t.issue_date)) ? String(t.issue_date) : '';
       out.push({ date: _d, who: who, left: left, item: item, kind: '換證',
+                 warn: certDateProblem(t),
                  event: '取得證照（目前這張）' + (_d ? '' : '　發證日期：' + t.issue_date),
                  span: '', loc: '', org: '',
                  cert: t.cert_no || '',
@@ -12943,7 +12969,7 @@ function renderExtHistory(){
   const cnt = document.getElementById('exth_count');
   if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
   body.innerHTML = rows.slice(0, 600).map(r => `<tr>
-      <td>${esc(r.date || '—')}</td>
+      <td>${esc(r.date || '—')}${r.warn ? ` <span class="pill red" title="${esc(r.warn)}　這一欄是發證日期，常見原因是把民國年當成西元年、或把到期日填進發證日">日期怪</span>` : ''}</td>
       <td>${esc(r.who)}${r.left ? ' <span class="pill gray">已離職</span>' : ''}</td>
       <td><span class="clip-item" title="${esc(r.item)}">${esc(r.item)}</span></td>
       <td>${esc(r.event)}</td>
@@ -16155,6 +16181,7 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   if(!noExpiry && !onHold && !expiry){ alert('請填寫到期日，或勾選「無到期日」／「暫不外訓」'); return; }
   const cert = document.getElementById('tf_cert').value.trim();
   const issue = document.getElementById('tf_issue').value || null;
+  if(!certDateOK(issue, noExpiry ? null : (expiry || null), emp.name + ' 的「' + type.name + '」')) return;
   // 同一人同一項目只留一筆：換證是覆蓋舊日期，不是再疊一筆（比照車輛證件 vd_add）
   const cur = findExistingTraining(empId, typeId);
   if(cur){
@@ -16337,7 +16364,11 @@ document.getElementById('trainingTableBody').addEventListener('click', async (e)
     if(rec){
       const noExp = document.getElementById('ext_noexp_'+saveId).checked;
       const onHold = !!(document.getElementById('ext_hold_'+saveId) || {}).checked;
-      rec.issue_date = document.getElementById('ext_issue_'+saveId).value || null;
+      const _ni = document.getElementById('ext_issue_'+saveId).value || null;
+      const _nx = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
+      // 擋在寫進雲端之前。不硬性禁止，但要按第二次才會過，避免民國年打成西元年默默存下去。
+      if(!certDateOK(_ni, _nx, (rec.employee_name || '') + ' 的「' + (rec.type_name || '') + '」')) return;
+      rec.issue_date = _ni;
       rec.no_expiry = noExp ? 1 : 0;
       // 暫不外訓不會把到期日清掉，之後恢復外訓還看得到原本卡在哪一天
       rec.on_hold = onHold ? 1 : 0;
