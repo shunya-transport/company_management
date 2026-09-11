@@ -1521,8 +1521,14 @@ let PD_OVERDUE = false, PD_HIDDEN_NODATE = 0, PD_HIDDEN_OUT = 0;
 function pdLoadNote(){
   const c = LOAD_COUNTS['acc_entries'] || {};
   const got = c.got != null ? c.got : STATE.entries.length;
+  // 直接在資料庫下 status='掛帳中' 會查到 537 筆，畫面上卻只有 304 筆。
+  // 差的那些是同一張傳票的 5% 稅列：系統刻意把它併進主列，金額算在「稅額」欄裡，
+  // 不單獨佔一列。這件事以前完全沒寫在畫面上，對帳的人只會覺得資料憑空少了一截。
+  const merged = (STATE.entries || []).filter(e => e.status === '掛帳中' && isMergedTax(e)).length;
   return '　<span class="muted">（記帳資料已載入 ' + got + ' 筆'
-       + (c.total != null ? ' ／ 雲端共 ' + c.total + ' 筆' : '') + '）</span>'
+       + (c.total != null ? ' ／ 雲端共 ' + c.total + ' 筆' : '')
+       + (merged ? '；掛帳中另有 ' + merged + ' 筆 5% 稅列已併進主列，金額算在主列的稅額欄，不單獨列一行' : '')
+       + '）</span>'
        + (c.total != null && c.got < c.total
            ? '　<span class="pill red">資料沒載完整，畫面會少一段，請重新整理</span>' : '');
 }
