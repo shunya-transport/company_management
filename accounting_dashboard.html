@@ -1514,7 +1514,13 @@ function statusPill(s){
 }
 
 // ---------- 掛帳中 ----------
-let PD_OVERDUE = false, PD_HIDDEN_NODATE = 0;
+let PD_OVERDUE = false, PD_HIDDEN_NODATE = 0, PD_HIDDEN_OUT = 0;
+// 搜尋比對的欄位集中在這裡，統計「別的分頁還有幾筆」時才會跟清單用同一套標準
+function pdKwHit(e, kw){
+  return [e.voucher_no, e.counterparty, e.description, e.invoice_no,
+          e.subject_name, e.subject_code, e.account_name, e.notes]
+    .map(v => String(v == null ? '' : v).toLowerCase()).join(' ').indexOf(kw) >= 0;
+}
 function pendingRows(){
   const kw = (document.getElementById('pd_search').value || '').trim().toLowerCase();
   const dir = document.getElementById('pd_dir').value;
@@ -1525,24 +1531,27 @@ function pendingRows(){
   const to = document.getElementById('pd_to').value;
   const t = todayISO();
   let rows = STATE.entries.filter(e => e.status === '掛帳中' && !isMergedTax(e));
-  PD_HIDDEN_NODATE = 0;
+  if(dir) rows = rows.filter(e => e.direction === dir);
+  // 帳戶：選了就只看這個帳戶要收／要付的。「未指定」的那些用 __none__ 挑出來對。
+  if(acc === '__none__') rows = rows.filter(e => !e.account_id);
+  else if(acc) rows = rows.filter(e => String(e.account_id) === acc);
+  if(kw) rows = rows.filter(e => pdKwHit(e, kw));
+  // ★ 期間一定要放在最後篩。
+  //   以前是期間先篩、搜尋後篩，被藏起來的筆數在搜尋之前就結算完了，
+  //   所以搜「新安」只有 1 筆，旁邊卻寫「另有 63 筆預計收付日未定」——
+  //   那 63 筆是整個掛帳中的數字，跟新安一點關係都沒有，看起來像資料不見了。
+  //   現在這個數字只算「對象、方向、帳戶都符合，純粹卡在日期」的筆數。
+  PD_HIDDEN_NODATE = 0; PD_HIDDEN_OUT = 0;
   if(from || to){
     rows = rows.filter(e => {
       const d = field === 'entry' ? e.entry_date : e.due_date;
       // 預計收付日可以是「未定」，設了期間就找不到它。不要靜靜吃掉，下面會提示有幾筆。
       if(!d){ PD_HIDDEN_NODATE++; return false; }
-      if(from && d < from) return false;
-      if(to && d > to) return false;
+      if((from && d < from) || (to && d > to)){ PD_HIDDEN_OUT++; return false; }
       return true;
     });
   }
   if(PD_OVERDUE) rows = rows.filter(e => e.due_date && e.due_date < t);
-  if(dir) rows = rows.filter(e => e.direction === dir);
-  // 帳戶：選了就只看這個帳戶要收／要付的。「未指定」的那些用 __none__ 挑出來對。
-  if(acc === '__none__') rows = rows.filter(e => !e.account_id);
-  else if(acc) rows = rows.filter(e => String(e.account_id) === acc);
-  if(kw) rows = rows.filter(e => [e.voucher_no,e.counterparty,e.description,e.invoice_no,e.subject_name,e.subject_code,e.account_name,e.notes]
-    .map(v => String(v==null?'':v).toLowerCase()).join(' ').indexOf(kw) >= 0);
   rows.sort((a,b) => {
     if(sort === 'amount') return grossAmt(b) - grossAmt(a);
     if(sort === 'date') return (a.entry_date < b.entry_date) ? 1 : -1;
@@ -1571,8 +1580,13 @@ function renderPending(){
     if(from || to) parts.push((field === 'entry' ? '發生日' : '預計收付日') + ' ' + (from || '不限') + ' ～ ' + (to || '不限'));
     if(PD_OVERDUE) parts.push('只看已過預計收付日的');
     if(parts.length){
+      const _why = [];
+      if(PD_HIDDEN_NODATE) _why.push(PD_HIDDEN_NODATE + ' 筆' + (field === 'entry' ? '沒有發生日' : '預計收付日未定'));
+      if(PD_HIDDEN_OUT) _why.push(PD_HIDDEN_OUT + ' 筆日期在期間之外');
+      const _hid = PD_HIDDEN_NODATE + PD_HIDDEN_OUT;
       note.innerHTML = '目前條件：' + esc(parts.join('　')) + '　共 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）'
-        + (PD_HIDDEN_NODATE ? '　<span class="pill amber">另有 ' + PD_HIDDEN_NODATE + ' 筆' + (field === 'entry' ? '沒有發生日' : '預計收付日未定') + '，設了期間就不會出現</span>' : '')
+        + (_hid ? '　<span class="pill amber">其他條件都符合、只被期間擋住的還有 ' + _hid + ' 筆（' + _why.join('、') + '）</span>'
+                + ' <button class="btn ghost tiny" id="pd_dropRange">清掉期間，' + (rows.length + _hid) + ' 筆一起看</button>' : '')
         + '　上面四張卡與匯出 CSV 都只算這 ' + rows.length + ' 筆。';
     }else if(filtering){
       note.innerHTML = '目前條件：篩選後 <strong>' + rows.length + '</strong> 筆（掛帳中全部 ' + allCnt + ' 筆）';
@@ -1585,6 +1599,19 @@ function renderPending(){
         + (_c.total != null && _c.got < _c.total
             ? '　<span class="pill red">資料沒載完整，畫面會少一段，請重新整理</span>' : '')
         + '　<span class="muted">沒填預計收付日的會照發生日排在同一條時間軸上，那一格顯示「未定」。</span>';
+    }
+    // 這個分頁只放「掛帳中」。搜出來的筆數比預期少，很多時候是那幾筆早就收付掉了，
+    // 或是被併成主列的稅額。與其讓人以為資料不見，直接把它們在哪裡講出來。
+    const _kw = (document.getElementById('pd_search').value || '').trim().toLowerCase();
+    if(_kw){
+      const _n = (st) => STATE.entries.filter(e => e.status === st && !isMergedTax(e) && pdKwHit(e, _kw)).length;
+      const _settled = _n('已收付'), _void = _n('已作廢');
+      const _tax = STATE.entries.filter(e => isMergedTax(e) && pdKwHit(e, _kw)).length;
+      const _p = [];
+      if(_settled) _p.push('「已收付」分頁 ' + _settled + ' 筆');
+      if(_void) _p.push('已作廢 ' + _void + ' 筆');
+      if(_tax) _p.push('併進主列的稅額 ' + _tax + ' 筆');
+      if(_p.length) note.innerHTML += '<br><span class="muted">「' + esc(_kw) + '」在這個分頁以外還有：' + _p.join('、') + '</span>';
     }
   }
   document.getElementById('pdStatRow').innerHTML =
@@ -2118,6 +2145,14 @@ function bindEvents(){
     document.getElementById('pd_from').value = y + '-01-01'; document.getElementById('pd_to').value = y + '-12-31'; renderPending();
   });
   document.getElementById('pd_overdue').addEventListener('click', () => { PD_OVERDUE = !PD_OVERDUE; renderPending(); });
+  // 提示列每次都重畫，按鈕不能各別掛事件，統一在外層接
+  document.getElementById('pdRangeNote').addEventListener('click', (e) => {
+    if(e.target && e.target.id === 'pd_dropRange'){
+      document.getElementById('pd_from').value = '';
+      document.getElementById('pd_to').value = '';
+      renderPending();
+    }
+  });
   document.getElementById('pd_clear').addEventListener('click', () => {
     ['pd_search','pd_from','pd_to'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('pd_dir').value = '';
