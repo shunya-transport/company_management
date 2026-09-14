@@ -804,6 +804,89 @@ function checkRequired(table, rows){
   const names = [...new Set(bad.flat())].map(k => FIELD_LABELS[k] || k);
   return { count: bad.length, names: names };
 }
+// ===== 只寫「改到的那一列、那幾欄」=====
+// 舊寫法是把整個陣列 upsert 回去，等於拿這個分頁開啟當下的內容覆蓋整張表：
+// 兩個人同時開著，後存檔的那個會把先存檔的改動默默還原回去，而且完全沒有錯誤訊息。
+// 這裡只送「跟載入時比起來真的變了的欄位」，沒動到的列與欄位完全不碰。
+const COMPUTED_FIELDS = {};   // 這一頁的清單都是資料庫欄位，沒有畫面專用的計算欄位
+function cmpVal(v){
+  if(v === null || v === undefined) return '';
+  if(typeof v === 'object'){ try{ return JSON.stringify(v); }catch(e){ return String(v); } }
+  return String(v);
+}
+function rowDiffForSave(key, item){
+  const base = (LAST_GOOD[key] || []).find(r => String(r.id) === String(item.id));
+  if(!base) return null;                      // 沒有基準（剛新增的那一列）→ 整列寫進去
+  const skip = new Set(['id'].concat(COMPUTED_FIELDS[key] || []));
+  const out = {};
+  Object.keys(item).forEach(k => {
+    if(skip.has(k)) return;
+    if(cmpVal(item[k]) !== cmpVal(base[k])) out[k] = item[k];
+  });
+  return out;
+}
+function buildWritePlan(key, list){
+  const map = TABLE_MAP[key];
+  const plan = { inserts: [], updates: [] };
+  if(!map) return plan;
+  const strip = COMPUTED_FIELDS[key] || [];
+  const hasBase = Array.isArray(LAST_GOOD[key]);
+  const fullRow = item => {
+    const {id, ...rest} = item;
+    strip.forEach(f => delete rest[f]);
+    return Object.assign({[map.pk]: item.id}, rest);
+  };
+  (list || []).forEach(item => {
+    if(!item) return;
+    const d = hasBase ? rowDiffForSave(key, item) : null;
+    if(!d){ plan.inserts.push(fullRow(item)); return; }
+    const body = Object.assign({}, d);
+    strip.forEach(f => delete body[f]);
+    if(!Object.keys(body).length) return;     // 這一列沒改到，不用送
+    plan.updates.push({ id: item.id, body: body, full: fullRow(item) });
+  });
+  return plan;
+}
+async function postUpsert(map, rows){
+  // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致（否則回 PGRST102），
+  // 所以按「欄位組合」分群，各群分別送出。不補 null，讓資料庫自己套用預設值。
+  const groups = new Map();
+  rows.forEach(o => {
+    const sig = Object.keys(o).sort().join('|');
+    if(!groups.has(sig)) groups.set(sig, []);
+    groups.get(sig).push(o);
+  });
+  for(const g of groups.values()){
+    for(let i = 0; i < g.length; i += 500){
+      await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
+        method: 'POST',
+        headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify(g.slice(i, i + 500))
+      });
+    }
+  }
+}
+// ★ 既有的列一律用 PATCH 改，不能用 upsert 只送「改到的欄位」：
+//   PostgREST 的 upsert 是 INSERT ... ON CONFLICT DO UPDATE，PostgreSQL 會先檢查
+//   NOT NULL 才判斷有沒有衝突，所以少送 company_name 這種 NOT NULL 欄位就會被擋（23502），
+//   即使那一列早就存在、實際上只是要改其中一格。
+//   一次要改很多列時（匯入之類）才改用整列 upsert，省請求數。
+const PATCH_MAX = 60;
+async function flushWrites(key, map, plan){
+  if(plan.inserts.length) await postUpsert(map, plan.inserts);
+  if(!plan.updates.length) return;
+  if(plan.updates.length > PATCH_MAX){
+    await postUpsert(map, plan.updates.map(u => u.full));
+    return;
+  }
+  for(const u of plan.updates){
+    await supaFetch(`${map.table}?${map.pk}=eq.${encodeURIComponent(u.id)}`, {
+      method: 'PATCH',
+      headers: {'Prefer':'return=minimal'},
+      body: JSON.stringify(u.body)
+    });
+  }
+}
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
@@ -823,40 +906,31 @@ async function saveState(key, value, shared){
   }
   try{
     if(value && value.length > 0){
-      const payload = value.map(item => {
-        const {id, ...rest} = item;
-        return {[map.pk]: id, ...rest};
-      });
-      // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致(否則回 PGRST102)
-      // 作法:按「欄位組合」分群,各群分別送出。不補 null,讓資料庫自己套用預設值
-      // (補 null 會踩到 created_at 這類 NOT NULL 欄位,造成 23502 錯誤)
-      const _groups = new Map();
-      payload.forEach(o => {
-        const sig = Object.keys(o).sort().join('|');
-        if(!_groups.has(sig)) _groups.set(sig, []);
-        _groups.get(sig).push(o);
-      });
-      const CHUNK = 500;
-      for(const _group of _groups.values()){
-        for(let i=0; i<_group.length; i+=CHUNK){
-          const chunk = _group.slice(i, i+CHUNK);
-          await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
-            method:'POST',
-            headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
-            body: JSON.stringify(chunk)
-          });
-        }
-      }
+      // 只送真的改到的列與欄位；沒動到的完全不碰，同事的修改就不會被蓋掉
+      await flushWrites(key, map, buildWritePlan(key, value));
     }
     // ★ 一定要用會分頁的 supaFetchAll。PostgREST 一次最多回 1000 筆，
     //   用不分頁的 supaFetch 只看得到前 1000 個編號，超過 1000 筆的表
     //   （訓練紀錄那種）後面的紀錄會刪不掉：畫面上不見了，重新整理又跑回來。
     //   分頁一定要指定 order，不然每一頁的順序不保證一致，會漏抓或重複。
-    const existingRows = await supaFetchAll(`${map.table}?select=${map.pk}&order=${map.pk}.asc`);
+    // ★ 只有「這個分頁原本看得到、現在不見了」的 id 才算是使用者刪掉的。
+    //   雲端在我們載入之後才多出來的（同事剛建的那幾家供應商），這個分頁根本沒有，
+    //   舊寫法會把它們一起當成「使用者刪掉了」清掉 —— 廠商資料就是這樣消失的。
+    //   另外，這一趟完全沒有刪除時就不必去撈全表的 id，省一次大查詢。
     const currentIds = new Set((value||[]).map(item => String(item.id)));
+    const knownIds = Array.isArray(LAST_GOOD[key])
+      ? new Set(LAST_GOOD[key].map(r => String(r.id)))
+      : null;
+    const removedHere = knownIds
+      ? [...knownIds].filter(id => !currentIds.has(id))
+      : null;
+    const existingRows = (removedHere && removedHere.length === 0)
+      ? []
+      : await supaFetchAll(`${map.table}?select=${map.pk}&order=${map.pk}.asc`);
     const idsToDelete = (existingRows||[])
       .map(r => r[map.pk])
-      .filter(pk => !currentIds.has(String(pk)));
+      .filter(pk => !currentIds.has(String(pk)))
+      .filter(pk => !knownIds || knownIds.has(String(pk)));
     if(idsToDelete.length > 0){
       // 保險:一次要刪掉超過5筆且佔全表一半以上,先跳出確認,避免整表誤刪
       // 保險線改嚴：原本要「超過 5 筆且佔全表一半」才問，少抓三成完全擋不住。

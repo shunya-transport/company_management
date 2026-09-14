@@ -853,6 +853,98 @@ function checkRequired(table, rows){
   const names = [...new Set(bad.flat())].map(k => FIELD_LABELS[k] || k);
   return { count: bad.length, names: names };
 }
+// ===== 只寫「改到的那一列、那幾欄」=====
+// 舊寫法是把整個陣列 upsert 回去，再把「雲端有、這個陣列沒有」的 id 全部刪掉。
+// 兩個人同時開著的時候，後存檔的那個會把先存檔的新增資料當成「被刪掉了」清空，
+// 而且完全沒有錯誤訊息。這裡只送真的變了的欄位，刪除也只刪自己刪掉的。
+const COMPUTED_FIELDS = {
+  // 畫面用的欄位，資料庫裡沒有，不能送出去
+  employee_trainings: ['employee_name', 'type_name', 'employee_no', 'region']
+};
+// 送出前換成 Supabase 的真實欄位名（畫面上叫 cert_no，資料庫是 certificate_no）
+function dbCols(map, obj){
+  const o = Object.assign({}, obj);
+  if(map.table === 'employee_trainings'){
+    ['employee_name', 'type_name', 'employee_no', 'region'].forEach(f => delete o[f]);
+    if(Object.prototype.hasOwnProperty.call(o, 'cert_no')){
+      o.certificate_no = o.cert_no;
+      delete o.cert_no;
+    }
+  }
+  return o;
+}
+function cmpVal(v){
+  if(v === null || v === undefined) return '';
+  if(typeof v === 'object'){ try{ return JSON.stringify(v); }catch(e){ return String(v); } }
+  return String(v);
+}
+function rowDiffForSave(key, item){
+  const base = (LAST_GOOD[key] || []).find(r => String(r.id) === String(item.id));
+  if(!base) return null;                      // 沒有基準（剛新增的那一列）→ 整列寫進去
+  const skip = new Set(['id'].concat(COMPUTED_FIELDS[key] || []));
+  const out = {};
+  Object.keys(item).forEach(k => {
+    if(skip.has(k)) return;
+    if(cmpVal(item[k]) !== cmpVal(base[k])) out[k] = item[k];
+  });
+  return out;
+}
+function buildWritePlan(key, list){
+  const map = TABLE_MAP[key];
+  const plan = { inserts: [], updates: [] };
+  if(!map) return plan;
+  const hasBase = Array.isArray(LAST_GOOD[key]);
+  const fullRow = item => {
+    const {id, ...rest} = item;
+    return Object.assign({[map.pk]: item.id}, dbCols(map, rest));
+  };
+  (list || []).forEach(item => {
+    if(!item) return;
+    const d = hasBase ? rowDiffForSave(key, item) : null;
+    if(!d){ plan.inserts.push(fullRow(item)); return; }
+    const body = dbCols(map, d);
+    if(!Object.keys(body).length) return;     // 這一列沒改到，不用送
+    plan.updates.push({ id: item.id, body: body, full: fullRow(item) });
+  });
+  return plan;
+}
+async function postUpsert(map, rows){
+  // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致（否則回 PGRST102），
+  // 所以按「欄位組合」分群，各群分別送出。不補 null，讓資料庫自己套用預設值。
+  const groups = new Map();
+  rows.forEach(o => {
+    const sig = Object.keys(o).sort().join('|');
+    if(!groups.has(sig)) groups.set(sig, []);
+    groups.get(sig).push(o);
+  });
+  for(const g of groups.values()){
+    for(let i = 0; i < g.length; i += 500){
+      await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
+        method: 'POST',
+        headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify(g.slice(i, i + 500))
+      });
+    }
+  }
+}
+// 既有的列一律用 PATCH：upsert 是 INSERT ... ON CONFLICT DO UPDATE，
+// PostgreSQL 會先檢查 NOT NULL 才判斷衝突，少送 employee_id 這種必填欄位就會被擋（23502）。
+const PATCH_MAX = 60;
+async function flushWrites(key, map, plan){
+  if(plan.inserts.length) await postUpsert(map, plan.inserts);
+  if(!plan.updates.length) return;
+  if(plan.updates.length > PATCH_MAX){
+    await postUpsert(map, plan.updates.map(u => u.full));
+    return;
+  }
+  for(const u of plan.updates){
+    await supaFetch(`${map.table}?${map.pk}=eq.${encodeURIComponent(u.id)}`, {
+      method: 'PATCH',
+      headers: {'Prefer':'return=minimal'},
+      body: JSON.stringify(u.body)
+    });
+  }
+}
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
@@ -872,48 +964,31 @@ async function saveState(key, value, shared){
   }
   try{
     if(value && value.length > 0){
-      const payload = value.map(item => {
-        const {id, ...rest} = item;
-        let clean = rest;
-        if(map.table === 'employee_trainings'){
-          // [修正] 還原成 Supabase 真實欄位:移除顯示用欄位,cert_no -> certificate_no
-          const {employee_name, type_name, employee_no, region, cert_no, ...cols} = rest;
-          clean = Object.assign({}, cols, {
-            certificate_no: (cert_no !== undefined ? cert_no : rest.certificate_no)
-          });
-        }
-        return {[map.pk]: id, ...clean};
-      });
-      // PostgREST 批次 upsert 要求同一次請求裡每個物件的欄位名稱完全一致(否則回 PGRST102)
-      // 作法:按「欄位組合」分群,各群分別送出。不補 null,讓資料庫自己套用預設值
-      // (補 null 會踩到 created_at 這類 NOT NULL 欄位,造成 23502 錯誤)
-      const _groups = new Map();
-      payload.forEach(o => {
-        const sig = Object.keys(o).sort().join('|');
-        if(!_groups.has(sig)) _groups.set(sig, []);
-        _groups.get(sig).push(o);
-      });
-      const CHUNK = 500;
-      for(const _group of _groups.values()){
-        for(let i=0; i<_group.length; i+=CHUNK){
-          const chunk = _group.slice(i, i+CHUNK);
-          await supaFetch(`${map.table}?on_conflict=${map.pk}`, {
-            method:'POST',
-            headers: {'Prefer':'resolution=merge-duplicates,return=minimal'},
-            body: JSON.stringify(chunk)
-          });
-        }
-      }
+      // 只送真的改到的列與欄位；沒動到的完全不碰，同事的修改就不會被蓋掉
+      await flushWrites(key, map, buildWritePlan(key, value));
     }
     // ★ 一定要用會分頁的 supaFetchAll。PostgREST 一次最多回 1000 筆，
     //   用不分頁的 supaFetch 只看得到前 1000 個編號，超過 1000 筆的表
     //   （訓練紀錄那種）後面的紀錄會刪不掉：畫面上不見了，重新整理又跑回來。
     //   分頁一定要指定 order，不然每一頁的順序不保證一致，會漏抓或重複。
-    const existingRows = await supaFetchAll(`${map.table}?select=${map.pk}&order=${map.pk}.asc`);
+    // ★ 只有「這個分頁原本看得到、現在不見了」的 id 才算是使用者刪掉的。
+    //   雲端在我們載入之後才多出來的（同事剛登記的證照），這個分頁根本沒有，
+    //   舊寫法會把它們一起當成「使用者刪掉了」清掉。
+    //   另外，這一趟完全沒有刪除時就不必去撈全表的 id，省一次大查詢。
     const currentIds = new Set((value||[]).map(item => String(item.id)));
+    const knownIds = Array.isArray(LAST_GOOD[key])
+      ? new Set(LAST_GOOD[key].map(r => String(r.id)))
+      : null;
+    const removedHere = knownIds
+      ? [...knownIds].filter(id => !currentIds.has(id))
+      : null;
+    const existingRows = (removedHere && removedHere.length === 0)
+      ? []
+      : await supaFetchAll(`${map.table}?select=${map.pk}&order=${map.pk}.asc`);
     const idsToDelete = (existingRows||[])
       .map(r => r[map.pk])
-      .filter(pk => !currentIds.has(String(pk)));
+      .filter(pk => !currentIds.has(String(pk)))
+      .filter(pk => !knownIds || knownIds.has(String(pk)));
     if(idsToDelete.length > 0){
       // 保險:一次要刪掉超過5筆且佔全表一半以上,先跳出確認,避免整表誤刪
       // 保險線改嚴：原本要「超過 5 筆且佔全表一半」才問，少抓三成完全擋不住。
@@ -1000,6 +1075,10 @@ async function loadState(){
     t.type_name = typeById[t.type_id] || t.type_name || '';
     t.cert_no = t.cert_no ?? t.certificate_no ?? '';
   });
+  // 姓名、訓練項目、證書字號是載入完才補上去的。基準（LAST_GOOD）是在補之前記的，
+  // 不重記一次的話，每一列都會被判定成「改過了」，等於又整表寫回去。
+  if(!LOAD_FAILED.has('employee_trainings')) rememberGood('employee_trainings', STATE.trainings);
+  if(!LOAD_FAILED.has('training_log')) rememberGood('training_log', STATE.trainingLog);
 }
 
 // ============ 總覽 ============
