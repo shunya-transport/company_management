@@ -6912,6 +6912,66 @@ function ciVxnSelect(key, cur){
         + (v || '—') + '</option>').join('')
     + '</select>';
 }
+// ===== 一張檢查表只能對應一個櫃號 =====
+// 司機頁已經擋住新的，這裡負責把以前一格填好幾個櫃的舊資料拆開。
+// 黏在一起的那些筆，板架位置只認得其中一個櫃，運送明細也會少算趟數。
+const CI_CNO_SEP = /[,，、;；\/\|]+/;
+function ciCnoSplit(s){
+  // 逗號、頓號、斜線、分號、直線一定是分隔符號；空白不一定 ——
+  // 櫃號印在櫃體上本來就寫成「TCLU 763958 4」，把空白一律當分隔會把一個櫃拆成三個。
+  // 所以先照硬分隔切開，每一段去掉空白後如果剛好是一個標準櫃號，那就是一個。
+  const hard = String(s || '').toUpperCase().replace(/[-\u2013\u2014]/g, '').split(CI_CNO_SEP);
+  const out = [];
+  hard.forEach(seg => {
+    const joined = seg.replace(/\s+/g, '');
+    if(!joined) return;
+    if(/^[A-Z]{4}\d{7}$/.test(joined)){ out.push(joined); return; }
+    // 中間完全沒有分隔、直接黏在一起的（22 個字元就是兩個櫃號）也拆得開
+    if(/^([A-Z]{4}\d{7}){2,}$/.test(joined)){
+      (joined.match(/[A-Z]{4}\d{7}/g) || []).forEach(x => out.push(x));
+      return;
+    }
+    seg.split(/\s+/).map(x => x.trim()).filter(Boolean).forEach(x => out.push(x));
+  });
+  return out;
+}
+async function ciSplitEdit(){
+  const r = (STATE.containerInspections || []).find(x => String(x.inspection_id) === String(ciEditId));
+  if(!r) return;
+  const cnos = ciCnoSplit(r.container_no);
+  if(cnos.length < 2){ alert('這一筆只有一個櫃號，不用拆。'); return; }
+  const seals = [r.seal_no1, r.seal_no2].filter(x => String(x || '').trim() !== '');
+  const bySeal = seals.length === cnos.length;
+  if(!confirm('要把這一筆拆成 ' + cnos.length + ' 筆嗎？\n\n'
+      + cnos.map((c, i) => '　' + c + (bySeal ? '　封條 ' + seals[i] : '')).join('\n')
+      + '\n\n日期、車號、檢查人、板架、貨主、起訖、檢查項目、單據全部照抄，只有櫃號分開。\n'
+      + (bySeal
+          ? '封條剛好也是 ' + seals.length + ' 個，就照順序一個櫃配一個封條 —— 拆完請核對一次。'
+          : '封條有 ' + seals.length + ' 個、櫃號有 ' + cnos.length + ' 個，對不起來，'
+            + '所以封條全部留在第一筆，麻煩自己搬到對的那一櫃。'))) return;
+  let nid = Math.max(maxIdIn(STATE.containerInspections),
+                     maxIdIn(STATE.containerInspections, 'inspection_id'));
+  const extra = [];
+  cnos.forEach((c, i) => {
+    if(i === 0){
+      r.container_no = c;
+      if(bySeal){ r.seal_no1 = seals[0] || null; r.seal_no2 = null; }
+      return;
+    }
+    nid += 1;
+    extra.push(Object.assign({}, r, {
+      id: nid, inspection_id: nid, container_no: c,
+      seal_no1: bySeal ? (seals[i] || null) : null,
+      seal_no2: null
+    }));
+  });
+  STATE.containerInspections = (STATE.containerInspections || []).concat(extra);
+  try{
+    await saveState('container_inspections', STATE.containerInspections, true);
+    ciCloseEdit();
+    renderAll();
+  }catch(e){ /* saveState 失敗時已經跳過提示並還原 */ }
+}
 function ciOpenEdit(id){
   const r = (STATE.containerInspections || []).find(x => String(x.inspection_id) === String(id));
   if(!r){ alert('找不到這一筆檢查表。'); return; }
@@ -6980,12 +7040,17 @@ function ciOpenEdit(id){
     </div>
     <button class="btn" id="ciEditSave">儲存</button>
     <button class="btn ghost" id="ciEditCancel">取消</button>
+    ${ciCnoSplit(r.container_no).length > 1
+       ? `<button class="btn ghost" id="ciEditSplit" style="margin-left:14px;">拆成 ${ciCnoSplit(r.container_no).length} 筆（一櫃一張）</button>`
+       : ''}
     <button class="del-btn" id="ciEditDelete" style="margin-left:14px;">刪除這一筆</button>
   `;
   document.getElementById('ciEditModal').classList.add('show');
   document.getElementById('ciEditCancel').addEventListener('click', ciCloseEdit);
   document.getElementById('ciEditSave').addEventListener('click', ciSaveEdit);
   document.getElementById('ciEditDelete').addEventListener('click', ciDeleteEdit);
+  const _ciSp = document.getElementById('ciEditSplit');
+  if(_ciSp) _ciSp.addEventListener('click', ciSplitEdit);
 }
 function ciCloseEdit(){
   ciEditId = null;
@@ -6997,11 +7062,18 @@ async function ciSaveEdit(){
   if(!r){ alert('找不到這一筆檢查表。'); return; }
   const v = k => { const el = document.getElementById('cie_' + k); return el ? el.value.trim() : ''; };
   if(!v('inspect_date')){ alert('日期不能空白。'); return; }
-  if(!v('container_no')){ alert('貨櫃櫃號不能空白。'); return; }
+  const _cn = ciCnoSplit(v('container_no'));
+  if(!_cn.length){ alert('貨櫃櫃號不能空白。'); return; }
+  if(_cn.length > 1){
+    alert('這一格有 ' + _cn.length + ' 個櫃號：\n\n　' + _cn.join('\n　')
+        + '\n\n一張檢查表只對應一個櫃。要保留兩筆紀錄，請按下面的「拆成 '
+        + _cn.length + ' 筆」，其他欄位會照抄過去。');
+    return;
+  }
   r.inspect_date = v('inspect_date');
   ['plate','inspector','trailer_no','trailer_size','shipper','origin','destination',
    'seal_no1','seal_no2','spec_other','spec_note'].forEach(k => { r[k] = v(k) || null; });
-  r.container_no = v('container_no').toUpperCase();
+  r.container_no = _cn[0];
   r.container_kind = v('container_kind') || null;
   r.container_spec = v('container_spec') || null;
   const docs = [...document.querySelectorAll('.cie-doc:checked')].map(x => x.value);

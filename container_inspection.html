@@ -189,7 +189,9 @@
       <div><label>起運地</label><input id="f_origin" list="dl_place" placeholder="例：台中港" autocomplete="off"></div>
       <div><label>目的地</label><input id="f_dest" list="dl_place" placeholder="例：麥寮" autocomplete="off"></div>
     </div>
-    <label>貨櫃櫃號</label><input id="f_cno" placeholder="例：TCLU1234567" autocomplete="off" style="text-transform:uppercase;">
+    <label>貨櫃櫃號<span class="muted" style="font-weight:400;">（一張表只能填一個櫃）</span></label>
+    <input id="f_cno" placeholder="例：TCLU7639584" autocomplete="off" style="text-transform:uppercase;">
+    <div id="cno_hint" class="muted" style="margin:5px 0 0;line-height:1.5;"></div>
     <label>封條號碼（紙本兩格，沒有就留空）</label>
     <input id="f_seal1" placeholder="封條 1" autocomplete="off" style="margin-bottom:7px;">
     <input id="f_seal2" placeholder="封條 2（選填）" autocomplete="off">
@@ -506,12 +508,81 @@ function collect(){
   row.abnormal = ALL_KEYS.some(k => FORM.res[k] === 'X');
   return row;
 }
+// ===== 一張檢查表只能填一個櫃號 =====
+// 逗號、頓號、斜線、分號、空白都算分隔；櫃號本身的連字號先去掉（TCLU-763 9584 是同一個櫃）。
+const CNO_SEP = /[,，、;；\/\|]+/;
+function cnoSplit(s){
+  // 逗號、頓號、斜線、分號、直線一定是分隔符號；空白不一定 ——
+  // 櫃號印在櫃體上本來就寫成「TCLU 763958 4」，把空白一律當分隔會把一個櫃拆成三個。
+  // 所以先照硬分隔切開，每一段去掉空白後如果剛好是一個標準櫃號，那就是一個。
+  const hard = String(s || '').toUpperCase().replace(/[-\u2013\u2014]/g, '').split(CNO_SEP);
+  const out = [];
+  hard.forEach(seg => {
+    const joined = seg.replace(/\s+/g, '');
+    if(!joined) return;
+    if(/^[A-Z]{4}\d{7}$/.test(joined)){ out.push(joined); return; }
+    // 中間完全沒有分隔、直接黏在一起的（22 個字元就是兩個櫃號）也拆得開
+    if(/^([A-Z]{4}\d{7}){2,}$/.test(joined)){
+      (joined.match(/[A-Z]{4}\d{7}/g) || []).forEach(x => out.push(x));
+      return;
+    }
+    seg.split(/\s+/).map(x => x.trim()).filter(Boolean).forEach(x => out.push(x));
+  });
+  return out;
+}
+// ISO 6346：4 個英文字母 + 6 位序號 + 1 位檢核碼。
+// 檢核碼算得出來就幾乎不可能是打錯的，所以格式對不上時提醒一次（不硬擋，怕有特殊櫃）。
+function cnoValid(c){
+  if(!/^[A-Z]{4}\d{7}$/.test(c)) return false;
+  const M = {A:10,B:12,C:13,D:14,E:15,F:16,G:17,H:18,I:19,J:20,K:21,L:23,M:24,
+             N:25,O:26,P:27,Q:28,R:29,S:30,T:31,U:32,V:34,W:35,X:36,Y:37,Z:38};
+  let sum = 0;
+  for(let i = 0; i < 10; i++){
+    const ch = c.charAt(i);
+    sum += (ch >= '0' && ch <= '9' ? Number(ch) : M[ch]) * Math.pow(2, i);
+  }
+  return (sum % 11) % 10 === Number(c.charAt(10));
+}
+function cnoHint(){
+  const el = document.getElementById('cno_hint');
+  if(!el) return;
+  const list = cnoSplit($('f_cno').value);
+  if(!list.length){ el.textContent = ''; el.style.color = ''; return; }
+  if(list.length > 1){
+    el.textContent = '這裡有 ' + list.length + ' 個櫃號（' + list.join('、') + '）。一張表只能填一個，'
+                   + '請留下這一趟要送的那一個，送出後再填下一張。';
+    el.style.color = 'var(--danger, #b3261e)';
+    return;
+  }
+  if(!cnoValid(list[0])){
+    el.textContent = '「' + list[0] + '」不是標準格式（4 個英文字母＋7 個數字，最後一位是檢核碼）。確認一下有沒有打錯。';
+    el.style.color = 'var(--danger, #b3261e)';
+    return;
+  }
+  el.textContent = '';
+  el.style.color = '';
+}
 async function save(){
   const row = collect();
   if(!row.inspect_date){ toast('請選日期', 'err'); return; }
   if(!row.plate){ toast('請填車號', 'err'); $('f_plate').focus(); return; }
   if(!row.inspector){ toast('請填檢查人（你的名字）', 'err'); $('f_inspector').focus(); return; }
-  if(!row.container_no){ toast('請填貨櫃櫃號', 'err'); $('f_cno').focus(); return; }
+  const _cnos = cnoSplit(row.container_no);
+  if(!_cnos.length){ toast('請填貨櫃櫃號', 'err'); $('f_cno').focus(); return; }
+  if(_cnos.length > 1){
+    toast('一張檢查表只能填一個櫃號', 'err');
+    alert('櫃號那一格填了 ' + _cnos.length + ' 個：\n\n　' + _cnos.join('\n　')
+        + '\n\n一張檢查表只對應一個櫃。檢查結果、封條、單據都是跟著櫃走的，'
+        + '\n混在同一筆之後，板架位置只會認得其中一個櫃，運送明細也會把兩趟算成一趟。'
+        + '\n\n請先留下這一趟的那一個櫃號送出，再填下一張。'
+        + '\n（車號、日期、檢查人送出後會留著，下一張不用重打。）');
+    $('f_cno').focus(); return;
+  }
+  row.container_no = _cnos[0];
+  if(!cnoValid(row.container_no)
+     && !confirm('櫃號「' + row.container_no + '」看起來不是標準格式。\n\n'
+               + '標準櫃號是 4 個英文字母加 7 個數字（例：TCLU7639584），最後一位是檢核碼。\n\n'
+               + '確定就是這樣要送出嗎？')){ $('f_cno').focus(); return; }
   const filled = ALL_KEYS.filter(k => FORM.res[k]).length;
   if(filled === 0){ toast('檢查項目一項都還沒填', 'err'); return; }
   if(filled < ALL_KEYS.length &&
@@ -840,6 +911,8 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATcAAACMCAMAAAAuhh4C
   $('tab_new').addEventListener('click', () => showTab('new'));
   $('tab_find').addEventListener('click', () => showTab('find'));
   $('btnSave').addEventListener('click', save);
+  $('f_cno').addEventListener('input', cnoHint);
+  $('f_cno').addEventListener('blur', cnoHint);
   $('btnReset').addEventListener('click', () => { if(confirm('確定要清空重填嗎？')) resetForm(false); });
   $('f_trailer').addEventListener('change', fillTrailerSize);
   $('f_trailer').addEventListener('blur',   fillTrailerSize);
