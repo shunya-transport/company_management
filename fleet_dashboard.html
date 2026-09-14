@@ -1515,7 +1515,9 @@
       <div class="muted" style="margin-bottom:10px;">
         維修保養、打油、輪胎作業單的廠商都是從這一份來的。這份是從舊系統轉過來的，
         名稱、電話、統編要改就在這裡改，<b>改完維修保養歷史上的廠商名稱會一起跟著變</b>。<br>
-        關鍵字可以打名稱、聯絡人、電話、統編、地址的任何一段，空白隔開就是要同時命中（例：輪胎 新竹）。
+        關鍵字可以打名稱、聯絡人、電話、統編、地址的任何一段，空白隔開就是要同時命中（例：輪胎 新竹）。<br>
+        <b>只有「用過」是空白的才刪得掉</b>：有維修保養或打油紀錄掛著的刪掉會查不出當初是哪一家做的，
+        按下刪除時還會再問一次雲端確認。
       </div>
       <div class="toolbar">
         <input id="vl_q" placeholder="搜尋名稱／聯絡人／電話／統編／地址" style="min-width:260px;" autocomplete="off">
@@ -3235,9 +3237,14 @@ function renderVendorList(){
       : `<b>${esc(v.name || '')}</b>`
         + (dup.has(String(v.tax_id || '').trim())
             ? ` <span class="pill gray" title="這個統編底下不只一家。分公司共用統編是正常的；如果是同一家建了兩次，把多的那一筆的名稱改清楚或請管理者刪除。">統編重覆</span>` : '');
+    // 有維修保養或打油紀錄掛著就不給刪 —— 刪了那些紀錄會查不出當初是哪一家做的。
+    // 這裡先用畫面上的筆數擋一次，真的按下去時還會再問一次雲端（載入的只有近兩年）。
     const act = editing
       ? `<button class="name-link" data-vl-save="${esc(v.id)}">儲存</button> <button class="del-btn" data-vl-cancel="1">取消</button>`
-      : `<button class="name-link" data-vl-edit="${esc(v.id)}">修改</button>`;
+      : `<button class="name-link" data-vl-edit="${esc(v.id)}">修改</button>`
+        + (v._n
+            ? ` <span class="muted" title="這家在維修保養或打油紀錄裡有 ${v._n} 筆，刪掉那些紀錄就會查不出廠商。要停用請把名稱或類別註記清楚。">使用中，不能刪</span>`
+            : ` <button class="del-btn" data-vl-del="${esc(v.id)}">刪除</button>`);
     return `<tr>
       <td>${nameCell}</td>
       <td>${vlCell(v, 'category', '例：保養維修')}</td>
@@ -3287,6 +3294,56 @@ async function vlSave(id){
   vlEditId = null;
   renderAll();
 }
+// 刪之前問雲端：這家廠商還有沒有別的資料掛著。
+// 畫面上的「用過」只算載入進來的那一段，舊紀錄不在裡面，所以不能只信它。
+async function vlRefCount(id){
+  const tables = [['maintenance_records', 'record_id', '維修保養'],
+                  ['grease_records', 'record_id', '打油'],
+                  ['equipment_repair_reports', 'report_id', '設備維修回報']];
+  const out = [];
+  for(const t of tables){
+    try{
+      const rows = await supaFetch(`${t[0]}?select=${t[1]}&vendor_id=eq.${encodeURIComponent(id)}`);
+      if(rows && rows.length) out.push(t[2] + ' ' + rows.length + ' 筆');
+    }catch(e){
+      // 這張表查不到就跳過。真的還有資料掛著時，資料庫的外鍵會在下一步把刪除擋下來。
+      console.warn('檢查 ' + t[0] + ' 失敗，略過：', e);
+    }
+  }
+  return out;
+}
+async function vlDelete(id){
+  const v = (STATE.vendors || []).find(x => String(x.id) === String(id));
+  if(!v){ alert('找不到這一家廠商，請重新整理。'); return; }
+  const used = await vlRefCount(v.id);
+  if(used.length){
+    alert('「' + v.name + '」不能刪除。\n\n它還掛在：' + used.join('、')
+        + '\n\n刪掉的話，那些紀錄就查不出當初是哪一家做的。'
+        + '\n\n如果是同一家重複建檔，建議先把那些紀錄改掛到要留下來的那一家，'
+        + '\n再回來刪這一筆；或是直接把名稱改清楚，不要刪。');
+    return;
+  }
+  if(!confirm('要刪掉廠商「' + v.name + '」嗎？\n\n'
+            + '　統編：' + (v.tax_id || '（空白）') + '\n'
+            + '　電話：' + (v.phone || '（空白）') + '\n'
+            + '　類別：' + (v.category || '（空白）') + '\n\n'
+            + '已經確認過沒有任何維修保養、打油或設備維修紀錄掛在它底下。\n'
+            + '刪掉就救不回來了。')) return;
+  try{
+    await supaFetch('vendors?vendor_id=eq.' + encodeURIComponent(v.id),
+      { method: 'DELETE', headers: {'Prefer':'return=minimal'} });
+  }catch(e){
+    const m = String((e && e.message) || e);
+    alert('沒有刪掉，雲端資料沒有變動。\n\n錯誤訊息：' + m + dbErrorHint(e)
+        + (m.indexOf('23503') >= 0
+            ? '\n\n資料庫說還有別的資料掛在這家廠商底下，所以擋了下來。'
+            : ''));
+    return;
+  }
+  STATE.vendors = (STATE.vendors || []).filter(x => String(x.id) !== String(v.id));
+  vlEditId = null;
+  renderAll();
+}
 async function vlAdd(){
   const name = prompt('新廠商的名稱：');
   if(name === null) return;
@@ -3318,6 +3375,8 @@ async function vlAdd(){
       const ed = t.getAttribute('data-vl-edit');
       if(ed){ vlEditId = ed; renderVendorList(); return; }
       if(t.getAttribute('data-vl-cancel')){ vlEditId = null; renderVendorList(); return; }
+      const dl = t.getAttribute('data-vl-del');
+      if(dl){ await vlDelete(dl); return; }
       const sv = t.getAttribute('data-vl-save');
       if(sv){ await vlSave(sv); }
     });
