@@ -1509,6 +1509,33 @@
       </div>
       <div class="muted" style="margin-top:8px;">請到「車輛管理」點車號進入編輯，指定該車套用哪一個保養標準車型，系統會依此自動估算下次保養里程。</div>
     </div>
+
+    <div class="card">
+      <h2>廠商清冊<span class="count-badge" id="vl_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        維修保養、打油、輪胎作業單的廠商都是從這一份來的。這份是從舊系統轉過來的，
+        名稱、電話、統編要改就在這裡改，<b>改完維修保養歷史上的廠商名稱會一起跟著變</b>。<br>
+        關鍵字可以打名稱、聯絡人、電話、統編、地址的任何一段，空白隔開就是要同時命中（例：輪胎 新竹）。
+      </div>
+      <div class="toolbar">
+        <input id="vl_q" placeholder="搜尋名稱／聯絡人／電話／統編／地址" style="min-width:260px;" autocomplete="off">
+        <select id="vl_cat"><option value="all">全部類別</option></select>
+        <select id="vl_region"><option value="all">全部地區</option></select>
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;">
+          <input type="checkbox" id="vl_used" style="width:auto;margin:0;"> 只看維修或打油用過的
+        </label>
+        <button class="btn ghost tiny" id="vl_add">＋ 新增廠商</button>
+      </div>
+      <div class="table-scroll" style="max-height:520px;">
+        <table>
+          <thead><tr>
+            <th>廠商名稱</th><th>類別</th><th>地區</th><th>聯絡人</th><th>電話</th>
+            <th>傳真</th><th>統一編號</th><th>地址</th><th title="維修保養＋打油紀錄裡用到幾次">用過</th><th></th>
+          </tr></thead>
+          <tbody id="vlBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="ledgers" class="panel">
@@ -3135,6 +3162,168 @@ async function createVendor(name){
   list.push({ id: newId, name: String(name).trim() });
   STATE.vendors = list;
   return newId;
+}
+
+// ===================== 廠商清冊（可搜尋、可修改）=====================
+// 上面那個「找廠商」視窗是填表時挑廠商用的，唯讀。
+// 這一份 179 家是從舊系統轉過來的，名稱打錯、電話換了、統編缺了都要能就地改，
+// 不然只能請人進資料庫動手。
+// vendors 沒有走 TABLE_MAP／saveState（STATE.vendors 存的是 {id,name,...} 的簡化版），
+// 所以這裡直接對那一列發 PATCH，不會牽動別張表。
+let vlEditId = null;
+
+// 這家廠商在維修保養與打油紀錄裡出現過幾次 —— 舊資料轉過來一堆沒用過的，
+// 有這個數字才知道哪些是現在真的在往來的。
+function vlUseCount(v){
+  let n = 0;
+  (STATE.maintRecords || []).forEach(r => { if(String(r.vendor_id) === String(v.id)) n++; });
+  (STATE.greaseRecords || []).forEach(r => { if(String(r.vendor_id) === String(v.id)) n++; });
+  return n;
+}
+// 同一個統編出現在好幾家：分公司共用統編是正常的（永德福有新竹、桃園、台中三家），
+// 但也可能是轉檔時同一家建了兩次。標出來讓人自己看。
+function vlDupTaxIds(){
+  const c = {};
+  (STATE.vendors || []).forEach(v => {
+    const t = String(v.tax_id || '').trim();
+    if(t && t !== '無') c[t] = (c[t] || 0) + 1;
+  });
+  return new Set(Object.keys(c).filter(k => c[k] > 1));
+}
+function vlFillSelects(){
+  const cats = [...new Set((STATE.vendors || []).map(v => v.category).filter(Boolean))].sort();
+  const regs = [...new Set((STATE.vendors || []).map(v => v.region).filter(Boolean))].sort();
+  const fill = (id, list, all) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="all">${all}</option>`
+      + list.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  };
+  fill('vl_cat', cats, '全部類別');
+  fill('vl_region', regs, '全部地區');
+}
+function vlCell(v, key, ph){
+  return vlEditId !== null && String(vlEditId) === String(v.id)
+    ? `<input id="vle_${key}" value="${esc(v[key] || '')}" placeholder="${esc(ph || '')}" style="min-width:90px;">`
+    : esc(v[key] || '');
+}
+function renderVendorList(){
+  const body = document.getElementById('vlBody');
+  if(!body) return;
+  vlFillSelects();
+  const q = (document.getElementById('vl_q') || {}).value || '';
+  const cat = (document.getElementById('vl_cat') || {}).value || 'all';
+  const reg = (document.getElementById('vl_region') || {}).value || 'all';
+  const usedOnly = !!(document.getElementById('vl_used') || {}).checked;
+  const dup = vlDupTaxIds();
+  let rows = (STATE.vendors || []).filter(v =>
+    (cat === 'all' || (v.category || '') === cat) &&
+    (reg === 'all' || (v.region || '') === reg) &&
+    vpMatch(v, q));
+  rows = rows.map(v => Object.assign({}, v, { _n: vlUseCount(v) }));
+  if(usedOnly) rows = rows.filter(v => v._n > 0);
+  rows.sort((a, b) => (b._n - a._n)
+    || String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'));
+  const cnt = document.getElementById('vl_count');
+  if(cnt) cnt.textContent = '共 ' + rows.length + ' 家（全部 ' + (STATE.vendors || []).length + ' 家）';
+  body.innerHTML = rows.map(v => {
+    const editing = vlEditId !== null && String(vlEditId) === String(v.id);
+    const nameCell = editing
+      ? `<input id="vle_name" value="${esc(v.name || '')}" style="min-width:200px;">`
+      : `<b>${esc(v.name || '')}</b>`
+        + (dup.has(String(v.tax_id || '').trim())
+            ? ` <span class="pill gray" title="這個統編底下不只一家。分公司共用統編是正常的；如果是同一家建了兩次，把多的那一筆的名稱改清楚或請管理者刪除。">統編重覆</span>` : '');
+    const act = editing
+      ? `<button class="name-link" data-vl-save="${esc(v.id)}">儲存</button> <button class="del-btn" data-vl-cancel="1">取消</button>`
+      : `<button class="name-link" data-vl-edit="${esc(v.id)}">修改</button>`;
+    return `<tr>
+      <td>${nameCell}</td>
+      <td>${vlCell(v, 'category', '例：保養維修')}</td>
+      <td>${vlCell(v, 'region', '例：新竹')}</td>
+      <td>${vlCell(v, 'contact_person')}</td>
+      <td class="c-nw">${vlCell(v, 'phone')}</td>
+      <td class="c-nw">${vlCell(v, 'fax')}</td>
+      <td class="c-nw">${vlCell(v, 'tax_id', '8 碼')}</td>
+      <td>${vlCell(v, 'address')}</td>
+      <td class="num">${v._n || ''}</td>
+      <td style="white-space:nowrap;">${act}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10" class="empty">找不到符合的廠商</td></tr>`;
+}
+async function vlSave(id){
+  const v = (STATE.vendors || []).find(x => String(x.id) === String(id));
+  if(!v){ alert('找不到這一家廠商，請重新整理。'); return; }
+  const g = k => { const el = document.getElementById('vle_' + k); return el ? el.value.trim() : ''; };
+  const name = g('name');
+  if(!name){ alert('廠商名稱不能空白。'); return; }
+  const tax = g('tax_id');
+  if(tax && tax !== '無' && !/^\d{8}$/.test(tax)
+     && !confirm('統一編號「' + tax + '」不是 8 位數字。\n\n確定就是這樣要存嗎？')) return;
+  const body = {
+    vendor_name: name, category: g('category') || null, region: g('region') || null,
+    contact_person: g('contact_person') || null, phone: g('phone') || null,
+    fax: g('fax') || null, tax_id: tax || null, address: g('address') || null
+  };
+  try{
+    await supaFetch('vendors?vendor_id=eq.' + encodeURIComponent(v.id),
+      { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
+  }catch(e){
+    alert('這一家沒有存進雲端資料庫。\n\n錯誤訊息：' + (e && e.message ? e.message : e) + dbErrorHint(e));
+    return;
+  }
+  const before = v.name;
+  Object.assign(v, {
+    name: name, category: body.category || '', region: body.region || '',
+    contact_person: body.contact_person || '', phone: body.phone || '',
+    fax: body.fax || '', tax_id: body.tax_id || '', address: body.address || ''
+  });
+  // 維修保養歷史上的廠商名稱是載入時對照出來的（不會寫回資料庫），改名後一起更新，
+  // 不然畫面上還是舊名字，要重新整理才會變。
+  if(before !== name){
+    (STATE.maintRecords || []).forEach(r => { if(String(r.vendor_id) === String(v.id)) r.vendor_name = name; });
+  }
+  vlEditId = null;
+  renderAll();
+}
+async function vlAdd(){
+  const name = prompt('新廠商的名稱：');
+  if(name === null) return;
+  const n = String(name).trim();
+  if(!n){ alert('名稱不能空白。'); return; }
+  if((STATE.vendors || []).some(v => vpNorm(v.name) === vpNorm(n))
+     && !confirm('清單裡已經有名稱很接近的廠商了。\n\n還是要新增一家嗎？')) return;
+  try{
+    const id = await createVendor(n);
+    vlEditId = id;
+    const q = document.getElementById('vl_q'); if(q) q.value = n;
+    renderAll();
+  }catch(e){ alert('建立廠商失敗：' + (e && e.message ? e.message : e)); }
+}
+{
+  const _wire = () => {
+    ['vl_q','vl_cat','vl_region'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.addEventListener('input', renderVendorList);
+    });
+    const _u = document.getElementById('vl_used');
+    if(_u) _u.addEventListener('change', renderVendorList);
+    const _a = document.getElementById('vl_add');
+    if(_a) _a.addEventListener('click', vlAdd);
+    const _b = document.getElementById('vlBody');
+    if(_b) _b.addEventListener('click', async (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const ed = t.getAttribute('data-vl-edit');
+      if(ed){ vlEditId = ed; renderVendorList(); return; }
+      if(t.getAttribute('data-vl-cancel')){ vlEditId = null; renderVendorList(); return; }
+      const sv = t.getAttribute('data-vl-save');
+      if(sv){ await vlSave(sv); }
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wire);
+  else _wire();
 }
 
 // ===================== 廠商關鍵字查詢 =====================
@@ -14343,6 +14532,7 @@ function renderAll(){
   renderMaintHistoryTable();
   renderMaintPendingTable();
   renderMaintStandardsTable();
+  renderVendorList();
   renderAdminRewards();
   renderFfTable();
   renderTlTable();
