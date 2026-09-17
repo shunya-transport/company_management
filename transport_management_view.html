@@ -3272,7 +3272,7 @@
     <h3 id="licenseModalTitle">證照管理</h3>
     <div class="table-scroll" style="max-height:220px;margin-bottom:16px;">
       <table>
-        <thead><tr><th>證照類型</th><th>證號</th><th>發證日期</th><th>效期</th><th></th></tr></thead>
+        <thead><tr><th>證照類型</th><th>證號</th><th>發證日期</th><th>效期</th><th title="證書照片：跟外訓證照總表同一份，這裡上傳那邊也看得到">證書</th><th></th></tr></thead>
         <tbody id="licenseModalBody"></tbody>
       </table>
     </div>
@@ -6588,6 +6588,8 @@ async function cpSave(){
     return;
   }
   renderTrainingTable();
+  if(document.getElementById('licenseModalBody')
+     && document.getElementById('licenseModal').classList.contains('show')) renderLicenseModalBody();
   cpOpen(t.id);              // 重開一次，圖片跟「移除這一張」才會跟著更新
   const msg2 = document.getElementById('cpMsg');
   if(msg2) msg2.textContent = done.concat('已存好').join('；');
@@ -10217,6 +10219,21 @@ function certStatusPill(t){
   const s = statusOf(t.expiry_date, 90);
   return `<span class="pill ${s}">${statusLabel(t.expiry_date,90)}</span>`;
 }
+// 證照管理視窗裡的照片圖示。跟外訓證照總表共用 cpOpen，也就是共用同一份
+// employee_trainings 資料 —— 在這裡上傳，外訓清冊那邊馬上看得到，反過來也一樣。
+{
+  const _w = () => {
+    const b = document.getElementById('licenseModalBody');
+    if(b) b.addEventListener('click', (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const ph = t.getAttribute('data-cp-photo');
+      if(ph) cpOpen(ph);
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
+}
 function renderLicenseModalBody(){
   const rows = STATE.trainings.filter(l => l.employee_id === currentLicenseEmpId);
   document.getElementById('licenseModalBody').innerHTML = rows.map(l => `
@@ -10225,8 +10242,15 @@ function renderLicenseModalBody(){
       <td>${esc(l.cert_no||'')}</td>
       <td>${esc(l.issue_date||'—')}</td>
       <td>${l.no_expiry ? '長期有效' : esc(l.expiry_date||'—')}${l.on_hold ? ' <span class="muted">（暫不外訓）</span>' : ''}</td>
+      <td style="text-align:center;">${
+        cpHas(l)
+          ? `<button class="name-link" data-cp-photo="${esc(l.id)}" style="font-size:16px;margin:0;"
+                title="看證書照片（${cpCount(l)} 張）">&#128247;</button>`
+          : `<button class="del-btn" data-cp-photo="${esc(l.id)}" style="color:var(--text-3);"
+                title="還沒有證書照片，點一下可以上傳">＋</button>`
+      }</td>
       <td><button class="del-btn" data-del-license="${l.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty">尚無證照紀錄</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="6" class="empty">尚無證照紀錄</td></tr>`;
 }
 function renderLicenseTypeSelect(){
   document.getElementById('lm_type').innerHTML = trainingTypeOptions();

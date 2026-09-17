@@ -3106,7 +3106,7 @@
     <h3 id="licenseModalTitle">證照管理</h3>
     <div class="table-scroll" style="max-height:220px;margin-bottom:16px;">
       <table>
-        <thead><tr><th>證照類型</th><th>證號</th><th>發證日期</th><th>效期</th><th></th></tr></thead>
+        <thead><tr><th>證照類型</th><th>證號</th><th>發證日期</th><th>效期</th><th title="證書照片：跟外訓證照總表同一份，這裡上傳那邊也看得到">證書</th><th></th></tr></thead>
         <tbody id="licenseModalBody"></tbody>
       </table>
     </div>
@@ -6294,6 +6294,8 @@ async function cpSave(){
     return;
   }
   renderTrainingTable();
+  if(document.getElementById('licenseModalBody')
+     && document.getElementById('licenseModal').classList.contains('show')) renderLicenseModalBody();
   cpOpen(t.id);              // 重開一次，圖片跟「移除這一張」才會跟著更新
   const msg2 = document.getElementById('cpMsg');
   if(msg2) msg2.textContent = done.concat('已存好').join('；');
@@ -7275,14 +7277,9 @@ function staffCertBrief(empId){
   return { n: certs.length, expired: expired, soon: soon, nearest: nearest,
            noLicence: hasTeam && !hasLicence };
 }
-function staffCertBadge(b){
-  let out = '';
-  if(b.expired) out += ` <span class="pill red" title="有 ${b.expired} 張已經過期，到期提醒信會一直出現">過期 ${b.expired}</span>`;
-  else if(b.soon) out += ` <span class="pill amber" title="90 天內到期">${b.soon} 張快到期</span>`;
-  else if(b.nearest) out += ` <span class="pill green" title="最快到期的那一張">${esc(toROCDate(b.nearest))}</span>`;
-  if(b.noLicence) out += ` <span class="pill amber" title="掛了車隊，但駕照資料與外訓證照總表兩邊都查不到職業駕照">缺駕照</span>`;
-  return out;
-}
+// 115/09/17：清冊的證照欄本來會標「過期 N」「N 張快到期」「缺駕照」，
+// 實際看起來太亂，拿掉了 —— 到不到期看外訓證照總表就好。
+// staffCertBrief 還留著，人員詳細視窗底下那句「掛了車隊卻查不到職業駕照」要用。
 // 人員詳細視窗的證照表：外訓證照 ＋ 只存在駕照資料那一邊的那幾張
 function staffCertSection(empId, emp){
   const certs = (STATE.trainings || []).filter(t => String(t.employee_id) === String(empId))
@@ -7358,10 +7355,7 @@ function renderStaffTable(){
       <td>${esc(e.company_name||'')}</td>
       <td>${esc(e.region||'')}</td>
       <td>${(() => { const s = checklistSummary(e.id); const cls = s.missing>0 ? 'amber' : 'green'; return `<button class="name-link" data-edit-checklist="${e.id}"><span class="pill ${cls}">${s.done}/${s.total}</span></button>`; })()}</td>
-      <td>${(() => {
-        const b = staffCertBrief(e.id);
-        return `<button class="name-link" data-edit-license="${e.id}">證照 (${b.n})</button>` + staffCertBadge(b);
-      })()}</td>
+      <td><button class="name-link" data-edit-license="${e.id}">證照 (${STATE.trainings.filter(l=>l.employee_id===e.id).length})</button></td>
       <td><button class="name-link" data-edit-equip="${e.id}">物品 (${equipInUseCount(e.id)})${equipPhonesOf(e.id).length?' 📱':''}${equipInstrumentsOf(e.id).length?' 📟':''}</button></td>
       <td><button class="name-link" data-edit-medical="${e.id}">體檢 (${STATE.medicalExamRecords.filter(x=>x.employee_id===e.id).length})</button></td>
       <td><button class="move-btn" data-move-staff="${e.id}">移至歷史</button></td>
@@ -9002,6 +8996,21 @@ function certStatusPill(t){
   const s = statusOf(t.expiry_date, 90);
   return `<span class="pill ${s}">${statusLabel(t.expiry_date,90)}</span>`;
 }
+// 證照管理視窗裡的照片圖示。跟外訓證照總表共用 cpOpen，也就是共用同一份
+// employee_trainings 資料 —— 在這裡上傳，外訓清冊那邊馬上看得到，反過來也一樣。
+{
+  const _w = () => {
+    const b = document.getElementById('licenseModalBody');
+    if(b) b.addEventListener('click', (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const ph = t.getAttribute('data-cp-photo');
+      if(ph) cpOpen(ph);
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
+}
 function renderLicenseModalBody(){
   const rows = STATE.trainings.filter(l => l.employee_id === currentLicenseEmpId);
   document.getElementById('licenseModalBody').innerHTML = rows.map(l => `
@@ -9010,8 +9019,15 @@ function renderLicenseModalBody(){
       <td>${esc(l.cert_no||'')}</td>
       <td>${esc(l.issue_date||'—')}</td>
       <td>${l.no_expiry ? '長期有效' : esc(l.expiry_date||'—')}${l.on_hold ? ' <span class="muted">（暫不外訓）</span>' : ''}</td>
+      <td style="text-align:center;">${
+        cpHas(l)
+          ? `<button class="name-link" data-cp-photo="${esc(l.id)}" style="font-size:16px;margin:0;"
+                title="看證書照片（${cpCount(l)} 張）">&#128247;</button>`
+          : `<button class="del-btn" data-cp-photo="${esc(l.id)}" style="color:var(--text-3);"
+                title="還沒有證書照片，點一下可以上傳">＋</button>`
+      }</td>
       <td><button class="del-btn" data-del-license="${l.id}">刪除</button></td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty">尚無證照紀錄</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="6" class="empty">尚無證照紀錄</td></tr>`;
 }
 function renderLicenseTypeSelect(){
   document.getElementById('lm_type').innerHTML = trainingTypeOptions();
