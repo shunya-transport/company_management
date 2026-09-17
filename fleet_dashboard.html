@@ -1987,6 +1987,69 @@
       </div>
       <div id="org_msg" class="muted" style="margin-top:10px;"></div>
     </div>
+
+    <div class="card">
+      <h2>薪資扣發／發款案件<span class="count-badge" id="pc_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        薪資扣發通知單、扣發同意書、發款通知單、最低服務年限獎金-生活補助這四張表單都是從這裡印的。
+        一個案件登錄一次，之後每個月扣（發）多少就在下面「逐期登錄」按一次，
+        <b>餘額系統自己算</b>，不用再自己追。離職時看餘額就知道要一次扣回多少。
+      </div>
+      <div class="form-grid">
+        <label>種類
+          <select id="pc_kind"><option value="扣款">扣款</option><option value="發款">發款</option></select>
+        </label>
+        <label>人員<select id="pc_emp"></select></label>
+        <label>單號<input id="pc_no" placeholder="選填"></label>
+        <label>同意書日期<input id="pc_agreed" type="date"></label>
+        <label>事由
+          <select id="pc_reason">
+            <option value="作業怠忽車輛毀損">作業怠忽車輛毀損</option>
+            <option value="違反客戶作業規定">違反客戶作業規定</option>
+            <option value="交通違規罰款">交通違規罰款</option>
+            <option value="法院強制扣款">法院強制扣款</option>
+            <option value="機器設備毀損修理費">機器設備毀損修理費</option>
+            <option value="自付證照外訓費">自付證照外訓費</option>
+            <option value="最低服務年限獎金-初訓證照補助">最低服務年限獎金-初訓證照補助</option>
+            <option value="生活補助預支">生活補助預支</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+        <label>事由補充<input id="pc_note" placeholder="例：1140721 危運複訓"></label>
+        <label>車號（車損類才填）<input id="pc_plate" placeholder="選填" list="plateList"></label>
+        <label>總金額<input id="pc_total" type="number" min="0" step="1"></label>
+        <label>方式
+          <select id="pc_mode"><option value="一次">一次</option><option value="分期">分期</option></select>
+        </label>
+        <label>分幾期<input id="pc_inst" type="number" min="1" step="1" placeholder="一次扣就留空"></label>
+        <label>每期金額<input id="pc_per" type="number" min="0" step="1" placeholder="留空＝總額÷期數"></label>
+        <label>第一次扣／發款日<input id="pc_first" type="date"></label>
+        <label>最低服務年限（月）<input id="pc_msm" type="number" min="0" step="1" placeholder="生活補助才填"></label>
+      </div>
+      <button class="btn" id="pc_add">新增案件</button>
+      <span class="muted" id="pc_msg" style="margin-left:10px;"></span>
+
+      <div class="toolbar" style="margin-top:16px;">
+        <input id="pc_search" placeholder="搜尋人員／單號／事由" autocomplete="off">
+        <select id="pc_status_filter">
+          <option value="進行中">只看進行中</option>
+          <option value="all">全部</option>
+          <option value="已結案">已結案</option>
+          <option value="作廢">作廢</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>單號</th><th>種類</th><th>人員</th><th>事由</th><th class="num">總額</th>
+            <th class="num">已扣／已發</th><th class="num">餘額</th><th>方式</th>
+            <th>第一次</th><th>狀態</th><th></th>
+          </tr></thead>
+          <tbody id="pcBody"></tbody>
+        </table>
+      </div>
+      <div id="pcLines" style="margin-top:12px;"></div>
+    </div>
   </div>
 
   <div id="fuelToll" class="panel">
@@ -2614,6 +2677,21 @@
             <option value="ext_list">桌機分機表</option>
             <option value="stocktake_vehicle">車用物品盤點表</option>
             <option value="stocktake_staff">人員物品盤點表</option>
+            <option value="equipment_list">物品領用清單（個人）</option>
+            <option value="onduty">在職證明書</option>
+            <option value="transport_onduty">運輸業在職工作證明書（港區通行證用）</option>
+            <option value="resign">離職證明書</option>
+            <option value="involuntary_resign">非自願離職證明書</option>
+            <option value="resign_application">員工離職申請書（含物品歸還清點）</option>
+            <option value="undertaking">切結書（積欠款償還）</option>
+            <option value="consent_receipt">同意書及給付收據</option>
+            <option value="severance_consent">合意資遣同意書</option>
+            <option value="property_card">客戶財產管制卡</option>
+            <option value="payroll_deduct_notice">薪資扣發通知單暨扣薪明細</option>
+            <option value="payroll_deduct_consent">薪資扣發同意書</option>
+            <option value="payroll_pay_notice">薪資其他項目發款通知單</option>
+            <option value="min_service_bonus">最低服務年限獎金－生活補助預支</option>
+            <option value="payroll_case_list">薪資扣發／發款　進行中案件一覽</option>
           </select>
         </label>
         <label>人員
@@ -3960,6 +4038,25 @@ async function enrichDenormalizedFields(){
     contact_person: v.contact_person || '', phone: v.phone || '', fax: v.fax || '',
     tax_id: v.tax_id || '', category: v.category || '', region: v.region || '', address: v.address || ''
   }));
+
+  // 證明書要蓋公司的頭：統編、地址、負責人在 companies，保險證號在 insurance_registry，
+  // 駕駛類別在 driver_licenses。這三張以前沒載進來，所以在職證明只印得出姓名。
+  // 撈失敗就給空陣列，表單照樣印得出來，只是那幾格留白。
+  // 薪資扣發／發款案件。表還沒建（SQL_161 還沒跑）就給空陣列，畫面照樣開得起來。
+  STATE.payrollCases = await supaFetch(
+    'payroll_cases?select=*&order=case_id.desc').catch(() => []) || [];
+  STATE.payrollLines = await supaFetch(
+    'payroll_case_lines?select=*&order=case_id.asc,seq.asc').catch(() => []) || [];
+
+  STATE.companyInfo = await supaFetch(
+    'companies?select=company_id,company_name,tax_id,registered_address,contact_address,responsible_person'
+  ).catch(() => []) || [];
+  STATE.insReg = await supaFetch(
+    'insurance_registry?select=company_id,insurance_cert_no,pension_unit_no,health_insurance_code'
+  ).catch(() => []) || [];
+  STATE.driverLicenses = await supaFetch(
+    'driver_licenses?select=employee_id,license_type,license_number,expiry_date'
+  ).catch(() => []) || [];
 
   // 離職的人也要放進來 —— 訓練紀錄不會跟著離職刪掉，
   // 只查在職名冊的話，離職同仁的證照姓名欄會變成空白
@@ -9451,17 +9548,28 @@ function renderStaffModalEdit(e){
 }
 function closeStaffModal(){ document.getElementById('staffModal').classList.remove('show'); }
 
+// 離職證明那幾張要選離職的人，切結書與收據兩邊都可能用到
+const FORM_HISTORY_TYPES = ['resign', 'involuntary_resign', 'severance_consent'];
+const FORM_BOTH_TYPES = ['undertaking', 'consent_receipt'];
+function formEmpList(type){
+  if(FORM_HISTORY_TYPES.indexOf(type) >= 0) return visibleHistory();
+  if(FORM_BOTH_TYPES.indexOf(type) >= 0) return (STATE.employees || []).concat(visibleHistory());
+  return STATE.employees || [];
+}
 function renderFormEmpSelect(){
   const type = document.getElementById('form_type').value;
   const sel = document.getElementById('form_emp');
-  const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
+  const list = formEmpList(type);
   sel.innerHTML = list.map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.employee_no)}）</option>`).join('')
     || `<option value="">尚無資料</option>`;
 }
 
 const EXTRA_FIELDS = {
-  onduty: [],
-  transport_onduty: [{id:'ex_gender', label:'性別', type:'select', opts:['男','女']}],
+  onduty: [{id:'ex_doc_no', label:'文件編號（空白＝工號）', type:'text', placeholder:'例：D0073'}],
+  transport_onduty: [
+    {id:'ex_gender', label:'性別（空白＝依身分證判斷）', type:'select', opts:['','男','女']},
+    {id:'ex_valid_to', label:'證明有效至（空白＝三年後）', type:'date'}
+  ],
   resign: [],
   involuntary_resign: [
     {id:'ex_gender', label:'性別', type:'select', opts:['男','女']},
@@ -9513,6 +9621,27 @@ const EXTRA_FIELDS = {
     {id:'ex_ins_period', label:'期間（民國年月，空白＝最新一期）', type:'text', placeholder:'例：115/08'},
     {id:'ex_ins_scope', label:'人員範圍', type:'select', opts:['該期全部','僅在職人員']}
   ],
+  consent_receipt: [
+    {id:'ex_pay_item', label:'給付內容', type:'text', placeholder:'例：112年5月份薪資'},
+    {id:'ex_pay_amount', label:'給付金額(元)', type:'number'},
+    {id:'ex_form_date', label:'表單日期（空白＝今天）', type:'date'}
+  ],
+  severance_consent: [
+    {id:'ex_sev_article', label:'資遣依據', type:'text', placeholder:'例：勞基法第11條第2款'},
+    {id:'ex_sev_end', label:'契約終止日（空白＝離職日）', type:'date'},
+    {id:'ex_sev_rows', label:'給付明細列數（空白＝6）', type:'number', placeholder:'例：6'}
+  ],
+  property_card: [
+    {id:'ex_prop_no', label:'門號（客戶財產編號）', type:'text', placeholder:'可留空，手寫'},
+    {id:'ex_prop_in', label:'入庫日期', type:'date'},
+    {id:'ex_prop_out', label:'領用日期', type:'date'}
+  ],
+  payroll_deduct_notice: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
+  payroll_deduct_consent: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
+  payroll_pay_notice: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
+  min_service_bonus: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
+  payroll_case_list: [],
+  transport_onduty_end: [],
   ppe_matrix: [],
   bank_roster: [
     {id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'},
@@ -9531,9 +9660,17 @@ function renderExtraFields(){
   const fields = EXTRA_FIELDS[type] || [];
   // 車隊清單是算出來的（基本領用量九隊＋三份 Word 範本），不寫死在上面
   fields.forEach(f => { if(f.id === 'ex_ppe_team') f.opts = ppeTeamOptions(); });
+  // 案件下拉：值是 case_id，顯示的是「人員｜種類｜事由｜金額｜餘額」
+  fields.forEach(f => { if(f.id === 'ex_case'){
+    f.opts = pcCaseOptions(); f.labels = pcCaseLabels();
+    const _k = pcKindForType();
+    f.label = '案件' + (_k ? '（只列' + _k + '）' : '');
+  } });
   document.getElementById('form_extra').innerHTML = fields.map(f => {
     if(f.type === 'select'){
-      return `<label>${f.label}<select id="${f.id}">${f.opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select></label>`;
+      return `<label>${f.label}<select id="${f.id}">`
+        + f.opts.map(o => `<option value="${esc(o)}">${esc(f.labels ? (f.labels[o] || o) : o)}</option>`).join('')
+        + `</select></label>`;
     }
     return `<label>${f.label}<input id="${f.id}" type="${f.type}" placeholder="${f.placeholder||''}"></label>`;
   }).join('');
@@ -10066,13 +10203,965 @@ async function pngFromNode(box, fileName){
     alert('這個瀏覽器沒辦法直接轉成圖片。\n\n請改按「列印」，在印表機那一格選「另存為 PDF」，紙張選 A4、方向選橫向，一樣可以留存或再轉圖檔。\n\n錯誤訊息：' + (err && err.message ? err.message : err));
   }
 }
+// ===================== 薪資扣發／發款案件 =====================
+// 這一組取代舊系統四張各自獨立的 Excel 表單。重點是「餘額」：
+// 以前逐期扣款要自己在表格上追，離職時常常忘記把剩下的一次扣回。
+// 這裡餘額一律用「總額 − 已登錄各期合計」即時算，不存在資料庫裡，兩邊不會對不起來。
+let pcLinesOpenId = null;
+function pcEmpName(id){
+  const e = (STATE.employees || []).find(x => String(x.id) === String(id))
+         || (STATE.employeesHistory || []).find(x => String(x.id) === String(id));
+  return e ? e.name : '';
+}
+function pcEmpOf(id){
+  return (STATE.employees || []).find(x => String(x.id) === String(id))
+      || (STATE.employeesHistory || []).find(x => String(x.id) === String(id))
+      || null;
+}
+function pcLinesOf(caseId){
+  return (STATE.payrollLines || [])
+    .filter(l => String(l.case_id) === String(caseId))
+    .sort((a, b) => (Number(a.seq) || 0) - (Number(b.seq) || 0));
+}
+function pcPaid(caseId){
+  return pcLinesOf(caseId).reduce((s, l) => s + (Number(l.amount) || 0), 0);
+}
+function pcBalance(c){ return (Number(c.total_amount) || 0) - pcPaid(c.case_id); }
+function pcFillEmp(){
+  const sel = document.getElementById('pc_emp');
+  if(!sel) return;
+  const list = (STATE.employees || []).concat(visibleHistory());
+  sel.innerHTML = list.map(e =>
+    `<option value="${e.id}">${esc(e.name)}（${esc(e.employee_no || '')}）</option>`).join('');
+}
+function renderPayrollCases(){
+  const body = document.getElementById('pcBody');
+  if(!body) return;
+  const q = ((document.getElementById('pc_search') || {}).value || '').trim();
+  const st = ((document.getElementById('pc_status_filter') || {}).value) || '進行中';
+  let rows = (STATE.payrollCases || []).slice();
+  if(st !== 'all') rows = rows.filter(c => (c.status || '進行中') === st);
+  if(q) rows = rows.filter(c =>
+    (pcEmpName(c.employee_id) + (c.case_no || '') + (c.reason_type || '') + (c.reason_note || '')).includes(q));
+  const cnt = document.getElementById('pc_count');
+  if(cnt) cnt.textContent = '共 ' + rows.length + ' 件（全部 ' + (STATE.payrollCases || []).length + ' 件）';
+  body.innerHTML = rows.map(c => {
+    const bal = pcBalance(c);
+    return `<tr>
+      <td>${esc(c.case_no || '')}</td>
+      <td>${c.case_kind === '發款' ? '<span class="pill green">發款</span>' : '<span class="pill amber">扣款</span>'}</td>
+      <td>${esc(pcEmpName(c.employee_id))}</td>
+      <td>${esc(c.reason_type || '')}${c.reason_note ? '<br><span class="muted" style="font-size:12px;">' + esc(c.reason_note) + '</span>' : ''}</td>
+      <td class="num">${fmt2(c.total_amount)}</td>
+      <td class="num">${fmt2(pcPaid(c.case_id))}</td>
+      <td class="num"${bal > 0 ? ' style="font-weight:700;"' : ''}>${fmt2(bal)}</td>
+      <td>${esc(c.pay_mode || '')}${c.installments ? '（' + c.installments + ' 期）' : ''}</td>
+      <td>${esc(String(c.first_date || '').slice(0,10))}</td>
+      <td>${esc(c.status || '進行中')}</td>
+      <td style="white-space:nowrap;">
+        <button class="name-link" data-pc-lines="${esc(c.case_id)}">逐期登錄</button>
+        ${bal <= 0 && (c.status || '進行中') === '進行中'
+           ? ` <button class="name-link" data-pc-close="${esc(c.case_id)}">結案</button>` : ''}
+        <button class="del-btn" data-pc-del="${esc(c.case_id)}">刪除</button>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">${(STATE.payrollCases || []).length
+      ? '沒有符合條件的案件'
+      : '還沒有案件。如果這裡一直是空的，先確認 SQL_161 已經在 Supabase 執行過。'}</td></tr>`;
+  renderPcLines();
+}
+function renderPcLines(){
+  const box = document.getElementById('pcLines');
+  if(!box) return;
+  if(pcLinesOpenId === null){ box.innerHTML = ''; return; }
+  const c = (STATE.payrollCases || []).find(x => String(x.case_id) === String(pcLinesOpenId));
+  if(!c){ box.innerHTML = ''; return; }
+  const lines = pcLinesOf(c.case_id);
+  const word = c.case_kind === '發款' ? '發款' : '扣款';
+  let bal = Number(c.total_amount) || 0;
+  const rows = lines.map(l => {
+    bal -= (Number(l.amount) || 0);
+    return `<tr>
+      <td style="text-align:center;">第 ${esc(String(l.seq || ''))} 期</td>
+      <td>${esc(l.pay_month || '')}</td>
+      <td class="num">${fmt2(l.amount)}</td>
+      <td class="num">${fmt2(bal)}</td>
+      <td>${esc(l.notes || '')}</td>
+      <td><button class="del-btn" data-pcl-del="${esc(l.line_id)}">刪除</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">還沒有登錄任何一期</td></tr>`;
+  box.innerHTML = `
+    <div class="detail-section">
+      <h4>${esc(pcEmpName(c.employee_id))}　${esc(c.reason_type || '')}　逐期${word}登錄
+        <span class="muted" style="font-weight:400;">（總額 ${fmt2(c.total_amount)}，餘額 ${fmt2(pcBalance(c))}）</span>
+      </h4>
+      <div class="form-grid">
+        <label>${word}月份（民國）<input id="pcl_month" placeholder="例：115/08"></label>
+        <label>金額<input id="pcl_amount" type="number" min="0" step="1"
+          value="${esc(String(c.per_amount || ''))}"></label>
+        <label>備註<input id="pcl_note" placeholder="選填"></label>
+      </div>
+      <button class="btn" id="pcl_add">登錄這一期</button>
+      <button class="btn ghost" id="pcl_close">收起</button>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>期數</th><th>${word}月份</th><th class="num">${word}金額</th>
+            <th class="num">${c.case_kind === '發款' ? '未發餘額' : '尚欠餘額'}</th><th>備註</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  const a = document.getElementById('pcl_add');
+  if(a) a.addEventListener('click', () => pcAddLine(c));
+  const cl = document.getElementById('pcl_close');
+  if(cl) cl.addEventListener('click', () => { pcLinesOpenId = null; renderPcLines(); });
+}
+async function pcAddCase(){
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const empId = parseInt(v('pc_emp'));
+  const total = Number(v('pc_total'));
+  if(!empId){ toast2('pc_msg', '請選人員'); return; }
+  if(!(total > 0)){ toast2('pc_msg', '總金額要大於 0'); return; }
+  const mode = v('pc_mode');
+  const inst = parseInt(v('pc_inst')) || (mode === '分期' ? null : 1);
+  if(mode === '分期' && !inst){ toast2('pc_msg', '分期要填「分幾期」'); return; }
+  const per = Number(v('pc_per')) || (mode === '分期' && inst ? Math.round(total / inst) : total);
+  const emp = pcEmpOf(empId);
+  const row = {
+    case_no: v('pc_no') || null,
+    case_kind: v('pc_kind'),
+    employee_id: empId,
+    company_id: emp ? (emp.company_id || null) : null,
+    agreed_date: v('pc_agreed') || null,
+    reason_type: v('pc_reason'),
+    reason_note: v('pc_note') || null,
+    plate: v('pc_plate') || null,
+    total_amount: total,
+    pay_mode: mode,
+    installments: inst,
+    per_amount: per,
+    first_date: v('pc_first') || null,
+    min_service_months: parseInt(v('pc_msm')) || null,
+    status: '進行中'
+  };
+  try{
+    const saved = await supaFetch('payroll_cases', {
+      method: 'POST', headers: {'Prefer': 'return=representation'}, body: JSON.stringify([row])
+    });
+    const made = (saved && saved[0]) || Object.assign({case_id: nextId((STATE.payrollCases||[]).map(x=>({id:x.case_id})))}, row);
+    STATE.payrollCases = [made].concat(STATE.payrollCases || []);
+  }catch(e){
+    alert('案件沒有存進雲端資料庫。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)
+        + '\n\n如果訊息裡有 payroll_cases does not exist，代表 SQL_161 還沒在 Supabase 執行。');
+    return;
+  }
+  ['pc_no','pc_note','pc_plate','pc_total','pc_inst','pc_per','pc_msm'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  toast2('pc_msg', '已新增案件');
+  renderAll();
+}
+async function pcAddLine(c){
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const amt = Number(v('pcl_amount'));
+  if(!(amt > 0)){ alert('金額要大於 0。'); return; }
+  const bal = pcBalance(c);
+  if(amt > bal && !confirm('這一期 ' + fmt2(amt) + ' 元比餘額 ' + fmt2(bal) + ' 元還多。\n\n確定要這樣登錄嗎？')) return;
+  const row = {
+    case_id: c.case_id,
+    seq: pcLinesOf(c.case_id).length + 1,
+    pay_month: v('pcl_month') || null,
+    amount: amt,
+    notes: v('pcl_note') || null
+  };
+  try{
+    const saved = await supaFetch('payroll_case_lines', {
+      method: 'POST', headers: {'Prefer': 'return=representation'}, body: JSON.stringify([row])
+    });
+    const made = (saved && saved[0]) || Object.assign({line_id: Date.now()}, row);
+    STATE.payrollLines = (STATE.payrollLines || []).concat([made]);
+  }catch(e){
+    alert('這一期沒有存進雲端資料庫。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e));
+    return;
+  }
+  renderAll();
+}
+async function pcDelLine(lineId){
+  const l = (STATE.payrollLines || []).find(x => String(x.line_id) === String(lineId));
+  if(!l) return;
+  if(!confirm('要刪掉這一期（' + (l.pay_month || '') + '　' + fmt2(l.amount) + ' 元）嗎？\n\n餘額會跟著加回來。')) return;
+  try{
+    await supaFetch('payroll_case_lines?line_id=eq.' + encodeURIComponent(lineId),
+      { method: 'DELETE', headers: {'Prefer':'return=minimal'} });
+  }catch(e){ alert('沒有刪掉：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  STATE.payrollLines = (STATE.payrollLines || []).filter(x => String(x.line_id) !== String(lineId));
+  renderAll();
+}
+async function pcSetStatus(caseId, status){
+  try{
+    await supaFetch('payroll_cases?case_id=eq.' + encodeURIComponent(caseId),
+      { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify({status: status}) });
+  }catch(e){ alert('沒有存進去：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  const c = (STATE.payrollCases || []).find(x => String(x.case_id) === String(caseId));
+  if(c) c.status = status;
+  renderAll();
+}
+async function pcDelCase(caseId){
+  const c = (STATE.payrollCases || []).find(x => String(x.case_id) === String(caseId));
+  if(!c) return;
+  const n = pcLinesOf(caseId).length;
+  if(!confirm('要刪掉 ' + pcEmpName(c.employee_id) + ' 的這件「' + (c.reason_type || '') + '」嗎？\n\n'
+            + '總額 ' + fmt2(c.total_amount) + ' 元'
+            + (n ? '，連同已登錄的 ' + n + ' 期一起消失' : '') + '。\n刪掉就救不回來了。')) return;
+  try{
+    await supaFetch('payroll_cases?case_id=eq.' + encodeURIComponent(caseId),
+      { method: 'DELETE', headers: {'Prefer':'return=minimal'} });
+  }catch(e){ alert('沒有刪掉：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  STATE.payrollCases = (STATE.payrollCases || []).filter(x => String(x.case_id) !== String(caseId));
+  STATE.payrollLines = (STATE.payrollLines || []).filter(x => String(x.case_id) !== String(caseId));
+  if(String(pcLinesOpenId) === String(caseId)) pcLinesOpenId = null;
+  renderAll();
+}
+function toast2(id, msg){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = msg;
+  setTimeout(() => { if(el.textContent === msg) el.textContent = ''; }, 4000);
+}
+{
+  const wire = () => {
+    ['pc_search','pc_status_filter'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.addEventListener('input', renderPayrollCases);
+    });
+    const sf = document.getElementById('pc_status_filter');
+    if(sf) sf.addEventListener('change', renderPayrollCases);
+    const add = document.getElementById('pc_add');
+    if(add) add.addEventListener('click', pcAddCase);
+    const body = document.getElementById('pcBody');
+    if(body) body.addEventListener('click', async (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const ln = t.getAttribute('data-pc-lines');
+      if(ln){ pcLinesOpenId = (String(pcLinesOpenId) === ln) ? null : ln; renderPcLines(); return; }
+      const cl = t.getAttribute('data-pc-close');
+      if(cl){ await pcSetStatus(cl, '已結案'); return; }
+      const dl = t.getAttribute('data-pc-del');
+      if(dl){ await pcDelCase(dl); return; }
+    });
+    const lines = document.getElementById('pcLines');
+    if(lines) lines.addEventListener('click', async (e) => {
+      const d = e.target && e.target.getAttribute ? e.target.getAttribute('data-pcl-del') : null;
+      if(d) await pcDelLine(d);
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+}
+
+// ---------- 四張薪資表單 ----------
+// 選案件而不是選人：一個人可能同時有好幾件（違規罰款＋生活補助預支）。
+function pcFormCase(){
+  const v = extraVal('ex_case');
+  if(!v) return null;
+  return (STATE.payrollCases || []).find(x => String(x.case_id) === String(v)) || null;
+}
+// 這張表單要的是扣款還是發款案件。扣發通知單／同意書只能挑扣款，
+// 發款通知單與最低服務年限獎金只能挑發款 —— 不然會印出
+// 「薪資發款項目：機器設備毀損」這種自相矛盾的單子。
+function pcKindForType(){
+  const t = (document.getElementById('form_type') || {}).value || '';
+  if(t === 'payroll_deduct_notice' || t === 'payroll_deduct_consent') return '扣款';
+  if(t === 'payroll_pay_notice' || t === 'min_service_bonus') return '發款';
+  return '';
+}
+function pcCaseOptions(){
+  const kind = pcKindForType();
+  return [''].concat((STATE.payrollCases || [])
+    .filter(c => !kind || String(c.case_kind || '') === kind)
+    .map(c => String(c.case_id)));
+}
+function pcCaseLabels(){
+  const m = {'': '（空白表單）'};
+  (STATE.payrollCases || []).forEach(c => {
+    m[String(c.case_id)] = pcEmpName(c.employee_id) + '｜' + (c.case_kind || '')
+      + '｜' + (c.reason_type || '') + '｜' + fmt2(c.total_amount) + ' 元'
+      + (c.case_no ? '｜' + c.case_no : '') + '｜餘 ' + fmt2(pcBalance(c));
+  });
+  return m;
+}
+// 逐期登錄表：舊表單是 40 格（左右各 20 期），已登錄的印上去，其餘留白手寫
+function pcLedger(c, word){
+  const lines = c ? pcLinesOf(c.case_id) : [];
+  let bal = c ? (Number(c.total_amount) || 0) : 0;
+  const filled = lines.map(l => {
+    bal -= (Number(l.amount) || 0);
+    return {m: l.pay_month || '', a: fmt2(l.amount), b: fmt2(bal)};
+  });
+  const cell = i => {
+    const f = filled[i];
+    return `<td style="border:1px solid #999;padding:3px 4px;text-align:center;">第 ${i + 1} 期</td>
+      <td style="border:1px solid #999;padding:3px 4px;">${f ? esc(f.m) : ''}</td>
+      <td style="border:1px solid #999;padding:3px 4px;text-align:right;">${f ? f.a : ''}</td>
+      <td style="border:1px solid #999;padding:3px 4px;text-align:right;">${f ? f.b : ''}</td>
+      <td style="border:1px solid #999;padding:3px 4px;width:64px;"></td>
+      <td style="border:1px solid #999;padding:3px 4px;width:64px;"></td>`;
+  };
+  const head = `<th style="border:1px solid #999;padding:4px;">期數</th>
+      <th style="border:1px solid #999;padding:4px;">${word}月份</th>
+      <th style="border:1px solid #999;padding:4px;">${word}金額</th>
+      <th style="border:1px solid #999;padding:4px;">${word === '發款' ? '未發餘額' : '尚欠餘額'}</th>
+      <th style="border:1px solid #999;padding:4px;">會計</th>
+      <th style="border:1px solid #999;padding:4px;">部門主管</th>`;
+  const rows = Array.from({length: 20}).map((_, i) =>
+    `<tr>${cell(i)}${cell(i + 20)}</tr>`).join('');
+  return `<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-top:8px;">
+      <tr style="background:#f2f2f2;">${head}${head}</tr>${rows}</table>`;
+}
+function pcNoticeHead(c, e, word){
+  return fmRows([
+    ['工　　號', fmU(e && e.employee_no, 8) + '　　　薪資' + word + '同意書日期：'
+       + (c ? fmD(c.agreed_date) : fmD(''))],
+    ['姓　　名', fmU(e && e.name, 8)],
+    ['部　　門', fmU(e && e.dept_name, 10) + '　　職稱：' + fmU(e && e.position_name, 8)],
+    ['區　　域', fmU(e && e.region, 6) + '　　到職日：' + (e ? fmD(e.hire_date) : fmD(''))]
+  ]);
+}
+function buildPayrollNotice(kind){
+  const word = kind === '發款' ? '發款' : '扣款';
+  const c = pcFormCase();
+  const e = c ? pcEmpOf(c.employee_id) : null;
+  const total = c ? fmt2(c.total_amount) : '';
+  const cond = c
+    ? (c.pay_mode === '分期'
+        ? `□一次${word}　■分期${word}，分 ${esc(String(c.installments || ''))} 期，每期 ${fmt2(c.per_amount)} 元`
+        : `■一次${word}　□分期${word}`)
+    : `□一次${word}　□分期${word}，分 ＿＿ 期，每期 ＿＿＿＿ 元`;
+  return fmSheet('員工薪資' + (kind === '發款' ? '其他項目發款' : '扣發') + '通知單暨' + word + '明細',
+    pcNoticeHead(c, e, word)
+    + `<div style="margin-top:12px;border:1px solid #999;padding:8px 10px;line-height:2;">
+         <b>薪資${word}項目</b>　${c ? esc(c.reason_type || '') : fmU('', 16)}
+         ${c && c.reason_note ? '<br>說明：' + esc(c.reason_note) : ''}
+         ${c && c.plate ? '<br>車號：' + esc(c.plate) : ''}
+         ${c && c.min_service_months ? '<br>最低服務年限：' + esc(String(c.min_service_months)) + ' 個月' : ''}
+       </div>`
+    + fmRows([
+        ['薪資' + word + '總額', (total ? esc(total) : fmU('', 8)) + ' 元'],
+        ['薪資' + word + '條件', cond],
+        ['第一次' + word + '日', c ? fmD(c.first_date) : fmD('')]
+      ])
+    + fmSignRow(['總經理', '財務部主管', '會計', '行政管理部主管', '人事'])
+    + `<div style="font-size:12px;color:#555;margin-top:6px;">
+         人事單位：同意書正本歸檔備查，副本裝訂於本通知單後面。
+       </div>`
+    + `<div style="margin-top:16px;font-weight:700;">薪資${word}登錄明細</div>`
+    + `<div style="font-size:12px;color:#555;">
+         ※此區由財務管理部薪資${word}時逐筆登錄。※簽核完成，依第一次${word}日開始進行。
+         ${kind === '發款'
+            ? '※已辦理離職手續、服務未達議定期限者，需依同意書議定的內容扣回。'
+            : '※已辦理離職手續者，需將剩餘款一次扣回。'}
+       </div>`
+    + pcLedger(c, word)
+    + (c ? `<div style="margin-top:8px;font-weight:700;">目前餘額：${fmt2(pcBalance(c))} 元</div>` : ''));
+}
+function buildPayrollConsent(){
+  const c = pcFormCase();
+  const e = c ? pcEmpOf(c.employee_id) : null;
+  const co = fmCoOf(e || {});
+  const mark = t => (c && c.reason_type === t) ? '■' : '□';
+  const amt = c ? fmt2(c.total_amount) : '＿＿＿＿';
+  return fmSheet('薪資扣發同意書',
+    `<div style="text-align:right;font-size:13px;">單號：${fmU(c && c.case_no, 8)}</div>`
+    + `<div style="margin-top:10px;line-height:2.3;">
+         一、${fmU(e && e.name, 6)} 君，於 ${c ? fmD(c.agreed_date) : fmD('')}，因以下情事裁定薪資扣款。
+         <div style="margin-top:6px;padding-left:12px;line-height:2.1;">
+           ${mark('作業怠忽車輛毀損')}作業上之怠忽，導致公司車輛
+             車牌號碼：${fmU(c && c.plate, 8)} 或承載的貨物毀損。<br>
+           ${mark('違反客戶作業規定')}違反客戶端作業規定，造成客戶端罰款。<br>
+           ${mark('交通違規罰款')}違反道路交通法規，違規罰款。<br>
+           ${mark('自付證照外訓費')}自付證照取得外訓費（課程名稱：${fmU(c && c.reason_note, 12)}）。<br>
+           ${mark('法院強制扣款')}行政執行處公文強制執行扣薪，直到償清。<br>
+           ${mark('其他')}其他：${fmU(c && c.reason_type === '其他' ? c.reason_note : '', 12)}<br>
+           總金額為 ${amt} 元。
+         </div>
+       </div>
+       <div style="margin-top:12px;line-height:2.3;">
+         二、以上經裁定　■進行扣款　□不需扣款　主管簽章＿＿＿＿＿＿＿＿＿＿
+       </div>
+       <div style="margin-top:6px;line-height:2.3;">
+         三、依上述總金額 ${amt} 元，本人願意賠償，並同意公司按下列方式自本人每月之薪資中直接扣取：
+         <div style="padding-left:12px;">
+           ${c && c.pay_mode === '一次' ? '■' : '□'}一次扣款。<br>
+           ${c && c.pay_mode === '分期' ? '■' : '□'}分期扣款（分 ${fmU(c && c.installments, 3)} 期，
+             每期 ${c ? fmt2(c.per_amount) : '＿＿＿＿'} 元）。
+         </div>
+       </div>
+       <div style="margin-top:6px;line-height:2.3;">
+         四、終止勞動契約時，本人同意清償所有未扣款，如未履行，則無條件接受法律程序追討
+             及法律所生之相關費用（如訴訟費用、律師費用等）。<br>
+         五、除前項之約定外，本人對本案放棄一切法律之訴訟權。
+       </div>
+       <div style="margin-top:22px;line-height:2.6;">
+         <div>此　致　${fmU(co.name, 14)}</div>
+         <div style="margin-top:12px;">立同意書人：　　　　　　　　簽名蓋章（可手印）：</div>
+         <div>身分證字號：${fmU(e && e.id_number, 10)}</div>
+         <div>住　　　址：${fmU(e && e.address, 24)}</div>
+         <div style="margin-top:14px;">申請日期：${esc(todayROC())}</div>
+       </div>`);
+}
+// 最低服務年限獎金：比例扣還對照表原本要查表，這裡照總額與年限自動算
+function buildMinServiceBonus(){
+  const c = pcFormCase();
+  const e = c ? pcEmpOf(c.employee_id) : null;
+  const co = fmCoOf(e || {});
+  const total = c ? (Number(c.total_amount) || 0) : 0;
+  const months = c ? (Number(c.min_service_months) || 0) : 0;
+  let table = `<div style="color:#999;">選了案件、而且案件有填「最低服務年限（月）」才會算出對照表。</div>`;
+  if(total > 0 && months > 0){
+    const per = total / months;
+    const cells = [];
+    for(let m = 0; m <= months; m++){
+      // 未滿 12 個月離職一律全額扣還；之後按剩餘月數比例
+      const back = m < 12 ? total : Math.round(per * (months - m));
+      cells.push([m, back < 0 ? 0 : back]);
+    }
+    const chunk = 14;
+    let html = '';
+    for(let i = 0; i < cells.length; i += chunk){
+      const part = cells.slice(i, i + chunk);
+      html += `<tr><td style="border:1px solid #999;padding:4px;background:#f2f2f2;white-space:nowrap;">年資（月）</td>`
+        + part.map(x => `<td style="border:1px solid #999;padding:4px;text-align:center;">${x[0]}</td>`).join('')
+        + `</tr><tr><td style="border:1px solid #999;padding:4px;background:#f2f2f2;white-space:nowrap;">歸還金額</td>`
+        + part.map(x => `<td style="border:1px solid #999;padding:4px;text-align:right;">${fmt2(x[1])}</td>`).join('')
+        + `</tr>`;
+    }
+    table = `<table style="width:100%;border-collapse:collapse;font-size:11.5px;">${html}</table>
+      <div style="font-size:12px;color:#555;margin-top:5px;">
+        未滿 12 個月離職一律全額扣還；12 個月之後按剩餘月數比例計算（總額 ÷ ${months} 個月 × 剩餘月數）。
+      </div>`;
+  }
+  return fmSheet('【最低服務年限獎金】－生活補助預支',
+    `<div style="text-align:right;font-size:13px;">單號：${fmU(c && c.case_no, 8)}</div>`
+    + `<div style="margin-top:10px;line-height:2.3;">
+         一、${fmU(e && e.name, 6)} 君，於 ${e ? fmD(e.hire_date) : fmD('')} 到職，
+             每月向公司請領 ${c ? fmt2(c.per_amount) : '＿＿＿＿'} 元，
+             共請領 ${fmU(c && c.installments, 3)} 個月，
+             最低服務年限 ${fmU(months || '', 3)} 個月。
+             <div style="margin-top:4px;">請領總額：${c ? fmt2(total) : '＿＿＿＿'} 元</div>
+       </div>
+       <div style="margin-top:12px;line-height:2.3;">
+         二、符合以下情事裁定薪資扣款：<br>
+         <div style="padding-left:12px;">
+           ■到職未滿 12 個月離職、解僱、資遣者，扣還全部撥發之【最低服務年限獎金】。<br>
+           ■到職後年資未達 ${fmU(months || '', 3)} 個月者離職、解僱、資遣者，依下列比例扣還：
+         </div>
+       </div>
+       <div style="margin-top:8px;">${table}</div>
+       <div style="margin-top:12px;line-height:2.3;">
+         三、服務月份未達議定之期限，本人願意償還到職後每月撥發之【最低服務年限獎金】，
+             本人同意公司自薪資中直接扣款，不足的部分於離職後 10 日內以現金償還。<br>
+         四、本人同意清償所有未扣款。如未履行，則無條件接受法律程序追討及法律所衍生之相關費用。<br>
+         五、除前項之約定外，本人對本案放棄一切之訴訟權、請求權。
+       </div>
+       <div style="margin-top:22px;line-height:2.6;">
+         <div>此　致　${fmU(co.name, 14)}</div>
+         <div style="margin-top:12px;">立同意書人：　　　　　　　　簽名蓋章（可手印）：</div>
+         <div>身分證字號：${fmU(e && e.id_number, 10)}</div>
+         <div style="margin-top:14px;">${esc(todayROC())}</div>
+       </div>`);
+}
+// 分期中的案件一覽 —— 最實用的一張：誰還在分期、還欠多少
+function buildPayrollCaseList(){
+  const rows = (STATE.payrollCases || [])
+    .filter(c => (c.status || '進行中') === '進行中')
+    .map(c => ({c: c, bal: pcBalance(c)}))
+    .sort((a, b) => b.bal - a.bal);
+  const body = rows.map((r, i) => `<tr>
+      <td style="border:1px solid #999;padding:5px;text-align:center;">${i + 1}</td>
+      <td style="border:1px solid #999;padding:5px;">${esc(pcEmpName(r.c.employee_id))}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:center;">${esc(r.c.case_kind || '')}</td>
+      <td style="border:1px solid #999;padding:5px;">${esc(r.c.reason_type || '')}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:right;">${fmt2(r.c.total_amount)}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:right;">${fmt2(pcPaid(r.c.case_id))}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:right;font-weight:700;">${fmt2(r.bal)}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:center;">${esc(r.c.pay_mode || '')}${r.c.installments ? '／' + r.c.installments + ' 期' : ''}</td>
+      <td style="border:1px solid #999;padding:5px;">${esc(String(r.c.first_date || '').slice(0,10))}</td>
+    </tr>`).join('') || `<tr><td colspan="9" style="border:1px solid #999;padding:8px;text-align:center;color:#888;">目前沒有進行中的案件</td></tr>`;
+  const sum = rows.reduce((s, r) => s + r.bal, 0);
+  return fmSheet('薪資扣發／發款　進行中案件一覽',
+    `<div style="text-align:right;font-size:13px;margin-bottom:6px;">${esc(todayROC())}</div>`
+    + `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+         <tr style="background:#f2f2f2;">
+           <th style="border:1px solid #999;padding:5px;width:36px;">#</th>
+           <th style="border:1px solid #999;padding:5px;">人員</th>
+           <th style="border:1px solid #999;padding:5px;width:52px;">種類</th>
+           <th style="border:1px solid #999;padding:5px;">事由</th>
+           <th style="border:1px solid #999;padding:5px;width:90px;">總額</th>
+           <th style="border:1px solid #999;padding:5px;width:90px;">已扣／已發</th>
+           <th style="border:1px solid #999;padding:5px;width:90px;">餘額</th>
+           <th style="border:1px solid #999;padding:5px;width:80px;">方式</th>
+           <th style="border:1px solid #999;padding:5px;width:96px;">第一次</th>
+         </tr>${body}
+         <tr><td colspan="6" style="border:1px solid #999;padding:5px;text-align:right;font-weight:700;">餘額合計</td>
+             <td style="border:1px solid #999;padding:5px;text-align:right;font-weight:700;">${fmt2(sum)}</td>
+             <td colspan="2" style="border:1px solid #999;"></td></tr>
+       </table>
+       <div style="font-size:12px;color:#555;margin-top:6px;">
+         餘額＝總額 − 已登錄各期合計。離職結算時，這一欄就是要一次扣回（或停發）的金額。
+       </div>`);
+}
+
+// ===================== 證明書／同意書套印 =====================
+// 來源是舊的「運輸行政管理系統」xlsm 表單那一欄。
+// 原則：系統查得到的一律自動帶；查不到的（薪資、資遣費、客戶財產配件）留手填格，
+//       不猜、不填 0 —— 印出來是空格比印錯數字安全。
+const CO_PHONE = '03-5420617';   // 兩家公司共用總機（來源：舊系統的表單，要改就改這一行）
+function fmCoOf(e){
+  const id = e && e.company_id;
+  const c = (STATE.companyInfo || []).find(x => String(x.company_id) === String(id)) || {};
+  const reg = (STATE.insReg || []).find(x => String(x.company_id) === String(id)) || {};
+  const line1 = s => String(s || '').split('\n')[0].trim();
+  return {
+    name: c.company_name || (e && e.company_name) || '',
+    tax_id: c.tax_id || '',
+    reg_addr: line1(c.registered_address),
+    addr: line1(c.contact_address) || line1(c.registered_address),
+    boss: c.responsible_person || '',
+    phone: CO_PHONE,
+    ins_no: reg.insurance_cert_no || '',
+    health_no: reg.health_insurance_code || ''
+  };
+}
+// 性別只有少數人有填，身分證第二碼 1＝男 2＝女，推得出來就不用再問
+function fmSex(e){
+  const picked = extraVal('ex_gender');
+  if(picked) return picked;
+  if(e && e.gender) return e.gender;
+  const d = String((e && e.id_number) || '').charAt(1);
+  return d === '1' ? '男' : (d === '2' ? '女' : '');
+}
+function fmLicense(e){
+  const l = (STATE.driverLicenses || [])
+    .filter(x => String(x.employee_id) === String(e && e.id))
+    .sort((a, b) => String(b.expiry_date || '').localeCompare(String(a.expiry_date || '')))[0];
+  return l ? (l.license_type || '') : '';
+}
+function fmYears(from, to){
+  if(!from) return '';
+  const a = new Date(String(from).slice(0,10) + 'T00:00:00');
+  const b = new Date(String(to || todayISO()).slice(0,10) + 'T00:00:00');
+  let y = b.getFullYear() - a.getFullYear();
+  if(b.getMonth() < a.getMonth() || (b.getMonth() === a.getMonth() && b.getDate() < a.getDate())) y--;
+  return y < 0 ? '' : String(y);
+}
+function fmU(v, n){
+  return (v === null || v === undefined || String(v).trim() === '')
+    ? '<span style="color:#999;">' + '＿'.repeat(n || 8) + '</span>'
+    : esc(String(v));
+}
+function fmD(v){
+  const s = v ? String(v).slice(0, 10) : '';
+  return s ? esc(toROCDate(s) || s) : '<span style="color:#999;">＿＿ 年 ＿＿ 月 ＿＿ 日</span>';
+}
+function fmSheet(title, inner, sub){
+  return `<div style="font-family:'Microsoft JhengHei','PingFang TC',sans-serif;line-height:1.9;font-size:15px;">`
+    + (sub ? `<div style="text-align:center;font-size:14px;">${esc(sub)}</div>` : '')
+    + `<h2 style="text-align:center;letter-spacing:8px;margin:6px 0 22px;font-size:21px;">${esc(title)}</h2>`
+    + inner + `</div>`;
+}
+function fmRows(pairs){
+  return `<table style="width:100%;border-collapse:collapse;">`
+    + pairs.map(p => `<tr>
+        <td style="width:104px;padding:7px 4px;white-space:nowrap;vertical-align:bottom;">${esc(p[0])}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid #999;">${p[1]}</td>
+      </tr>`).join('') + `</table>`;
+}
+function fmFoot(co, lead){
+  return `<div style="margin-top:32px;line-height:2.2;">`
+    + (lead || '')
+    + `<div>公司名稱：${fmU(co.name, 14)}　（蓋章）</div>`
+    + `<div>統一編號：${fmU(co.tax_id, 10)}　　負責人：${fmU(co.boss, 6)}　（蓋章）</div>`
+    + `<div>地　　址：${fmU(co.addr, 24)}</div>`
+    + `<div>電　　話：${fmU(co.phone, 12)}</div>`
+    + `<div style="margin-top:20px;text-align:center;">${esc(todayROC())}</div></div>`;
+}
+// 手寫用的簽核欄（離職申請書、管制卡都要）
+function fmSignRow(names){
+  return `<table style="width:100%;border-collapse:collapse;margin-top:16px;text-align:center;font-size:13px;">
+    <tr>${names.map(n => `<td style="border:1px solid #999;padding:5px;">${esc(n)}</td>`).join('')}</tr>
+    <tr>${names.map(() => `<td style="border:1px solid #999;height:52px;"></td>`).join('')}</tr></table>`;
+}
+
+// ---------- 在職證明書 ----------
+function buildOndutyCert(e, purpose){
+  const co = fmCoOf(e);
+  const yrs = fmYears(e.hire_date);
+  return fmSheet('在職證明書', fmRows([
+      ['姓　　名', fmU(e.name, 8)],
+      ['身分證字號', fmU(e.id_number, 10)],
+      ['出　生　日', fmD(e.birth_date)],
+      ['部　　門', fmU(e.dept_name, 10)],
+      ['職　　稱', fmU(e.position_name, 10)],
+      ['駕駛類別', fmU(fmLicense(e), 10)],
+      ['到　職　日', fmD(e.hire_date)],
+      ['年　　資', yrs ? esc(yrs) + ' 年' : fmU('', 4)]
+    ])
+    + `<div style="margin-top:22px;">上列人員確為本公司員工，特此證明，僅供${esc(purpose)}使用。</div>`
+    + fmFoot(co, `<div style="margin-bottom:10px;">文件編號：${fmU(extraVal('ex_doc_no') || e.employee_no, 8)}</div>`));
+}
+
+// ---------- 運輸業在職工作證明書（港區通行證用） ----------
+function buildTransportOnduty(e){
+  const co = fmCoOf(e);
+  let to = extraVal('ex_valid_to');
+  if(!to){
+    const d = new Date(todayISO() + 'T00:00:00');
+    d.setFullYear(d.getFullYear() + 3);
+    to = d.toISOString().slice(0, 10);
+  }
+  return fmSheet('在職工作證明書', fmRows([
+      ['姓　　名', fmU(e.name, 8)],
+      ['出生年月日', fmD(e.birth_date)],
+      ['性　　別', fmU(fmSex(e), 2)],
+      ['身分證字號', fmU(e.id_number, 10)],
+      ['工作日期', fmD(e.hire_date) + '　至　' + fmD(to)]
+    ])
+    + `<div style="margin-top:20px;line-height:2;">
+         該職業大貨車（曳引車）駕駛人確與本公司合作，加入本公司營運，
+         現需申請港區通行證，進出港區執行工作，特此證明。<br>
+         以上證明事項如有不實，願負相關法律責任；如致臺灣港務股份有限公司受有損害，
+         願負一切損害賠償之責任。
+       </div>`
+    + fmFoot(co, `<div style="margin-bottom:8px;font-weight:700;">證明單位</div>`),
+    '運輸業（職業大貨車、曳引車駕駛人）');
+}
+
+// ---------- 離職證明書 ----------
+function buildResignCert(e, purpose){
+  const co = fmCoOf(e);
+  return fmSheet('離職證明書', fmRows([
+      ['姓　　名', fmU(e.name, 8)],
+      ['身分證字號', fmU(e.id_number, 10)],
+      ['出　生　日', fmD(e.birth_date)],
+      ['部　　門', fmU(e.dept_name, 10)],
+      ['職　　稱', fmU(e.position_name, 10)],
+      ['到　職　日', fmD(e.hire_date)],
+      ['離　職　日', fmD(e.resign_date)]
+    ])
+    + `<div style="margin-top:22px;">上列人員確曾任職於本公司，並已於上述離職日辦妥離職手續，特此證明。`
+    + `僅供${esc(purpose)}使用。</div>`
+    + fmFoot(co, `<div style="margin-bottom:10px;">文件編號：${fmU(e.employee_no, 8)}</div>`));
+}
+
+// ---------- 非自願離職證明書 ----------
+// 離職當月工資、勞基法條款系統沒有，留手填／自己輸入。
+function buildInvoluntaryResign(e){
+  const co = fmCoOf(e);
+  const salary = extraVal('ex_salary');
+  const reason = extraVal('ex_reason');
+  const box = t => `<div style="border:1px solid #999;padding:8px 10px;margin-top:10px;line-height:2;">${t}</div>`;
+  return fmSheet('非　自　願　離　職　證　明　書',
+    `<div style="text-align:right;font-size:13px;margin-bottom:6px;">填表日期：${esc(todayROC())}</div>`
+    + `<div style="font-size:13px;color:#b00;margin-bottom:8px;">＊此表開立需經公司同意</div>`
+    + fmRows([
+      ['申請人姓名', fmU(e.name, 8)],
+      ['出生年月日', fmD(e.birth_date)],
+      ['性　　別', fmU(fmSex(e), 2)],
+      ['身分證統一編號', fmU(e.id_number, 10)],
+      ['住　　址', fmU(e.address, 24)],
+      ['職　　稱', fmU(e.position_name, 10)],
+      ['電　　話', fmU(e.phone, 12)],
+      ['離職當月工資', salary ? esc(fmt2(salary)) + ' 元' : fmU('', 8) + ' 元'],
+      ['離　職　日', fmD(e.resign_date) + '　<span style="font-size:12px;color:#666;">（離職日期為在職最後一日）</span>']
+    ])
+    + box(`<b>離職原因</b>　${reason ? esc(reason) : fmU('', 20)}
+        <div style="font-size:12.5px;color:#555;margin-top:6px;">
+        □關廠　□遷廠　□休業　□解散　□破產<br>
+        勞動基準法第11條 □第1款 □第2款 □第3款 □第4款 □第5款<br>
+        勞動基準法第14條第1項 □第1款 □第2款 □第3款 □第4款 □第5款 □第6款<br>
+        □勞動基準法第13條但書　□勞動基準法第20條　□定期契約工作期滿
+        </div>`)
+    + box(`<b>投保單位證明欄</b>
+        <div>投保單位名稱：${fmU(co.name, 14)}　（請蓋印信或章戳）</div>
+        <div>保險證號：${fmU(co.ins_no, 10)}</div>
+        <div>投保單位地址：${fmU(co.reg_addr || co.addr, 24)}</div>
+        <div>投保單位電話：${fmU(co.phone, 12)}</div>`)
+    + `<div style="margin-top:14px;font-size:12px;color:#555;line-height:1.7;">
+         就業保險法第36條：以詐欺或其他不正當行為領取保險給付，除按其領取之保險給付處以 2 倍罰鍰外，
+         並應依民法請求損害賠償；其涉及刑責者，移送司法機關辦理。
+       </div>`
+    + `<div style="margin-top:24px;">申請人　　　　　　　　　　　　（簽章）</div>`);
+}
+
+// ---------- 員工離職申請書（含物品歸還清點） ----------
+function buildResignApplication(e){
+  const co = fmCoOf(e);
+  const reason = extraVal('ex_apply_reason');
+  // 這個人名下實際還握著什麼 —— 門禁卡、公務機、儀器、領用中的物品、剩餘特休
+  const cards = (STATE.accessCardRoster || [])
+    .filter(r => String(r.employee_id) === String(e.id) && !r.returned_date);
+  const phones = (typeof equipPhonesOf === 'function' ? equipPhonesOf(e.id) : []) || [];
+  const instrs = (typeof equipInstrumentsOf === 'function' ? equipInstrumentsOf(e.id) : []) || [];
+  const eqs = (STATE.employeeEquipment || [])
+    .filter(x => String(x.employee_id) === String(e.id) && x.status === '使用中');
+  const leave = (STATE.annualLeaveYearly || [])
+    .filter(r => String(r.employee_id) === String(e.id))
+    .sort((a, b) => (b.year_roc || 0) - (a.year_roc || 0))[0];
+
+  const items = [];
+  cards.forEach(c => items.push(['門禁卡', (c.card_no || '') + (c.gates ? '（' + c.gates + '）' : ''), 1]));
+  phones.forEach(p => items.push(['公務機', (typeof equipPhoneDetail === 'function' ? equipPhoneDetail(p) : (p.phone_no || '')), 1]));
+  instrs.forEach(i => items.push([
+    (typeof equipInstrumentTypeName === 'function' ? equipInstrumentTypeName(i) : '儀器'),
+    (typeof equipInstrumentDetail === 'function' ? equipInstrumentDetail(i) : ''), 1]));
+  eqs.forEach(x => {
+    const t = (STATE.equipmentTypes || []).find(t => t.id === x.type_id);
+    items.push([t ? t.name : '物品', x.item_detail || '', x.quantity == null ? 1 : x.quantity]);
+  });
+
+  const rows = items.length
+    ? items.map((it, i) => `<tr>
+        <td style="border:1px solid #999;padding:5px;text-align:center;">${i + 1}</td>
+        <td style="border:1px solid #999;padding:5px;">${esc(it[0])}</td>
+        <td style="border:1px solid #999;padding:5px;">${esc(it[1])}</td>
+        <td style="border:1px solid #999;padding:5px;text-align:center;">${esc(String(it[2]))}</td>
+        <td style="border:1px solid #999;padding:5px;width:90px;"></td>
+      </tr>`).join('')
+    : `<tr><td colspan="5" style="border:1px solid #999;padding:8px;text-align:center;color:#888;">
+         系統查不到這個人名下未歸還的物品</td></tr>`;
+  // 空白列讓人補手寫（宿舍鑰匙、雨衣雨鞋那些沒有登錄在系統裡的）
+  const blanks = Array.from({length: 4}).map(() =>
+    `<tr>${['','','','',''].map((_, i) =>
+      `<td style="border:1px solid #999;padding:5px;height:26px;${i===0?'text-align:center;':''}"></td>`).join('')}</tr>`).join('');
+
+  return fmSheet('員工離職申請書',
+    `<div style="text-align:right;font-size:13px;margin-bottom:6px;">申請日期：${esc(todayROC())}</div>`
+    + fmRows([
+      ['離職編號', fmU(e.employee_no, 8) + '　<span style="font-size:12px;color:#666;">（人事填寫）</span>'],
+      ['姓　　名', fmU(e.name, 8)],
+      ['部　　門', fmU(e.dept_name, 10)],
+      ['職　　稱', fmU(e.position_name, 10)],
+      ['到　職　日', fmD(e.hire_date)],
+      ['離　職　日', fmD(e.resign_date)],
+      ['離職原因', reason ? esc(reason) : fmU('', 20)]
+    ])
+    + `<div style="font-size:12.5px;color:#555;margin-top:6px;">
+         □工作不適應　□轉換工作跑道　□家中有事　□自行創業　□解僱　□資遣　□其他
+       </div>`
+    + `<div style="margin-top:18px;font-weight:700;">物品歸還清點</div>`
+    + `<div style="font-size:12.5px;color:#555;margin-bottom:6px;">
+         下列是系統登錄在本人名下、尚未歸還的物品。未歸還者扣除製作成本、訓練費用。
+         宿舍鑰匙、雨衣雨鞋等未登錄在系統的品項請自行補寫在空白列。
+       </div>`
+    + `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+         <tr style="background:#f2f2f2;">
+           <th style="border:1px solid #999;padding:5px;width:36px;">#</th>
+           <th style="border:1px solid #999;padding:5px;width:120px;">項目</th>
+           <th style="border:1px solid #999;padding:5px;">內容／編號</th>
+           <th style="border:1px solid #999;padding:5px;width:52px;">數量</th>
+           <th style="border:1px solid #999;padding:5px;width:90px;">簽收</th>
+         </tr>${rows}${blanks}
+       </table>`
+    + `<div style="margin-top:12px;">剩餘特休天數：`
+    + (leave ? esc(String(leave.remaining_days == null ? '' : leave.remaining_days)) + ' 天'
+             + `<span style="font-size:12px;color:#666;">（${esc(String(leave.year_roc))} 年度）</span>`
+             : fmU('', 4) + ' 天')
+    + `</div>`
+    + `<div style="margin-top:14px;font-weight:700;">簽核</div>`
+    + fmSignRow(['資訊設備管理人', '財務部', '品質管理部', '設備管理部', '人事', '部門主管'])
+    + `<div style="margin-top:14px;font-size:13px;">公司：${fmU(co.name, 14)}</div>`);
+}
+
+// ---------- 切結書 ----------
+function buildUndertaking(e){
+  const co = fmCoOf(e);
+  const owed = extraVal('ex_owed');
+  const why = extraVal('ex_owed_reason');
+  const how = extraVal('ex_repay_method');
+  return fmSheet('切　結　書',
+    `<div style="line-height:2.4;text-indent:0;">
+       立書人 ${fmU(e.name, 6)}，出生於 ${fmD(e.birth_date)}，身分證字號 ${fmU(e.id_number, 10)}，
+       於 ${fmD(e.hire_date)} 任職於 ${fmU(co.name, 14)}，因個人因素，
+       於 ${fmD(e.resign_date)} 辦理離職手續。
+       在勞動契約存續期間積欠${why ? esc(why) : fmU('', 6)}新台幣
+       ${owed ? esc(fmt2(owed)) : fmU('', 6)} 元。
+     </div>
+     <div style="margin-top:16px;line-height:2.4;">
+       依上述積欠總金額新台幣 ${owed ? esc(fmt2(owed)) : fmU('', 6)} 元，本人願意還款，
+       並同意以${how ? esc(how) : fmU('', 6)}方式償還。如未履行，則無條件接受法律程序追討
+       及法律所生之相關費用（如訴訟費用、律師費用等）。
+     </div>
+     <div style="margin-top:28px;line-height:2.6;">
+       <div>此　致　${fmU(co.name, 14)}</div>
+       <div style="margin-top:14px;">立切結書人：　　　　　　　　　　簽名蓋章（可手印）：</div>
+       <div>身分證字號：${fmU(e.id_number, 10)}</div>
+       <div>住　　　址：${fmU(e.address, 24)}</div>
+       <div style="margin-top:18px;text-align:center;">${esc(todayROC())}</div>
+     </div>`);
+}
+
+// ---------- 同意書及給付收據 ----------
+function buildConsentReceipt(e){
+  const co = fmCoOf(e);
+  const item = extraVal('ex_pay_item');
+  const amt = extraVal('ex_pay_amount');
+  const fdate = extraVal('ex_form_date') || todayISO();
+  const payRows = Array.from({length: 5}).map((_, i) => `<tr>
+      <td style="border:1px solid #999;padding:5px;text-align:center;">${i + 1}</td>
+      <td style="border:1px solid #999;padding:5px;">${i === 0 && item ? esc(item) : ''}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:right;">${i === 0 && amt ? esc(fmt2(amt)) : ''}</td>
+    </tr>`).join('');
+  return fmSheet('同　意　書',
+    `<div style="line-height:2.2;">
+       本人於到職時已明確瞭解並同意公司每月所核給之工資項目中，無論其給付之名目為何，
+       均已內含延長工時工資與國定假日出勤之加倍工資。惟為重申前述口頭約定事項，
+       並為求日後勞資關係之安定與勞資爭議之避免，本人同意重新簽訂勞動契約。<br>
+       本人並茲此確認，自到職日起迄今本人依法得請求之一切給付（包括薪資、加班費、獎金、
+       津貼等任何名目之給付），均已具領完訖，本人勞退提繳薪資亦均足額提繳。<br>
+       本人截至今日止對公司無任何應付未付之加班費或其他給付之請求權。為杜疑義，
+       倘有任何該等請求權亦茲此同意拋棄之。唯恐口說無憑，故特立此據，以示明確。
+     </div>
+     <div style="margin-top:20px;line-height:2.4;">
+       <div>此　致　${fmU(co.name, 14)}</div>
+       <div style="margin-top:12px;">立同意書人：${fmU(e.name, 8)}　　（簽名蓋章）</div>
+       <div>身分證字號：${fmU(e.id_number, 10)}</div>
+       <div>住　　　址：${fmU(e.address, 24)}</div>
+       <div style="margin-top:8px;">表單日期：${fmD(fdate)}</div>
+     </div>
+     <h2 style="text-align:center;letter-spacing:8px;margin:34px 0 16px;font-size:20px;">收　據</h2>
+     ${fmRows([['姓　　名', fmU(e.name, 8)], ['身分證字號', fmU(e.id_number, 10)]])}
+     <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:14px;">
+       <tr style="background:#f2f2f2;">
+         <th style="border:1px solid #999;padding:5px;width:46px;">項次</th>
+         <th style="border:1px solid #999;padding:5px;">給付內容</th>
+         <th style="border:1px solid #999;padding:5px;width:120px;">金額</th>
+       </tr>${payRows}
+       <tr><td colspan="2" style="border:1px solid #999;padding:5px;text-align:right;font-weight:700;">合　計</td>
+           <td style="border:1px solid #999;padding:5px;text-align:right;font-weight:700;">${amt ? esc(fmt2(amt)) : ''}</td></tr>
+     </table>
+     <div style="margin-top:20px;line-height:2.4;">
+       <div>金　　額：${amt ? esc(fmt2(amt)) + ' 元' : fmU('', 8) + ' 元'}</div>
+       <div>簽收人：　　　　　　　　　　（簽名蓋章）</div>
+       <div style="margin-top:16px;text-align:center;">${esc(todayROC())}</div>
+     </div>`);
+}
+
+// ---------- 合意資遣同意書 ----------
+// 資遣費、預告工資、特休未休工資都要平均工資與年資去算，系統沒有薪資資料，
+// 所以整張給付明細是空格：金額由人事算好填上去，不要讓系統猜。
+function buildSeveranceConsent(e){
+  const co = fmCoOf(e);
+  const art = extraVal('ex_sev_article');
+  const end = extraVal('ex_sev_end') || e.resign_date;
+  const n = Math.max(3, Math.min(12, parseInt(extraVal('ex_sev_rows')) || 6));
+  const preset = ['資遣費', '預告工資', '應休而未休之特別假工資', '當月份薪資',
+                  '扣：歸還最低服務年限獎金－生活補助預支', '合意離職特別資遣費'];
+  const rows = Array.from({length: n}).map((_, i) => `<tr>
+      <td style="border:1px solid #999;padding:5px;text-align:center;">${i + 1}</td>
+      <td style="border:1px solid #999;padding:5px;">${esc(preset[i] || '')}</td>
+      <td style="border:1px solid #999;padding:5px;width:130px;"></td>
+    </tr>`).join('');
+  return fmSheet('合意資遣　同意書',
+    fmRows([
+      ['公　　司', fmU(co.name, 14) + '　（以下稱資方）'],
+      ['員　　工', fmU(e.name, 8) + '　（以下稱勞方）'],
+      ['身分證字號', fmU(e.id_number, 10)],
+      ['到　職　日', fmD(e.hire_date)],
+      ['資遣依據', art ? esc(art) : fmU('', 16)]
+    ])
+    + `<div style="margin-top:16px;line-height:2.1;">
+         一、茲經勞資雙方充分溝通及在本人自由意志下與公司簽立本同意書，並同意由公司依上述依據辦理資遣。<br>
+         二、雙方合意終止勞動契約，資方應給付勞方下列金額，並於簽立同意書後現金給付勞方。
+       </div>`
+    + `<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:14px;">
+         <tr style="background:#f2f2f2;">
+           <th style="border:1px solid #999;padding:5px;width:46px;">項次</th>
+           <th style="border:1px solid #999;padding:5px;">勞動契約終止給付明細</th>
+           <th style="border:1px solid #999;padding:5px;width:130px;">金額</th>
+         </tr>${rows}
+         <tr><td colspan="2" style="border:1px solid #999;padding:5px;text-align:right;font-weight:700;">合　　計</td>
+             <td style="border:1px solid #999;padding:5px;"></td></tr>
+       </table>
+       <div style="font-size:12px;color:#666;margin-top:5px;">
+         金額欄刻意留空：資遣費與預告工資要用平均工資和年資計算，薪資資料不在這個系統裡，請由人事算好填寫。
+       </div>`
+    + `<div style="margin-top:14px;line-height:2.1;">
+         三、除前條金額外，雙方確認已無其他基於勞動關係所生之待處理事項，勞方對資方亦無其他金錢請求權
+             （包括但不限於工資、加班費、獎金、資遣費、預告工資、津貼等任何名目之給付）。<br>
+         四、勞方就雙方勞動契約存續期間所衍生一切民事、刑事或行政檢舉權利皆拋棄，不得再為其他主張、請求或申訴。<br>
+         五、本同意書之內容與過程提供之資料，雙方應予保密，非經他方書面同意或依法令，不得提供與第三人。<br>
+         六、雙方勞動契約關係並自 ${fmD(end)} 終止。
+       </div>`
+    + `<div style="margin-top:26px;line-height:2.6;">
+         <div>資方：${fmU(co.name, 14)}　負責人：${fmU(co.boss, 6)}　（蓋章）</div>
+         <div>勞方：${fmU(e.name, 8)}　　簽名蓋章（可手印）：</div>
+         <div>身分證字號：${fmU(e.id_number, 10)}</div>
+         <div>住　　　址：${fmU(e.address, 24)}</div>
+         <div style="margin-top:16px;text-align:center;">${esc(todayROC())}</div>
+       </div>`);
+}
+
+// ---------- 客戶財產管制卡 ----------
+// 配件清單與基本配備數量照舊系統的管制卡。客戶財產清冊還沒進資料庫，
+// 所以品項是固定表格、數量欄留白；門號填得出來的話會去公務機清單帶領用人。
+const PROP_ITEMS = [
+  ['手機', '1'], ['傳輸線（USB 連接線）', '2'], ['旅充插頭', '1'], ['耳機', '1'],
+  ['車用掛架', '隨車'], ['手機保護殼', '1'], ['觸控筆', ''], ['印表機連接線', '隨車'],
+  ['USB 孔車充（2 孔）', ''], ['條碼機（序號）', ''], ['條碼機－握把', ''],
+  ['條碼機－感應器', ''], ['條碼機－卡損架', ''], ['條碼機－USB 連接線', ''],
+  ['電池', ''], ['插頭轉換器', ''], ['夾鏈袋', ''], ['平板', ''], ['列印機', '']
+];
+function buildPropertyCard(){
+  const no = extraVal('ex_prop_no');
+  const din = extraVal('ex_prop_in');
+  const dout = extraVal('ex_prop_out');
+  let holder = '';
+  if(no){
+    const p = (STATE.companyPhones || []).find(x => String(x.phone_no || '').replace(/\D/g, '') === no.replace(/\D/g, ''));
+    if(p && p.employee_id){
+      const emp = (STATE.employees || []).find(x => String(x.id) === String(p.employee_id));
+      if(emp) holder = emp.name;
+    }
+  }
+  const rows = PROP_ITEMS.map(it => `<tr>
+      <td style="border:1px solid #999;padding:5px;">${esc(it[0])}</td>
+      <td style="border:1px solid #999;padding:5px;text-align:center;width:90px;">${esc(it[1])}</td>
+      <td style="border:1px solid #999;padding:5px;width:110px;"></td>
+      <td style="border:1px solid #999;padding:5px;width:110px;"></td>
+      <td style="border:1px solid #999;padding:5px;"></td>
+    </tr>`).join('');
+  return fmSheet('客戶財產管制卡',
+    fmRows([
+      ['門　　號', fmU(no, 12) + '　<span style="font-size:12px;color:#666;">（客戶財產編號）</span>'],
+      ['入庫日期', fmD(din)],
+      ['領用日期', fmD(dout)],
+      ['領用人', fmU(holder, 8)]
+    ])
+    + `<table style="width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;">
+         <tr style="background:#f2f2f2;">
+           <th style="border:1px solid #999;padding:5px;">項　　目</th>
+           <th style="border:1px solid #999;padding:5px;">數量（基本配備）</th>
+           <th style="border:1px solid #999;padding:5px;">設備人員簽章</th>
+           <th style="border:1px solid #999;padding:5px;">使用人員簽章</th>
+           <th style="border:1px solid #999;padding:5px;">備　　註</th>
+         </tr>${rows}
+       </table>
+       <div style="font-size:12px;color:#666;margin-top:6px;">
+         品項與基本配備數量照舊系統的管制卡。客戶財產清冊還沒匯進資料庫，
+         實際配了幾個請照實填寫。
+       </div>`);
+}
+
 function generateForm(){
   const type = document.getElementById('form_type').value;
   const empId = parseInt(document.getElementById('form_emp').value);
-  const list = (type === 'resign' || type === 'involuntary_resign') ? visibleHistory() : STATE.employees;
-  const e = list.find(x => x.id === empId);
+  const e = formEmpList(type).find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff','bank_roster'];
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff','bank_roster','property_card',
+    'payroll_deduct_notice','payroll_deduct_consent','payroll_pay_notice','min_service_bonus','payroll_case_list'];
+  // 這幾張有表格，640px 會擠在一起
+  const CERT_WIDE = ['resign_application','consent_receipt','severance_consent','property_card',
+    'payroll_deduct_notice','payroll_pay_notice','min_service_bonus','payroll_case_list'];
   const MS_TYPES = ['bp_sheet','alcohol_sheet'];
   if(!e && type !== 'pension_contribution' && !ROSTER_TYPES.includes(type)){ alert('請先選擇人員'); return; }
   const purpose = document.getElementById('form_purpose').value.trim() || '＿＿＿＿＿＿＿＿＿＿';
@@ -10532,8 +11621,23 @@ function generateForm(){
   if(type === 'alcohol_sheet')  bodyHtml = buildMeasureSheets('alcohol');
   if(type === 'stocktake_vehicle') bodyHtml = buildStocktake('vehicle');
   if(type === 'stocktake_staff')   bodyHtml = buildStocktake('staff');
+  if(type === 'onduty')             bodyHtml = buildOndutyCert(e, purpose);
+  if(type === 'transport_onduty')   bodyHtml = buildTransportOnduty(e);
+  if(type === 'resign')             bodyHtml = buildResignCert(e, purpose);
+  if(type === 'involuntary_resign') bodyHtml = buildInvoluntaryResign(e);
+  if(type === 'resign_application') bodyHtml = buildResignApplication(e);
+  if(type === 'undertaking')        bodyHtml = buildUndertaking(e);
+  if(type === 'consent_receipt')    bodyHtml = buildConsentReceipt(e);
+  if(type === 'severance_consent')  bodyHtml = buildSeveranceConsent(e);
+  if(type === 'property_card')      bodyHtml = buildPropertyCard();
+  if(type === 'payroll_deduct_notice')  bodyHtml = buildPayrollNotice('扣款');
+  if(type === 'payroll_pay_notice')     bodyHtml = buildPayrollNotice('發款');
+  if(type === 'payroll_deduct_consent') bodyHtml = buildPayrollConsent();
+  if(type === 'min_service_bonus')      bodyHtml = buildMinServiceBonus();
+  if(type === 'payroll_case_list')      bodyHtml = buildPayrollCaseList();
 
-  const wide = ROSTER_TYPES.includes(type) || type === 'pension_contribution' || type === 'leave_slip';
+  const wide = ROSTER_TYPES.includes(type) || type === 'pension_contribution' || type === 'leave_slip'
+            || CERT_WIDE.includes(type);
   // 血壓／酒測是 A4 橫式 15 欄，壓到 900px 會擠成一團，畫面上直接照原寬顯示
   const maxW = MS_TYPES.includes(type) ? '1180px' : (wide ? '900px' : '640px');
   document.getElementById('printArea').innerHTML = `<div style="max-width:${maxW};margin:0 auto;padding:${MS_TYPES.includes(type)?'20px':'40px'};border:1px solid #ddd;border-radius:8px;background:#fff;">${bodyHtml}</div>`;
@@ -14592,6 +15696,8 @@ function renderAll(){
   renderMaintPendingTable();
   renderMaintStandardsTable();
   renderVendorList();
+  pcFillEmp();
+  renderPayrollCases();
   renderAdminRewards();
   renderFfTable();
   renderTlTable();
