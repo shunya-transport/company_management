@@ -1286,6 +1286,38 @@
         </table>
       </div>
     </div>
+    <div class="card">
+      <h2>駕照與外訓證照對照<span class="count-badge" id="dl_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        職業駕照現在存在兩個地方：<b>人員的駕照資料</b>（在職證明的駕駛類別、表單套印用的）
+        與<b>上面的外訓證照總表</b>（到期提醒信寄的是這一份）。兩邊沒有互相對照過，已經有幾筆對不起來。<br>
+        <b>哪一邊才對，只有看過駕照正本的人知道</b>，所以這裡不自動選邊：確認之後逐筆按「以駕照表為準」或「以外訓表為準」，
+        按下去只改那一筆。以後在外訓證照總表改到駕照那幾列，存檔後也會問要不要一起更新駕照資料。<br>
+        <span id="dlDupNote"></span>
+      </div>
+      <div class="toolbar no-print">
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;">
+          <input type="checkbox" id="dl_diff_only" style="width:auto;margin:0;" checked> 只看對不起來的
+        </label>
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;">
+          <input type="checkbox" id="dl_hide_left" style="width:auto;margin:0;" checked> 不看已離職人員
+        </label>
+        <button class="btn ghost" id="dl_csv">匯出 CSV</button>
+      </div>
+      <div class="table-scroll" style="max-height:520px;">
+        <table class="cert-table">
+          <thead><tr>
+            <th>人員</th><th>類型</th>
+            <th>駕照表證號</th><th>駕照表發證</th><th>駕照表到期</th>
+            <th>外訓表證號</th><th>外訓表發證</th><th>外訓表到期</th>
+            <th>差異</th><th class="no-print"></th>
+          </tr></thead>
+          <tbody id="dlBody"></tbody>
+        </table>
+      </div>
+      <div id="dlMissing" class="muted" style="margin-top:10px;"></div>
+    </div>
+
     <div style="margin:26px 0 18px;border-top:2px solid var(--border);padding-top:8px;font-size:13px;font-weight:700;color:var(--text-3);letter-spacing:.08em;">內部訓練紀錄</div>
     <div class="card">
       <h2>新增內訓紀錄</h2>
@@ -2882,7 +2914,7 @@
   </div>
 </div>
 
-<div class="modal-backdrop no-print" id="certPhotoModal">
+<div class="modal-backdrop no-print" id="certPhotoModal" style="z-index:120;">
   <div class="modal-box" style="max-width:820px;">
     <button class="modal-close" id="certPhotoClose">✕</button>
     <div id="certPhotoContent"></div>
@@ -4638,6 +4670,10 @@ async function loadState(){
   await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
   rpLoad();                     // 設備報修單（不 await，讀不到也不要卡住整頁）
   wpLoad();                     // 客戶廠區工作證（同上；還沒跑 SQL_162 就只是空的）
+  // 人員的駕照資料。要跟外訓證照總表的駕照類對照，撈不到就給空陣列。
+  STATE.driverLicenses = await supaFetch(
+    'driver_licenses?select=*&order=license_id.asc'
+  ).catch(() => []) || [];
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
   STATE.adminDeputies = SEED.admin_deputies || [];
@@ -6595,6 +6631,315 @@ async function cpRemove(side){
       if(!t || !t.getAttribute) return;
       const ph = t.getAttribute('data-cp-photo');
       if(ph) cpOpen(ph);
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
+}
+
+// ===================== 駕照與外訓證照的對照與連動 =====================
+// training_types 23/24/25 是「職業聯結車駕照／職業大貨車駕照／職業大客車駕照」，
+// driver_licenses.license_type 寫的是「職業聯結車／職業大貨車／職業大客車」，
+// 去掉「駕照」兩個字就對得上。
+// 不要用寫死的 type_id。雲端實際上有兩組駕照項目：
+//   23/24/25「職業聯結車駕照…」一筆紀錄都沒有，
+//   26/33/35「職業職業聯結車駕照…」（名稱多一個「職業」，匯入時重複建的）掛了 24 筆。
+// 所以改成看名稱：結尾是「駕照」就算駕照，開頭重複的「職業」收斂成一個，
+// 這樣兩組命名都認得，以後把重複項目合併掉也不會壞。
+function dlNormName(n){
+  return String(n == null ? '' : n).trim().replace(/駕照$/, '').replace(/^(職業)+/, '職業').trim();
+}
+function dlKindOfType(name){ return dlNormName(name); }
+function dlIsLicenceCert(t){ return !!t && /駕照$/.test(String((t && t.type_name) || '').trim()); }
+function dlD(v){
+  const s = String(v == null ? '' : v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+}
+function dlN(v){ return String(v == null ? '' : v).trim(); }
+function dlEmpName(id){
+  const e = (STATE.employees || []).find(x => String(x.id) === String(id))
+         || (STATE.employeesHistory || []).find(x => String(x.id) === String(id));
+  return e ? e.name : '（查不到姓名 ' + dlN(id) + '）';
+}
+function dlEmpLeft(id){
+  return !(STATE.employees || []).some(x => String(x.id) === String(id))
+      && (STATE.employeesHistory || []).some(x => String(x.id) === String(id));
+}
+function dlTypeIdOfKind(kind){
+  const list = (STATE.trainingTypes || []);
+  // 先找名稱完全對得上的（「職業聯結車駕照」），找不到再找收斂後對得上的
+  //（「職業職業聯結車駕照」那一組），這樣新增的紀錄會優先掛在名稱正確的項目上。
+  const exact = list.find(x => dlN(x.name) === kind + '駕照');
+  if(exact) return exact.id;
+  const loose = list.find(x => dlNormName(x.name) === kind && /駕照$/.test(dlN(x.name)));
+  return loose ? loose.id : null;
+}
+// 兩邊合併成一份對照清單：先走外訓表，再把只在駕照表的補進來
+function dlPairs(){
+  const out = [];
+  const used = new Set();
+  (STATE.trainings || []).filter(dlIsLicenceCert).forEach(t => {
+    const kind = dlKindOfType(t.type_name);
+    const dl = (STATE.driverLicenses || []).find(d =>
+      String(d.employee_id) === String(t.employee_id) && dlN(d.license_type) === kind);
+    if(dl) used.add(String(dl.license_id));
+    out.push({ key: 'et' + t.id, empId: t.employee_id, name: t.employee_name || dlEmpName(t.employee_id),
+               left: !!t.employee_left, kind: kind, t: t, dl: dl || null });
+  });
+  (STATE.driverLicenses || []).forEach(d => {
+    if(used.has(String(d.license_id))) return;
+    out.push({ key: 'dl' + d.license_id, empId: d.employee_id, name: dlEmpName(d.employee_id),
+               left: dlEmpLeft(d.employee_id), kind: dlN(d.license_type), t: null, dl: d });
+  });
+  return out;
+}
+function dlDiff(r){
+  if(!r.t)  return ['只在駕照表有'];
+  if(!r.dl) return ['只在外訓表有'];
+  const out = [];
+  if(dlN(r.dl.license_number) !== dlN(r.t.cert_no))     out.push('證號不同');
+  if(dlD(r.dl.issue_date)     !== dlD(r.t.issue_date))  out.push('發證日不同');
+  if(dlD(r.dl.expiry_date)    !== dlD(r.t.expiry_date)) out.push('到期日不同');
+  return out;
+}
+function dlCell(a, b){
+  // 兩邊不一樣就標紅，一眼看得出是哪一格在打架
+  const same = dlN(a) === dlN(b);
+  const txt = dlN(a) || '—';
+  return same ? esc(txt) : `<b style="color:var(--red);">${esc(txt)}</b>`;
+}
+function renderDlCompare(){
+  const body = document.getElementById('dlBody');
+  if(!body) return;
+  const diffOnly = !!(document.getElementById('dl_diff_only') || {}).checked;
+  const hideLeft = !!(document.getElementById('dl_hide_left') || {}).checked;
+  let rows = dlPairs();
+  const all = rows.length;
+  const bad = rows.filter(r => dlDiff(r).length).length;
+  if(hideLeft) rows = rows.filter(r => !r.left);
+  if(diffOnly) rows = rows.filter(r => dlDiff(r).length);
+  rows.sort((a, b) => (dlDiff(b).length ? 1 : 0) - (dlDiff(a).length ? 1 : 0)
+    || String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'));
+  const cnt = document.getElementById('dl_count');
+  if(cnt) cnt.textContent = '共 ' + all + ' 筆，其中 ' + bad + ' 筆對不起來';
+  // 訓練項目表裡有兩組駕照（「職業聯結車駕照」與「職業職業聯結車駕照」），
+  // 新增證照時下拉會出現兩個看起來一樣的選項，提醒一下。
+  const dupNote = document.getElementById('dlDupNote');
+  if(dupNote){
+    const byKind = {};
+    (STATE.trainingTypes || []).forEach(x => {
+      if(!/駕照$/.test(dlN(x.name))) return;
+      const k = dlNormName(x.name);
+      (byKind[k] = byKind[k] || []).push(x.name);
+    });
+    const dups = Object.keys(byKind).filter(k => byKind[k].length > 1);
+    dupNote.innerHTML = dups.length
+      ? '<b style="color:var(--red);">訓練項目表裡有重複的駕照項目：</b>'
+        + dups.map(k => esc(byKind[k].join('／'))).join('；')
+        + '　新增外訓證照時下拉會出現兩個看起來一樣的選項。要清掉請執行 SQL_165 第 4 段。'
+      : '';
+  }
+  body.innerHTML = rows.map(r => {
+    const d = dlDiff(r);
+    const dl = r.dl || {}, t = r.t || {};
+    let act = '';
+    if(!r.t){
+      const tid = dlTypeIdOfKind(r.kind);
+      act = tid
+        ? `<button class="name-link" data-dl-newet="${esc(r.key)}">建到外訓表</button>`
+        : `<span class="muted" title="訓練項目清單裡找不到「${esc(r.kind)}駕照」">無對應訓練項目</span>`;
+    }else if(!r.dl){
+      act = `<button class="name-link" data-dl-newdl="${esc(r.key)}">建到駕照表</button>`;
+    }else if(d.length){
+      act = `<button class="name-link" data-dl-toet="${esc(r.key)}" title="把駕照表的值寫進外訓證照總表">以駕照表為準 →</button>`
+          + ` <button class="name-link" data-dl-todl="${esc(r.key)}" title="把外訓證照總表的值寫進駕照資料">← 以外訓表為準</button>`;
+    }else{
+      act = '<span class="muted">一致</span>';
+    }
+    return `<tr>
+      <td>${esc(r.name)}${r.left ? ' <span class="pill gray">已離職</span>' : ''}</td>
+      <td>${esc(r.kind)}</td>
+      <td>${r.dl ? dlCell(dl.license_number, t.cert_no) : '<span class="muted">（無此列）</span>'}</td>
+      <td>${r.dl ? dlCell(dlD(dl.issue_date), dlD(t.issue_date)) : ''}</td>
+      <td>${r.dl ? dlCell(dlD(dl.expiry_date), dlD(t.expiry_date)) : ''}</td>
+      <td>${r.t ? dlCell(t.cert_no, dl.license_number) : '<span class="muted">（無此列）</span>'}</td>
+      <td>${r.t ? dlCell(dlD(t.issue_date), dlD(dl.issue_date)) : ''}</td>
+      <td>${r.t ? dlCell(dlD(t.expiry_date), dlD(dl.expiry_date)) : ''}</td>
+      <td>${d.length ? `<span class="pill red">${esc(d.join('、'))}</span>` : '<span class="pill gray">一致</span>'}</td>
+      <td class="no-print" style="white-space:nowrap;">${act}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10" class="empty">${
+      bad ? '（已套用篩選，把上面兩個勾取消就看得到全部）' : '兩邊完全一致'}</td></tr>`;
+
+  // 在職的司機兩邊都沒有駕照 —— 這種是真的缺資料，不是對不起來
+  const miss = (STATE.employees || []).filter(e =>
+    e && dlN(e.fleet_team) &&
+    !(STATE.driverLicenses || []).some(d => String(d.employee_id) === String(e.id)) &&
+    !(STATE.trainings || []).some(t => dlIsLicenceCert(t) && String(t.employee_id) === String(e.id)));
+  const mbox = document.getElementById('dlMissing');
+  if(mbox){
+    mbox.innerHTML = miss.length
+      ? '<b style="color:var(--red);">兩邊都查不到駕照的在職司機 ' + miss.length + ' 人：</b>'
+        + miss.map(e => esc(e.name) + '（' + esc(e.employee_no || '') + '・' + esc(e.fleet_team || '') + '）').join('、')
+        + '　請在上面的「新增外訓證照」把駕照登進來。'
+      : '掛了車隊的在職司機，兩邊都至少有一份駕照資料。';
+  }
+}
+function dlPairByKey(key){ return dlPairs().find(r => r.key === key) || null; }
+
+// ---------- 逐筆同步（一次只動一筆，不做整表覆蓋）----------
+async function dlWriteEt(t, body){
+  await supaFetch('employee_trainings?record_id=eq.' + encodeURIComponent(t.id),
+    { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
+  if('certificate_no' in body) t.cert_no = body.certificate_no;
+  if('issue_date' in body)     t.issue_date = body.issue_date;
+  if('expiry_date' in body)    t.expiry_date = body.expiry_date;
+}
+async function dlWriteDl(d, body){
+  await supaFetch('driver_licenses?license_id=eq.' + encodeURIComponent(d.license_id),
+    { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
+  Object.assign(d, body);
+}
+function dlChangeText(pairs){
+  return pairs.filter(p => dlN(p[1]) !== dlN(p[2]))
+    .map(p => '　' + p[0] + '：' + (dlN(p[2]) || '（空白）') + ' → ' + (dlN(p[1]) || '（空白）'))
+    .join('\n') || '　（沒有任何欄位需要改）';
+}
+async function dlToEt(key){
+  const r = dlPairByKey(key);
+  if(!r || !r.t || !r.dl){ alert('找不到這一筆，請重新整理。'); return; }
+  const body = { certificate_no: dlN(r.dl.license_number) || null,
+                 issue_date: dlD(r.dl.issue_date) || null,
+                 expiry_date: dlD(r.dl.expiry_date) || null };
+  if(!confirm('要把「' + r.name + '・' + r.kind + '」的駕照表內容寫進外訓證照總表嗎？\n\n'
+            + dlChangeText([['證號', body.certificate_no, r.t.cert_no],
+                            ['發證日', body.issue_date, r.t.issue_date],
+                            ['到期日', body.expiry_date, r.t.expiry_date]])
+            + '\n\n到期提醒信寄的是外訓證照總表這一份，所以這一步會影響提醒的時間。')) return;
+  try{ await dlWriteEt(r.t, body); }
+  catch(e){ alert('沒有寫進去，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  renderAll();
+}
+async function dlToDl(key){
+  const r = dlPairByKey(key);
+  if(!r || !r.t || !r.dl){ alert('找不到這一筆，請重新整理。'); return; }
+  const body = { license_number: dlN(r.t.cert_no) || null,
+                 issue_date: dlD(r.t.issue_date) || null,
+                 expiry_date: dlD(r.t.expiry_date) || null };
+  if(!confirm('要把「' + r.name + '・' + r.kind + '」的外訓證照總表內容寫進駕照資料嗎？\n\n'
+            + dlChangeText([['證號', body.license_number, r.dl.license_number],
+                            ['發證日', body.issue_date, r.dl.issue_date],
+                            ['到期日', body.expiry_date, r.dl.expiry_date]])
+            + '\n\n在職證明的駕駛類別是從駕照資料帶出來的。')) return;
+  try{ await dlWriteDl(r.dl, body); }
+  catch(e){ alert('沒有寫進去，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  renderAll();
+}
+async function dlNewDl(key){
+  const r = dlPairByKey(key);
+  if(!r || !r.t){ alert('找不到這一筆，請重新整理。'); return; }
+  if(!confirm('駕照資料裡沒有「' + r.name + '・' + r.kind + '」這一張，要照外訓證照總表建一筆嗎？\n\n'
+            + '　證號：' + (dlN(r.t.cert_no) || '（空白）') + '\n'
+            + '　發證日：' + (dlD(r.t.issue_date) || '（空白）') + '\n'
+            + '　到期日：' + (dlD(r.t.expiry_date) || '（空白）'))) return;
+  const row = { employee_id: r.empId, license_type: r.kind,
+                license_number: dlN(r.t.cert_no) || null,
+                issue_date: dlD(r.t.issue_date) || null,
+                expiry_date: dlD(r.t.expiry_date) || null,
+                notes: '由外訓證照總表對照建立' };
+  try{
+    const made = await supaFetch('driver_licenses',
+      { method: 'POST', headers: {'Prefer':'return=representation'}, body: JSON.stringify([row]) });
+    const got = (made && made[0]) || row;
+    STATE.driverLicenses = (STATE.driverLicenses || []).concat([got]);
+  }catch(e){ alert('沒有建起來，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  renderAll();
+}
+async function dlNewEt(key){
+  const r = dlPairByKey(key);
+  if(!r || !r.dl){ alert('找不到這一筆，請重新整理。'); return; }
+  const tid = dlTypeIdOfKind(r.kind);
+  if(!tid){ alert('訓練項目清單裡沒有「' + r.kind + '駕照」，沒辦法建。'); return; }
+  if(!confirm('外訓證照總表裡沒有「' + r.name + '・' + r.kind + '駕照」，要照駕照資料建一筆嗎？\n\n'
+            + '　證號：' + (dlN(r.dl.license_number) || '（空白）') + '\n'
+            + '　發證日：' + (dlD(r.dl.issue_date) || '（空白）') + '\n'
+            + '　到期日：' + (dlD(r.dl.expiry_date) || '（空白）') + '\n\n'
+            + '建好之後這張駕照就會進到期提醒信裡。')) return;
+  const row = { employee_id: r.empId, type_id: tid,
+                certificate_no: dlN(r.dl.license_number) || null,
+                issue_date: dlD(r.dl.issue_date) || null,
+                expiry_date: dlD(r.dl.expiry_date) || null,
+                notes: '由駕照資料對照建立' };
+  try{
+    const made = await supaFetch('employee_trainings',
+      { method: 'POST', headers: {'Prefer':'return=representation'}, body: JSON.stringify([row]) });
+    const got = (made && made[0]) || row;
+    STATE.trainings = (STATE.trainings || []).concat([Object.assign({}, got, {
+      id: got.record_id, cert_no: got.certificate_no,
+      employee_name: r.name, type_name: r.kind + '駕照' })]);
+    rememberGood('employee_trainings', STATE.trainings);   // 重記基準，否則下次存檔會整份送出
+  }catch(e){ alert('沒有建起來，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  renderAll();
+}
+// 在外訓證照總表改完駕照那幾列之後，問要不要一起更新駕照資料。
+// 不自動改 —— 使用者可能只是先把外訓表填對，還沒確認駕照正本。
+async function dlAfterCertSave(rec){
+  if(!dlIsLicenceCert(rec)) return;
+  const kind = dlKindOfType(rec.type_name);
+  const dl = (STATE.driverLicenses || []).find(d =>
+    String(d.employee_id) === String(rec.employee_id) && dlN(d.license_type) === kind);
+  if(!dl) return;                       // 駕照表沒有這一張就不多事，對照卡上會顯示「只在外訓表有」
+  const body = { license_number: dlN(rec.cert_no) || null,
+                 issue_date: dlD(rec.issue_date) || null,
+                 expiry_date: dlD(rec.expiry_date) || null };
+  const changed = dlN(dl.license_number) !== dlN(body.license_number)
+               || dlD(dl.issue_date)     !== dlN(body.issue_date)
+               || dlD(dl.expiry_date)    !== dlN(body.expiry_date);
+  if(!changed) return;
+  if(!confirm('這是駕照。人員的駕照資料（在職證明的駕駛類別用的那一份）要一起更新嗎？\n\n'
+            + dlChangeText([['證號', body.license_number, dl.license_number],
+                            ['發證日', body.issue_date, dl.issue_date],
+                            ['到期日', body.expiry_date, dl.expiry_date]])
+            + '\n\n按「取消」就只改外訓證照總表，兩邊會不一樣，'
+            + '下面的「駕照與外訓證照對照」會把它標成紅字。')) return;
+  try{ await dlWriteDl(dl, body); }
+  catch(e){ alert('駕照資料沒有更新（外訓證照總表已經存好了）。\n\n錯誤訊息：'
+                + ((e && e.message) || e) + dbErrorHint(e)); }
+}
+function dlCsv(){
+  const head = ['人員','已離職','類型','駕照表證號','駕照表發證','駕照表到期',
+                '外訓表證號','外訓表發證','外訓表到期','差異'];
+  const rows = dlPairs().map(r => {
+    const dl = r.dl || {}, t = r.t || {};
+    return [r.name, r.left ? '是' : '', r.kind,
+            dlN(dl.license_number), dlD(dl.issue_date), dlD(dl.expiry_date),
+            dlN(t.cert_no), dlD(t.issue_date), dlD(t.expiry_date),
+            dlDiff(r).join('、')];
+  });
+  return csvLines(head, rows);
+}
+{
+  const _w = () => {
+    ['dl_diff_only','dl_hide_left'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.addEventListener('change', renderDlCompare);
+    });
+    const x = document.getElementById('dl_csv');
+    if(x) x.addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff' + dlCsv()], {type:'text/csv;charset=utf-8;'}));
+      a.download = '駕照與外訓證照對照_' + todayISO() + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    const b = document.getElementById('dlBody');
+    if(b) b.addEventListener('click', async (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const a1 = t.getAttribute('data-dl-toet');  if(a1){ await dlToEt(a1); return; }
+      const a2 = t.getAttribute('data-dl-todl');  if(a2){ await dlToDl(a2); return; }
+      const a3 = t.getAttribute('data-dl-newdl'); if(a3){ await dlNewDl(a3); return; }
+      const a4 = t.getAttribute('data-dl-newet'); if(a4){ await dlNewEt(a4); return; }
     });
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
@@ -15121,6 +15466,7 @@ function renderAll(){
   renderLeaveStatTable();
   renderInternalYearStatus();
   renderExternalStatusTable();
+  renderDlCompare();
   renderTrainingLogTable();
   renderContactsAll();
   renderPermits();
@@ -17234,6 +17580,8 @@ document.getElementById('trainingTableBody').addEventListener('click', async (e)
       rec.on_hold = onHold ? 1 : 0;
       rec.expiry_date = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
       await saveState('employee_trainings', STATE.trainings, true);
+      // 這一列是駕照的話，問要不要把人員的駕照資料一起更新（兩邊本來各存一份）
+      await dlAfterCertSave(rec);
     }
     editingExternalId = null;
     renderAll();
