@@ -1115,7 +1115,7 @@
       </div>
       <div class="table-scroll">
         <table class="cert-table">
-          <thead><tr><th>人員</th><th title="完整名稱滑鼠移到欄位上看">訓練項目</th><th title="完整證號滑鼠移到欄位上看">證書字號</th><th>發證日期</th><th title="下次覆驗日">到期日</th><th>狀態</th><th>複訓報名</th><th title="換證履歷，滑鼠移到欄位上看全文">備註</th><th></th></tr></thead>
+          <thead><tr><th>人員</th><th title="完整名稱滑鼠移到欄位上看">訓練項目</th><th title="完整證號滑鼠移到欄位上看">證書字號</th><th>發證日期</th><th title="下次覆驗日">到期日</th><th>狀態</th><th>複訓報名</th><th title="換證履歷，滑鼠移到欄位上看全文">備註</th><th title="證書照片：點圖示可以看，也可以上傳">證書</th><th></th></tr></thead>
           <tbody id="trainingTableBody"></tbody>
         </table>
       </div>
@@ -2711,6 +2711,13 @@
 </div>
     </div>
   </div>
+
+<div class="modal-backdrop no-print" id="certPhotoModal">
+  <div class="modal-box" style="max-width:820px;">
+    <button class="modal-close" id="certPhotoClose">✕</button>
+    <div id="certPhotoContent"></div>
+  </div>
+</div>
 
 <div class="modal-backdrop no-print" id="insOffModal">
   <div class="modal-box" style="max-width:460px;">
@@ -6087,6 +6094,221 @@ function certStatusCode(t){
 // 要看一個人的證照得在同一頁上下對照兩次。合併之後兩邊的能力一項都沒少。
 // ★ 排序做成下拉：兩張表原本的順序各有用處 ——
 //   到期日是「誰快過期」，人員是「這個人身上有哪幾張證」，只留一種等於少一個功能。
+// ===================== 外訓證照的證書照片 =====================
+// 欄位是 SQL_164 加的。兩種放法都支援：上傳到 training-certs 儲存桶（photo_path），
+// 或貼外部連結（photo_url）。桶是不公開的，所以每次看都要換一組簽名網址。
+//
+// 存檔一律對單一列發 PATCH。不走 saveState／saveRows —— 那一套是整表覆蓋，
+// 陣列裡沒有的 id 會被刪掉。
+const CERT_BUCKET = 'training-certs';
+var cpId = null;
+
+function cpRow(id){ return (STATE.trainings || []).find(t => String(t.id) === String(id)); }
+function cpHas(t){
+  return !!(t && (t.photo_path || t.photo_url || t.photo_back_path || t.photo_back_url));
+}
+function cpCount(t){
+  let n = 0;
+  if(t && (t.photo_path || t.photo_url)) n++;
+  if(t && (t.photo_back_path || t.photo_back_url)) n++;
+  return n;
+}
+async function cpSignedUrl(path){
+  const res = await authFetch(
+    `${SUPABASE_URL}/storage/v1/object/sign/${CERT_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`,
+    { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  if(!res.ok){
+    const t = await res.text().catch(()=> '');
+    throw new Error('簽名網址取得失敗 ' + res.status + '：' + t);
+  }
+  const j = await res.json();
+  const u = j && (j.signedURL || j.signedUrl);
+  if(!u) throw new Error('回傳裡沒有簽名網址');
+  return u.indexOf('http') === 0 ? u : (SUPABASE_URL + '/storage/v1' + u);
+}
+async function cpUpload(t, side, file){
+  const ext = ((String(file.name || '').match(/\.[A-Za-z0-9]+$/) || ['.jpg'])[0]).toLowerCase();
+  const path = String(t.id) + '/' + side + '_' + Date.now() + ext;
+  const res = await authFetch(
+    `${SUPABASE_URL}/storage/v1/object/${CERT_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`,
+    { method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
+      body: file });
+  if(!res.ok){
+    const txt = await res.text().catch(()=> '');
+    throw new Error('上傳失敗 ' + res.status + '：' + txt
+      + (res.status === 404 ? '（代表 training-certs 這個儲存桶還沒建，請先執行 SQL_164）' : ''));
+  }
+  return path;
+}
+async function cpPatch(t, body){
+  await supaFetch('employee_trainings?record_id=eq.' + encodeURIComponent(t.id),
+    { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
+  Object.assign(t, body);
+}
+function cpSlotHtml(t, side){
+  const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+  const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+  const label = side === 'front' ? '正面' : '背面';
+  const has = !!(t[pk] || t[uk]);
+  return `<div style="border:1px solid var(--border-strong);border-radius:12px;padding:12px;">
+    <div style="font-weight:700;margin-bottom:8px;">${label}
+      ${has ? '' : '<span class="muted" style="font-weight:400;">（還沒有照片）</span>'}</div>
+    <div id="cpimg_${side}" style="min-height:120px;display:flex;align-items:center;justify-content:center;
+         background:var(--gray-bg);border-radius:8px;margin-bottom:10px;overflow:hidden;">
+      ${has ? '<span class="muted">載入中…</span>' : '<span class="muted">—</span>'}
+    </div>
+    <label class="muted" style="display:block;font-size:12px;margin-bottom:6px;">
+      上傳證書照片（jpg／png／pdf，10MB 以內）
+      <input type="file" id="cpfile_${side}" accept="image/*,application/pdf" style="margin-top:4px;">
+    </label>
+    <label class="muted" style="display:block;font-size:12px;">
+      或貼外部連結（Google Drive、NAS）
+      <input id="cplink_${side}" value="${esc(t[uk] || '')}" placeholder="https://…" style="margin-top:4px;">
+    </label>
+    ${t[pk] ? `<div class="muted" style="font-size:11.5px;margin-top:6px;">已上傳：${esc(t[pk])}</div>` : ''}
+    ${has ? `<button class="del-btn" data-cp-del="${side}" style="margin-top:6px;">移除這一張</button>` : ''}
+  </div>`;
+}
+async function cpShowImgs(t){
+  for(const side of ['front','back']){
+    const box = document.getElementById('cpimg_' + side);
+    if(!box) continue;
+    const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+    const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+    let url = null;
+    if(t[pk]){
+      try{ url = await cpSignedUrl(t[pk]); }
+      catch(e){ box.innerHTML = '<span class="muted" style="padding:10px;">' + esc(String((e && e.message) || e)) + '</span>'; continue; }
+    }else if(t[uk]){
+      url = t[uk];
+    }
+    if(!url) continue;
+    const isPdf = /\.pdf($|\?)/i.test(t[pk] || t[uk] || '');
+    box.innerHTML = isPdf
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="name-link" style="padding:20px;">開啟 PDF</a>`
+      : `<a href="${esc(url)}" target="_blank" rel="noopener" title="點一下開新視窗看原尺寸">
+           <img src="${esc(url)}" alt="證書卡面" style="max-width:100%;max-height:300px;display:block;"></a>`;
+  }
+}
+function cpOpen(id){
+  const t = cpRow(id);
+  if(!t){ alert('找不到這一筆外訓證照，請重新整理。'); return; }
+  cpId = t.id;
+  const box = document.getElementById('certPhotoContent');
+  box.innerHTML = `<h3>${esc(t.employee_name || '')}　${esc(t.type_name || '')}</h3>
+    <div class="muted" style="margin-bottom:12px;">
+      ${t.cert_no ? '證書字號 ' + esc(t.cert_no) + '　' : ''}
+      ${t.issue_date ? '發證 ' + esc(t.issue_date) + '　' : ''}
+      ${t.no_expiry ? '長期有效' : (t.expiry_date ? '到期 ' + esc(t.expiry_date) : '')}
+      <br>照片放在不公開的儲存桶，每次開啟都會換一組一小時後失效的網址，沒登入的人看不到。
+      點照片可以開新視窗看原尺寸。
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      ${cpSlotHtml(t, 'front')}
+      ${cpSlotHtml(t, 'back')}
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn" id="cpSaveBtn">儲存照片</button>
+      <span class="muted" id="cpMsg" style="margin-left:10px;"></span>
+    </div>`;
+  document.getElementById('certPhotoModal').classList.add('show');
+  cpShowImgs(t);
+}
+function cpClose(){
+  document.getElementById('certPhotoModal').classList.remove('show');
+  cpId = null;
+}
+async function cpSave(){
+  const t = cpRow(cpId);
+  if(!t) return;
+  const msg = document.getElementById('cpMsg');
+  const body = {};
+  const done = [];
+  for(const side of ['front','back']){
+    const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+    const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+    const fi = document.getElementById('cpfile_' + side);
+    const li = document.getElementById('cplink_' + side);
+    const file = fi && fi.files && fi.files[0];
+    if(file){
+      if(msg) msg.textContent = '正在上傳' + (side === 'front' ? '正面' : '背面') + '…';
+      try{
+        body[pk] = await cpUpload(t, side, file);
+        done.push((side === 'front' ? '正面' : '背面') + '照片已上傳');
+      }catch(e){
+        if(msg) msg.textContent = '';
+        alert(String((e && e.message) || e));
+        return;
+      }
+    }
+    const link = li ? String(li.value || '').trim() : '';
+    if(link !== String(t[uk] || '')) body[uk] = link || null;
+  }
+  if(!Object.keys(body).length){
+    if(msg) msg.textContent = '沒有要存的東西（沒有選檔案，連結也沒有改）。';
+    return;
+  }
+  try{
+    await cpPatch(t, body);
+  }catch(e){
+    const m = String((e && e.message) || e);
+    if(msg) msg.textContent = '';
+    alert('照片資訊沒有存進資料庫。\n\n錯誤訊息：' + m + dbErrorHint(e)
+        + (m.indexOf('photo_path') >= 0 || m.indexOf('42703') >= 0
+            ? '\n\n代表 SQL_164 還沒在 Supabase 執行。' : ''));
+    return;
+  }
+  renderTrainingTable();
+  cpOpen(t.id);              // 重開一次，圖片跟「移除這一張」才會跟著更新
+  const msg2 = document.getElementById('cpMsg');
+  if(msg2) msg2.textContent = done.concat('已存好').join('；');
+}
+async function cpRemove(side){
+  const t = cpRow(cpId);
+  if(!t) return;
+  const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+  const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+  const label = side === 'front' ? '正面' : '背面';
+  if(!confirm('要把' + label + '照片從這一張證照上移除嗎？\n\n'
+            + '資料庫裡的連結會清掉。已經上傳到儲存桶的檔案本身不會刪，\n'
+            + '需要真的刪檔請到 Supabase 後台的 Storage。')) return;
+  try{
+    await cpPatch(t, {[pk]: null, [uk]: null});
+  }catch(e){
+    alert('沒有移除，資料庫沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e));
+    return;
+  }
+  renderTrainingTable();
+  cpOpen(t.id);
+}
+{
+  const _w = () => {
+    const c = document.getElementById('certPhotoClose');
+    if(c) c.addEventListener('click', cpClose);
+    const m = document.getElementById('certPhotoModal');
+    if(m) m.addEventListener('click', async (e) => {
+      if(e.target === m){ cpClose(); return; }
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      if(t.id === 'cpSaveBtn'){ await cpSave(); return; }
+      const rm = t.getAttribute('data-cp-del');
+      if(rm){ await cpRemove(rm); return; }
+    });
+    // 這張表原本就有一個處理修改／刪除的 listener，這裡另外掛一個只管照片，
+    // 不去動原本那一個。
+    const b = document.getElementById('trainingTableBody');
+    if(b) b.addEventListener('click', (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const ph = t.getAttribute('data-cp-photo');
+      if(ph) cpOpen(ph);
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
+}
+
 function renderTrainingTable(){
   const body = document.getElementById('trainingTableBody');
   if(!body) return;
@@ -6117,7 +6339,7 @@ function renderTrainingTable(){
   const cnt = document.getElementById('training_count');
   if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
   if(rows.length===0){
-    body.innerHTML = STATE.trainings.length===0 ? '' : `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
+    body.innerHTML = STATE.trainings.length===0 ? '' : `<tr><td colspan="10" class="empty">沒有符合條件的紀錄</td></tr>`;
     if(emptyEl) emptyEl.style.display = STATE.trainings.length===0 ? 'block' : 'none';
     return;
   }
@@ -6144,6 +6366,13 @@ function renderTrainingTable(){
       <td>${certStatusPill(t)}</td>
       <td>${retrainCell(t)}</td>
       <td>${certNoteCell(t)}</td>
+      <td style="text-align:center;">${
+        cpHas(t)
+          ? `<button class="name-link" data-cp-photo="${esc(t.id)}" style="font-size:16px;margin:0;"
+                title="看證書照片（${cpCount(t)} 張）">&#128247;</button>`
+          : `<button class="del-btn" data-cp-photo="${esc(t.id)}" style="color:var(--text-3);"
+                title="還沒有證書照片，點一下可以上傳">＋</button>`
+      }</td>
       <td>${actionCell}</td>
     </tr>`;
   }).join('');
