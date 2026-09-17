@@ -199,6 +199,18 @@
   .table-scroll th{position:sticky;top:0;background:linear-gradient(90deg,#fbfaf8,#f2ece4);z-index:1;}
   /* 維修保養歷史記錄:欄寬與字級調整(內容欄縮小,其餘欄位放大且不換行) */
   /* 公里數統計表／平均公里數（季）：欄位多，改用緊湊版面且不換行 */
+  table.wp-table{width:auto;min-width:100%;font-size:12px;}
+  table.wp-table th{padding:8px 5px;font-size:11.5px;white-space:nowrap;}
+  table.wp-table td{padding:6px 5px;vertical-align:middle;line-height:1.5;white-space:nowrap;}
+  table.wp-table td.wp-note{white-space:normal;min-width:140px;max-width:180px;
+    font-size:11px;line-height:1.5;color:#5b6672;}
+  table.wp-table td.wp-co{white-space:normal;max-width:96px;font-size:11px;}
+  table.wp-table td.wp-code{font-size:11.5px;}
+  table.wp-table td.wp-code .sub{font-size:10.5px;color:#7b8694;}
+  table.wp-table input{font-size:12px;padding:4px 6px;}
+  table.wp-table input[type="date"]{width:120px;}
+  table.wp-table select{font-size:12px;padding:4px 6px;}
+  table.wp-table tbody tr:hover{background:rgba(13,27,44,.03);}
   table.km-table{font-size:12px;}
   table.km-table th{padding:8px 8px;font-size:11.5px;white-space:nowrap;}
   table.km-table td{padding:7px 8px;white-space:nowrap;vertical-align:middle;}
@@ -2388,11 +2400,13 @@
             <button class="btn ghost" id="wp_print">列印本頁</button>
           </div>
           <div class="table-scroll" style="max-height:620px;">
-            <table style="font-size:12.5px;">
+            <table class="wp-table">
               <thead><tr>
-                <th>廠區</th><th>姓名</th><th>證號／卡號</th><th>條碼號</th><th>卡背號碼</th>
-                <th>申請公司</th><th>我方</th><th>申請單位</th>
-                <th>發證日</th><th>有效日期</th><th>效期</th><th>狀態</th><th>備註</th><th class="no-print"></th>
+                <th>廠區</th><th>姓名</th><th>證號</th>
+                <th title="卡面的條碼號與卡背號碼，有值才顯示">條碼／卡背</th>
+                <th>申請公司</th><th>我方</th><th title="申請單位">單位</th>
+                <th>發證日</th><th>到期日</th><th>效期</th><th>狀態</th><th>備註</th>
+                <th title="卡面照片：點圖示可以看、也可以上傳">照片</th><th class="no-print"></th>
               </tr></thead>
               <tbody id="wpBody"></tbody>
             </table>
@@ -2858,6 +2872,13 @@
   <div class="modal-box">
     <button class="modal-close" id="ciEditClose">✕</button>
     <div id="ciEditContent"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop no-print" id="wpPhotoModal">
+  <div class="modal-box" style="max-width:820px;">
+    <button class="modal-close" id="wpPhotoClose">✕</button>
+    <div id="wpPhotoContent"></div>
   </div>
 </div>
 
@@ -4740,6 +4761,34 @@ function wpFillSelects(){
   dl('wpSiteList', sites);
   dl('wpApplyCoList', cos);
 }
+// 「112 年 12 月 31 日」一格會被擠成三行，改成民國短格式
+function wpROCShort(d){
+  const s = String(d || '').slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return (Number(s.slice(0, 4)) - 1911) + '/' + s.slice(5, 7) + '/' + s.slice(8, 10);
+}
+// 申請公司有「亞東工業氣體股份有限公司」這種，欄位放不下。
+// 畫面上去掉尾巴的公司型態，滑鼠移上去看完整名稱。
+function wpCoCell(r){
+  const full = String(r.apply_company || '');
+  if(wpEditId !== null && String(wpEditId) === String(r.permit_id)){
+    return `<input id="wpe_apply_company" value="${esc(full)}" style="min-width:110px;">`;
+  }
+  if(!full) return '';
+  const shortName = full.replace(/(股份有限公司|有限公司|股份公司)$/, '');
+  return `<span title="${esc(full)}">${esc(shortName)}</span>`;
+}
+// 條碼號與卡背號碼：63 筆裡只有幾筆有值，各給一欄太浪費。
+// 合成一格上下排，修改時兩個輸入框也上下排。
+function wpCodeCell(r){
+  if(wpEditId !== null && String(wpEditId) === String(r.permit_id)){
+    return `<input id="wpe_barcode_no" value="${esc(r.barcode_no || '')}" placeholder="條碼號" style="min-width:104px;">`
+      + `<br><input id="wpe_card_back_no" value="${esc(r.card_back_no || '')}" placeholder="卡背號碼" style="min-width:104px;margin-top:3px;">`;
+  }
+  const a = r.barcode_no ? esc(r.barcode_no) : '';
+  const b = r.card_back_no ? `<span class="sub">卡背 ${esc(r.card_back_no)}</span>` : '';
+  return a && b ? (a + '<br>' + b) : (a || b);
+}
 function wpCell(r, key, ph, w){
   return wpEditId !== null && String(wpEditId) === String(r.permit_id)
     ? `<input id="wpe_${key}" value="${esc(r[key] == null ? '' : r[key])}" placeholder="${esc(ph || '')}" style="min-width:${w || 80}px;">`
@@ -4748,7 +4797,7 @@ function wpCell(r, key, ph, w){
 function wpDateCell(r, key){
   return wpEditId !== null && String(wpEditId) === String(r.permit_id)
     ? `<input id="wpe_${key}" type="date" value="${esc(String(r[key] || '').slice(0,10))}" style="min-width:130px;">`
-    : (r[key] ? esc(toROCDate(String(r[key]).slice(0,10))) : '');
+    : (r[key] ? esc(wpROCShort(r[key])) : '');
 }
 function renderPermits(){
   const body = document.getElementById('wpBody');
@@ -4801,9 +4850,11 @@ function renderPermits(){
           }>${esc(e.name + (e.no ? '（' + e.no + '）' : '') + (e.left ? ' ※已離職' : ''))}</option>`).join('')}</select>`
       : `<b>${esc(r.name || '')}</b>`
         + (r.card_name && r.card_name !== r.name
-            ? ` <span class="pill gray" title="卡面印的姓名跟人事資料不一樣">卡面：${esc(r.card_name)}</span>` : '')
+            ? `<br><span class="pill gray" style="font-size:10.5px;padding:1px 7px;"
+                  title="卡面印的姓名是「${esc(r.card_name)}」，跟人事資料不一樣">卡面 ${esc(r.card_name)}</span>` : '')
         + (r.employee_id == null
-            ? ` <span class="pill amber" title="對不到人事編號，只留姓名">無工號</span>` : '');
+            ? `<br><span class="pill amber" style="font-size:10.5px;padding:1px 7px;"
+                  title="對不到人事編號，只留姓名">無工號</span>` : '');
     const statusCell = editing
       ? `<select id="wpe_card_status">${['持有中','已繳回','已遺失','已作廢'].map(x =>
           `<option value="${x}"${(r.card_status || '持有中') === x ? ' selected' : ''}>${x}</option>`).join('')}</select>`
@@ -4818,24 +4869,230 @@ function renderPermits(){
       : `<button class="name-link" data-wp-edit="${esc(r.permit_id)}">修改</button> `
         + `<button class="del-btn" data-wp-del="${esc(r.permit_id)}">刪除</button>`;
     return `<tr>
-      <td>${wpCell(r, 'site', '例：台積電', 90)}</td>
+      <td>${wpCell(r, 'site', '例：台積電', 80)}</td>
       <td>${nameCell}</td>
-      <td class="c-nw">${wpCell(r, 'permit_no', '', 130)}</td>
-      <td class="c-nw">${wpCell(r, 'barcode_no', '', 110)}</td>
-      <td class="c-nw">${wpCell(r, 'card_back_no', '', 110)}</td>
-      <td>${wpCell(r, 'apply_company', '', 110)}</td>
+      <td>${wpCell(r, 'permit_no', '', 116)}</td>
+      <td class="wp-code">${wpCodeCell(r)}</td>
+      <td class="wp-co">${wpCoCell(r)}</td>
       <td>${ourCell}</td>
-      <td>${wpCell(r, 'apply_dept', '', 80)}</td>
-      <td class="c-nw">${wpDateCell(r, 'issue_date')}</td>
-      <td class="c-nw">${wpDateCell(r, 'expiry_date')}</td>
-      <td class="c-nw">${wpExpiryPill(r)}</td>
+      <td>${wpCell(r, 'apply_dept', '', 70)}</td>
+      <td>${wpDateCell(r, 'issue_date')}</td>
+      <td>${wpDateCell(r, 'expiry_date')}</td>
+      <td>${wpExpiryPill(r)}</td>
       <td>${statusCell}</td>
-      <td>${wpCell(r, 'notes', '', 160)}</td>
+      <td class="wp-note">${wpCell(r, 'notes', '', 150)}</td>
+      <td class="c-nw" style="text-align:center;">${
+        wpHasPhoto(r)
+          ? `<button class="name-link" data-wp-photo="${esc(r.permit_id)}" style="font-size:16px;margin:0;"
+                title="看卡面照片（${wpPhotoCount(r)} 張）">&#128247;</button>`
+          : `<button class="del-btn" data-wp-photo="${esc(r.permit_id)}" style="color:var(--text-3);"
+                title="還沒有照片，點一下可以上傳">＋</button>`
+      }</td>
       <td class="no-print" style="white-space:nowrap;">${act}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="14" class="empty">${
       WP_STATE === 'ok' ? (WP_ROWS.length ? '找不到符合條件的工作證' : '還沒有任何工作證資料')
                         : '這一頁暫時沒有資料'}</td></tr>`;
+}
+
+// ---------- 卡面照片 ----------
+// 兩種放法都支援：上傳到 Supabase Storage（photo_path），或貼外部連結（photo_url）。
+// 儲存桶 work-permits 是不公開的，所以要看照片得先換一組簽名網址（預設一小時失效）。
+const WP_BUCKET = 'work-permits';
+var wpPhotoId = null;
+
+function wpHasPhoto(r){
+  return !!(r && (r.photo_path || r.photo_url || r.photo_back_path || r.photo_back_url));
+}
+function wpPhotoCount(r){
+  let n = 0;
+  if(r && (r.photo_path || r.photo_url)) n++;
+  if(r && (r.photo_back_path || r.photo_back_url)) n++;
+  return n;
+}
+// 不公開的桶要簽名網址。拿不到就把原因顯示在框裡，不要留一個破圖。
+async function wpSignedUrl(path){
+  const res = await authFetch(
+    `${SUPABASE_URL}/storage/v1/object/sign/${WP_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`,
+    { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  if(!res.ok){
+    const t = await res.text().catch(()=> '');
+    throw new Error('簽名網址取得失敗 ' + res.status + '：' + t);
+  }
+  const j = await res.json();
+  const u = j && (j.signedURL || j.signedUrl);
+  if(!u) throw new Error('回傳裡沒有簽名網址');
+  return u.indexOf('http') === 0 ? u : (SUPABASE_URL + '/storage/v1' + u);
+}
+async function wpUploadPhoto(r, side, file){
+  const ext = ((String(file.name || '').match(/\.[A-Za-z0-9]+$/) || ['.jpg'])[0]).toLowerCase();
+  const path = String(r.permit_id) + '/' + side + '_' + Date.now() + ext;
+  const res = await authFetch(
+    `${SUPABASE_URL}/storage/v1/object/${WP_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`,
+    { method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
+      body: file });
+  if(!res.ok){
+    const t = await res.text().catch(()=> '');
+    throw new Error('上傳失敗 ' + res.status + '：' + t
+      + (res.status === 404 ? '（代表 work-permits 這個儲存桶還沒建，請先執行 SQL_163）' : ''));
+  }
+  return path;
+}
+async function wpPatchPhoto(r, body){
+  await supaFetch('work_permits?permit_id=eq.' + encodeURIComponent(r.permit_id),
+    { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
+  Object.assign(r, body);
+}
+function wpPhotoSlotHtml(r, side){
+  const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+  const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+  const label = side === 'front' ? '正面' : '背面';
+  const has = !!(r[pk] || r[uk]);
+  return `<div style="border:1px solid var(--border-strong);border-radius:12px;padding:12px;">
+    <div style="font-weight:700;margin-bottom:8px;">${label}
+      ${has ? '' : '<span class="muted" style="font-weight:400;">（還沒有照片）</span>'}</div>
+    <div id="wpimg_${side}" style="min-height:120px;display:flex;align-items:center;justify-content:center;
+         background:var(--gray-bg);border-radius:8px;margin-bottom:10px;overflow:hidden;">
+      ${has ? '<span class="muted">載入中…</span>' : '<span class="muted">—</span>'}
+    </div>
+    <label class="muted" style="display:block;font-size:12px;margin-bottom:6px;">
+      上傳卡面照片（jpg／png／pdf，10MB 以內）
+      <input type="file" id="wpfile_${side}" accept="image/*,application/pdf" style="margin-top:4px;">
+    </label>
+    <label class="muted" style="display:block;font-size:12px;">
+      或貼外部連結（Google Drive、NAS）
+      <input id="wplink_${side}" value="${esc(r[uk] || '')}" placeholder="https://…" style="margin-top:4px;">
+    </label>
+    ${r[pk] ? `<div class="muted" style="font-size:11.5px;margin-top:6px;">已上傳：${esc(r[pk])}</div>` : ''}
+    ${has ? `<button class="del-btn" data-wp-photo-del="${side}" style="margin-top:6px;">移除這一張</button>` : ''}
+  </div>`;
+}
+async function wpPhotoShowImgs(r){
+  for(const side of ['front','back']){
+    const box = document.getElementById('wpimg_' + side);
+    if(!box) continue;
+    const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+    const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+    let url = null;
+    if(r[pk]){
+      try{ url = await wpSignedUrl(r[pk]); }
+      catch(e){ box.innerHTML = '<span class="muted" style="padding:10px;">' + esc(String((e && e.message) || e)) + '</span>'; continue; }
+    }else if(r[uk]){
+      url = r[uk];
+    }
+    if(!url) continue;
+    const isPdf = /\.pdf($|\?)/i.test(r[pk] || r[uk] || '');
+    box.innerHTML = isPdf
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="name-link" style="padding:20px;">開啟 PDF</a>`
+      : `<a href="${esc(url)}" target="_blank" rel="noopener" title="點一下開新視窗看原尺寸">
+           <img src="${esc(url)}" alt="工作證卡面" style="max-width:100%;max-height:300px;display:block;"></a>`;
+  }
+}
+function wpPhotoOpen(id){
+  const r = WP_ROWS.find(x => String(x.permit_id) === String(id));
+  if(!r){ alert('找不到這一張工作證，請重新整理。'); return; }
+  wpPhotoId = r.permit_id;
+  const box = document.getElementById('wpPhotoContent');
+  box.innerHTML = `<h3>${esc(r.site || '')}　${esc(r.name || '')}
+      ${r.permit_no ? '<span class="muted" style="font-weight:400;">　' + esc(r.permit_no) + '</span>' : ''}</h3>
+    <div class="muted" style="margin-bottom:12px;">
+      照片放在不公開的儲存桶，每次開啟都會換一組一小時後失效的網址，沒登入的人看不到。
+      點照片可以開新視窗看原尺寸。
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      ${wpPhotoSlotHtml(r, 'front')}
+      ${wpPhotoSlotHtml(r, 'back')}
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn" id="wpPhotoSave">儲存照片</button>
+      <span class="muted" id="wpPhotoMsg" style="margin-left:10px;"></span>
+    </div>`;
+  document.getElementById('wpPhotoModal').classList.add('show');
+  wpPhotoShowImgs(r);
+}
+function wpPhotoClose(){
+  document.getElementById('wpPhotoModal').classList.remove('show');
+  wpPhotoId = null;
+}
+async function wpPhotoSave(){
+  const r = WP_ROWS.find(x => String(x.permit_id) === String(wpPhotoId));
+  if(!r) return;
+  const msg = document.getElementById('wpPhotoMsg');
+  const body = {};
+  const done = [];
+  for(const side of ['front','back']){
+    const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+    const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+    const fi = document.getElementById('wpfile_' + side);
+    const li = document.getElementById('wplink_' + side);
+    const file = fi && fi.files && fi.files[0];
+    if(file){
+      if(msg) msg.textContent = '正在上傳' + (side === 'front' ? '正面' : '背面') + '…';
+      try{
+        body[pk] = await wpUploadPhoto(r, side, file);
+        done.push((side === 'front' ? '正面' : '背面') + '照片已上傳');
+      }catch(e){
+        if(msg) msg.textContent = '';
+        alert(String((e && e.message) || e));
+        return;
+      }
+    }
+    const link = li ? String(li.value || '').trim() : '';
+    if(link !== String(r[uk] || '')) body[uk] = link || null;
+  }
+  if(!Object.keys(body).length){
+    if(msg) msg.textContent = '沒有要存的東西（沒有選檔案，連結也沒有改）。';
+    return;
+  }
+  try{
+    await wpPatchPhoto(r, body);
+  }catch(e){
+    if(msg) msg.textContent = '';
+    alert('照片資訊沒有存進資料庫。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)
+        + (String((e && e.message) || e).indexOf('photo_path') >= 0
+            ? '\n\n代表 SQL_163 還沒在 Supabase 執行。' : ''));
+    return;
+  }
+  renderPermits();
+  wpPhotoOpen(r.permit_id);        // 重開一次，圖片跟「移除這一張」才會跟著更新
+  const msg2 = document.getElementById('wpPhotoMsg');
+  if(msg2) msg2.textContent = done.concat('已存好').join('；');
+}
+async function wpPhotoRemove(side){
+  const r = WP_ROWS.find(x => String(x.permit_id) === String(wpPhotoId));
+  if(!r) return;
+  const pk = side === 'front' ? 'photo_path' : 'photo_back_path';
+  const uk = side === 'front' ? 'photo_url'  : 'photo_back_url';
+  const label = side === 'front' ? '正面' : '背面';
+  if(!confirm('要把' + label + '照片從這一張工作證上移除嗎？\n\n'
+            + '資料庫裡的連結會清掉。已經上傳到儲存桶的檔案本身不會刪，\n'
+            + '需要真的刪檔請到 Supabase 後台的 Storage。')) return;
+  try{
+    await wpPatchPhoto(r, {[pk]: null, [uk]: null});
+  }catch(e){
+    alert('沒有移除，資料庫沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e));
+    return;
+  }
+  renderPermits();
+  wpPhotoOpen(r.permit_id);
+}
+{
+  const _w = () => {
+    const c = document.getElementById('wpPhotoClose');
+    if(c) c.addEventListener('click', wpPhotoClose);
+    const m = document.getElementById('wpPhotoModal');
+    if(m) m.addEventListener('click', async (e) => {
+      if(e.target === m){ wpPhotoClose(); return; }
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      if(t.id === 'wpPhotoSave'){ await wpPhotoSave(); return; }
+      const rm = t.getAttribute('data-wp-photo-del');
+      if(rm){ await wpPhotoRemove(rm); return; }
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
 }
 
 function wpClearForm(){
@@ -4932,7 +5189,7 @@ async function wpDelete(id){
 }
 function wpCsv(){
   const head = ['廠區','姓名','卡面姓名','工號對應','證號／卡號','條碼號','卡背號碼',
-                '申請公司','我方公司','申請單位','發證日','有效日期','效期','狀態','備註'];
+                '申請公司','我方公司','申請單位','發證日','有效日期','效期','狀態','備註','照片'];
   const kindTxt = {expired: '已過期', soon: '90天內到期', valid: '有效', none: '卡面沒印'};
   const rows = WP_ROWS.slice().sort((a, b) =>
       String(a.site || '').localeCompare(String(b.site || ''), 'zh-Hant')
@@ -4941,7 +5198,8 @@ function wpCsv(){
                r.permit_no, r.barcode_no, r.card_back_no, r.apply_company, r.our_company,
                r.apply_dept, String(r.issue_date || '').slice(0,10),
                String(r.expiry_date || '').slice(0,10), kindTxt[wpExpiryKind(r)],
-               r.card_status || '持有中', r.notes]);
+               r.card_status || '持有中', r.notes,
+               wpPhotoCount(r) ? (wpPhotoCount(r) + ' 張') : '無']);
   return csvLines(head, rows);
 }
 {
@@ -4971,6 +5229,8 @@ function wpCsv(){
       if(t.getAttribute('data-wp-cancel')){ wpEditId = null; renderPermits(); return; }
       const sv = t.getAttribute('data-wp-save');
       if(sv){ await wpSave(sv); return; }
+      const ph = t.getAttribute('data-wp-photo');
+      if(ph){ wpPhotoOpen(ph); return; }
       const dl = t.getAttribute('data-wp-del');
       if(dl){ await wpDelete(dl); return; }
     });
