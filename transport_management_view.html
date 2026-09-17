@@ -411,6 +411,7 @@
       <button data-tab="container">貨櫃運送</button>
       <button data-tab="repair">設備報修</button>
       <button data-tab="trainings">人員証照及訓練</button>
+      <button data-tab="permits">工作證名冊</button>
       <button data-tab="mileage">車輛里程統計</button>
       <button data-tab="workhour">工時統計</button>
       <button data-tab="contacts">通訊錄</button>
@@ -2331,6 +2332,73 @@
       </div>
     </div>
   </div>
+
+      <div id="permits" class="panel">
+        <div class="card no-print">
+          <h2>新增工作證</h2>
+          <div class="muted" style="margin-bottom:10px;">
+            一張卡一列。同一個人在不同廠區有好幾張是正常的，各建一列。
+            卡面沒印效期的（像台積電、晶元光電）有效日期就留空白，不會被當成過期。
+          </div>
+          <div class="form-grid">
+            <label>廠區<input id="wp_site" list="wpSiteList" placeholder="例：台積電" autocomplete="off"></label>
+            <label>人員<select id="wp_emp"></select></label>
+            <label>申請公司<input id="wp_apply_co" list="wpApplyCoList" placeholder="卡面印的那一家" autocomplete="off"></label>
+            <label>我方公司<select id="wp_our_co">
+              <option value="">（空白）</option>
+              <option value="順亞運通">順亞運通</option>
+              <option value="利福運通">利福運通</option>
+            </select></label>
+            <label>申請單位<input id="wp_dept" placeholder="例：廠務一部（選填）"></label>
+            <label>證號／卡號<input id="wp_no" placeholder="卡面上的號碼"></label>
+            <label>條碼號<input id="wp_barcode" placeholder="選填"></label>
+            <label>卡背號碼<input id="wp_backno" placeholder="HID 感應卡那種（選填）"></label>
+            <label>發證日<input id="wp_issue" type="date"></label>
+            <label>有效日期<input id="wp_expiry" type="date"></label>
+            <label>狀態<select id="wp_status">
+              <option value="持有中">持有中</option>
+              <option value="已繳回">已繳回</option>
+              <option value="已遺失">已遺失</option>
+              <option value="已作廢">已作廢</option>
+            </select></label>
+            <label>備註<input id="wp_note" placeholder="例：卡面廠商欄寫「三福_順亞」"></label>
+          </div>
+          <button class="btn" id="wp_add">新增這一張</button>
+          <button class="btn ghost" id="wp_clear">清空欄位</button>
+          <span class="muted" id="wp_msg" style="margin-left:10px;"></span>
+          <datalist id="wpSiteList"></datalist>
+          <datalist id="wpApplyCoList"></datalist>
+        </div>
+
+        <div class="card">
+          <h2>客戶廠區工作證名冊<span class="count-badge" id="wp_count"></span></h2>
+          <div class="muted" id="wp_summary" style="margin-bottom:10px;"></div>
+          <div class="toolbar no-print">
+            <input id="wp_q" placeholder="搜尋姓名／廠區／證號／條碼／備註" style="min-width:250px;" autocomplete="off">
+            <select id="wp_f_site"><option value="all">全部廠區</option></select>
+            <select id="wp_f_status"><option value="all">全部狀態</option></select>
+            <select id="wp_f_expiry">
+              <option value="all">效期不限</option>
+              <option value="expired">已過期</option>
+              <option value="soon">90 天內到期</option>
+              <option value="valid">還有效</option>
+              <option value="none">卡面沒印效期</option>
+            </select>
+            <button class="btn ghost" id="wp_export">匯出 CSV</button>
+            <button class="btn ghost" id="wp_print">列印本頁</button>
+          </div>
+          <div class="table-scroll" style="max-height:620px;">
+            <table style="font-size:12.5px;">
+              <thead><tr>
+                <th>廠區</th><th>姓名</th><th>證號／卡號</th><th>條碼號</th><th>卡背號碼</th>
+                <th>申請公司</th><th>我方</th><th>申請單位</th>
+                <th>發證日</th><th>有效日期</th><th>效期</th><th>狀態</th><th>備註</th><th class="no-print"></th>
+              </tr></thead>
+              <tbody id="wpBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
       <div id="contacts" class="panel">
         <div class="card">
@@ -4541,6 +4609,7 @@ async function loadState(){
 
   await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
   rpLoad();                     // 設備報修單（不 await，讀不到也不要卡住整頁）
+  wpLoad();                     // 客戶廠區工作證（同上；還沒跑 SQL_162 就只是空的）
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
   STATE.adminDeputies = SEED.admin_deputies || [];
@@ -4555,6 +4624,359 @@ async function loadState(){
   //   不重記一次的話，之後每次存檔都會把每一列都當成「有改過」而整份送出去。
   refreshAllBaselines();
   warnDuplicateEmployeeIds();
+}
+
+// ===================== 客戶廠區工作證名冊 =====================
+// 資料表是 SQL_162 建的 work_permits。十個廠區的工作證／門禁卡／承攬商合格證，
+// 原本只有一份 Excel，到期沒人提醒。
+//
+// 刻意不走 saveState／saveRows：那一套是「整表覆蓋，陣列裡沒有的 id 就刪掉」，
+// 115/09 廠商資料被刪就是那樣出來的。這裡一律對單一列發 POST／PATCH／DELETE，
+// 不會牽動別人剛剛新增的資料。
+var WP_ROWS  = [];
+var WP_STATE = 'idle';     // idle / ok / missing / error
+var WP_ERR   = '';
+var wpEditId = null;
+
+async function wpLoad(){
+  try{
+    WP_ROWS = await supaFetch('work_permits?select=*&order=permit_id.asc') || [];
+    WP_STATE = 'ok';
+  }catch(e){
+    WP_ROWS = [];
+    const m = String((e && e.message) || e);
+    // 42P01 = 這張表還不存在，也就是 SQL_162 還沒在 Supabase 執行
+    WP_STATE = (m.indexOf('42P01') >= 0 || m.indexOf('does not exist') >= 0) ? 'missing' : 'error';
+    WP_ERR = m;
+    console.error('工作證名冊讀取失敗', e);
+  }
+  renderPermits();
+}
+
+// 人員下拉：在職排前面，離職的也要留著（工作證常常是離職後才想起要繳回）
+function wpEmpAll(){
+  const seen = new Set();
+  const out = [];
+  (STATE.employees || []).forEach(e => {
+    if(!e || !e.name || seen.has(String(e.id))) return;
+    seen.add(String(e.id));
+    out.push({id: e.id, name: e.name, no: e.employee_no || '', left: false});
+  });
+  (STATE.employeesHistory || []).forEach(e => {
+    if(!e || !e.name || (e.id != null && seen.has(String(e.id)))) return;
+    if(e.id != null) seen.add(String(e.id));
+    out.push({id: e.id, name: e.name, no: e.employee_no || '', left: true});
+  });
+  return out;
+}
+function wpFillEmp(){
+  const sel = document.getElementById('wp_emp');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">（請選人）</option>'
+    + wpEmpAll().map(e => `<option value="${esc(e.id == null ? ('名:' + e.name) : e.id)}">`
+        + esc(e.name + (e.no ? '（' + e.no + '）' : '') + (e.left ? ' ※已離職' : '')) + '</option>').join('');
+  if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+function wpEmpPick(v){
+  const s = String(v || '');
+  if(!s) return null;
+  if(s.indexOf('名:') === 0) return {id: null, name: s.slice(2)};
+  const e = wpEmpAll().find(x => String(x.id) === s);
+  return e ? {id: e.id, name: e.name} : null;
+}
+
+// 效期：卡面沒印有效日期的一律算「沒印效期」，不要當成過期
+function wpDaysLeft(r){
+  const d = String((r && r.expiry_date) || '').slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  return Math.round((new Date(d + 'T00:00:00') - new Date(todayISO() + 'T00:00:00')) / 86400000);
+}
+function wpExpiryKind(r){
+  const n = wpDaysLeft(r);
+  if(n === null) return 'none';
+  if(n < 0) return 'expired';
+  if(n <= 90) return 'soon';
+  return 'valid';
+}
+function wpExpiryPill(r){
+  const n = wpDaysLeft(r);
+  if(n === null) return '<span class="muted">卡面沒印</span>';
+  if(n < 0)  return `<span class="pill red">已過期 ${-n} 天</span>`;
+  if(n <= 90) return `<span class="pill amber">${n} 天後到期</span>`;
+  return `<span class="pill gray">有效</span>`;
+}
+function wpStatusPill(s){
+  const v = s || '持有中';
+  const cls = v === '持有中' ? 'gray' : (v === '已繳回' ? 'amber' : 'red');
+  return `<span class="pill ${cls}">${esc(v)}</span>`;
+}
+function wpMatch(r, q){
+  const kw = String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if(!kw.length) return true;
+  const hay = [r.site, r.name, r.card_name, r.permit_no, r.barcode_no, r.card_back_no,
+               r.apply_company, r.our_company, r.apply_dept, r.notes]
+    .map(x => String(x == null ? '' : x)).join(' ').toLowerCase();
+  return kw.every(k => hay.indexOf(k) >= 0);
+}
+function wpFillSelects(){
+  const sites = [...new Set(WP_ROWS.map(r => r.site).filter(Boolean))].sort();
+  const cos   = [...new Set(WP_ROWS.map(r => r.apply_company).filter(Boolean))].sort();
+  const stats = [...new Set(WP_ROWS.map(r => r.card_status || '持有中'))].sort();
+  const fill = (id, list, all) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="all">${all}</option>`
+      + list.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  };
+  fill('wp_f_site', sites, '全部廠區');
+  fill('wp_f_status', stats, '全部狀態');
+  const dl = (id, list) => {
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = list.map(x => `<option value="${esc(x)}">`).join('');
+  };
+  dl('wpSiteList', sites);
+  dl('wpApplyCoList', cos);
+}
+function wpCell(r, key, ph, w){
+  return wpEditId !== null && String(wpEditId) === String(r.permit_id)
+    ? `<input id="wpe_${key}" value="${esc(r[key] == null ? '' : r[key])}" placeholder="${esc(ph || '')}" style="min-width:${w || 80}px;">`
+    : esc(r[key] == null ? '' : r[key]);
+}
+function wpDateCell(r, key){
+  return wpEditId !== null && String(wpEditId) === String(r.permit_id)
+    ? `<input id="wpe_${key}" type="date" value="${esc(String(r[key] || '').slice(0,10))}" style="min-width:130px;">`
+    : (r[key] ? esc(toROCDate(String(r[key]).slice(0,10))) : '');
+}
+function renderPermits(){
+  const body = document.getElementById('wpBody');
+  if(!body) return;
+  wpFillEmp();
+  wpFillSelects();
+  const q  = (document.getElementById('wp_q') || {}).value || '';
+  const fs = (document.getElementById('wp_f_site') || {}).value || 'all';
+  const ft = (document.getElementById('wp_f_status') || {}).value || 'all';
+  const fe = (document.getElementById('wp_f_expiry') || {}).value || 'all';
+  let rows = WP_ROWS.filter(r =>
+    (fs === 'all' || (r.site || '') === fs) &&
+    (ft === 'all' || (r.card_status || '持有中') === ft) &&
+    (fe === 'all' || wpExpiryKind(r) === fe) &&
+    wpMatch(r, q));
+  const ord = {expired: 0, soon: 1, valid: 2, none: 3};
+  rows.sort((a, b) => (ord[wpExpiryKind(a)] - ord[wpExpiryKind(b)])
+    || String(a.site || '').localeCompare(String(b.site || ''), 'zh-Hant')
+    || String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'));
+
+  const cnt = document.getElementById('wp_count');
+  if(cnt) cnt.textContent = '共 ' + rows.length + ' 張（全部 ' + WP_ROWS.length + ' 張）';
+  const sum = document.getElementById('wp_summary');
+  if(sum){
+    if(WP_STATE === 'missing'){
+      sum.innerHTML = '<span style="color:var(--red);">資料庫裡還沒有 <b>work_permits</b> 這張表 —— '
+        + '請先把 <b>SQL_162_客戶廠區工作證名冊.sql</b> 貼到 Supabase 的 SQL Editor 執行，'
+        + '這一頁就會把 63 張工作證帶出來。</span>';
+    }else if(WP_STATE === 'error'){
+      sum.innerHTML = '<span style="color:var(--red);">工作證名冊讀取失敗：' + esc(WP_ERR)
+        + '<br>這一頁暫時是空的，其他分頁不受影響。</span>';
+    }else{
+      const nExp  = WP_ROWS.filter(r => wpExpiryKind(r) === 'expired').length;
+      const nSoon = WP_ROWS.filter(r => wpExpiryKind(r) === 'soon').length;
+      const nNone = WP_ROWS.filter(r => wpExpiryKind(r) === 'none').length;
+      const nHold = WP_ROWS.filter(r => (r.card_status || '持有中') === '持有中').length;
+      sum.innerHTML = '持有中 <b>' + nHold + '</b> 張；'
+        + '已過期 <b style="color:var(--red);">' + nExp + '</b> 張；'
+        + '90 天內到期 <b>' + nSoon + '</b> 張；'
+        + '卡面沒印效期 ' + nNone + ' 張。'
+        + '　台積電、晶元光電那種卡面沒印效期的，不會被算成過期。要單看快到期的，用右邊的「效期」下拉篩。';
+    }
+  }
+  body.innerHTML = rows.map(r => {
+    const editing = wpEditId !== null && String(wpEditId) === String(r.permit_id);
+    const nameCell = editing
+      ? `<select id="wpe_emp">${wpEmpAll().map(e =>
+          `<option value="${esc(e.id == null ? ('名:' + e.name) : e.id)}"${
+            (String(e.id) === String(r.employee_id) || (r.employee_id == null && e.name === r.name)) ? ' selected' : ''
+          }>${esc(e.name + (e.no ? '（' + e.no + '）' : '') + (e.left ? ' ※已離職' : ''))}</option>`).join('')}</select>`
+      : `<b>${esc(r.name || '')}</b>`
+        + (r.card_name && r.card_name !== r.name
+            ? ` <span class="pill gray" title="卡面印的姓名跟人事資料不一樣">卡面：${esc(r.card_name)}</span>` : '')
+        + (r.employee_id == null
+            ? ` <span class="pill amber" title="對不到人事編號，只留姓名">無工號</span>` : '');
+    const statusCell = editing
+      ? `<select id="wpe_card_status">${['持有中','已繳回','已遺失','已作廢'].map(x =>
+          `<option value="${x}"${(r.card_status || '持有中') === x ? ' selected' : ''}>${x}</option>`).join('')}</select>`
+      : wpStatusPill(r.card_status);
+    const ourCell = editing
+      ? `<select id="wpe_our_company">${['','順亞運通','利福運通'].map(x =>
+          `<option value="${x}"${(r.our_company || '') === x ? ' selected' : ''}>${x || '（空白）'}</option>`).join('')}</select>`
+      : esc(r.our_company || '');
+    const act = editing
+      ? `<button class="name-link" data-wp-save="${esc(r.permit_id)}">儲存</button> `
+        + `<button class="del-btn" data-wp-cancel="1">取消</button>`
+      : `<button class="name-link" data-wp-edit="${esc(r.permit_id)}">修改</button> `
+        + `<button class="del-btn" data-wp-del="${esc(r.permit_id)}">刪除</button>`;
+    return `<tr>
+      <td>${wpCell(r, 'site', '例：台積電', 90)}</td>
+      <td>${nameCell}</td>
+      <td class="c-nw">${wpCell(r, 'permit_no', '', 130)}</td>
+      <td class="c-nw">${wpCell(r, 'barcode_no', '', 110)}</td>
+      <td class="c-nw">${wpCell(r, 'card_back_no', '', 110)}</td>
+      <td>${wpCell(r, 'apply_company', '', 110)}</td>
+      <td>${ourCell}</td>
+      <td>${wpCell(r, 'apply_dept', '', 80)}</td>
+      <td class="c-nw">${wpDateCell(r, 'issue_date')}</td>
+      <td class="c-nw">${wpDateCell(r, 'expiry_date')}</td>
+      <td class="c-nw">${wpExpiryPill(r)}</td>
+      <td>${statusCell}</td>
+      <td>${wpCell(r, 'notes', '', 160)}</td>
+      <td class="no-print" style="white-space:nowrap;">${act}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="14" class="empty">${
+      WP_STATE === 'ok' ? (WP_ROWS.length ? '找不到符合條件的工作證' : '還沒有任何工作證資料')
+                        : '這一頁暫時沒有資料'}</td></tr>`;
+}
+
+function wpClearForm(){
+  ['wp_site','wp_apply_co','wp_dept','wp_no','wp_barcode','wp_backno','wp_issue','wp_expiry','wp_note']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const e = document.getElementById('wp_emp'); if(e) e.value = '';
+  const o = document.getElementById('wp_our_co'); if(o) o.value = '';
+  const s = document.getElementById('wp_status'); if(s) s.value = '持有中';
+  const m = document.getElementById('wp_msg'); if(m) m.textContent = '';
+}
+async function wpAdd(){
+  const v = id => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+  const site = v('wp_site');
+  const who = wpEmpPick(v('wp_emp'));
+  if(!site){ alert('廠區不能空白。'); return; }
+  if(!who){ alert('請先選人員。'); return; }
+  const no = v('wp_no');
+  const dup = WP_ROWS.find(r => (r.site || '') === site && (r.name || '') === who.name
+                             && String(r.permit_no || '') === no);
+  if(dup && !confirm('「' + who.name + '」在「' + site + '」已經有一張同號碼的工作證了。\n\n還是要再建一列嗎？')) return;
+  const body = {
+    site: site, name: who.name, employee_id: who.id == null ? null : who.id,
+    apply_company: v('wp_apply_co') || null, our_company: v('wp_our_co') || null,
+    apply_dept: v('wp_dept') || null, permit_no: no || null,
+    barcode_no: v('wp_barcode') || null, card_back_no: v('wp_backno') || null,
+    issue_date: v('wp_issue') || null, expiry_date: v('wp_expiry') || null,
+    card_status: v('wp_status') || '持有中', notes: v('wp_note') || null
+  };
+  try{
+    const made = await supaFetch('work_permits',
+      { method: 'POST', headers: {'Prefer':'return=representation'}, body: JSON.stringify([body]) });
+    const row = (made && made[0]) || Object.assign({permit_id: 'tmp' + Date.now()}, body);
+    WP_ROWS = WP_ROWS.concat([row]);
+  }catch(e){
+    alert('這一張沒有存進雲端資料庫。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)
+        + (String((e && e.message) || e).indexOf('42P01') >= 0
+            ? '\n\n代表 SQL_162 還沒在 Supabase 執行。' : ''));
+    return;
+  }
+  const q = document.getElementById('wp_q'); if(q) q.value = who.name;
+  wpClearForm();
+  const m = document.getElementById('wp_msg');
+  if(m) m.textContent = '已新增「' + who.name + '」在' + site + '的工作證。';
+  renderPermits();
+}
+async function wpSave(id){
+  const r = WP_ROWS.find(x => String(x.permit_id) === String(id));
+  if(!r){ alert('找不到這一張工作證，請重新整理。'); return; }
+  const g = k => { const el = document.getElementById('wpe_' + k); return el ? String(el.value || '').trim() : ''; };
+  const site = g('site');
+  if(!site){ alert('廠區不能空白。'); return; }
+  const who = wpEmpPick(g('emp')) || {id: r.employee_id, name: r.name};
+  const iss = g('issue_date'), exp = g('expiry_date');
+  if(iss && exp && exp < iss && !confirm('有效日期比發證日還早。\n\n確定就是這樣要存嗎？')) return;
+  const body = {
+    site: site, name: who.name, employee_id: who.id == null ? null : who.id,
+    permit_no: g('permit_no') || null, barcode_no: g('barcode_no') || null,
+    card_back_no: g('card_back_no') || null, apply_company: g('apply_company') || null,
+    our_company: g('our_company') || null, apply_dept: g('apply_dept') || null,
+    issue_date: iss || null, expiry_date: exp || null,
+    card_status: g('card_status') || '持有中', notes: g('notes') || null
+  };
+  try{
+    await supaFetch('work_permits?permit_id=eq.' + encodeURIComponent(r.permit_id),
+      { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
+  }catch(e){
+    alert('這一張沒有存進雲端資料庫，雲端資料沒有變動。\n\n錯誤訊息：'
+        + ((e && e.message) || e) + dbErrorHint(e));
+    return;
+  }
+  Object.assign(r, body);
+  wpEditId = null;
+  renderPermits();
+}
+async function wpDelete(id){
+  const r = WP_ROWS.find(x => String(x.permit_id) === String(id));
+  if(!r){ alert('找不到這一張工作證，請重新整理。'); return; }
+  if(!confirm('要刪掉這一張工作證嗎？\n\n'
+            + '　廠區：' + (r.site || '（空白）') + '\n'
+            + '　姓名：' + (r.name || '（空白）') + '\n'
+            + '　證號：' + (r.permit_no || '（空白）') + '\n\n'
+            + '如果只是卡片繳回或遺失，建議改成用「修改」把狀態改為已繳回／已遺失，\n'
+            + '這樣以後還查得到當初發過這張卡。刪掉就救不回來了。')) return;
+  try{
+    await supaFetch('work_permits?permit_id=eq.' + encodeURIComponent(r.permit_id),
+      { method: 'DELETE', headers: {'Prefer':'return=minimal'} });
+  }catch(e){
+    alert('沒有刪掉，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e));
+    return;
+  }
+  WP_ROWS = WP_ROWS.filter(x => String(x.permit_id) !== String(r.permit_id));
+  wpEditId = null;
+  renderPermits();
+}
+function wpCsv(){
+  const head = ['廠區','姓名','卡面姓名','工號對應','證號／卡號','條碼號','卡背號碼',
+                '申請公司','我方公司','申請單位','發證日','有效日期','效期','狀態','備註'];
+  const kindTxt = {expired: '已過期', soon: '90天內到期', valid: '有效', none: '卡面沒印'};
+  const rows = WP_ROWS.slice().sort((a, b) =>
+      String(a.site || '').localeCompare(String(b.site || ''), 'zh-Hant')
+      || String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'))
+    .map(r => [r.site, r.name, r.card_name || '', r.employee_id == null ? '對不到' : r.employee_id,
+               r.permit_no, r.barcode_no, r.card_back_no, r.apply_company, r.our_company,
+               r.apply_dept, String(r.issue_date || '').slice(0,10),
+               String(r.expiry_date || '').slice(0,10), kindTxt[wpExpiryKind(r)],
+               r.card_status || '持有中', r.notes]);
+  return csvLines(head, rows);
+}
+{
+  const _wire = () => {
+    ['wp_q','wp_f_site','wp_f_status','wp_f_expiry'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.addEventListener('input', renderPermits);
+      if(el) el.addEventListener('change', renderPermits);
+    });
+    const _a = document.getElementById('wp_add');   if(_a) _a.addEventListener('click', wpAdd);
+    const _c = document.getElementById('wp_clear'); if(_c) _c.addEventListener('click', wpClearForm);
+    const _p = document.getElementById('wp_print'); if(_p) _p.addEventListener('click', () => window.print());
+    const _x = document.getElementById('wp_export');
+    if(_x) _x.addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff' + wpCsv()], {type:'text/csv;charset=utf-8;'}));
+      a.download = '客戶廠區工作證名冊_' + todayISO() + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    const _b = document.getElementById('wpBody');
+    if(_b) _b.addEventListener('click', async (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const ed = t.getAttribute('data-wp-edit');
+      if(ed){ wpEditId = ed; renderPermits(); return; }
+      if(t.getAttribute('data-wp-cancel')){ wpEditId = null; renderPermits(); return; }
+      const sv = t.getAttribute('data-wp-save');
+      if(sv){ await wpSave(sv); return; }
+      const dl = t.getAttribute('data-wp-del');
+      if(dl){ await wpDelete(dl); return; }
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wire);
+  else _wire();
 }
 
 // ===== 電動板車預約（唯讀）=====
@@ -14212,6 +14634,7 @@ function renderAll(){
   renderExternalStatusTable();
   renderTrainingLogTable();
   renderContactsAll();
+  renderPermits();
   ['tl_window_note','mh_window_note','wh_window_note'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.textContent = '　' + loadWindowLabel();
