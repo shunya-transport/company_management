@@ -1595,8 +1595,16 @@
     <label class="muted">～ <input id="ts_hs_to" type="date"></label>
     <button class="btn ghost" id="ts_hs_clear">清除</button>
   </div>
+  <style>
+    /* 車牌、板架、單號這些短欄不換行；備註只留一行（滑過去看全文）；操作欄縮到剛好 */
+    table.ts-hist th, table.ts-hist td{ white-space:nowrap; padding-left:10px; padding-right:10px; }
+    table.ts-hist td.ts-note{ white-space:normal; min-width:120px; max-width:220px; }
+    table.ts-hist td:nth-child(3){ white-space:normal; min-width:150px; max-width:190px; }
+    table.ts-hist td.ts-note > div{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    table.ts-hist th:last-child, table.ts-hist td:last-child{ width:1%; }
+  </style>
   <div class="table-scroll">
-    <table>
+    <table class="ts-hist">
       <thead><tr><th>日期</th><th>單號</th><th>輪胎行</th><th>車牌</th><th>板架</th><th>公里數</th><th>輪胎</th><th>金額</th><th>發票號碼</th><th>備註</th><th></th></tr></thead>
       <tbody id="tsHistBody"></tbody>
     </table>
@@ -9727,7 +9735,7 @@ function renderTireOrderHistory(){
       <td class="muted">—</td>
       <td>${(r.cost == null || r.cost === '') ? '—' : '$' + esc(Number(r.cost).toLocaleString())}</td>
       <td>${r.invoice_no ? esc(r.invoice_no) : '<span class="muted">未補</span>'}</td>
-      <td class="muted"><div class="note-1line" title="${esc(o.notes)}">${esc(o.notes)}</div></td>
+      <td class="muted ts-note"><div title="${esc(o.notes)}">${esc(o.notes)}</div></td>
       <td style="white-space:nowrap;"><button class="name-link" data-open-maint="${esc(r.id)}">修改</button>
         <button class="name-link" data-print-maint="${esc(r.id)}">印</button></td>
     </tr>`;
@@ -9744,7 +9752,7 @@ function renderTireOrderHistory(){
       <td>${tsOrderAmount(o) == null ? '—' : '$'+esc(Number(tsOrderAmount(o)).toLocaleString())}
           ${(o.invoice_amount != null && o.invoice_amount !== '') ? '<div class="muted" style="font-size:10px;">依發票</div>' : ''}</td>
       <td>${o.invoice_no ? esc(o.invoice_no) : '<span class="muted">未補</span>'}</td>
-      <td class="muted">${esc(o.notes||'')}</td>
+      <td class="muted ts-note"><div title="${esc(o.notes||'')}">${esc(o.notes||'')}</div></td>
       <td style="white-space:nowrap;"><button class="name-link" data-ts-edit="${esc(o.id)}">修改</button>
         <button class="name-link" data-ts-print="${esc(o.id)}">印維修單</button>
         <button class="del-btn" data-ts-odel="${esc(o.id)}">刪除</button></td>
