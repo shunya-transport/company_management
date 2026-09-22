@@ -21,7 +21,8 @@ function daysLabel(dateStr) {
 // items 需要有 expiryField 指定的日期欄位；renderRow(item) 回傳這筆的 <tr>...</tr> HTML
 // headers 是選填的欄位標題陣列，例如 ['姓名','證照名稱','證照號碼','到期日']，
 // 有給的話每個表格上方會多一列標題，收信的人才知道每一欄是什麼
-function bucketByDate(items, expiryField, renderRow, headers) {
+// word 是選填的，預設「到期」；駕照審驗那一段傳「審驗」，標題才不會寫成「30天內到期」
+function bucketByDate(items, expiryField, renderRow, headers, word = '到期') {
   const buckets = { overdue: [], within30: [], within60: [], within90: [] };
   items.forEach(item => {
     const dateVal = item[expiryField];
@@ -49,9 +50,9 @@ function bucketByDate(items, expiryField, renderRow, headers) {
 
   return (
     sectionHtml('🔴 已逾期', buckets.overdue, '#B3261E') +
-    sectionHtml('🟠 30天內到期', buckets.within30, '#9C6B00') +
-    sectionHtml('🟡 31~60天內到期', buckets.within60, '#9C8B00') +
-    sectionHtml('🟢 61~90天內到期', buckets.within90, '#4a7d3f')
+    sectionHtml(`🟠 30天內${word}`, buckets.within30, '#9C6B00') +
+    sectionHtml(`🟡 31~60天內${word}`, buckets.within60, '#9C8B00') +
+    sectionHtml(`🟢 61~90天內${word}`, buckets.within90, '#4a7d3f')
   );
 }
 

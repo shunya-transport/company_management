@@ -17,7 +17,7 @@ const MAINTENANCE_STANDARDS = require('./maintenance_standards.json');
 async function main() {
   console.log('開始檢查車輛／板架／保養／證照到期狀況...', todayISO());
 
-  const [leases, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes] = await Promise.all([
+  const [leases, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes, licences] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
@@ -26,10 +26,12 @@ async function main() {
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'maintenance_schedules?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employee_trainings?no_expiry=eq.false&select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name,status,birth_date'),
     // 證照名稱存在 training_types 這張對照表，employee_trainings 只存 type_id，
     // 沒撈這張表的話信裡只會有證照號碼，看不出是危運、六小時還是堆高機
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'training_types?select=type_id,type_name'),
+    // 駕照：審驗日（inspection_date）與到期日（expiry_date）分開存，兩種都提醒（SQL_169）
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'driver_licenses?select=*'),
   ]);
 
   const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v]));
@@ -96,8 +98,15 @@ async function main() {
   </tr>`, ['板架車號', '出租狀態', '文件類型', '到期日', '剩餘天數']);
 
   // ---------- 3. 人員證照到期 ----------
+  // 駕照改由下面「駕照審驗／換照」那兩段提醒（看駕照資料），外訓表的駕照列就不重複列
+  const normLic = n => String(n || '').trim().replace(/駕照$/, '').replace(/^(職業)+/, '職業').trim();
+  const hasLicence = new Set(licences.map(d => d.employee_id + '|' + normLic(d.license_type)));
   const certItems = trainings
     .filter(t => t.expiry_date)
+    .filter(t => {
+      const n = String(trainingTypeById[t.type_id] || '').trim();
+      return !(/駕照$/.test(n) && hasLicence.has(t.employee_id + '|' + normLic(n)));
+    })
     .map(t => ({
       ...t,
       employee_name: employeeById[t.employee_id] || '',
@@ -107,6 +116,36 @@ async function main() {
   const certHtml = bucketByDate(certItems, 'expiry_date', t => `<tr>
     <td>${t.employee_name}</td><td><b>${t.type_name}</b></td><td>${t.expiry_date}</td><td>${daysLabel(t.expiry_date)}</td>
   </tr>`, ['姓名', '證照／訓練名稱', '到期日', '剩餘天數']);
+
+  // ---------- 3b. 駕照審驗／換照（只看在職） ----------
+  // 職業駕照有效期 6 年，第 3 年要審驗；年滿 60 歲每年審驗（附體檢）。
+  // inspected_on（審驗完成日）有填、而且不早於審驗日前 60 天，就算辦完了，不再提醒。
+  const d10 = v => { const s = String(v || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; };
+  const empById = Object.fromEntries(employees.map(e => [e.employee_id, e]));
+  const ageOf = (e) => {
+    const b = d10(e && e.birth_date); if (!b) return null;
+    const t = todayISO();
+    return Number(t.slice(0, 4)) - Number(b.slice(0, 4)) - (t.slice(5) < b.slice(5) ? 1 : 0);
+  };
+  const activeLic = licences
+    .filter(d => (empById[d.employee_id] || {}).status === '在職')
+    .map(d => {
+      const e = empById[d.employee_id] || {};
+      const age = ageOf(e);
+      const insp = d10(d.inspection_date), exp = d10(d.expiry_date), on = d10(d.inspected_on);
+      const done = !!(insp && on && daysUntil(on) - daysUntil(insp) >= -60);
+      return { name: e.name || '', kind: normLic(d.license_type), age, insp, exp, done,
+               old60: age != null && age >= 60 };
+    });
+  const licInspItems = activeLic.filter(x => x.insp && x.exp && x.insp < x.exp && !x.done);
+  const licExpItems = activeLic.filter(x => x.exp);
+  const ageTag = x => x.old60 ? `<br><span style="color:#888;">${x.age} 歲：每年審驗＋體檢</span>` : '';
+  const licInspHtml = bucketByDate(licInspItems, 'insp', x => `<tr>
+    <td>${x.name}</td><td><b>${x.kind}</b></td><td>${x.insp}</td><td>${daysLabel(x.insp).replace('到期', '')}</td><td>${x.exp}</td>
+  </tr>`, ['姓名', '駕照類別', '審驗日', '剩餘天數', '有效期（到期日）'], '要審驗');
+  const licExpHtml = bucketByDate(licExpItems, 'exp', x => `<tr>
+    <td>${x.name}</td><td><b>${x.kind}</b></td><td>${x.exp}</td><td>${daysLabel(x.exp)}</td><td>${x.old60 && x.insp === x.exp && !x.done ? '審驗（每年）' : '換照'}${ageTag(x)}</td>
+  </tr>`, ['姓名', '駕照類別', '到期日', '剩餘天數', '要辦']);
 
   // ---------- 4. 車輛保養（里程制，不適用90/60/30天分段，改用剩餘里程判斷） ----------
   const latestMileage = {};
@@ -227,6 +266,8 @@ async function main() {
   const totalCount = leaseItems.filter(l => daysUntil(l.lease_end_date) <= 90).length
     + allDocItems.filter(d => daysUntil(d.expiry_date) <= 90).length
     + certItems.filter(t => daysUntil(t.expiry_date) <= 90).length
+    + licInspItems.filter(x => daysUntil(x.insp) <= 90).length
+    + licExpItems.filter(x => daysUntil(x.exp) <= 90).length
     + vehicleMaintRows.length + trailerMaintRows.length
     + grease.vehicle.length + grease.trailer.length
     + axle.vehicle.length + axle.trailer.length;
@@ -265,7 +306,11 @@ async function main() {
     if (leaseHtml) html += `<h3 ${bar}>📋 板架出租合約到期</h3>${leaseHtml}`;
   }
 
-  if (certHtml) html += `<h2 ${groupBar}>🎓 人員</h2><h3 ${bar}>🎓 人員證照到期</h3>${certHtml}`;
+  if (certHtml || licInspHtml || licExpHtml) html += `<h2 ${groupBar}>🎓 人員</h2>`;
+  if (licExpHtml) html += `<h3 ${bar}>🪪 駕照到期（要換照）</h3>${licExpHtml}`;
+  if (licInspHtml) html += `<h3 ${bar}>🪪 駕照審驗</h3>
+    <p style="font-family:sans-serif;font-size:13px;margin:6px 0;color:#555;">審驗日前後一個月內要去監理站辦，逾期一年以上駕照會被註銷。辦完請到儀表板總覽的「駕照審驗／到期提醒」按「已審驗」，下次就不會再寄。</p>${licInspHtml}`;
+  if (certHtml) html += `<h3 ${bar}>🎓 人員證照到期</h3>${certHtml}`;
   html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號、15號寄送，資料來源：順亞運通車隊儀表板。人員體檢、儀器校正與車輛保險在另一份「其餘物品」通知信裡。</p>`;
 
   const recipients = NOTIFY_EMAIL.split(',').map(s => s.trim()).filter(Boolean);
