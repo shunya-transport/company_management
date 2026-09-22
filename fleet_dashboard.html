@@ -6925,8 +6925,13 @@ function renderTrainingTable(){
       : `<button class="name-link" data-edit-ext="${t.id}">修改</button> <button class="del-btn" data-del-training="${t.id}">刪除</button>`;
     return `<tr>
       <td>${esc(t.employee_name)}${t.employee_left ? ' <span class="pill gray">已離職</span>' : ''}</td>
-      <td><span class="clip-item" title="${esc(t.type_name||'')}">${esc(t.type_name)}</span></td>
-      <td><span class="clip-cert" title="${esc(t.cert_no||'')}">${esc(t.cert_no||'')}</span></td>
+      <td>${editing
+        ? `<select id="ext_type_${t.id}" style="width:190px;">${
+            trainingTypeOptions(t.type_id).replace('value="' + t.type_id + '"', 'value="' + t.type_id + '" selected')}</select>`
+        : `<span class="clip-item" title="${esc(t.type_name||'')}">${esc(t.type_name)}</span>`}</td>
+      <td>${editing
+        ? `<input type="text" id="ext_cert_${t.id}" value="${esc(t.cert_no||'')}" style="width:150px;">`
+        : `<span class="clip-cert" title="${esc(t.cert_no||'')}">${esc(t.cert_no||'')}</span>`}</td>
       <td>${issueCell}</td>
       <td>${expiryCell}</td>
       <td>${certStatusPill(t)}</td>
@@ -18625,6 +18630,20 @@ document.getElementById('trainingTableBody').addEventListener('click', async (e)
       const _nx = noExp ? null : (document.getElementById('ext_exp_'+saveId).value || null);
       // 擋在寫進雲端之前。不硬性禁止，但要按第二次才會過，避免民國年打成西元年默默存下去。
       if(!certDateOK(_ni, _nx, (rec.employee_name || '') + ' 的「' + (rec.type_name || '') + '」')) return;
+      // 訓練項目與證書字號也可以改（例如駕照類別掛錯、危運證掛到駕照底下）
+      const _tsel = document.getElementById('ext_type_' + saveId);
+      const _nt = _tsel ? parseInt(_tsel.value, 10) : rec.type_id;
+      if(_nt && String(_nt) !== String(rec.type_id)){
+        const _ty = (STATE.trainingTypes || []).find(x => String(x.id) === String(_nt));
+        const _dup = (STATE.trainings || []).find(x => x !== rec
+          && String(x.employee_id) === String(rec.employee_id) && String(x.type_id) === String(_nt));
+        if(_dup && !confirm((rec.employee_name || '') + ' 已經有一筆「' + ((_ty && _ty.name) || '') + '」'
+             + '（到期 ' + (_dup.expiry_date || '未填') + '）。\n改過去會變成兩筆，確定要改嗎？')) return;
+        rec.type_id = _nt;
+        rec.type_name = _ty ? (ttLicKind(_ty.name) ? ttLicKind(_ty.name) + '駕照' : _ty.name) : rec.type_name;
+      }
+      const _cin = document.getElementById('ext_cert_' + saveId);
+      if(_cin){ rec.cert_no = _cin.value.trim(); rec.certificate_no = rec.cert_no || null; }
       rec.issue_date = _ni;
       rec.no_expiry = noExp ? 1 : 0;
       // 暫不外訓不會把到期日清掉，之後恢復外訓還看得到原本卡在哪一天
