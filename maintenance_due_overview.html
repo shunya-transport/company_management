@@ -195,19 +195,32 @@ function computeRow(s, plate, yard, curMileage){
   }
 }
 
+// 分頁讀取：Supabase 一次最多回 1000 筆，里程紀錄已經超過 1000 筆，不分頁會被截掉
+async function sgetAll(path){
+  let out=[];
+  for(let from=0; from<1000000; from+=1000){
+    const r=await authFetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:{apikey:SUPABASE_KEY, Authorization:'Bearer '+(AUTH_TOKEN||SUPABASE_KEY), 'Range-Unit':'items', Range:`${from}-${from+999}`}});
+    if(r.status===416) break;
+    if(!r.ok) throw new Error(path+' '+r.status);
+    const rows=await r.json(); out=out.concat(rows);
+    if(rows.length<1000) break;
+  }
+  return out;
+}
 async function load(){
   try{
     const [sched, vehicles, mlogs] = await Promise.all([
-      sget('maintenance_schedules?select=*'),
-      sget('vehicles?select=vehicle_id,plate_number,base_location'),
-      sget('vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc')
+      sgetAll('maintenance_schedules?select=*'),
+      sget('vehicles?select=vehicle_id,plate_number,base_location,status,current_mileage'),
+      sgetAll('vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc')
     ]);
     const vById={}; vehicles.forEach(v=>vById[v.vehicle_id]=v);
     const latestMileage={};
     mlogs.forEach(m=>{ if(!(m.vehicle_id in latestMileage)) latestMileage[m.vehicle_id]=m.mileage; });
-    ROWS = sched.map(s=>{
+    // 報廢、繳銷的車不列（跟儀表板一樣）
+    ROWS = sched.filter(s=>{ const v=vById[s.vehicle_id]; return !(v && (v.status==='報廢' || v.status==='繳銷')); }).map(s=>{
       const v=vById[s.vehicle_id]||{};
-      return computeRow(s, v.plate_number||('車#'+s.vehicle_id), v.base_location||'—', latestMileage[s.vehicle_id] ?? null);
+      return computeRow(s, v.plate_number||('車#'+s.vehicle_id), v.base_location||'—', latestMileage[s.vehicle_id] ?? v.current_mileage ?? null);
     });
     // 填車場、項目下拉
     const yards=[...new Set(ROWS.map(r=>r.yard).filter(Boolean))].sort();

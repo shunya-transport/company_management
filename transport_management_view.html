@@ -4663,10 +4663,26 @@ async function loadState(){
   STATE.trainingTypes = SEED.training_types;
   STATE.internalTrainings = SEED.internal_trainings || [];
   STATE.insuranceMonthly = SEED.insurance_monthly || [];
+  // 勞健保月報改讀雲端 insurance_monthly_records（內建那份只到 115/07、690 筆，雲端有 2,500 多筆）。
+  // 身分證字號、生日不撈；讀不到才沿用內建。
+  try{
+    const _imCols = 'record_id,year_roc,month,account_type,name,employee_no,region,company_name,dept_name,position_name,'
+      + 'insured_date,labor_insured_amount,injury_insured_amount,pension_insured_amount,health_insured_amount,dependents_count,'
+      + 'employer_labor_general,employer_labor_injury,employer_health,employer_pension,personal_labor,personal_health,'
+      + 'labor_rate,employment_rate,health_rate,injury_rate,employee_id';
+    const _im = await supaFetchAll('insurance_monthly_records?select=' + _imCols + '&order=year_roc.desc,month.desc,record_id.asc');
+    if(_im && _im.length) STATE.insuranceMonthly = _im;
+  }catch(e){ console.error('insurance_monthly_records 讀取失敗，改用內建', e); }
   STATE.internalTrainingTypes = SEED.internal_training_types || [];
   STATE.docItems = SEED.doc_items || [];
   STATE.maintenanceStandards = SEED.maintenance_standards || [];
   STATE.equipmentTypes = SEED.equipment_types || [];
+  // 配備類型改讀雲端（跟運輸行政管理資料庫一樣）。內建清單是舊的，編號跟雲端可能對不上，
+  // 在另一支新增的類型這裡也看不到。讀不到才沿用內建。
+  try{
+    const _eq = await supaFetch('equipment_types?select=*&order=type_id.asc');
+    if(_eq && _eq.length) STATE.equipmentTypes = _eq.map(r => ({...r, id: r.type_id}));
+  }catch(e){ console.error('equipment_types 讀取失敗，改用內建清單', e); }
   // 貨櫃檢查表：司機用 container_inspection.html 填的，這裡只讀不寫。
   // 還沒跑 SQL #78 的話會讀失敗，畫面上會顯示提示，不影響其他分頁。
   STATE.annualLeaveTiers = SEED.annual_leave_tiers || [];

@@ -4739,6 +4739,16 @@ async function loadState(){
   STATE.trainingTypes = SEED.training_types;
   STATE.internalTrainings = SEED.internal_trainings || [];
   STATE.insuranceMonthly = SEED.insurance_monthly || [];
+  // 勞健保月報改讀雲端 insurance_monthly_records（內建那份只到 115/07、690 筆，雲端有 2,500 多筆）。
+  // 身分證字號、生日不撈；讀不到才沿用內建。
+  try{
+    const _imCols = 'record_id,year_roc,month,account_type,name,employee_no,region,company_name,dept_name,position_name,'
+      + 'insured_date,labor_insured_amount,injury_insured_amount,pension_insured_amount,health_insured_amount,dependents_count,'
+      + 'employer_labor_general,employer_labor_injury,employer_health,employer_pension,personal_labor,personal_health,'
+      + 'labor_rate,employment_rate,health_rate,injury_rate,employee_id';
+    const _im = await supaFetchAll('insurance_monthly_records?select=' + _imCols + '&order=year_roc.desc,month.desc,record_id.asc');
+    if(_im && _im.length) STATE.insuranceMonthly = _im;
+  }catch(e){ console.error('insurance_monthly_records 讀取失敗，改用內建', e); }
   STATE.internalTrainingTypes = SEED.internal_training_types || [];
   STATE.docItems = SEED.doc_items || [];
   STATE.maintenanceStandards = SEED.maintenance_standards || [];
@@ -5728,6 +5738,11 @@ function vehicleCompanyWarn(n){
 const EQT_CAT_BASE = ['識別證件','鑰匙門禁','防護用具','通訊設備','制服類','鞋類',
                      '車輛安全配備','儀器設備','其他'];
 // 真的去雲端讀；讀不到（表不存在、沒權限）才退回內建清單，不要讓整頁掛掉
+// 急救箱原本寫死 type_id 37（本機備份的編號），改成看名稱，雲端編號不同也認得
+function isMedkitType(id){
+  const t = (STATE.equipmentTypes || []).find(x => String(x.id) === String(id) || String(x.type_id) === String(id));
+  return t ? /急救箱|醫藥箱/.test(String(t.name || '')) : String(id) === '37';
+}
 async function loadEquipTypes(){
   try{
     const rows = await supaFetch('equipment_types?select=*&order=type_id.asc');
@@ -9621,7 +9636,7 @@ function etItemsOf(src){
   etRowsOf(vid).forEach(x => out.push({
     kind:'ve', ref:x.id, type_id:x.type_id, name: etTypeName(x.type_id),
     detail: x.item_detail || '', have: etQty(x), expiry:null, row:x,
-    medkit: (x.type_id === 37) ? STATE.medicalKitItems.filter(m => m.vehicle_id === vid).length : 0
+    medkit: isMedkitType(x.type_id) ? STATE.medicalKitItems.filter(m => m.vehicle_id === vid).length : 0
   }));
   STATE.vehicleDocuments.filter(d => d.vehicle_id === vid && ET_DOC_TYPES[d.doc_type]).forEach(d => out.push({
     kind:'vd', ref:d.id, type_id: ET_DOC_TYPES[d.doc_type], name: d.doc_type,
@@ -9713,7 +9728,7 @@ function renderEtPick(){
       detail += it.expiry ? '　<span class="muted">檢驗到期 ' + esc(it.expiry) + '</span>'
                           : '　<span class="muted">到期日未填</span>';
     }
-    if(it.kind === 've' && it.type_id === 37 && it.medkit){
+    if(it.kind === 've' && isMedkitType(it.type_id) && it.medkit){
       detail += '　<span class="muted">含內容物 ' + it.medkit + ' 項，會跟著箱子走</span>';
     }
     if(fromStock && ET_DOC_TYPES[it.name]){
@@ -9813,7 +9828,7 @@ async function etRun(){
       }
       touched.ve = true;
       // 醫藥箱：箱子整個離開這台車，裡面的東西跟著走
-      if(it.type_id === 37 && src.quantity === 0){
+      if(isMedkitType(it.type_id) && src.quantity === 0){
         const mk = STATE.medicalKitItems.filter(m => m.vehicle_id === fromId);
         if(mk.length){
           payload = { medkit: mk.map(m => ({ item_name:m.item_name, quantity:m.quantity,

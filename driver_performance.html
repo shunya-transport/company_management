@@ -545,10 +545,24 @@ function msg(id, t, bad){ const el=document.getElementById(id); if(!el) return; 
 function warn(t){ const el=document.getElementById('pf_warn'); if(el){ el.innerHTML=t||''; } }
 
 // ---------- 資料層 ----------
+// Supabase 一次最多回 1000 筆，超過會被默默截掉：沒指定 limit 的查詢就一頁一頁抓完
 async function sbGet(path){
-  const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {headers:{'Prefer':'count=exact'}});
-  if(!res.ok) throw new Error(await res.text());
-  return res.json();
+  if(/[?&]limit=/.test(path)){
+    const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`, {headers:{'Prefer':'count=exact'}});
+    if(!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+  let out = [];
+  for(let from = 0; from < 1000000; from += 1000){
+    const res = await authFetch(`${SUPABASE_URL}/rest/v1/${path}`,
+      {headers:{'Prefer':'count=exact', 'Range-Unit':'items', 'Range': from + '-' + (from + 999)}});
+    if(res.status === 416) break;
+    if(!res.ok) throw new Error(await res.text());
+    const rows = await res.json();
+    out = out.concat(rows);
+    if(rows.length < 1000) break;
+  }
+  return out;
 }
 async function sbInsert(table, row){
   const res = await authFetch(`${SUPABASE_URL}/rest/v1/${table}`,
