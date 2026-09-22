@@ -4678,6 +4678,13 @@ async function loadState(){
   STATE.driverLicenses = await supaFetch(
     'driver_licenses?select=*&order=license_id.asc'
   ).catch(() => []) || [];
+  // 外訓項目改讀雲端（跟運輸行政管理資料庫一樣）。原本讀的是檔案裡寫死的舊清單，
+  // 編號跟雲端對不上，新增的項目（大貨車駕照、危運證…）也不會出現，兩邊看到的項目名稱就不一樣。
+  // 撈不到才沿用舊清單，寧可顯示舊的也不要把下拉弄成空的。
+  try{
+    const _tt = await supaFetch('training_types?select=*&order=type_id.asc');
+    if(_tt && _tt.length) STATE.trainingTypes = _tt.map(r => Object.assign({}, r, { id: r.type_id, name: r.type_name }));
+  }catch(e){ /* 沿用 SEED */ }
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
   STATE.adminDeputies = SEED.admin_deputies || [];
