@@ -2753,6 +2753,15 @@
     </div>
 
     <div id="printArea"></div>
+
+    <div class="card no-print" style="margin-top:18px;">
+      <h2>表單清單管理<span class="count-badge" id="fh_count"></span></h2>
+      <div class="muted" style="margin-bottom:8px;">不用的表單按「刪除」就會從上面的「表單類型」清單拿掉，按「還原」可以拿回來。<span id="fh_note"></span></div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table><thead><tr><th>表單</th><th style="width:90px;">狀態</th><th style="width:80px;"></th></tr></thead>
+        <tbody id="fhBody"></tbody></table>
+      </div>
+    </div>
   </div>
 </div>
     </div>
@@ -4768,6 +4777,7 @@ async function loadState(){
 
   await loadOrgRefs();          // 部門／職稱／公司別的名稱→編號對照，存檔要用
   await ttLoadTypes();         // 內外訓項目：改成讀雲端，撈不到才沿用 SEED
+  fhLoad();                    // 表單清單：哪些表單被刪掉（隱藏）了
   STATE.adminVendors = SEED.admin_vendors || [];
   STATE.adminCustomers = SEED.admin_customers || [];
   STATE.adminDeputies = SEED.admin_deputies || [];
@@ -12046,6 +12056,94 @@ function osResignApp(e){
     + osT(222.3, 500.1, 15.1, e.address, OS_KAI)
     + osTC(284.7, 233.6, 15.1, osRoc(e.resign_date), OS_KAI);
   return osPage('resignapp', 0, marks, p1) + osPage('resignapp', 1, null, p2);
+}
+
+
+// ===== 表單清單管理：不用的表單從「表單類型」下拉刪掉（隱藏），隨時可以還原 =====
+// 存在雲端 app_settings（key = form_hidden_types），大家看到的清單一致；
+// 還沒跑 SQL_179 建表的話，先存在這台電腦的瀏覽器裡。
+const FH_KEY = 'form_hidden_types';
+let FH_HIDDEN = [], FH_ALL = null, FH_CLOUD = false;
+function fhCaptureAll(){
+  if(FH_ALL) return;
+  const sel = document.getElementById('form_type');
+  FH_ALL = sel ? [...sel.options].map(o => ({v: o.value, t: o.textContent})) : [];
+}
+function fhApply(){
+  fhCaptureAll();
+  const sel = document.getElementById('form_type');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = FH_ALL.filter(o => FH_HIDDEN.indexOf(o.v) < 0)
+    .map(o => `<option value="${esc(o.v)}">${esc(o.t)}</option>`).join('');
+  if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else sel.dispatchEvent(new Event('change'));
+  renderFhCard();
+}
+async function fhLoad(){
+  try{
+    const r = await supaFetch('app_settings?key=eq.' + FH_KEY + '&select=value');
+    FH_CLOUD = true;
+    if(r && r[0] && Array.isArray(r[0].value)) FH_HIDDEN = r[0].value;
+  }catch(e){
+    FH_CLOUD = false;
+    try{ FH_HIDDEN = JSON.parse(localStorage.getItem(FH_KEY) || '[]') || []; }catch(_){ FH_HIDDEN = []; }
+  }
+  fhApply();
+}
+async function fhSave(){
+  if(FH_CLOUD){
+    try{
+      await supaFetch('app_settings?on_conflict=key', {method: 'POST',
+        headers: {'Prefer': 'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify([{key: FH_KEY, value: FH_HIDDEN}])});
+      return true;
+    }catch(e){
+      alert('沒有存進雲端。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e));
+      return false;
+    }
+  }
+  try{ localStorage.setItem(FH_KEY, JSON.stringify(FH_HIDDEN)); }catch(_){}
+  return true;
+}
+function renderFhCard(){
+  const body = document.getElementById('fhBody');
+  if(!body || !FH_ALL) return;
+  const shown = FH_ALL.filter(o => FH_HIDDEN.indexOf(o.v) < 0);
+  const hidden = FH_ALL.filter(o => FH_HIDDEN.indexOf(o.v) >= 0);
+  const cnt = document.getElementById('fh_count');
+  if(cnt) cnt.textContent = `使用中 ${shown.length}　已刪除 ${hidden.length}`;
+  const note = document.getElementById('fh_note');
+  if(note) note.textContent = FH_CLOUD ? '' : '（雲端還沒建 app_settings 表，目前只存在這台電腦；跑 SQL_179 之後大家就會一致）';
+  body.innerHTML = shown.map(o => `<tr><td>${esc(o.t)}</td><td><span class="pill green">使用中</span></td>
+      <td style="white-space:nowrap;"><button class="del-btn" data-fh-del="${esc(o.v)}">刪除</button></td></tr>`).join('')
+    + hidden.map(o => `<tr style="opacity:.6;"><td>${esc(o.t)}</td><td><span class="pill gray">已刪除</span></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-fh-back="${esc(o.v)}">還原</button></td></tr>`).join('');
+}
+{
+  const _w = () => {
+    const b = document.getElementById('fhBody');
+    if(!b) return;
+    b.addEventListener('click', async (ev) => {
+      const t = ev.target;
+      if(!t || !t.getAttribute) return;
+      const d = t.getAttribute('data-fh-del'), r = t.getAttribute('data-fh-back');
+      if(!d && !r) return;
+      const name = ((FH_ALL || []).find(o => o.v === (d || r)) || {}).t || '';
+      if(d){
+        if(FH_ALL.filter(o => FH_HIDDEN.indexOf(o.v) < 0).length <= 1){ alert('至少要留一張表單。'); return; }
+        if(!confirm('要把「' + name + '」從表單類型清單刪掉嗎？\n\n只是不顯示，隨時可以在這裡按「還原」拿回來。')) return;
+        FH_HIDDEN = FH_HIDDEN.concat([d]);
+      }else{
+        FH_HIDDEN = FH_HIDDEN.filter(x => x !== r);
+      }
+      const old = FH_HIDDEN;
+      if(!(await fhSave())){ FH_HIDDEN = d ? old.filter(x => x !== d) : old.concat([r]); }
+      fhApply();
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
 }
 
 // ===================== 證明書／同意書套印 =====================
