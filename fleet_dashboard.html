@@ -11474,6 +11474,13 @@ function toast2(id, msg){
 
 // ---------- 四張薪資表單 ----------
 // 選案件而不是選人：一個人可能同時有好幾件（違規罰款＋生活補助預支）。
+// 沒選案件（空白表單）時，改用上面「人員」選的那個人帶入姓名、身分證、住址這些基本資料
+function pcFormEmp(){
+  const v = (document.getElementById('form_emp') || {}).value;
+  if(!v) return null;
+  return (STATE.employees || []).find(x => String(x.id) === String(v))
+      || (STATE.employeesHistory || []).find(x => String(x.id) === String(v)) || null;
+}
 function pcFormCase(){
   const v = extraVal('ex_case');
   if(!v) return null;
@@ -11544,7 +11551,7 @@ function pcNoticeHead(c, e, word){
 function buildPayrollNotice(kind){
   const word = kind === '發款' ? '發款' : '扣款';
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   const total = c ? fmt2(c.total_amount) : '';
   const cond = c
     ? (c.pay_mode === '分期'
@@ -11580,7 +11587,7 @@ function buildPayrollNotice(kind){
 }
 function buildPayrollConsent(){
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   const co = fmCoOf(e || {});
   const mark = t => (c && c.reason_type === t) ? '■' : '□';
   const amt = c ? fmt2(c.total_amount) : '＿＿＿＿';
@@ -11626,7 +11633,7 @@ function buildPayrollConsent(){
 // 最低服務年限獎金：比例扣還對照表原本要查表，這裡照總額與年限自動算
 function buildMinServiceBonus(){
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   const co = fmCoOf(e || {});
   const total = c ? (Number(c.total_amount) || 0) : 0;
   const months = c ? (Number(c.min_service_months) || 0) : 0;
@@ -11937,7 +11944,7 @@ function osCaseMarks(c){
 // ---------- 薪資扣發同意書（一） ----------
 function osConsent1(){
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   const co = fmCoOf(e || {});
   const k = osReasonKey(c);
   const amt = c ? osNum(c.total_amount) : '';
@@ -11966,7 +11973,7 @@ function osConsent1(){
 // ---------- 薪資扣發同意書（二）（利福運輸集團，四家公司勾選）----------
 function osConsent2(){
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   const co = fmCoOf(e || {});
   const k = osReasonKey(c);
   const amt = c ? osNum(c.total_amount) : '';
@@ -12000,7 +12007,7 @@ function osConsent2(){
 const OS_DAXIE = '零壹貳參肆伍陸柒捌玖';
 function osAuth(){
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   let add = osVTop(507.4, 582, c ? (c.case_no || '') : '', 13.4, 17.2);
   const amt = c ? Math.round(Number(c.total_amount) || 0) : 0;
   if(amt > 0 && amt < 10000000){
@@ -12015,7 +12022,7 @@ function osAuth(){
 // ---------- 員工薪資扣發通知單暨扣薪明細 ----------
 function osNotice(){
   const c = pcFormCase();
-  const e = c ? pcEmpOf(c.employee_id) : null;
+  const e = c ? pcEmpOf(c.employee_id) : pcFormEmp();
   const k = osReasonKey(c);
   const r = String((c && c.reason_type) || '');
   const mk = {'作業': k === '作業上之', '客戶': k === '違反客戶', '交通': k === '違反道路',
