@@ -1084,6 +1084,7 @@
         <label>證書字號<input id="tf_cert" placeholder="選填"></label>
         <label>發證日期<input id="tf_issue" type="date"></label>
         <label>到期日<input id="tf_exp" type="date"></label>
+        <label id="tf_insp_wrap" style="display:none;">審驗日（照駕照正本；空白＝到期日前 3 年）<input id="tf_insp" type="date"></label>
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);margin:2px 0 14px;">
         <input type="checkbox" id="tf_no_expiry" style="width:auto;"> 此證照無到期日（長期有效）
@@ -6845,6 +6846,46 @@ async function dlNewEt(key){
 }
 // 在外訓證照總表改完駕照那幾列之後，問要不要一起更新駕照資料。
 // 不自動改 —— 使用者可能只是先把外訓表填對，還沒確認駕照正本。
+
+// 新增受訓紀錄選的是駕照：存完順便把「駕照資料」建好／更新（審驗、換照提醒看的是駕照資料）。
+// 審驗日照駕照正本填；沒填就用到期日往前 3 年（年滿 60 歲＝到期日，每年審驗）。
+async function dlSyncFromCert(rec, insp){
+  if(!rec || !dlIsLicenceCert(rec)) return;
+  const kind = dlKindOfType(rec.type_name);
+  const exp = dlD(rec.expiry_date);
+  const body = {
+    license_type: kind,
+    license_number: dlN(rec.cert_no || rec.certificate_no) || null,
+    issue_date: dlD(rec.issue_date) || null,
+    expiry_date: exp || null,
+    inspection_date: dlD(insp) || dlInspFor(rec.employee_id, exp) || null,
+    inspected_on: null
+  };
+  const mine = (STATE.driverLicenses || []).filter(d => String(d.employee_id) === String(rec.employee_id));
+  const dl = mine.find(d => dlN(d.license_type) === kind) || mine[0];   // 升等換類別（大貨車→聯結車）就改原本那筆
+  try{
+    if(dl){
+      await dlWriteDl(dl, body);
+    }else{
+      const row = Object.assign({employee_id: rec.employee_id, notes: '由新增受訓紀錄建立'}, body);
+      const made = await supaFetch('driver_licenses',
+        {method: 'POST', headers: {'Prefer': 'return=representation'}, body: JSON.stringify([row])});
+      STATE.driverLicenses = (STATE.driverLicenses || []).concat([(made && made[0]) || row]);
+    }
+  }catch(e){
+    alert('外訓紀錄已經存好了，但駕照資料沒有更新到（審驗／換照提醒看的是駕照資料）。\n'
+        + '可以到下面「駕照與外訓證照對照」按「建到駕照表」補建。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e));
+  }
+}
+function tfInspToggle(){
+  const w = document.getElementById('tf_insp_wrap');
+  const ty = (STATE.trainingTypes || []).find(t => String(t.id) === String((document.getElementById('tf_type') || {}).value));
+  if(w) w.style.display = (ty && /駕照$/.test(String(ty.name || '').trim())) ? '' : 'none';
+}
+{
+  const _w = () => { const t = document.getElementById('tf_type'); if(t) t.addEventListener('change', tfInspToggle); };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w); else _w();
+}
 async function dlAfterCertSave(rec){
   if(!dlIsLicenceCert(rec)) return;
   const kind = dlKindOfType(rec.type_name);
@@ -19061,7 +19102,11 @@ document.getElementById('tf_add').addEventListener('click', async () => {
     });
   }
   // saveState 存不進去時會自己丟例外並跳提示，這裡接住是為了不要在沒存成功的情況下把表單清空
+  const _tfRec = cur || STATE.trainings[STATE.trainings.length - 1];
   try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
+  // 駕照：一起建／更新駕照資料，審驗與換照提醒才會有這個人
+  await dlSyncFromCert(_tfRec, (document.getElementById('tf_insp') || {}).value);
+  if(document.getElementById('tf_insp')) document.getElementById('tf_insp').value = '';
   ['tf_cert','tf_issue','tf_exp'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('tf_no_expiry').checked = false;
   if(document.getElementById('tf_on_hold')) document.getElementById('tf_on_hold').checked = false;
