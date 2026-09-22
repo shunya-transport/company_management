@@ -5544,10 +5544,26 @@ const TRAINING_TYPE_ALIAS = {};
 // ↑ 同上。現有紀錄用到的 type_id 是 1~27，每一個都對得到真的項目，不需要別名。
 //   留著會把「道路危險物品運送人員訓練證明書」的紀錄算成職業聯結車駕照。
 function trainingTypeKey(id){ return TRAINING_TYPE_ALIAS[id] || id; }
+// 駕照項目有重複的（「職業職業聯結車駕照」跟「職業聯結車駕照」是同一種），下拉只列一個：
+// 名稱正確的那個優先。SQL_173 跑完資料庫就只剩一組，這段只是保險。
+function ttLicKind(n){
+  const s = String(n == null ? '' : n).trim();
+  return /駕照$/.test(s) ? s.replace(/駕照$/, '').replace(/^(職業)+/, '職業') : null;
+}
 function trainingTypeOptions(currentId){
-  return (STATE.trainingTypes || [])
-    .filter(t => HIDDEN_TRAINING_TYPE_IDS.indexOf(t.id) < 0 || t.id === currentId)
-    .map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  const list = (STATE.trainingTypes || [])
+    .filter(t => HIDDEN_TRAINING_TYPE_IDS.indexOf(t.id) < 0 || t.id === currentId);
+  const pick = {};
+  list.forEach(t => {
+    const k = ttLicKind(t.name);
+    if(!k) return;
+    const cur = pick[k];
+    const good = String(t.name).trim() === k + '駕照';
+    if(!cur || (good && String(cur.name).trim() !== k + '駕照')) pick[k] = t;
+  });
+  return list
+    .filter(t => { const k = ttLicKind(t.name); return !k || pick[k] === t || t.id === currentId; })
+    .map(t => `<option value="${t.id}">${esc(ttLicKind(t.name) ? ttLicKind(t.name) + '駕照' : t.name)}</option>`).join('');
 }
 // 找同一人同一項目已經存在的那一筆。用 alias 比對，
 // 這樣「職業職業聯結車駕照(26)」跟「職業聯結車駕照(23)」會被當成同一張證，換證時不會又分裂成兩筆。
@@ -6796,7 +6812,7 @@ function renderDlCompare(){
     dupNote.innerHTML = dups.length
       ? '<b style="color:var(--red);">訓練項目表裡有重複的駕照項目：</b>'
         + dups.map(k => esc(byKind[k].join('／'))).join('；')
-        + '　新增外訓證照時下拉會出現兩個看起來一樣的選項。要清掉請執行 SQL_165 第 4 段。'
+        + '　下拉已經只列一個；要把資料庫也合併掉請執行 SQL_173。'
       : '';
   }
   body.innerHTML = rows.map(r => {
