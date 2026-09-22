@@ -468,6 +468,10 @@
       <div id="trainingAlerts"></div>
     </div>
     <div class="card">
+      <h2>駕照審驗／到期提醒<span class="count-badge" id="ov_dl_count"></span></h2>
+      <div id="dlAlerts"></div>
+    </div>
+    <div class="card">
       <h2>車輛保養到期提醒<span class="count-badge" id="overview_maint_count"></span></h2>
       <div id="overviewMaintAlerts"></div>
     </div>
@@ -1290,7 +1294,7 @@
       <h2>駕照與外訓證照對照<span class="count-badge" id="dl_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
         職業駕照現在存在兩個地方：<b>人員的駕照資料</b>（在職證明的駕駛類別、表單套印用的）
-        與<b>上面的外訓證照總表</b>（到期提醒信寄的是這一份）。兩邊沒有互相對照過，已經有幾筆對不起來。<br>
+        與<b>上面的外訓證照總表</b>。駕照的審驗／到期提醒看駕照資料，點「審驗日」可以改。兩邊沒有互相對照過，已經有幾筆對不起來。<br>
         <b>哪一邊才對，只有看過駕照正本的人知道</b>，所以這裡不自動選邊：確認之後逐筆按「以駕照表為準」或「以外訓表為準」，
         按下去只改那一筆。以後在外訓證照總表改到駕照那幾列，存檔後也會問要不要一起更新駕照資料。<br>
         <span id="dlDupNote"></span>
@@ -1308,7 +1312,7 @@
         <table class="cert-table">
           <thead><tr>
             <th>人員</th><th>類型</th>
-            <th>駕照表證號</th><th>駕照表發證</th><th>駕照表到期</th>
+            <th>駕照表證號</th><th>駕照表發證</th><th>駕照表到期</th><th>審驗日</th>
             <th>外訓表證號</th><th>外訓表發證</th><th>外訓表到期</th>
             <th>差異</th><th class="no-print"></th>
           </tr></thead>
@@ -5000,7 +5004,7 @@ function wpPhotoSlotHtml(r, side){
       ${has ? '<span class="muted">載入中…</span>' : '<span class="muted">—</span>'}
     </div>
     <label class="muted" style="display:block;font-size:12px;margin-bottom:6px;">
-      上傳卡面照片（jpg／png／pdf，10MB 以內）
+      上傳卡面照片（jpg／png／pdf；太大的會自動縮到長邊 2000px 再傳）
       <input type="file" id="wpfile_${side}" accept="image/*,application/pdf" style="margin-top:4px;">
     </label>
     <label class="muted" style="display:block;font-size:12px;">
@@ -5071,10 +5075,17 @@ async function wpPhotoSave(){
     const li = document.getElementById('wplink_' + side);
     const file = fi && fi.files && fi.files[0];
     if(file){
-      if(msg) msg.textContent = '正在上傳' + (side === 'front' ? '正面' : '背面') + '…';
+      const label = (side === 'front' ? '正面' : '背面');
+      if(msg) msg.textContent = '正在處理' + label + '…';
+      const small = await shrinkPhoto(file);
+      if(small.size > 10 * 1048576
+         && !confirm(label + '這個檔案有 ' + photoSizeText(small.size)
+                   + '，超過 10MB 的上限，很可能會被擋下來。\n\n還是要試著上傳嗎？')) return;
+      if(msg) msg.textContent = '正在上傳' + label + '（' + photoSizeText(small.size) + '）…';
       try{
-        body[pk] = await wpUploadPhoto(r, side, file);
-        done.push((side === 'front' ? '正面' : '背面') + '照片已上傳');
+        body[pk] = await wpUploadPhoto(r, side, small);
+        done.push(label + '照片已上傳'
+          + (small._shrunkFrom ? '（' + photoSizeText(small._shrunkFrom) + ' → ' + photoSizeText(small.size) + '）' : ''));
       }catch(e){
         if(msg) msg.textContent = '';
         alert(String((e && e.message) || e));
@@ -5391,9 +5402,9 @@ function renderOverview(){
   document.getElementById('lesseeBars').innerHTML = rows || '<div class="empty">尚無出租中的板架</div>';
 
   const withExpiry = STATE.trainings
-    .filter(t => !t.on_hold && !t.no_expiry && t.expiry_date && daysUntil(t.expiry_date) <= 90)
+    .filter(t => !t.on_hold && !t.no_expiry && t.expiry_date && daysUntil(t.expiry_date) <= 90 && !dlCoveredByDl(t))
     .sort((a,b)=> (a.expiry_date||'').localeCompare(b.expiry_date||''));
-  const noExpiryData = STATE.trainings.filter(t => !t.on_hold && !t.no_expiry && !t.expiry_date);
+  const noExpiryData = STATE.trainings.filter(t => !t.on_hold && !t.no_expiry && !t.expiry_date && !dlCoveredByDl(t));
   const alerts = [...withExpiry, ...noExpiryData];
   if(alerts.length===0){
     document.getElementById('trainingAlerts').innerHTML = '<div class="empty">目前沒有需要留意的證照</div>';
@@ -5408,6 +5419,7 @@ function renderOverview(){
       }).join('') + `</tbody></table></div>`;
   }
 
+  renderDlAlerts();
   const maintAlerts = [];
   STATE.vehicles.forEach(v => {
     if(!v.maintenance_model || isRetiredVehicle(v)) return;
@@ -6454,6 +6466,45 @@ async function cpSignedUrl(path){
   if(!u) throw new Error('回傳裡沒有簽名網址');
   return u.indexOf('http') === 0 ? u : (SUPABASE_URL + '/storage/v1' + u);
 }
+// ---------- 上傳前先縮小 ----------
+// Supabase 免費方案的 Storage 只有 1GB。手機直拍的證件照一張 2～4MB，
+// 工作證與外訓證照全部貼完將近 400 個檔案，照原檔傳會超過 1GB。
+// 長邊縮到 2000px、JPEG 品質 0.82，一張約 200～400KB，字還是看得清楚。
+// PDF、HEIC（瀏覽器解不開）、本來就小於 400KB 的都原樣送；
+// 壓縮失敗或壓完反而更大就退回原檔，絕不會因此上傳不了。
+const PHOTO_MAX_PX = 2000;
+const PHOTO_QUALITY = 0.82;
+const PHOTO_SKIP_BELOW = 400 * 1024;
+
+function photoSizeText(n){
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.round(n / 1024) + 'KB';
+}
+async function shrinkPhoto(file){
+  if(!file) return file;
+  const type = String(file.type || '');
+  if(!/^image\//i.test(type)) return file;            // PDF 之類
+  if(/heic|heif/i.test(type)) return file;            // 瀏覽器多半解不開
+  if(file.size <= PHOTO_SKIP_BELOW) return file;
+  try{
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, PHOTO_MAX_PX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    if(bmp.close) bmp.close();
+    const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', PHOTO_QUALITY));
+    if(!blob || blob.size >= file.size) return file;   // 沒變小就用原檔
+    const name = String(file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+    const out = new File([blob], name, { type: 'image/jpeg' });
+    out._shrunkFrom = file.size;                       // 存檔訊息要顯示「原本多大」
+    return out;
+  }catch(e){
+    console.warn('照片縮小失敗，改傳原檔', e);
+    return file;
+  }
+}
 async function cpUpload(t, side, file){
   const ext = ((String(file.name || '').match(/\.[A-Za-z0-9]+$/) || ['.jpg'])[0]).toLowerCase();
   const path = String(t.id) + '/' + side + '_' + Date.now() + ext;
@@ -6487,7 +6538,7 @@ function cpSlotHtml(t, side){
       ${has ? '<span class="muted">載入中…</span>' : '<span class="muted">—</span>'}
     </div>
     <label class="muted" style="display:block;font-size:12px;margin-bottom:6px;">
-      上傳證書照片（jpg／png／pdf，10MB 以內）
+      上傳證書照片（jpg／png／pdf；太大的會自動縮到長邊 2000px 再傳）
       <input type="file" id="cpfile_${side}" accept="image/*,application/pdf" style="margin-top:4px;">
     </label>
     <label class="muted" style="display:block;font-size:12px;">
@@ -6560,10 +6611,17 @@ async function cpSave(){
     const li = document.getElementById('cplink_' + side);
     const file = fi && fi.files && fi.files[0];
     if(file){
-      if(msg) msg.textContent = '正在上傳' + (side === 'front' ? '正面' : '背面') + '…';
+      const label = (side === 'front' ? '正面' : '背面');
+      if(msg) msg.textContent = '正在處理' + label + '…';
+      const small = await shrinkPhoto(file);
+      if(small.size > 10 * 1048576
+         && !confirm(label + '這個檔案有 ' + photoSizeText(small.size)
+                   + '，超過 10MB 的上限，很可能會被擋下來。\n\n還是要試著上傳嗎？')) return;
+      if(msg) msg.textContent = '正在上傳' + label + '（' + photoSizeText(small.size) + '）…';
       try{
-        body[pk] = await cpUpload(t, side, file);
-        done.push((side === 'front' ? '正面' : '背面') + '照片已上傳');
+        body[pk] = await cpUpload(t, side, small);
+        done.push(label + '照片已上傳'
+          + (small._shrunkFrom ? '（' + photoSizeText(small._shrunkFrom) + ' → ' + photoSizeText(small.size) + '）' : ''));
       }catch(e){
         if(msg) msg.textContent = '';
         alert(String((e && e.message) || e));
@@ -6764,13 +6822,15 @@ function renderDlCompare(){
       <td>${r.dl ? dlCell(dl.license_number, t.cert_no) : '<span class="muted">（無此列）</span>'}</td>
       <td>${r.dl ? dlCell(dlD(dl.issue_date), dlD(t.issue_date)) : ''}</td>
       <td>${r.dl ? dlCell(dlD(dl.expiry_date), dlD(t.expiry_date)) : ''}</td>
+      <td>${r.dl ? `<button class="name-link" data-dl-insp="${esc(r.key)}" title="點一下修改審驗日">${
+          esc(dlD(dl.inspection_date) || '填')}</button>${dlInspDone(dl) ? ' <span class="muted" title="審驗完成 ' + esc(dlD(dl.inspected_on)) + '">✓</span>' : ''}` : ''}</td>
       <td>${r.t ? dlCell(t.cert_no, dl.license_number) : '<span class="muted">（無此列）</span>'}</td>
       <td>${r.t ? dlCell(dlD(t.issue_date), dlD(dl.issue_date)) : ''}</td>
       <td>${r.t ? dlCell(dlD(t.expiry_date), dlD(dl.expiry_date)) : ''}</td>
       <td>${d.length ? `<span class="pill red">${esc(d.join('、'))}</span>` : '<span class="pill gray">一致</span>'}</td>
       <td class="no-print" style="white-space:nowrap;">${act}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="10" class="empty">${
+  }).join('') || `<tr><td colspan="11" class="empty">${
       bad ? '（已套用篩選，把上面兩個勾取消就看得到全部）' : '兩邊完全一致'}</td></tr>`;
 
   // 在職的司機兩邊都沒有駕照 —— 這種是真的缺資料，不是對不起來
@@ -6787,6 +6847,150 @@ function renderDlCompare(){
       : '掛了車隊的在職司機，兩邊都至少有一份駕照資料。';
   }
 }
+// ---------- 審驗日／到期日（SQL_169 起 driver_licenses 多了 inspection_date、inspected_on）----------
+// 職業駕照有效期 6 年，中間第 3 年要審驗；年滿 60 歲每年審驗（附體檢）。日期都落在生日。
+// inspected_on 有值、而且不早於審驗日前 60 天，就算這一次審驗辦完了，不再提醒。
+function dlAddYears(iso, n){
+  const s = dlD(iso);
+  if(!s) return '';
+  const md = s.slice(5) === '02-29' ? '02-28' : s.slice(5);
+  return String(parseInt(s.slice(0, 4), 10) + n) + '-' + md;
+}
+function dlAge(empId){
+  const e = (STATE.employees || []).find(x => String(x.id) === String(empId));
+  const b = dlD(e && e.birth_date);
+  if(!b) return null;
+  const t = todayISO();
+  let a = parseInt(t.slice(0, 4), 10) - parseInt(b.slice(0, 4), 10);
+  if(t.slice(5) < b.slice(5)) a--;
+  return a;
+}
+function dlInspFor(empId, exp){
+  if(!dlD(exp)) return null;
+  const a = dlAge(empId);
+  return (a != null && a >= 60) ? dlD(exp) : dlAddYears(exp, -3);
+}
+function dlInspDone(d){
+  const i = dlD(d && d.inspection_date), o = dlD(d && d.inspected_on);
+  return !!(i && o && (daysUntil(o) - daysUntil(i)) >= -60);
+}
+// 外訓表的駕照列，駕照資料有對應的那一張就不在「人員證照到期提醒」重複列（改由駕照卡片提醒）
+function dlCoveredByDl(t){
+  if(!dlIsLicenceCert(t)) return false;
+  const kind = dlKindOfType(t.type_name);
+  return (STATE.driverLicenses || []).some(d =>
+    String(d.employee_id) === String(t.employee_id) && dlN(d.license_type) === kind);
+}
+function dlAlertItems(){
+  const out = [];
+  (STATE.driverLicenses || []).forEach(d => {
+    if(!(STATE.employees || []).some(e => String(e.id) === String(d.employee_id))) return;   // 只看在職
+    const exp = dlD(d.expiry_date), insp = dlD(d.inspection_date);
+    const age = dlAge(d.employee_id);
+    const base = { d: d, name: dlEmpName(d.employee_id), kind: dlN(d.license_type), age: age };
+    if(!exp){ out.push(Object.assign({ what: '未填到期日', date: '' }, base)); return; }
+    if(insp && insp < exp && !dlInspDone(d) && daysUntil(insp) <= 90)
+      out.push(Object.assign({ what: '審驗', date: insp }, base));
+    if(daysUntil(exp) <= 90)
+      out.push(Object.assign({ what: (insp === exp && age != null && age >= 60 && !dlInspDone(d)) ? '每年審驗' : '換照',
+                               date: exp }, base));
+  });
+  return out.sort((a, b) => (a.date || '0').localeCompare(b.date || '0'));
+}
+function renderDlAlerts(){
+  const box = document.getElementById('dlAlerts');
+  if(!box) return;
+  const items = dlAlertItems();
+  const cnt = document.getElementById('ov_dl_count');
+  if(cnt) cnt.textContent = items.length ? String(items.length) : '';
+  if(!items.length){ box.innerHTML = '<div class="empty">90 天內沒有要審驗或換照的駕照</div>'; return; }
+  box.innerHTML = `<div class="table-scroll" style="max-height:280px;"><table><thead><tr>
+      <th>人員</th><th>類別</th><th>要辦</th><th>日期</th><th>狀態</th><th class="no-print"></th></tr></thead><tbody>` +
+    items.map(x => {
+      const s = x.date ? statusOf(x.date, 90) : 'gray';
+      const tag = x.what === '換照' ? 'red' : 'amber';
+      const btn = x.what === '換照'
+        ? `<button class="name-link" data-dl-renew="${esc(x.d.license_id)}">已換照</button>`
+        : x.what === '未填到期日' ? ''
+        : `<button class="name-link" data-dl-inspdone="${esc(x.d.license_id)}">已審驗</button>`;
+      return `<tr><td>${esc(x.name)}${x.age != null && x.age >= 60 ? ' <span class="muted">（' + x.age + '歲）</span>' : ''}</td>
+        <td>${esc(x.kind)}</td><td><span class="pill ${tag}">${esc(x.what)}</span></td>
+        <td>${esc(x.date || '—')}</td>
+        <td>${x.date ? `<span class="pill ${s}">${(dd => dd < 0 ? '逾期 ' + (-dd) + ' 天' : dd === 0 ? '就是今天' : '還有 ' + dd + ' 天')(daysUntil(x.date))}</span>` : '<span class="pill gray">未記錄</span>'}</td>
+        <td class="no-print" style="white-space:nowrap;">${btn}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+}
+function dlById(id){ return (STATE.driverLicenses || []).find(d => String(d.license_id) === String(id)) || null; }
+function dlAskDate(msg, def){
+  const v = prompt(msg, def || '');
+  if(v == null) return null;
+  const s = String(v).trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(new Date(s + 'T00:00:00'))){ alert('日期格式要像 2026-09-22'); return null; }
+  return s;
+}
+async function dlMarkInspected(id){
+  const d = dlById(id);
+  if(!d) return;
+  const name = dlEmpName(d.employee_id);
+  const on = dlAskDate(name + '・' + dlN(d.license_type) + '\n審驗辦好的日期：', todayISO());
+  if(!on) return;
+  const body = { inspected_on: on };
+  const insp = dlD(d.inspection_date), exp = dlD(d.expiry_date);
+  const age = dlAge(d.employee_id);
+  if(age != null && age >= 60 && insp){
+    // 60 歲以上每年審驗：下一次審驗排到明年同一天
+    body.inspection_date = dlAddYears(insp, 1);
+    if(insp === exp) body.expiry_date = dlAddYears(exp, 1);
+  }
+  try{ await dlWriteDl(d, body); }
+  catch(e){ alert('沒有存進去，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  renderAll();
+}
+async function dlMarkRenewed(id){
+  const d = dlById(id);
+  if(!d) return;
+  const name = dlEmpName(d.employee_id);
+  const exp = dlAskDate(name + '・' + dlN(d.license_type) + '\n新駕照的到期日（有效期，看駕照正本）：',
+                        dlAddYears(d.expiry_date, 6));
+  if(!exp) return;
+  const iss = dlAskDate('換照日（新駕照的發照日）：', todayISO());
+  if(!iss) return;
+  const body = { expiry_date: exp, issue_date: iss, inspection_date: dlInspFor(d.employee_id, exp), inspected_on: null };
+  try{ await dlWriteDl(d, body); }
+  catch(e){ alert('沒有存進去，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  // 外訓證照總表的駕照列一起改，兩邊才不會又對不起來
+  const pair = dlPairs().find(r => r.dl === d && r.t);
+  if(pair && (dlD(pair.t.expiry_date) !== exp || dlD(pair.t.issue_date) !== iss)){
+    try{ await dlWriteEt(pair.t, { expiry_date: exp, issue_date: iss }); }
+    catch(e){ alert('駕照資料已經更新，但外訓證照總表那一列沒有改到。\n\n錯誤訊息：' + ((e && e.message) || e)); }
+  }
+  renderAll();
+}
+async function dlEditInsp(key){
+  const r = dlPairByKey(key);
+  if(!r || !r.dl) return;
+  const cur = dlD(r.dl.inspection_date) || dlInspFor(r.empId, r.dl.expiry_date) || '';
+  const v = prompt(r.name + '・' + r.kind + '\n審驗日（清空就是不設）：', cur);
+  if(v == null) return;
+  const s = String(v).trim();
+  if(s && (!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(new Date(s + 'T00:00:00')))){ alert('日期格式要像 2026-09-22'); return; }
+  try{ await dlWriteDl(r.dl, { inspection_date: s || null }); }
+  catch(e){ alert('沒有存進去，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
+  renderAll();
+}
+{
+  const _w = () => {
+    const b = document.getElementById('dlAlerts');
+    if(b) b.addEventListener('click', async (e) => {
+      const t = e.target;
+      if(!t || !t.getAttribute) return;
+      const a = t.getAttribute('data-dl-inspdone'); if(a){ await dlMarkInspected(a); return; }
+      const r = t.getAttribute('data-dl-renew');    if(r){ await dlMarkRenewed(r); return; }
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
+  else _w();
+}
 function dlPairByKey(key){ return dlPairs().find(r => r.key === key) || null; }
 
 // ---------- 逐筆同步（一次只動一筆，不做整表覆蓋）----------
@@ -6798,6 +7002,11 @@ async function dlWriteEt(t, body){
   if('expiry_date' in body)    t.expiry_date = body.expiry_date;
 }
 async function dlWriteDl(d, body){
+  // 到期日換了、又沒一起給審驗日 → 審驗日跟著改成到期日前 3 年（60 歲以上＝到期日），審驗完成日清掉
+  if('expiry_date' in body && !('inspection_date' in body) && dlD(body.expiry_date) !== dlD(d.expiry_date)){
+    body.inspection_date = dlInspFor(d.employee_id, body.expiry_date);
+    body.inspected_on = null;
+  }
   await supaFetch('driver_licenses?license_id=eq.' + encodeURIComponent(d.license_id),
     { method: 'PATCH', headers: {'Prefer':'return=minimal'}, body: JSON.stringify(body) });
   Object.assign(d, body);
@@ -6817,7 +7026,7 @@ async function dlToEt(key){
             + dlChangeText([['證號', body.certificate_no, r.t.cert_no],
                             ['發證日', body.issue_date, r.t.issue_date],
                             ['到期日', body.expiry_date, r.t.expiry_date]])
-            + '\n\n到期提醒信寄的是外訓證照總表這一份，所以這一步會影響提醒的時間。')) return;
+            + '\n\n駕照的審驗／到期提醒看的是駕照資料，這一步只改外訓證照總表。')) return;
   try{ await dlWriteEt(r.t, body); }
   catch(e){ alert('沒有寫進去，雲端資料沒有變動。\n\n錯誤訊息：' + ((e && e.message) || e) + dbErrorHint(e)); return; }
   renderAll();
@@ -6848,6 +7057,7 @@ async function dlNewDl(key){
                 license_number: dlN(r.t.cert_no) || null,
                 issue_date: dlD(r.t.issue_date) || null,
                 expiry_date: dlD(r.t.expiry_date) || null,
+                inspection_date: dlInspFor(r.empId, r.t.expiry_date),
                 notes: '由外訓證照總表對照建立' };
   try{
     const made = await supaFetch('driver_licenses',
@@ -6866,7 +7076,7 @@ async function dlNewEt(key){
             + '　證號：' + (dlN(r.dl.license_number) || '（空白）') + '\n'
             + '　發證日：' + (dlD(r.dl.issue_date) || '（空白）') + '\n'
             + '　到期日：' + (dlD(r.dl.expiry_date) || '（空白）') + '\n\n'
-            + '建好之後這張駕照就會進到期提醒信裡。')) return;
+            + '駕照的審驗／到期提醒看的是駕照資料，不會因此重複提醒。')) return;
   const row = { employee_id: r.empId, type_id: tid,
                 certificate_no: dlN(r.dl.license_number) || null,
                 issue_date: dlD(r.dl.issue_date) || null,
@@ -6909,12 +7119,13 @@ async function dlAfterCertSave(rec){
                 + ((e && e.message) || e) + dbErrorHint(e)); }
 }
 function dlCsv(){
-  const head = ['人員','已離職','類型','駕照表證號','駕照表發證','駕照表到期',
+  const head = ['人員','已離職','類型','駕照表證號','駕照表發證','駕照表到期','審驗日','審驗完成',
                 '外訓表證號','外訓表發證','外訓表到期','差異'];
   const rows = dlPairs().map(r => {
     const dl = r.dl || {}, t = r.t || {};
     return [r.name, r.left ? '是' : '', r.kind,
             dlN(dl.license_number), dlD(dl.issue_date), dlD(dl.expiry_date),
+            dlD(dl.inspection_date), dlD(dl.inspected_on),
             dlN(t.cert_no), dlD(t.issue_date), dlD(t.expiry_date),
             dlDiff(r).join('、')];
   });
@@ -6942,6 +7153,7 @@ function dlCsv(){
       const a2 = t.getAttribute('data-dl-todl');  if(a2){ await dlToDl(a2); return; }
       const a3 = t.getAttribute('data-dl-newdl'); if(a3){ await dlNewDl(a3); return; }
       const a4 = t.getAttribute('data-dl-newet'); if(a4){ await dlNewEt(a4); return; }
+      const a5 = t.getAttribute('data-dl-insp');  if(a5){ await dlEditInsp(a5); return; }
     });
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _w);
