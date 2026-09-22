@@ -15094,6 +15094,51 @@ function rtIsPast(t){
   const d = daysUntil(t.class_end_date || t.class_start_date);
   return d !== null && d < 0;
 }
+// 課上完了：直接在這一列補新證號、發證日、到期日，存完這一梯報名就結案、從清單消失。
+// 三個值都跟原本一樣（證已經先補好了）就只結案，不寫換證紀錄。
+function rtAskDate(msg, def){
+  const v = prompt(msg, def || '');
+  if(v == null) return undefined;
+  const s = String(v).trim();
+  if(!s) return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(new Date(s + 'T00:00:00'))){ alert('日期格式要像 2026-05-23'); return undefined; }
+  return s;
+}
+async function rtComplete(id){
+  const rec = (STATE.trainings || []).find(t => String(t.id) === String(id));
+  if(!rec) return;
+  const who = (rec.employee_name || '') + '・' + (rec.type_name || '');
+  const curNo = rec.cert_no || rec.certificate_no || '';
+  const no = prompt(who + '\n新證書字號：', curNo);
+  if(no == null) return;
+  const iss = rtAskDate('發證日期（西元，例如 2026-05-23）：',
+                        rec.class_end_date || rec.class_start_date || rec.issue_date || '');
+  if(iss === undefined) return;
+  const defExp = (iss && iss === rec.issue_date && rec.expiry_date) ? rec.expiry_date
+               : (suggestExpiryFrom(rec.type_id, iss) || rec.expiry_date || '');
+  const exp = rtAskDate('到期日（看證書上的有效日期；空白＝長期有效）：', defExp);
+  if(exp === undefined) return;
+  if(iss && exp && !certDateOK(iss, exp, who)) return;
+  const newNo = String(no).trim();
+  const same = newNo === curNo && (iss || '') === (rec.issue_date || '') && (exp || '') === (rec.expiry_date || '');
+  if(same){
+    const cd = rec.class_start_date + ((rec.class_end_date && rec.class_end_date !== rec.class_start_date) ? ('～' + rec.class_end_date) : '');
+    const line = '【' + todayISO() + ' 複訓結案】上課 ' + cd
+               + (rec.class_location ? '／' + rec.class_location : '') + (rec.class_org ? '／' + rec.class_org : '');
+    rec.notes = rec.notes ? (String(rec.notes).trim() + '\n' + line) : line;
+    rec.class_start_date = null; rec.class_end_date = null; rec.class_location = null; rec.class_org = null;
+  }else{
+    pushRenewNote(rec);             // 舊證號／日期寫進備註，並清掉這一梯報名
+    rec.cert_no = newNo;
+    rec.certificate_no = newNo || null;
+    rec.issue_date = iss;
+    rec.expiry_date = exp;
+    rec.no_expiry = exp ? 0 : 1;
+  }
+  try{ await saveState('employee_trainings', STATE.trainings, true); }catch(e){ return; }
+  try{ await dlAfterCertSave(rec); }catch(e){}
+  renderAll();
+}
 function renderRetrainTable(){
   const body = document.getElementById('rtBody');
   if(!body) return;
@@ -15112,7 +15157,7 @@ function renderRetrainTable(){
       <td>${esc(t.class_location || '')}</td>
       <td>${esc(t.class_org || '')}</td>
       <td>${t.no_expiry ? '長期有效' : esc(t.expiry_date || '—')}</td>
-      <td><button class="del-btn" data-rt-cancel="${t.id}">取消報名</button></td>
+      <td style="white-space:nowrap;">${rtIsPast(t) ? `<button class="name-link" data-rt-done="${t.id}">補證號</button> ` : ''}<button class="del-btn" data-rt-cancel="${t.id}">取消報名</button></td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有人報名複訓。</td></tr>`;
 }
 let editingExternalId = null;
@@ -18553,6 +18598,8 @@ document.getElementById('tf_add').addEventListener('click', async () => {
   const _body = document.getElementById('rtBody');
   if(!_body) return;
   _body.addEventListener('click', async (ev) => {
+    const doneId = ev.target.getAttribute('data-rt-done');
+    if(doneId){ await rtComplete(doneId); return; }
     const id = ev.target.getAttribute('data-rt-cancel');
     if(!id) return;
     const rec = (STATE.trainings || []).find(t => String(t.id) === id);
