@@ -1,5 +1,5 @@
 // 每月1號、15號執行：車輛與板架的驗車＋各項證件文件、保養（大/小保養）、板架出租合約、人員證照到期
-const { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail } = require('./notify_helpers');
+const { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, supaFetchAll, sendEmail } = require('./notify_helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -19,12 +19,12 @@ async function main() {
 
   const [leases, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes, licences] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage,status'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
     // 驗車和其他證件（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）都在這張表，一次撈回來後再分開
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'maintenance_schedules?select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
+    supaFetchAll(SUPABASE_URL, SUPABASE_KEY, 'vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employee_trainings?no_expiry=eq.false&select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name,status,birth_date'),
     // 證照名稱存在 training_types 這張對照表，employee_trainings 只存 type_id，
@@ -34,6 +34,8 @@ async function main() {
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'driver_licenses?select=*'),
   ]);
 
+  // 報廢、繳銷的車不寄（跟儀表板 isRetiredVehicle 一樣）；「待賣出」「停用」照常寄
+  const retired = new Set(vehicles.filter(v => v.status === '報廢' || v.status === '繳銷').map(v => v.vehicle_id));
   const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v]));
   const lesseeById = Object.fromEntries(lessees.map(l => [l.lessee_id, l.lessee_name]));
   const employeeById = Object.fromEntries(employees.map(e => [e.employee_id, e.name]));
@@ -75,7 +77,7 @@ async function main() {
 
   // ---------- 2. 驗車與其他證件到期（車輛與板架分開列，車輛在上、板架在下） ----------
   const allDocItems = docs
-    .filter(d => d.expiry_date)
+    .filter(d => d.expiry_date && !retired.has(d.vehicle_id))
     .map(d => {
       const v = vehicleById[d.vehicle_id] || {};
       return { ...d, plate: v.plate_number || '', vehicle_type: v.vehicle_type || '', is_trailer: isTrailer(v) };
@@ -101,8 +103,10 @@ async function main() {
   // 駕照改由下面「駕照審驗／換照」那兩段提醒（看駕照資料），外訓表的駕照列就不重複列
   const normLic = n => String(n || '').trim().replace(/駕照$/, '').replace(/^(職業)+/, '職業').trim();
   const hasLicence = new Set(licences.map(d => d.employee_id + '|' + normLic(d.license_type)));
+  // 只寄在職人員的：離職的人證照紀錄會留著查沿革，但不該再催（名字也會是空白）
+  const activeEmp = new Set(employees.filter(e => e.status === '在職').map(e => e.employee_id));
   const certItems = trainings
-    .filter(t => t.expiry_date)
+    .filter(t => t.expiry_date && activeEmp.has(t.employee_id))
     .filter(t => {
       const n = String(trainingTypeById[t.type_id] || '').trim();
       return !(/駕照$/.test(n) && hasLicence.has(t.employee_id + '|' + normLic(n)));
@@ -155,6 +159,7 @@ async function main() {
   const vehicleMaintRows = [];
   const trailerMaintRows = [];
   vehicles.forEach(v => {
+    if (retired.has(v.vehicle_id)) return;
     const std = MAINTENANCE_STANDARDS.find(s => s.model_name === v.maintenance_model);
     if (!std) return;
     const currentMileage = latestMileage[v.vehicle_id] ?? v.current_mileage;
@@ -230,7 +235,7 @@ async function main() {
     const out = { vehicle: [], trailer: [] };
     schedules.filter(s => s.maintenance_type === type).forEach(s => {
       const v = vehicleById[s.vehicle_id];
-      if (!v) return;
+      if (!v || retired.has(s.vehicle_id)) return;
       const d = scheduleDue(s, v);
       if (!d) return;
       out[isTrailer(v) ? 'trailer' : 'vehicle'].push({ plate: v.plate_number, vehicle_id: s.vehicle_id, trailer: isTrailer(v), ...d });

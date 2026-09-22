@@ -17,9 +17,9 @@ async function main() {
 
   const [insurance, vehicles, medExams, employees, instruments, leases, lessees] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_insurance?select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,status'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'medical_exam_records?select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'employees?select=employee_id,name,status'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'instruments?select=*'),
     // 出租中的板架要在表格裡上底色，所以這裡也要知道哪幾台在客戶那邊
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=vehicle_id,lessee_id'),
@@ -75,7 +75,9 @@ async function main() {
     const top = insLatest[`${i.vehicle_id}|${String(i.insurance_type || '').trim()}`];
     return !!(top && d && top > d);
   };
-  const insItems = insurance.filter(i => i.expiry_date && !insOff(i) && !insSuperseded(i)).map(attachVehicle);
+  // 報廢、繳銷的車，保單沒按「中止」也不寄（跟儀表板一樣）
+  const retired = new Set(vehicles.filter(v => v.status === '報廢' || v.status === '繳銷').map(v => v.vehicle_id));
+  const insItems = insurance.filter(i => i.expiry_date && !insOff(i) && !insSuperseded(i) && !retired.has(i.vehicle_id)).map(attachVehicle);
   const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', i => `<tr>
     <td><b>${i.plate}</b></td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>
   </tr>`, ['車號', '險種', '保險公司', '到期日', '剩餘天數']);
@@ -84,8 +86,16 @@ async function main() {
   </tr>`, ['板架車號', '出租狀態', '險種', '保險公司', '到期日', '剩餘天數']);
 
   // ---------- 3. 人員體檢到期 ----------
-  const medItems = medExams
-    .filter(m => m.next_due_date)
+  // 每人只看最新那一次體檢（做完新的，舊那筆的到期日就不該再催）；離職的不寄
+  const activeEmp = new Set(employees.filter(e => e.status === '在職').map(e => e.employee_id));
+  const medLatest = {};
+  medExams.forEach(m => {
+    const k = m.employee_id;
+    const key = String(m.exam_date || '') + '|' + String(m.next_due_date || '');
+    if (!medLatest[k] || key > medLatest[k]._key) medLatest[k] = { ...m, _key: key };
+  });
+  const medItems = Object.values(medLatest)
+    .filter(m => m.next_due_date && activeEmp.has(m.employee_id))
     .map(m => ({ ...m, employee_name: employeeById[m.employee_id] || '' }));
   const medHtml = bucketByDate(medItems, 'next_due_date', m => `<tr>
     <td>${m.employee_name}</td><td>${m.next_due_date}</td><td>${daysLabel(m.next_due_date)}</td>
@@ -103,7 +113,7 @@ async function main() {
     if (/^[一-龥]{2,4}$/.test(note) && !NOT_A_NAME.test(note)) return `${note}（依備註）`;
     return '<span style="color:#B3261E;">⚠ 未登記</span>';
   };
-  const calItems = instruments.filter(i => i.next_calibration_due);
+  const calItems = instruments.filter(i => i.next_calibration_due && i.status !== '報廢');
   const calHtml = bucketByDate(calItems, 'next_calibration_due', i => `<tr>
     <td><b>${i.brand_model || ''}</b></td><td>${i.asset_no || ''}</td><td>${holderOf(i)}</td><td>${i.storage_area || ''}</td><td>${i.next_calibration_due}</td><td>${daysLabel(i.next_calibration_due)}</td>
   </tr>`, ['廠牌型號', '財產編號', '目前持有人', '存放位置', '下次校正到期日', '剩餘天數']);

@@ -69,6 +69,24 @@ async function supaFetch(SUPABASE_URL, SUPABASE_KEY, path) {
   return res.json();
 }
 
+// 分頁讀取：Supabase 一次最多回 1000 筆，超過的會被默默截掉（里程紀錄已經超過 1000 筆）
+async function supaFetchAll(SUPABASE_URL, SUPABASE_KEY, path) {
+  const PAGE = 1000;
+  let out = [];
+  for (let from = 0; from < 1000000; from += PAGE) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+                 'Range-Unit': 'items', Range: `${from}-${from + PAGE - 1}` },
+    });
+    if (res.status === 416) break;
+    if (!res.ok) throw new Error(`Supabase 查詢失敗 ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+    out = out.concat(rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 async function sendEmail(RESEND_API_KEY, recipients, subject, html) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -88,4 +106,4 @@ async function sendEmail(RESEND_API_KEY, recipients, subject, html) {
   }
 }
 
-module.exports = { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, sendEmail };
+module.exports = { todayISO, daysUntil, daysLabel, bucketByDate, supaFetch, supaFetchAll, sendEmail };
