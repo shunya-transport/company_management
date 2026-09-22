@@ -6858,7 +6858,7 @@ function renderDlCompare(){
 
   // 在職的司機兩邊都沒有駕照 —— 這種是真的缺資料，不是對不起來
   const miss = (STATE.employees || []).filter(e =>
-    e && dlN(e.fleet_team) &&
+    e && dlN(e.fleet_team) && dlN(e.employee_type) !== '間接' &&   // 間接人員（內勤）不用駕照
     !(STATE.driverLicenses || []).some(d => String(d.employee_id) === String(e.id)) &&
     !(STATE.trainings || []).some(t => dlIsLicenceCert(t) && String(t.employee_id) === String(e.id)));
   const mbox = document.getElementById('dlMissing');
