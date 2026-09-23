@@ -493,13 +493,18 @@
     </div>
 
     <div class="card">
-      <h2>各行號投保人數</h2>
+      <h2>各行號投保人數<span class="count-badge" id="cic_period"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        人數以<b>勞健保月報當期實際投保的人</b>為準（勞健保提撥計算表用的是同一份），右邊再跟在職名冊對一次。
+        月中離職的人當月還是有投保，本來就會留在月報上；新報到還沒進月報的人則要自己確認有沒有加保。
+      </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>行號</th><th>投保人數</th></tr></thead>
+          <thead><tr><th>行號</th><th>當期月報投保</th><th>在職名冊</th><th>差</th></tr></thead>
           <tbody id="companyInsuredCountBody"></tbody>
         </table>
       </div>
+      <div id="cicDiff" style="margin-top:10px;"></div>
     </div>
 
     <div class="card">
@@ -7598,18 +7603,74 @@ function renderIcTable(){
   }).join('') || `<tr><td colspan="6" class="empty">尚無投保資料</td></tr>`;
 }
 
+// 各行號投保人數：本來是數「有投保異動紀錄的人」，所以新報到還沒登異動的人不會被算到、
+// 離職後資料搬去 employees_history 的人又對不回名冊，數字跟勞保提撥表永遠對不起來。
+// 改成以勞健保月報當期實際投保的人為準（提撥表同一份資料），再把兩邊差在哪幾個人列出來。
+function insMonthlyKey(r){ return (Number(r.year_roc) || 0) * 100 + (Number(r.month) || 0); }
+function insLatestKey(){
+  const ks = (STATE.insuranceMonthly || []).map(insMonthlyKey).filter(k => k > 0);
+  return ks.length ? Math.max.apply(null, ks) : 0;
+}
+function insKeyLabel(key){
+  return key ? `${Math.floor(key / 100)}/${String(key % 100).padStart(2, '0')}` : '（查無月報）';
+}
 function renderCompanyInsuredCount(){
-  const byCompany = {};
-  STATE.insuranceChanges.forEach(c => {
-    const emp = STATE.employees.find(e => e.id === c.employee_id);
-    if(!emp) return;
-    const key = emp.company_name || '未設定公司別';
-    byCompany[key] = byCompany[key] || new Set();
-    byCompany[key].add(emp.id);
+  const body = document.getElementById('companyInsuredCountBody');
+  if(!body) return;
+  const key = insLatestKey();
+  const cur = (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key);
+  const onDuty = (STATE.employees || []).filter(e => e.status === '在職');
+  const nm = v => String(v || '').trim();
+
+  const co = {};
+  const bump = (name, field, who) => {
+    const k = name || '未設定行號';
+    co[k] = co[k] || { ins:new Set(), duty:new Set() };
+    co[k][field].add(who);
+  };
+  cur.forEach(r => bump(r.company_name, 'ins', nm(r.name)));
+  onDuty.forEach(e => bump(e.company_name, 'duty', nm(e.name)));
+
+  const badge = document.getElementById('cic_period');
+  if(badge) badge.textContent = insKeyLabel(key) + ' 月報';
+
+  const rows = Object.entries(co).sort((a, b) => b[1].ins.size - a[1].ins.size || a[0].localeCompare(b[0], 'zh-Hant'));
+  const tot = { ins:0, duty:0 };
+  const html = rows.map(([name, v]) => {
+    tot.ins += v.ins.size; tot.duty += v.duty.size;
+    const d = v.ins.size - v.duty.size;
+    return `<tr><td>${esc(name)}</td><td>${v.ins.size} 人</td><td>${v.duty.size} 人</td>
+      <td>${d === 0 ? '<span class="muted">—</span>' : (d > 0 ? '+' : '') + d}</td></tr>`;
+  }).join('');
+  body.innerHTML = (html + (rows.length > 1
+      ? `<tr style="font-weight:700;background:#fafafa;"><td>合計</td><td>${tot.ins} 人</td><td>${tot.duty} 人</td>
+         <td>${tot.ins - tot.duty === 0 ? '—' : (tot.ins - tot.duty > 0 ? '+' : '') + (tot.ins - tot.duty)}</td></tr>`
+      : ''))
+    || `<tr><td colspan="4" class="empty">尚無投保資料</td></tr>`;
+
+  const box = document.getElementById('cicDiff');
+  if(!box) return;
+  const insNames = new Set(cur.map(r => nm(r.name)));
+  const dutyNames = new Set(onDuty.map(e => nm(e.name)));
+  const hist = STATE.employeesHistory || [];
+  const changes = STATE.insuranceChanges || [];
+
+  const missing = onDuty.filter(e => !insNames.has(nm(e.name)))
+    .map(e => esc(e.name) + (e.hire_date ? `（${esc(typeof toROCDate === "function" ? toROCDate(e.hire_date) : e.hire_date)} 到職）` : ''));
+  const extra = cur.filter(r => !dutyNames.has(nm(r.name))).map(r => {
+    const h = hist.find(x => nm(x.name) === nm(r.name));
+    return esc(r.name) + (h && h.resign_date ? `（${esc(typeof toROCDate === "function" ? toROCDate(h.resign_date) : h.resign_date)} 離職）` : '（名冊查無）');
   });
-  const rows = Object.entries(byCompany).sort((a,b)=>b[1].size-a[1].size);
-  document.getElementById('companyInsuredCountBody').innerHTML = rows.map(([name,set]) => `
-    <tr><td>${esc(name)}</td><td>${set.size} 人</td></tr>`).join('') || `<tr><td colspan="2" class="empty">尚無投保資料</td></tr>`;
+  const noChange = onDuty.filter(e => !changes.some(c => String(c.employee_id) === String(e.id))).map(e => esc(e.name));
+
+  const line = (color, title, list, tail) => list.length
+    ? `<div style="margin-bottom:6px;"><b style="color:${color};">${title}（${list.length} 人）</b>：${list.join('、')}${tail ? '<span class="muted">　' + tail + '</span>' : ''}</div>`
+    : '';
+  box.innerHTML =
+      line('#b26a00', '在職、但這一期月報沒有', missing, '新報到的多半是月報還沒出來，要自己確認有沒有加保')
+    + line('#666',    '這一期月報有、但已不在職', extra, '當月有投保就該留在帳上，不是錯')
+    + line('#666',    '在職、但系統裡沒有投保異動紀錄', noChange, '只是異動紀錄沒補登，不影響月報')
+    || '<div class="muted">月報跟在職名冊完全一致。</div>';
 }
 
 // ===================== 勞健保級距對照表 =====================
@@ -7729,7 +7790,10 @@ function ibDiffRows(){
     const lb = la ? ibFind(la) : null, hb = ha ? ibFind(ha) : null;
     if(!lb || !hb) return;                       // 只保健保、或超出級距表的，不判斷
     const nEl = lb.employer_labor, nPl = lb.employee_labor;
-    const nEh = hb.employer_health, nPh = hb.employee_health * (1 + dep);
+    // 健保眷口超過 3 口以 3 口計；眷屬月中加退保（金額不是整口數）那一格不算不符
+    const nEh = hb.employer_health, nPh = hb.employee_health * (1 + Math.min(dep, 3));
+    const curPh = Number(r.personal_health) || 0;
+    const depPartial = hb.employee_health > 0 && curPh > 0 && (curPh % hb.employee_health) !== 0;
     const nEi = Math.round(Math.min(ja, IB_INJURY_MAX) * (Number(r.injury_rate) || 0.0021));
     const nEp = Math.round(Math.max(pa, IB_PENSION_MIN) * IB_PENSION_RATE);
     const cEl = Number(r.employer_labor_general) || 0, cEp = Number(r.employer_pension) || 0;
@@ -7742,7 +7806,7 @@ function ibDiffRows(){
      ['公司-職災', ja, Number(r.employer_labor_injury) || 0, nEi],
      ['公司-勞退', pa, cEp, nEp],
      ['員工-勞保', la, Number(r.personal_labor) || 0, nPl],
-     ['員工-健保', ha, Number(r.personal_health) || 0, nPh]
+     ['員工-健保', ha, curPh, depPartial ? curPh : nPh]
     ].forEach(x => {
       if(x[2] !== x[3]) rows.push({ name:r.name || '', ym:key, amt:x[1], field:x[0], cur:x[2], want:x[3], part:part,
                                     days: part && nEl ? Math.round(cEl / nEl * 30) : null });
@@ -10905,6 +10969,10 @@ const EXTRA_FIELDS = {
     {id:'ex_ins_period', label:'期間（民國年月，空白＝最新一期）', type:'text', placeholder:'例：115/08'},
     {id:'ex_ins_scope', label:'人員範圍', type:'select', opts:['該期全部','僅在職人員']}
   ],
+  pension_contribution: [
+    {id:'ex_ins_period', label:'期間（民國年月，空白＝最新一期）', type:'text', placeholder:'例：115/08'},
+    {id:'ex_ins_scope', label:'人員範圍', type:'select', opts:['該期全部','僅在職人員']}
+  ],
   consent_receipt: [
     {id:'ex_pay_item', label:'給付內容', type:'text', placeholder:'例：112年5月份薪資'},
     {id:'ex_pay_amount', label:'給付金額(元)', type:'number'},
@@ -12999,7 +13067,9 @@ function generateForm(){
     const grandAll      = grandTotal + grandPersonal;
     const sumOf = (list, fn) => list.reduce((s, r) => s + (fn(r)||0), 0);
     const money = (v) => '$' + (v||0).toFixed(0);
-    const period = rowsData[0] ? `民國 ${rowsData[0].latest.year_roc} 年 ${rowsData[0].latest.month} 月` : '';
+    const _pcKey = pcPeriodKey();
+    const period = _pcKey ? `民國 ${Math.floor(_pcKey / 100)} 年 ${_pcKey % 100} 月` : '（查無月報）';
+    const _pcMiss = pcMissingOnDuty();
 
     const byCompany = {};
     rowsData.forEach(r => {
@@ -13017,7 +13087,7 @@ function generateForm(){
       const memberRows = list.map((r,i) => `
         <tr>
           <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${i+1}</td>
-          <td style="padding:5px 8px;border:1px solid #ccc;">${esc(r.emp.name)}</td>
+          <td style="padding:5px 8px;border:1px solid #ccc;">${esc(r.emp.name)}${r.emp.onDuty ? '' : '<span style="color:#999;font-size:11px;"> (已離職)</span>'}</td>
           <td style="padding:5px 8px;border:1px solid #ccc;">${esc(r.emp.dept_name||'')}</td>
           <td style="${CELLE}">${money(r.latest.employer_labor_general)}</td>
           <td style="${CELLE}">${money(r.latest.employer_labor_injury)}</td>
@@ -13046,7 +13116,7 @@ function generateForm(){
 
     bodyHtml = `
       <h2 style="text-align:center;letter-spacing:6px;">勞健保提撥計算表</h2>
-      <p style="text-align:center;color:#666;font-size:12px;margin:4px 0 16px;">全體人員彙總，依行號分組 ・ 資料期間：${esc(period)}（依各人最近一期投保紀錄）</p>
+      <p style="text-align:center;color:#666;font-size:12px;margin:4px 0 16px;">依行號分組 ・ 資料期間：${esc(period)} 月報（該期實際投保人 ${rowsData.length} 人）</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead>
           <tr>
@@ -13086,7 +13156,9 @@ function generateForm(){
       </table>
       <p style="font-size:11px;color:#999;margin-top:20px;">
         ※「雇主提撥」為公司負擔（勞保一般＋職災、健保、勞退 6%），「人員自付」為由薪資扣繳的勞保、健保自付額；勞退自提未計入。<br>
-        ※本表金額取自公司內部勞健保登錄系統之最近一期實際投保紀錄，僅供公司內部參考；正式數據請以勞保局、健保署核定資料為準。
+        ※本表列的是<b>${esc(period)}</b>月報上實際投保的每一個人（含當月投保、月底才離職的同仁），行號也以月報上的行號為準。<br>
+        ${_pcMiss.length ? `※ 這一期月報沒有資料、但目前在職的人：${esc(_pcMiss.map(e => e.name).join('、'))}　（多半是新報到、月報還沒出來，要自己確認有沒有加保）<br>` : ''}
+        ※本表金額取自公司內部勞健保登錄系統的月報資料，僅供公司內部參考；正式數據請以勞保局、健保署核定資料為準。
       </p>`;
 
   }else if(type === 'insured_amount'){
@@ -13435,16 +13507,58 @@ function generateForm(){
 // ===== 勞健保提撥計算表 =====
 // 每人取「最近一期」投保紀錄；雇主提撥＝勞保(一般)＋勞保(職災)＋健保＋勞退6%，
 // 人員自付＝勞保自付＋健保自付（勞退自提未計入）。
+// 本來是「每個名冊上的人各自抓自己最近一期」，會有三個問題：
+//   1. 月報上 employee_id 對不回名冊的人（離職後資料搬走了）整個不見
+//   2. 每個人抓到的月份可能不一樣，一張表混好幾期
+//   3. 名冊在職、但月報還沒有他的人，靜悄悄地不見
+// 改成以「同一期月報」為準（表單那邊可以填期間，留白＝最新一期），
+// 月報上有誰就列誰，行號也用月報上的行號。這樣才對得上勞保局的繳款單。
+function pcPeriodKey(){
+  const raw = (extraVal('ex_ins_period') || '').replace(/[^0-9]/g, '');
+  if(raw.length >= 4){
+    const y = parseInt(raw.slice(0, 3), 10), m = parseInt(raw.slice(3), 10);
+    if(y > 0 && m >= 1 && m <= 12) return y * 100 + m;
+  }
+  return insLatestKey();
+}
+function pcRosterOf(r){
+  const emps = STATE.employees || [];
+  const nm = v => String(v || '').trim();
+  let e = (r.employee_id != null) ? emps.find(x => String(x.id) === String(r.employee_id)) : null;
+  if(!e) e = emps.find(x => nm(x.name) === nm(r.name));
+  return e || null;
+}
 function pensionContributionRows(){
-  return STATE.employees.map(emp => {
-    const records = STATE.insuranceMonthly.filter(r => r.employee_id === emp.id)
-      .sort((a,b) => (b.year_roc*100+b.month) - (a.year_roc*100+a.month));
-    const latest = records[0];
-    if(!latest) return null;
-    const total = (latest.employer_labor_general||0) + (latest.employer_labor_injury||0) + (latest.employer_health||0) + (latest.employer_pension||0);
-    const personal = (latest.personal_labor||0) + (latest.personal_health||0);
-    return { emp, latest, total, personal, all: total + personal };
-  }).filter(Boolean);
+  const key = pcPeriodKey();
+  const onlyOnDuty = (extraVal('ex_ins_scope') === '僅在職人員');
+  return (STATE.insuranceMonthly || [])
+    .filter(r => insMonthlyKey(r) === key)
+    .map(r => {
+      const e = pcRosterOf(r);
+      const emp = {
+        id: e ? e.id : null,
+        name: r.name || (e && e.name) || '',
+        employee_no: r.employee_no || (e && e.employee_no) || '',
+        dept_name: r.dept_name || (e && e.dept_name) || '',
+        company_name: r.company_name || (e && e.company_name) || '未設定行號',
+        status: e ? (e.status || '') : '已離職',
+        onDuty: !!(e && e.status === '在職')
+      };
+      const total = (r.employer_labor_general||0) + (r.employer_labor_injury||0) + (r.employer_health||0) + (r.employer_pension||0);
+      const personal = (r.personal_labor||0) + (r.personal_health||0);
+      return { emp, latest: r, total, personal, all: total + personal };
+    })
+    .filter(x => !onlyOnDuty || x.emp.onDuty)
+    .sort((a, b) => String(a.emp.company_name).localeCompare(String(b.emp.company_name), 'zh-Hant')
+                 || String(a.emp.employee_no).localeCompare(String(b.emp.employee_no))
+                 || String(a.emp.name).localeCompare(String(b.emp.name), 'zh-Hant'));
+}
+// 這一期月報沒有、但目前在職的人（提撥表下面會列出來，才不會有人默默漏掉）
+function pcMissingOnDuty(){
+  const key = pcPeriodKey();
+  const nm = v => String(v || '').trim();
+  const have = new Set((STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key).map(r => nm(r.name)));
+  return (STATE.employees || []).filter(e => e.status === '在職' && !have.has(nm(e.name)));
 }
 
 function pensionContributionCsv(){
@@ -13459,7 +13573,7 @@ function pensionContributionCsv(){
   const n = (v) => String(Math.round(v||0));
   Object.entries(byCompany).forEach(([companyName, list]) => {
     list.forEach((r,i) => rows.push([
-      companyName, String(i+1), r.emp.name||'', r.emp.dept_name||'',
+      companyName, String(i+1), (r.emp.name||'') + (r.emp.onDuty ? '' : '(已離職)'), r.emp.dept_name||'',
       n(r.latest.employer_labor_general), n(r.latest.employer_labor_injury),
       n(r.latest.employer_health), n(r.latest.employer_pension), n(r.total),
       n(r.latest.personal_labor), n(r.latest.personal_health), n(r.personal), n(r.all)
