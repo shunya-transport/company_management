@@ -11251,7 +11251,7 @@ function slipTimeCell(r){
   const mo = (d) => d ? Number(String(d).slice(5,7)) : '';
   const dy = (d) => d ? Number(String(d).slice(8,10)) : '';
   const t = r ? slipTimesFromNote(r.notes) : null;
-  return `<div style="line-height:1.8;font-size:14px;white-space:nowrap;">
+  return `<div style="line-height:1.62;font-size:14px;white-space:nowrap;">
     <div>自${ln(mo(r && r.start_date))}月${ln(dy(r && r.start_date))}日${ln(t ? t.from : '', 38)}</div>
     <div>至${ln(mo(r && r.end_date))}月${ln(dy(r && r.end_date))}日${ln(t ? t.to : '', 38)}</div>
     <div>共請假${ln(r ? leaveDaysOf(r).toFixed(2) : '', 50)}天</div>
@@ -11281,7 +11281,7 @@ function buildLeaveSlip(e){
   const rowCount = Math.max(want, recs.length);
   const BD = '1px solid #000';
   const TH = (t, w) => `<th style="border:${BD};padding:3px 1px;font-size:14.5px;font-weight:700;line-height:1.22;${w?'width:'+w+';':''}">${t}</th>`;
-  const TD = (html, align) => `<td style="border:${BD};padding:3px 4px;font-size:14px;vertical-align:middle;text-align:${align||'center'};height:86px;">${html}</td>`;
+  const TD = (html, align) => `<td style="border:${BD};padding:3px 4px;font-size:14px;vertical-align:middle;text-align:${align||'center'};height:80px;">${html}</td>`;
   let rows = '';
   for(let i = 0; i < rowCount; i++){
     const r = recs[i] || null;
@@ -11311,10 +11311,10 @@ function buildLeaveSlip(e){
   </style>
   <div class="slip-wrap" data-png-width="1123" data-png-height="794" style="position:relative;">
     <img src="${SLIP_LOGO}" alt="DGTT" style="position:absolute;left:0;top:0;height:36px;">
-    <div style="text-align:center;font-size:26px;font-weight:700;letter-spacing:1px;padding:2px 0 8px;">
+    <div style="text-align:center;font-size:26px;font-weight:700;letter-spacing:1px;padding:0 0 5px;">
       ${yr} 年度　請假單
     </div>
-    <div style="font-size:15.5px;line-height:1.62;margin:0 0 4px 2px;">
+    <div style="font-size:15.5px;line-height:1.55;margin:0 0 3px 2px;">
       <div>${hd('姓　名：', e.name)}</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         ${hd('工　號：', e.employee_no)}${hd('到職日: ', slipRocDate(e.hire_date))}${hd('部門: ', e.dept_name)}
@@ -11329,10 +11329,10 @@ function buildLeaveSlip(e){
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div style="font-size:14px;margin-top:4px;line-height:1.5;font-weight:700;">
+    <div style="font-size:14px;margin-top:3px;line-height:1.45;font-weight:700;">
       備註：1.到職滿半年者，始可休特休假。2.病假請檢附相關証明。3.事假請於3天前申請。4.連續請假3天(含)以上者，需簽核至總經理。
     </div>
-    <div style="font-size:13px;text-align:right;margin-top:3px;">表單編號：管010-A1</div>
+    <div style="font-size:13px;text-align:right;margin-top:2px;">表單編號：管010-A1</div>
   </div>`;
 }
 // ===== 血壓／酒測量測紀錄表 =====
