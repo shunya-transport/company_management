@@ -503,6 +503,45 @@
     </div>
 
     <div class="card">
+      <h2>勞健保級距對照表<span class="count-badge" id="ib_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        現行級距與費率：勞保 12.5%（普通事故 11.5%＋就保 1%；公司 70%、員工 20%，最低 11,100、最高 45,800）、
+        健保 5.17%（公司 60%×平均眷口 1.56、員工 30%，最低 29,500，眷屬每一口再加一份員工自付）、
+        職災平均 0.21%（最高 72,800，實際依行業費率）、勞退 6%（公司全額，最低 1,500）。
+        級距存在雲端 <code>insurance_brackets</code>，以後級距調整只要改那張表，這裡跟著變。
+      </div>
+      <div class="toolbar">
+        <label>投保金額<input id="ib_amt" type="number" placeholder="例：38200"></label>
+        <label>眷口數<input id="ib_dep" type="number" min="0" value="0" style="width:80px;"></label>
+        <label title="級距表那一欄是勞保局的平均 0.21%；公司月報上實際用的是行業費率">職災費率(%)<input id="ib_inj" type="number" step="0.01" style="width:90px;"></label>
+        <button class="btn" id="ib_calc">試算</button>
+        <button class="btn ghost" id="ib_toggle">展開完整級距表</button>
+      </div>
+      <div id="ib_result" style="margin-bottom:10px;"></div>
+      <div id="ib_tableWrap" class="table-scroll" style="display:none;">
+        <table>
+          <thead><tr>
+            <th>級距</th><th>級距金額</th>
+            <th>公司-勞保</th><th>公司-健保</th><th>公司-職災</th><th>公司-勞退6%</th><th>公司合計</th>
+            <th>員工-勞保</th><th>員工-健保</th><th>員工合計</th><th>備註</th>
+          </tr></thead>
+          <tbody id="ib_tableBody"></tbody>
+        </table>
+      </div>
+      <h3 style="margin:16px 0 4px;font-size:15px;">這一期月報金額跟現行級距不符的<span class="count-badge" id="ib_diff_count"></span></h3>
+      <div class="muted" style="margin-bottom:8px;">
+        月報金額是從舊系統匯進來的，系統本身不會重算，所以會停在匯入那時候的級距上。
+        要一次改掉請跑 SQL_183；月中加保／退保、月中薪調那幾筆本來就按日折算，這裡會標出來、不算不符。
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>姓名</th><th>年/月</th><th>級距金額</th><th>欄位</th><th>目前</th><th>應為</th><th>差額</th><th>說明</th></tr></thead>
+          <tbody id="ib_diffBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>門禁卡完整清冊<span class="count-badge" id="card_ledger_count"></span></h2>
       <div class="toolbar">
         <input id="card_search" placeholder="搜尋姓名或卡號">
@@ -4762,6 +4801,12 @@ async function loadState(){
     const _im = await supaFetchAll('insurance_monthly_records?select=' + _imCols + '&order=year_roc.desc,month.desc,record_id.asc');
     if(_im && _im.length) STATE.insuranceMonthly = _im;
   }catch(e){ console.error('insurance_monthly_records 讀取失敗，改用內建', e); }
+  // 勞健保級距表（SQL_182 建的）。撈不到就用程式裡那份內建備援，畫面照樣能看。
+  STATE.insBrackets = [];
+  try{
+    const _ib = await authFetch(`${SUPABASE_URL}/rest/v1/insurance_brackets?select=*&order=insured_amount.asc`);
+    if(_ib.ok) STATE.insBrackets = await _ib.json();
+  }catch(e){ console.error('insurance_brackets 讀取失敗，改用內建級距', e); }
   STATE.internalTrainingTypes = SEED.internal_training_types || [];
   STATE.docItems = SEED.doc_items || [];
   STATE.maintenanceStandards = SEED.maintenance_standards || [];
@@ -7566,6 +7611,237 @@ function renderCompanyInsuredCount(){
   document.getElementById('companyInsuredCountBody').innerHTML = rows.map(([name,set]) => `
     <tr><td>${esc(name)}</td><td>${set.size} 人</td></tr>`).join('') || `<tr><td colspan="2" class="empty">尚無投保資料</td></tr>`;
 }
+
+// ===================== 勞健保級距對照表 =====================
+// 級距與費率都存在雲端 insurance_brackets（SQL_182 建的），撈不到才用下面這份內建備援。
+// 內建這一份是 115 年度現行級距：部分工時 24 列 ＋ 第 1~32 級。
+// 欄位順序：[級距編號, 級距金額, 公司勞保, 公司健保, 公司職災, 公司勞退, 公司合計,
+//            員工勞保, 員工健保(本人), 員工合計, 備註]
+const IB_FALLBACK_RAW = [
+  [null,1500,972,1428,62,90,2552,277,458,735,'部分工時；勞退最低級距'],
+  [null,3000,972,1428,62,180,2642,277,458,735,'部分工時'],
+  [null,4500,972,1428,62,270,2732,277,458,735,'部分工時'],
+  [null,6000,972,1428,62,360,2822,277,458,735,'部分工時'],
+  [null,7500,972,1428,62,450,2912,277,458,735,'部分工時'],
+  [null,8700,972,1428,62,522,2984,277,458,735,'部分工時'],
+  [null,9900,972,1428,62,594,3056,277,458,735,'部分工時'],
+  [null,11100,972,1428,62,666,3128,277,458,735,'部分工時；勞保最低級距'],
+  [null,12540,1097,1428,62,752,3339,313,458,771,'部分工時'],
+  [null,13500,1182,1428,62,810,3482,338,458,796,'部分工時'],
+  [null,15840,1386,1428,62,950,3826,396,458,854,'部分工時'],
+  [null,16500,1444,1428,62,990,3924,413,458,871,'部分工時'],
+  [null,17280,1512,1428,62,1037,4039,432,458,890,'部分工時'],
+  [null,17880,1564,1428,62,1073,4127,447,458,905,'部分工時'],
+  [null,19047,1666,1428,62,1143,4299,476,458,934,'部分工時'],
+  [null,20008,1751,1428,62,1200,4441,500,458,958,'部分工時'],
+  [null,21009,1838,1428,62,1261,4589,525,458,983,'部分工時'],
+  [null,22000,1925,1428,62,1320,4735,550,458,1008,'部分工時'],
+  [null,23100,2022,1428,62,1386,4898,577,458,1035,'部分工時'],
+  [null,24000,2100,1428,62,1440,5030,600,458,1058,'部分工時'],
+  [null,25250,2209,1428,62,1515,5214,632,458,1090,'部分工時'],
+  [null,26400,2310,1428,62,1584,5384,660,458,1118,'部分工時'],
+  [null,27600,2415,1428,62,1656,5561,690,458,1148,'部分工時'],
+  [null,28590,2501,1428,62,1715,5706,715,458,1173,'部分工時'],
+  [1,29500,2582,1428,62,1770,5842,738,458,1196,'健保最低級距'],
+  [2,30300,2651,1466,64,1818,5999,758,470,1228,''],
+  [3,31800,2783,1539,67,1908,6297,795,493,1288,''],
+  [4,33300,2914,1611,70,1998,6593,833,516,1349,''],
+  [5,34800,3045,1684,73,2088,6890,870,540,1410,''],
+  [6,36300,3176,1757,76,2178,7187,908,563,1471,''],
+  [7,38200,3342,1849,80,2292,7563,955,592,1547,''],
+  [8,40100,3509,1940,84,2406,7939,1002,622,1624,''],
+  [9,42000,3675,2032,88,2520,8315,1050,651,1701,''],
+  [10,43900,3841,2124,92,2634,8691,1098,681,1779,''],
+  [11,45800,4008,2216,96,2748,9068,1145,710,1855,'勞保最高級距'],
+  [12,48200,4008,2332,101,2892,9333,1145,748,1893,''],
+  [13,50600,4008,2449,106,3036,9599,1145,785,1930,''],
+  [14,53000,4008,2565,111,3180,9864,1145,822,1967,''],
+  [15,55400,4008,2681,116,3324,10129,1145,859,2004,''],
+  [16,57800,4008,2797,121,3468,10394,1145,896,2041,''],
+  [17,60800,4008,2942,128,3648,10726,1145,943,2088,''],
+  [18,63800,4008,3087,134,3828,11057,1145,990,2135,''],
+  [19,66800,4008,3233,140,4008,11389,1145,1036,2181,''],
+  [20,69800,4008,3378,147,4188,11721,1145,1083,2228,''],
+  [21,72800,4008,3523,153,4368,12052,1145,1129,2274,'災保最高級距'],
+  [22,76500,4008,3702,153,4590,12453,1145,1187,2332,''],
+  [23,80200,4008,3881,153,4812,12854,1145,1244,2389,''],
+  [24,83900,4008,4060,153,5034,13255,1145,1301,2446,''],
+  [25,87600,4008,4239,153,5256,13656,1145,1359,2504,''],
+  [26,92100,4008,4457,153,5526,14144,1145,1428,2573,''],
+  [27,96600,4008,4675,153,5796,14632,1145,1498,2643,''],
+  [28,101100,4008,4892,153,6066,15119,1145,1568,2713,''],
+  [29,105600,4008,5110,153,6336,15607,1145,1638,2783,''],
+  [30,110100,4008,5328,153,6606,16095,1145,1708,2853,''],
+  [31,115500,4008,5589,153,6930,16680,1145,1791,2936,''],
+  [32,120900,4008,5850,153,7254,17265,1145,1875,3020,'']
+];
+const IB_FALLBACK = IB_FALLBACK_RAW.map(a => ({
+  bracket_no:a[0], insured_amount:a[1], employer_labor:a[2], employer_health:a[3],
+  employer_injury:a[4], employer_pension:a[5], employer_total:a[6],
+  employee_labor:a[7], employee_health:a[8], employee_total:a[9], note:a[10]
+}));
+const IB_LABOR_MAX = 45800, IB_INJURY_MAX = 72800, IB_PENSION_MIN = 1500, IB_PENSION_RATE = 0.06;
+
+function ibRows(){
+  const src = (STATE.insBrackets && STATE.insBrackets.length) ? STATE.insBrackets : IB_FALLBACK;
+  return src.map(b => ({
+    bracket_no: (b.bracket_no == null || b.bracket_no === '') ? null : Number(b.bracket_no),
+    insured_amount: Number(b.insured_amount),
+    employer_labor: Number(b.employer_labor), employer_health: Number(b.employer_health),
+    employer_injury: Number(b.employer_injury), employer_pension: Number(b.employer_pension),
+    employer_total: Number(b.employer_total),
+    employee_labor: Number(b.employee_labor), employee_health: Number(b.employee_health),
+    employee_total: Number(b.employee_total), note: b.note || ''
+  })).sort((a,b) => a.insured_amount - b.insured_amount);
+}
+// 投保金額往上取級距（勞保局的規則：薪資落在哪一級就用那一級的上限）
+function ibFind(amount){
+  const rows = ibRows(), a = Number(amount) || 0;
+  if(!rows.length || !a) return null;
+  return rows.find(b => b.insured_amount >= a) || rows[rows.length - 1];
+}
+// 這一期月報裡最常見的職災費率，試算欄預設用它（查不到就用平均 0.21%）
+function ibInjuryRate(){
+  const c = {};
+  (STATE.insuranceMonthly || []).forEach(r => {
+    const v = Number(r.injury_rate);
+    if(v > 0) c[v] = (c[v] || 0) + 1;
+  });
+  const k = Object.keys(c).sort((a,b) => c[b] - c[a])[0];
+  return k ? Number(k) : 0.0021;
+}
+
+// 目前這一期的金額跟級距對一次。判斷「按日折算」的規則跟 SQL_183 一樣：
+// 勞保與勞退同時比整月少、少的比例又差不到 3%，而且那個金額在級距表上找不到整月對應級距。
+function ibDiffRows(){
+  const recs = STATE.insuranceMonthly || [];
+  if(!recs.length) return { key:0, people:0, rows:[] };
+  const ym = r => (Number(r.year_roc) || 0) * 100 + (Number(r.month) || 0);
+  const key = Math.max.apply(null, recs.map(ym));
+  const cur = recs.filter(r => ym(r) === key);
+  const rows = [], brs = ibRows();
+  cur.forEach(r => {
+    const la = Number(r.labor_insured_amount) || 0;
+    const ha = Number(r.health_insured_amount) || 0;
+    const pa = Number(r.pension_insured_amount) || 0;
+    const ja = Number(r.injury_insured_amount) || la;
+    const dep = Number(r.dependents_count) || 0;
+    const lb = la ? ibFind(la) : null, hb = ha ? ibFind(ha) : null;
+    if(!lb || !hb) return;                       // 只保健保、或超出級距表的，不判斷
+    const nEl = lb.employer_labor, nPl = lb.employee_labor;
+    const nEh = hb.employer_health, nPh = hb.employee_health * (1 + dep);
+    const nEi = Math.round(Math.min(ja, IB_INJURY_MAX) * (Number(r.injury_rate) || 0.0021));
+    const nEp = Math.round(Math.max(pa, IB_PENSION_MIN) * IB_PENSION_RATE);
+    const cEl = Number(r.employer_labor_general) || 0, cEp = Number(r.employer_pension) || 0;
+    const part = nEl > 0 && nEp > 0 && cEl > 0 && cEp > 0
+      && cEl < nEl * 0.97 && cEp < nEp * 0.97
+      && Math.abs(cEl / nEl - cEp / nEp) < 0.03
+      && !brs.some(b => b.employer_labor === cEl && Math.round(b.insured_amount * IB_PENSION_RATE) === cEp);
+    [['公司-勞保', la, cEl, nEl],
+     ['公司-健保', ha, Number(r.employer_health) || 0, nEh],
+     ['公司-職災', ja, Number(r.employer_labor_injury) || 0, nEi],
+     ['公司-勞退', pa, cEp, nEp],
+     ['員工-勞保', la, Number(r.personal_labor) || 0, nPl],
+     ['員工-健保', ha, Number(r.personal_health) || 0, nPh]
+    ].forEach(x => {
+      if(x[2] !== x[3]) rows.push({ name:r.name || '', ym:key, amt:x[1], field:x[0], cur:x[2], want:x[3], part:part,
+                                    days: part && nEl ? Math.round(cEl / nEl * 30) : null });
+    });
+  });
+  rows.sort((a,b) => (a.part - b.part) || String(a.name).localeCompare(String(b.name), 'zh-Hant') || a.field.localeCompare(b.field));
+  return { key:key, people:cur.length, rows:rows };
+}
+
+function ibCalc(){
+  const amtEl = document.getElementById('ib_amt');
+  const box = document.getElementById('ib_result');
+  if(!amtEl || !box) return;
+  const a = Number(amtEl.value) || 0;
+  if(!a){ box.innerHTML = '<div class="muted">輸入投保金額後按「試算」。</div>'; return; }
+  const b = ibFind(a);
+  if(!b){ box.innerHTML = '<div class="muted">查不到對應級距。</div>'; return; }
+  const dep = Math.max(0, Number(document.getElementById('ib_dep').value) || 0);
+  const rate = (Number(document.getElementById('ib_inj').value) || 0) / 100;
+  const inj = rate > 0 ? Math.round(Math.min(b.insured_amount, IB_INJURY_MAX) * rate) : b.employer_injury;
+  const eh = b.employer_health, ph = b.employee_health * (1 + dep);
+  const empTotal = b.employer_labor + eh + inj + b.employer_pension;
+  const n = v => Number(v).toLocaleString('en-US');
+  const cell = 'padding:4px 10px;border:1px solid #ddd;text-align:right;';
+  const head = 'padding:4px 10px;border:1px solid #ddd;background:#f5f5f5;';
+  box.innerHTML = `
+    <div style="margin-bottom:6px;">投保金額 <b>${n(a)}</b> → 對應
+      <b>${b.bracket_no ? '第 ' + b.bracket_no + ' 級' : '部分工時'} ${n(b.insured_amount)}</b>
+      ${b.note ? '<span class="muted">（' + esc(b.note) + '）</span>' : ''}
+      ${dep ? '　眷口 ' + dep + ' 人' : ''}
+      ${rate > 0 ? '　職災費率 ' + (rate * 100).toFixed(2) + '%' : ''}
+    </div>
+    <table style="border-collapse:collapse;font-size:13px;">
+      <tr><th style="${head}"></th><th style="${head}">勞保</th><th style="${head}">健保</th>
+          <th style="${head}">職災</th><th style="${head}">勞退6%</th><th style="${head}">合計</th></tr>
+      <tr><th style="${head}">公司負擔</th>
+        <td style="${cell}">${n(b.employer_labor)}</td><td style="${cell}">${n(eh)}</td>
+        <td style="${cell}">${n(inj)}</td><td style="${cell}">${n(b.employer_pension)}</td>
+        <td style="${cell}"><b>${n(empTotal)}</b></td></tr>
+      <tr><th style="${head}">員工自付</th>
+        <td style="${cell}">${n(b.employee_labor)}</td><td style="${cell}">${n(ph)}</td>
+        <td style="${cell}">—</td><td style="${cell}">—</td>
+        <td style="${cell}"><b>${n(b.employee_labor + ph)}</b></td></tr>
+    </table>
+    <div class="muted" style="margin-top:6px;">員工健保 ${n(b.employee_health)} × (1＋眷口 ${dep}) ＝ ${n(ph)}；勞退自提沒算在裡面。</div>`;
+}
+
+function renderIbCard(){
+  const body = document.getElementById('ib_tableBody');
+  if(!body) return;
+  const rows = ibRows(), n = v => Number(v).toLocaleString('en-US');
+  const cnt = document.getElementById('ib_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 級` + ((STATE.insBrackets && STATE.insBrackets.length) ? '' : '（內建備援，雲端級距表還沒建）');
+  const inj = document.getElementById('ib_inj');
+  if(inj && !inj.value) inj.value = (ibInjuryRate() * 100).toFixed(2);
+  body.innerHTML = rows.map(b => `<tr>
+      <td style="text-align:center;">${b.bracket_no == null ? '<span class="muted">部分工時</span>' : b.bracket_no}</td>
+      <td style="text-align:right;"><b>${n(b.insured_amount)}</b></td>
+      <td style="text-align:right;">${n(b.employer_labor)}</td>
+      <td style="text-align:right;">${n(b.employer_health)}</td>
+      <td style="text-align:right;">${n(b.employer_injury)}</td>
+      <td style="text-align:right;">${n(b.employer_pension)}</td>
+      <td style="text-align:right;">${n(b.employer_total)}</td>
+      <td style="text-align:right;">${n(b.employee_labor)}</td>
+      <td style="text-align:right;">${n(b.employee_health)}</td>
+      <td style="text-align:right;">${n(b.employee_total)}</td>
+      <td>${esc(b.note || '')}</td>
+    </tr>`).join('');
+
+  const d = ibDiffRows(), dbody = document.getElementById('ib_diffBody');
+  const real = d.rows.filter(r => !r.part);
+  const dcnt = document.getElementById('ib_diff_count');
+  if(dcnt) dcnt.textContent = d.key ? `${Math.floor(d.key/100)}/${String(d.key%100).padStart(2,'0')}　${real.length} 筆` : '';
+  if(dbody){
+    dbody.innerHTML = d.rows.length ? d.rows.slice(0, 300).map(r => `<tr${r.part ? ' style="color:#888;"' : ''}>
+        <td>${esc(r.name)}</td>
+        <td style="text-align:center;">${Math.floor(r.ym/100)}/${String(r.ym%100).padStart(2,'0')}</td>
+        <td style="text-align:right;">${n(r.amt)}</td>
+        <td>${esc(r.field)}</td>
+        <td style="text-align:right;">${n(r.cur)}</td>
+        <td style="text-align:right;">${n(r.want)}</td>
+        <td style="text-align:right;">${r.want - r.cur > 0 ? '+' : ''}${n(r.want - r.cur)}</td>
+        <td>${r.part ? '按日折算（約 ' + r.days + ' 天），不算不符' : '停在舊級距，SQL_183 會改成「應為」'}</td>
+      </tr>`).join('')
+      : `<tr><td colspan="8" class="empty">這一期 ${d.people} 人的金額都跟現行級距一致</td></tr>`;
+  }
+}
+
+const _ibCalcBtn = document.getElementById('ib_calc');
+if(_ibCalcBtn) _ibCalcBtn.addEventListener('click', ibCalc);
+const _ibAmt = document.getElementById('ib_amt');
+if(_ibAmt) _ibAmt.addEventListener('keydown', e => { if(e.key === 'Enter') ibCalc(); });
+const _ibToggle = document.getElementById('ib_toggle');
+if(_ibToggle) _ibToggle.addEventListener('click', () => {
+  const w = document.getElementById('ib_tableWrap');
+  const open = w.style.display === 'none';
+  w.style.display = open ? '' : 'none';
+  _ibToggle.textContent = open ? '收起完整級距表' : '展開完整級距表';
+});
 
 // ===================== 在職人員清冊的證照摘要 =====================
 // 原本只有一個張數，看不出有沒有過期。這裡把狀態算出來標在旁邊，
@@ -17237,6 +17513,7 @@ function renderAll(){
   renderInstrumentsTable();
   renderCalibrationTable();
   renderCompanyInsuredCount();
+  renderIbCard();
   renderFleetTable();
   renderEtSelects();
   renderEtLog();
