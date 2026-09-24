@@ -1832,7 +1832,8 @@
 
     <div class="card">
       <h2>請假總表（月曆打勾式）</h2>
-      <div class="muted" style="margin-bottom:10px;">有請假就打勾，滑鼠移到勾勾上可看假別；沒請假的儲存格空白。</div>
+      <div class="muted" style="margin-bottom:10px;">有請假就打勾，滑鼠移到勾勾上可看假別；沒請假的儲存格空白。
+        <span style="color:#c0392b;">紅色的 ✖</span> 代表那筆假單的起訖日跨度跟時數對不起來（多半是結束日期的月份打錯），滑鼠移上去看原因。</div>
       <div class="form-grid" style="margin-bottom:10px;">
         <label>年月<input id="lvgrid_month" type="month"></label>
       </div>
@@ -15653,6 +15654,8 @@ async function saveLeaveEdit(){
     rec.employee_id = empId;
     rec.employee_name_raw = emp.name;
   }
+  // 結束日期月份打錯防呆
+  if(!leaveSpanConfirm(start, end, hours)) return;
   // 法定上限防呆（改的這一筆要排除自己，不然會重複計算）
   if(!leaveQuotaConfirm(keep ? rec.employee_id : parseInt(sel.value),
                         document.getElementById('lve_type').value, start, hours, rec.id)) return;
@@ -15943,8 +15946,10 @@ function renderLeaveGrid(){
         const en = (r.end_date||'').slice(0,10);
         return s && en && dateStr >= s && dateStr <= en;
       });
+      // 起訖跨度跟時數對不起來的（多半是結束日期月份打錯），這一整排標紅提醒
+      const odd = match && leaveSpanLooksWrong((match.start_date||'').slice(0,10), (match.end_date||'').slice(0,10), match.hours);
       cells.push(match
-        ? `<td style="text-align:center;color:var(--accent-dark);font-weight:700;font-size:16px;line-height:1;padding:2px 0;" title="${esc(match.leave_type)}${match.notes?'：'+esc(match.notes):''}">●</td>`
+        ? `<td style="text-align:center;color:${odd ? '#c0392b' : 'var(--accent-dark)'};font-weight:700;font-size:16px;line-height:1;padding:2px 0;" title="${esc(match.leave_type)}${match.notes?'：'+esc(match.notes):''}${odd ? `　⚠ 起 ${esc((match.start_date||'').slice(0,10))} 迄 ${esc((match.end_date||'').slice(0,10))}、只有 ${esc(match.hours)} 小時，結束日期可能打錯` : ''}">${odd ? '✖' : '●'}</td>`
         : `<td style="padding:2px 0;"></td>`);
     }
     return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;white-space:nowrap;padding:2px 8px;width:1%;">${esc(e.name)}</td>${cells.join('')}</tr>`;
@@ -17597,6 +17602,36 @@ document.getElementById('ins_scope_filter').addEventListener('change', renderIns
 document.getElementById('card_search').addEventListener('input', renderAccessCardLedger);
 document.getElementById('leave_search').addEventListener('input', renderLeaveLedger);
 
+// ===== 結束日期打錯的防呆 =====
+// 曾渝芬 115/08 有三筆假單，起始日在 8 月、結束日卻打成 9 月（8/26→9/28 這種）。
+// 月曆打勾式是照起訖日逐日打點，整排就都是點；統計表卻是看起始日的月份，
+// 所以 9 月又查不到人，兩張表對不起來。
+// 判斷方式：起訖跨度（天）比「時數÷8」推估出來的天數大很多就算可疑。
+// 巫玉宏 8/01~8/31、168 小時（21 天）那種真的長假不會被誤判。
+function leaveSpanDays(start, end){
+  if(!start || !end) return 1;
+  const d1 = new Date(start + 'T00:00:00'), d2 = new Date(end + 'T00:00:00');
+  if(isNaN(d1) || isNaN(d2)) return 1;
+  return Math.round((d2 - d1) / 86400000) + 1;
+}
+function leaveSpanLooksWrong(start, end, hours){
+  const span = leaveSpanDays(start, end);
+  const est  = Math.ceil((Number(hours) || 0) / LEAVE_HOURS_PER_DAY);
+  return span >= 3 && span > est * 2 && (span - est) >= 5;
+}
+// 存檔前問一次。回傳 false 代表使用者選擇不要存。
+function leaveSpanConfirm(start, end, hours){
+  if(!leaveSpanLooksWrong(start, end, hours)) return true;
+  const span = leaveSpanDays(start, end);
+  const est  = Math.ceil((Number(hours) || 0) / LEAVE_HOURS_PER_DAY);
+  return confirm('起始日 ' + start + '、結束日 ' + end + ' 相差 ' + span + ' 天，\n'
+    + '但時數只有 ' + hours + ' 小時（大約 ' + est + ' 天），兩邊差很多。\n\n'
+    + '最常見的原因是結束日期的「月份」打錯了。\n'
+    + '這樣存下去，請假總表（月曆打勾式）會從 ' + start + ' 一路打點到 ' + end + '，\n'
+    + '但統計表只算在 ' + String(start).slice(0, 7) + '，兩張表會對不起來。\n\n'
+    + '確定要照這個日期存嗎？');
+}
+
 document.getElementById('lv_add').addEventListener('click', async () => {
   const empId = parseInt(document.getElementById('lv_emp').value);
   const start = document.getElementById('lv_start').value;
@@ -17610,12 +17645,15 @@ document.getElementById('lv_add').addEventListener('click', async () => {
     hours = (Math.round((d2-d1)/86400000) + 1) * LEAVE_HOURS_PER_DAY;
   }
   if(hours <= 0){ alert('時數要大於 0。'); return; }
+  if(end < start){ alert('結束日期不能早於起始日期。'); return; }
   // 請假一律以半小時為單位。0.1、0.3 這種通常是把「天數」誤填到時數欄，
   // 曾渝芬那兩筆 0.1 天就是這樣變成 0.8 小時的，這裡先問一次。
   if(!isHalfHour(hours) && !confirm('你填的是 ' + hours + ' 小時，不是 0.5 的倍數。\n\n'
       + '請假通常以半小時為單位（0.5、1、1.5、…）。\n'
       + '如果你想填的是「天」，1 天請填 8、半天請填 4、1 小時請填 1。\n\n確定要用 '
       + hours + ' 小時存檔嗎？')) return;
+  // 結束日期月份打錯防呆
+  if(!leaveSpanConfirm(start, end, hours)) return;
   // 法定上限防呆：超過才問，這是警告不是硬擋
   if(!leaveQuotaConfirm(empId, document.getElementById('lv_type').value, start, hours)) return;
   STATE.leaveRecords.push({
