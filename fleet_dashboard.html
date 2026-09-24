@@ -512,7 +512,8 @@
       <div class="muted" style="margin-bottom:10px;">
         現行級距與費率：勞保 12.5%（普通事故 11.5%＋就保 1%；公司 70%、員工 20%，最低 11,100、最高 45,800）、
         健保 5.17%（公司 60%×平均眷口 1.56、員工 30%，最低 29,500，眷屬每一口再加一份員工自付）、
-        職災平均 0.21%（最高 72,800，實際依行業費率）、勞退 6%（公司全額，最低 1,500）。
+        職災平均 0.21%（最高 72,800，實際依行業費率）、勞退 6%（公司全額，最低 1,500、最高 150,000）。
+        <b>四種保險的上限不一樣</b>：月薪 53,000 的人，勞保投保薪資是 45,800，職災、勞退、健保才是 53,000。
         級距存在雲端 <code>insurance_brackets</code>，以後級距調整只要改那張表，這裡跟著變。
       </div>
       <div class="toolbar">
@@ -536,7 +537,9 @@
       <h3 style="margin:16px 0 4px;font-size:15px;">這一期月報金額跟現行級距不符的<span class="count-badge" id="ib_diff_count"></span></h3>
       <div class="muted" style="margin-bottom:8px;">
         月報金額是從舊系統匯進來的，系統本身不會重算，所以會停在匯入那時候的級距上。
-        要一次改掉請跑 SQL_183；月中加保／退保、月中薪調那幾筆本來就按日折算，這裡會標出來、不算不符。
+        要一次改掉請跑 SQL_184；月中加保／退保、月中薪調那幾筆本來就按日折算，這裡會標出來、不算不符。
+        投保金額本身超過上限的（勞保 45,800／職災 72,800／勞退 150,000／健保 313,000）也會列在這裡，
+        那是投保金額要改，勞保局的繳款單只會算到上限。
       </div>
       <div class="table-scroll">
         <table>
@@ -7742,7 +7745,16 @@ const IB_FALLBACK = IB_FALLBACK_RAW.map(a => ({
   employer_injury:a[4], employer_pension:a[5], employer_total:a[6],
   employee_labor:a[7], employee_health:a[8], employee_total:a[9], note:a[10]
 }));
+// 四種保險的投保金額上限不一樣，同一個人可以是「勞保 45,800、職災 53,000、勞退 53,000、健保 53,000」。
+// 勞保局的繳款單就是這樣算的，系統把勞保也記成 53,000 就永遠對不起來。
 const IB_LABOR_MAX = 45800, IB_INJURY_MAX = 72800, IB_PENSION_MIN = 1500, IB_PENSION_RATE = 0.06;
+const IB_PENSION_MAX = 150000, IB_HEALTH_MAX = 313000;
+const IB_CAPS = [
+  { k:'labor_insured_amount',   t:'勞保投保薪資', max:IB_LABOR_MAX },
+  { k:'injury_insured_amount',  t:'職災投保薪資', max:IB_INJURY_MAX },
+  { k:'pension_insured_amount', t:'勞退月提繳工資', max:IB_PENSION_MAX },
+  { k:'health_insured_amount',  t:'健保投保金額', max:IB_HEALTH_MAX }
+];
 
 function ibRows(){
   const src = (STATE.insBrackets && STATE.insBrackets.length) ? STATE.insBrackets : IB_FALLBACK;
@@ -7783,11 +7795,18 @@ function ibDiffRows(){
   const cur = recs.filter(r => ym(r) === key);
   const rows = [], brs = ibRows();
   cur.forEach(r => {
-    const la = Number(r.labor_insured_amount) || 0;
-    const ha = Number(r.health_insured_amount) || 0;
-    const pa = Number(r.pension_insured_amount) || 0;
-    const ja = Number(r.injury_insured_amount) || la;
+    // 各項先壓回自己的上限再算，勞保超過 45,800 的部分不計費
+    const la = Math.min(Number(r.labor_insured_amount) || 0, IB_LABOR_MAX);
+    const ha = Math.min(Number(r.health_insured_amount) || 0, IB_HEALTH_MAX);
+    const pa = Math.min(Number(r.pension_insured_amount) || 0, IB_PENSION_MAX);
+    const ja = Math.min(Number(r.injury_insured_amount) || Number(r.labor_insured_amount) || 0, IB_INJURY_MAX);
     const dep = Number(r.dependents_count) || 0;
+    // 投保金額本身就超過上限的，先標出來（那是資料要改，不是保費算錯）
+    IB_CAPS.forEach(c => {
+      const v = Number(r[c.k]) || 0;
+      if(v > c.max) rows.push({ name:r.name || '', ym:key, amt:v, field:c.t + '超過上限',
+                                cur:v, want:c.max, part:false, days:null });
+    });
     const lb = la ? ibFind(la) : null, hb = ha ? ibFind(ha) : null;
     if(!lb || !hb) return;                       // 只保健保、或超出級距表的，不判斷
     const nEl = lb.employer_labor, nPl = lb.employee_labor;
@@ -7809,7 +7828,9 @@ function ibDiffRows(){
      ['員工-勞保', la, Number(r.personal_labor) || 0, nPl],
      ['員工-健保', ha, curPh, depPartial ? curPh : nPh]
     ].forEach(x => {
-      if(x[2] !== x[3]) rows.push({ name:r.name || '', ym:key, amt:x[1], field:x[0], cur:x[2], want:x[3], part:part,
+      // 負數是勞保局的沖還／補收（例如傷病期間免計保費），不是算錯
+      const refund = x[2] < 0;
+      if(x[2] !== x[3]) rows.push({ name:r.name || '', ym:key, amt:x[1], field:x[0], cur:x[2], want:x[3], part:part || refund, refund:refund,
                                     days: part && nEl ? Math.round(cEl / nEl * 30) : null });
     });
   });
@@ -7890,7 +7911,10 @@ function renderIbCard(){
         <td style="text-align:right;">${n(r.cur)}</td>
         <td style="text-align:right;">${n(r.want)}</td>
         <td style="text-align:right;">${r.want - r.cur > 0 ? '+' : ''}${n(r.want - r.cur)}</td>
-        <td>${r.part ? '按日折算（約 ' + r.days + ' 天），不算不符' : '停在舊級距，SQL_183 會改成「應為」'}</td>
+        <td>${r.refund ? '勞保局沖還／補收（例如傷病期間免計保費），不算不符'
+              : r.part ? '按日折算（約 ' + r.days + ' 天），不算不符'
+              : String(r.field).indexOf('超過上限') >= 0 ? '投保金額超過上限，要改投保金額（SQL_186）'
+              : '停在舊級距，SQL_184 會改成「應為」'}</td>
       </tr>`).join('')
       : `<tr><td colspan="8" class="empty">這一期 ${d.people} 人的金額都跟現行級距一致</td></tr>`;
   }
