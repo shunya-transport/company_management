@@ -452,9 +452,8 @@
           <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
           <label>勞健保投保金額<input id="sf_insured" type="number" list="insAmountList" placeholder="例：45800" style="max-width:150px;"
                  title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
-          <label>眷屬加保人數<input id="sf_dep" type="number" min="0" value="0" style="max-width:110px;"></label>
-          <label>其中免計費眷口<input id="sf_depfree" type="number" min="0" value="0" style="max-width:110px;"
-                 title="中低收入戶滿70歲、重大傷病等健保法規定免自付保費的眷屬，不算保費口數"></label>
+          <label>眷屬加保人數<input id="sf_dep" type="number" min="0" value="0" style="max-width:110px;"
+                 title="填幾人，下面就會出現幾列，一位一位登記"></label>
           <label>雇主險（團保）
             <span style="display:flex;align-items:center;gap:8px;font-weight:400;padding:6px 0;">
               <input id="sf_empins_status" type="checkbox" style="width:18px;height:18px;">
@@ -462,6 +461,7 @@
             </span>
           </label>
         </div>
+        <div id="sf_dep_list" style="margin-top:8px;"></div>
         <div id="sf_ins_hint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
         <datalist id="insAmountList"></datalist>
       </div>
@@ -612,8 +612,10 @@
           </select>
         </label>
         <label>親屬加保人數<input id="ic_dep_count" type="number" min="0" value="0" style="max-width:110px;"></label>
-        <label>其中免計費眷口<input id="ic_dep_free" type="number" min="0" value="0" style="max-width:110px;"
-               title="中低收入戶滿70歲、重大傷病等健保法規定免自付保費的眷屬，不算保費口數"></label>
+        <label>其中免計費眷口
+          <input id="ic_dep_free" type="number" min="0" value="0" style="max-width:110px;" readonly
+                 title="由人員管理的眷屬明細自動算出來（中低收入戶滿70歲、重度以上身障全額補助），要改請到人員管理登記眷屬">
+        </label>
         <label>備註<input id="ic_notes" placeholder="選填"></label>
       </div>
       <button class="btn" id="ic_add">新增投保資料</button>
@@ -7943,31 +7945,144 @@ function insFillAmountList(){
   dl.innerHTML = ibRows().filter(b => b.bracket_no)
     .map(b => `<option value="${b.insured_amount}">第 ${b.bracket_no} 級</option>`).join('');
 }
-// 新增人員表單那一組欄位的即時試算
-function sfInsHint(){
-  const box = document.getElementById('sf_ins_hint');
-  if(!box) return;
-  box.innerHTML = insEstimateHtml(
-    (document.getElementById('sf_insured') || {}).value,
-    (document.getElementById('sf_dep') || {}).value,
-    (document.getElementById('sf_depfree') || {}).value);
+// ===== 眷屬明細 =====
+// 「免計費幾口」不要人自己算，改成一位一位登記，系統自己判斷：
+//   ・中低收入戶滿 70 歲 → 老人福利法，健保費全額補助（沒滿 70 歲不算，會出現提醒）
+//   ・重度以上身心障礙   → 身心障礙者權益保障法，全額補助
+// 健保眷屬自付：本人一份＋計費眷屬每口一份，超過 3 口以 3 口計。
+function depAgeOn(birth, on){
+  const b = String(birth || '').slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(b)) return null;
+  const d = new Date(b + 'T00:00:00'), t = on ? new Date(on + 'T00:00:00') : new Date();
+  if(isNaN(d) || isNaN(t)) return null;
+  let a = t.getFullYear() - d.getFullYear();
+  const m = t.getMonth() - d.getMonth();
+  if(m < 0 || (m === 0 && t.getDate() < d.getDate())) a--;
+  return a;
 }
-// 編輯人員視窗那一組
-function seInsHint(){
-  const box = document.getElementById('se_ins_hint');
-  if(!box) return;
-  box.innerHTML = insEstimateHtml(
-    (document.getElementById('se_insured') || {}).value,
-    (document.getElementById('se_dep') || {}).value,
-    (document.getElementById('se_depfree') || {}).value);
+// 這一口免不免計費
+function depIsFree(d){
+  if(!d) return false;
+  if(d.disability) return true;
+  if(d.low_income_70 && (depAgeOn(d.birth_date) ?? -1) >= 70) return true;
+  return false;
 }
-['sf_insured', 'sf_dep', 'sf_depfree'].forEach(id => {
-  const el = document.getElementById(id);
-  if(el) el.addEventListener('input', sfInsHint);
-});
-// 編輯視窗是動態產生的，用事件代理
+function depFreeCount(list){ return (list || []).filter(depIsFree).length; }
+// 勾了中低收入戶但還沒滿 70 歲的，要講清楚那一口還是要算錢
+function depWarnings(list){
+  const out = [];
+  (list || []).forEach((d, i) => {
+    const nm = String(d.name || '').trim() || ('第 ' + (i + 1) + ' 位眷屬');
+    const age = depAgeOn(d.birth_date);
+    if(d.low_income_70 && !d.disability){
+      if(age === null) out.push(nm + '：勾了中低收入戶，但沒填出生日期，算不出滿不滿 70 歲，先當要計費');
+      else if(age < 70) out.push(nm + '：中低收入戶要滿 70 歲才全額補助（目前 ' + age + ' 歲），這一口仍要計費');
+    }
+  });
+  return out;
+}
+function depRowHtml(prefix, i, d){
+  const v = k => esc(d && d[k] != null ? d[k] : '');
+  const ck = k => (d && d[k]) ? 'checked' : '';
+  const age = depAgeOn(d && d.birth_date);
+  const free = depIsFree(d);
+  return `<div class="dep-row" data-dep-prefix="${prefix}" data-dep-i="${i}"
+       style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:5px 8px;border:1px solid var(--line, #ddd);border-radius:6px;margin-bottom:6px;background:${free ? 'rgba(46,125,50,.06)' : 'transparent'};">
+    <span class="muted" style="min-width:34px;">${i + 1}.</span>
+    <label style="font-weight:400;margin:0;">稱謂／姓名
+      <input class="dep-in" data-dep-k="name" value="${v('name')}" placeholder="例：配偶 王小美" style="max-width:170px;"></label>
+    <label style="font-weight:400;margin:0;">出生日期
+      <input class="dep-in" data-dep-k="birth_date" type="date" value="${v('birth_date')}" style="max-width:150px;"></label>
+    <span class="muted dep-age">${age === null ? '' : age + ' 歲'}</span>
+    <label style="font-weight:400;margin:0;display:flex;align-items:center;gap:5px;"
+           title="老人福利法：中低收入戶滿 70 歲，健保費由政府全額補助">
+      <input class="dep-in" data-dep-k="low_income_70" type="checkbox" ${ck('low_income_70')} style="width:16px;height:16px;">中低收入戶</label>
+    <label style="font-weight:400;margin:0;display:flex;align-items:center;gap:5px;"
+           title="身心障礙者權益保障法：重度、極重度身心障礙，健保費由政府全額補助">
+      <input class="dep-in" data-dep-k="disability" type="checkbox" ${ck('disability')} style="width:16px;height:16px;">重度以上身障</label>
+    <span class="dep-flag" style="font-size:12px;${free ? 'color:#2e7d32;font-weight:700;' : 'color:#888;'}">${free ? '免計費' : '計費'}</span>
+  </div>`;
+}
+// 讀畫面上的眷屬明細
+function depRead(prefix){
+  return [...document.querySelectorAll(`.dep-row[data-dep-prefix="${prefix}"]`)].map(row => {
+    const g = k => row.querySelector(`.dep-in[data-dep-k="${k}"]`);
+    return {
+      name: (g('name') || {}).value || '',
+      birth_date: (g('birth_date') || {}).value || null,
+      low_income_70: !!(g('low_income_70') || {}).checked,
+      disability: !!(g('disability') || {}).checked,
+      note: ''
+    };
+  });
+}
+// 依「眷屬加保人數」畫出對應列數（原本填過的內容留著）
+function depRender(prefix, keep){
+  const box = document.getElementById(prefix + '_dep_list');
+  if(!box) return;
+  const n = Math.max(0, parseInt((document.getElementById(prefix + '_dep') || {}).value, 10) || 0);
+  const old = keep || depRead(prefix);
+  const list = [];
+  for(let i = 0; i < n; i++) list.push(old[i] || { name:'', birth_date:null, low_income_70:false, disability:false, note:'' });
+  box.innerHTML = n
+    ? `<div class="muted" style="font-size:12px;margin-bottom:4px;">眷屬明細（勾了補助身分，系統就會自己把那一口算成免計費；中低收入戶要滿 70 歲才算）</div>`
+      + list.map((d, i) => depRowHtml(prefix, i, d)).join('')
+    : '';
+}
+function insHintFor(prefix){
+  const box = document.getElementById(prefix + '_ins_hint');
+  if(!box) return;
+  const list = depRead(prefix);
+  const free = depFreeCount(list);
+  const warn = depWarnings(list);
+  box.innerHTML = insEstimateHtml(
+      (document.getElementById(prefix + '_insured') || {}).value,
+      (document.getElementById(prefix + '_dep') || {}).value, free)
+    + (warn.length ? `<br><span style="color:#b26a00;">⚠ ${warn.map(esc).join('<br>⚠ ')}</span>` : '');
+}
+function sfInsHint(){ insHintFor('sf'); }
+function seInsHint(){ insHintFor('se'); }
+// 一列改了只更新那一列的「歲數／免計費」標記，不重畫整區——
+// 重畫會把游標踢掉，名字打第一個字就沒辦法繼續打。
+function depRefreshRow(row){
+  if(!row) return;
+  const g = k => row.querySelector(`.dep-in[data-dep-k="${k}"]`);
+  const d = {
+    birth_date: (g('birth_date') || {}).value || null,
+    low_income_70: !!(g('low_income_70') || {}).checked,
+    disability: !!(g('disability') || {}).checked
+  };
+  const age = depAgeOn(d.birth_date);
+  const free = depIsFree(d);
+  const a = row.querySelector('.dep-age');
+  if(a) a.textContent = age === null ? '' : age + ' 歲';
+  const f = row.querySelector('.dep-flag');
+  if(f){
+    f.textContent = free ? '免計費' : '計費';
+    f.style.color = free ? '#2e7d32' : '#888';
+    f.style.fontWeight = free ? '700' : '400';
+  }
+  row.style.background = free ? 'rgba(46,125,50,.06)' : 'transparent';
+}
+function depOnRowEdit(target){
+  const row = target.closest('.dep-row');
+  const prefix = row && row.getAttribute('data-dep-prefix');
+  if(!prefix) return false;
+  depRefreshRow(row);
+  insHintFor(prefix);
+  return true;
+}
+// 眷屬人數改了才重畫列數
 document.addEventListener('input', e => {
-  if(e.target && ['se_insured', 'se_dep', 'se_depfree'].includes(e.target.id)) seInsHint();
+  if(!e.target) return;
+  if(e.target.id === 'sf_dep'){ depRender('sf'); sfInsHint(); return; }
+  if(e.target.id === 'se_dep'){ depRender('se'); seInsHint(); return; }
+  if(e.target.id === 'sf_insured') return sfInsHint();
+  if(e.target.id === 'se_insured') return seInsHint();
+  if(e.target.classList && e.target.classList.contains('dep-in')) depOnRowEdit(e.target);
+});
+document.addEventListener('change', e => {
+  if(e.target && e.target.classList && e.target.classList.contains('dep-in')) depOnRowEdit(e.target);
 });
 
 function renderIbCard(){
@@ -10795,8 +10910,28 @@ function renderStaffModalView(e){
         ? Number(e.insured_salary).toLocaleString('en-US')
           + `<span class="muted">（勞保 ${Math.min(e.insured_salary, IB_LABOR_MAX).toLocaleString('en-US')}／職災 ${Math.min(e.insured_salary, IB_INJURY_MAX).toLocaleString('en-US')}／勞退 ${Math.min(Math.max(e.insured_salary, IB_PENSION_MIN), IB_PENSION_MAX).toLocaleString('en-US')}／健保 ${Math.min(e.insured_salary, IB_HEALTH_MAX).toLocaleString('en-US')}）</span>`
         : '—'}</dd>
-      <dt>眷屬加保</dt><dd>${(Number(e.dependents_count)||0) === 0 ? '無'
-        : `${Number(e.dependents_count)} 人${(Number(e.dependents_free_count)||0) ? `（免計費 ${Number(e.dependents_free_count)} 口）` : ''}　計費眷口 ${insBillableDeps(e.dependents_count, e.dependents_free_count)} 口`}</dd>
+      <dt>眷屬加保</dt><dd>${(() => {
+        const n = Number(e.dependents_count) || 0;
+        if(!n) return '無';
+        let list = e.dependents_detail;
+        if(typeof list === 'string'){ try{ list = JSON.parse(list); }catch(_){ list = []; } }
+        list = Array.isArray(list) ? list : [];
+        const free = list.length ? depFreeCount(list) : (Number(e.dependents_free_count) || 0);
+        const head = `${n} 人${free ? `（免計費 ${free} 口）` : ''}　計費眷口 ${insBillableDeps(n, free)} 口`;
+        if(!list.length) return head;
+        const li = list.map(d => {
+          const age = depAgeOn(d.birth_date);
+          const tags = [];
+          if(d.low_income_70) tags.push('中低收入戶');
+          if(d.disability) tags.push('重度以上身障');
+          return `<div>・${esc(String(d.name || '').trim() || '（未填姓名）')}`
+            + (age === null ? '' : `<span class="muted"> ${age} 歲</span>`)
+            + (tags.length ? `<span class="muted"> ${esc(tags.join('、'))}</span>` : '')
+            + (depIsFree(d) ? '<span style="color:#2e7d32;"> 免計費</span>' : '')
+            + `</div>`;
+        }).join('');
+        return head + li;
+      })()}</dd>
       <dt>雇主險（團保）</dt><dd>${e.employer_ins_status==='已加保' ? '<b>✓ 已加保</b>' : esc(e.employer_ins_status||'未加保')}</dd>
       <dt>血壓酒測機</dt><dd>${esc(e.bp_alcohol_status||'—')}${e.bp_alcohol_date?'（'+esc(e.bp_alcohol_date)+' 登錄）':''}${e.bp_alcohol_code?' 代號 '+esc(e.bp_alcohol_code):''}</dd>
       <dt>勞退自提比例</dt><dd>${(() => { const p = STATE.pensionElections.find(x=>x.employee_id===empId); return p && p.self_contribution_rate ? p.self_contribution_rate+'%' : '未自提'; })()}</dd>
@@ -10882,6 +11017,14 @@ function renderStaffModalView(e){
   document.getElementById('staffModalEditBtn').addEventListener('click', () => renderStaffModalEdit(e));
 }
 
+// 編輯視窗畫好之後，把眷屬明細帶進去並試算一次
+function seDepInit(e){
+  let list = e.dependents_detail;
+  if(typeof list === 'string'){ try{ list = JSON.parse(list); }catch(_){ list = []; } }
+  depRender('se', Array.isArray(list) ? list : []);
+  seInsHint();
+}
+
 function renderStaffModalEdit(e){
   // 只列對照得到編號的名稱，避免選了存不進去；目前這個人的值不在清單裡也要補回來才選得到
   const withCur = (list, cur) => (cur && list.indexOf(cur) < 0) ? [cur].concat(list) : list;
@@ -10894,6 +11037,7 @@ function renderStaffModalEdit(e){
   const regionOptions = yardOptions(e.region);
   const opt = (list, current) => list.map(v => `<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
 
+  setTimeout(() => seDepInit(e), 0);
   document.getElementById('staffModalContent').innerHTML = `
     <h3>編輯人員 — ${esc(e.name)}</h3>
     <div class="form-grid">
@@ -10923,9 +11067,8 @@ function renderStaffModalEdit(e){
       <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
       <label>勞健保投保金額<input id="se_insured" type="number" list="insAmountList" value="${esc(e.insured_salary||'')}" placeholder="例：45800" style="max-width:150px;"
              title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
-      <label>眷屬加保人數<input id="se_dep" type="number" min="0" value="${esc(e.dependents_count||0)}" style="max-width:110px;"></label>
-      <label>其中免計費眷口<input id="se_depfree" type="number" min="0" value="${esc(e.dependents_free_count||0)}" style="max-width:110px;"
-             title="中低收入戶滿70歲、重大傷病等健保法規定免自付保費的眷屬，不算保費口數"></label>
+      <label>眷屬加保人數<input id="se_dep" type="number" min="0" value="${esc(e.dependents_count||0)}" style="max-width:110px;"
+             title="填幾人，下面就會出現幾列，一位一位登記"></label>
       <label>雇主險（團保）
         <span style="display:flex;align-items:center;gap:8px;font-weight:400;padding:6px 0;">
           <input id="se_empins_status" type="checkbox" style="width:18px;height:18px;" ${e.employer_ins_status==='已加保'?'checked':''}>
@@ -10934,6 +11077,7 @@ function renderStaffModalEdit(e){
         </span>
       </label>
       <label>勞退自提比例(%)<input id="se_pension_rate" type="number" step="0.5" min="0" max="6" value="${esc((STATE.pensionElections.find(p=>p.employee_id===e.id)||{}).self_contribution_rate||0)}"></label>
+      <div id="se_dep_list" style="grid-column:1/-1;"></div>
       <div id="se_ins_hint" class="muted" style="grid-column:1/-1;font-size:12px;line-height:1.7;"></div>
     </div>
     <div class="detail-section">
@@ -10977,7 +11121,8 @@ function renderStaffModalEdit(e){
   e.insured_salary = document.getElementById('se_insured') && document.getElementById('se_insured').value
                      ? parseInt(document.getElementById('se_insured').value, 10) : null;
   e.dependents_count = parseInt((document.getElementById('se_dep') || {}).value, 10) || 0;
-  e.dependents_free_count = parseInt((document.getElementById('se_depfree') || {}).value, 10) || 0;
+  e.dependents_detail = depRead('se');
+  e.dependents_free_count = depFreeCount(e.dependents_detail);
     // 打勾＝已加保；沒打勾的話，原本標記「不需加保」的就維持不動，其餘算未加保
     e.employer_ins_status = document.getElementById('se_empins_status').checked ? '已加保'
                           : (e.employer_ins_status === '不需加保' ? '不需加保' : '未加保');
@@ -19974,7 +20119,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     bank_account: document.getElementById('sf_bank').value.trim() || null,
     insured_salary: document.getElementById('sf_insured').value ? parseInt(document.getElementById('sf_insured').value, 10) : null,
     dependents_count: parseInt(document.getElementById('sf_dep').value, 10) || 0,
-    dependents_free_count: parseInt(document.getElementById('sf_depfree').value, 10) || 0,
+    dependents_detail: depRead('sf'),
+    dependents_free_count: depFreeCount(depRead('sf')),
     employer_ins_status: document.getElementById('sf_empins_status').checked ? '已加保'
                          : (document.getElementById('sf_type').value === '間接' ? '不需加保' : '未加保'),
     bp_alcohol_status: bpStatusFromGates(cardGates, document.getElementById('sf_type').value),
