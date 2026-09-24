@@ -541,7 +541,12 @@
       <div class="detail-section">
         <h4>報到辦理事項</h4>
         <div class="form-grid">
-          <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off"></label>
+          <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
+          <label>勞健保投保金額<input id="sf_insured" type="number" list="insAmountList" placeholder="例：45800" style="max-width:150px;"
+                 title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
+          <label>眷屬加保人數<input id="sf_dep" type="number" min="0" value="0" style="max-width:110px;"></label>
+          <label>其中免計費眷口<input id="sf_depfree" type="number" min="0" value="0" style="max-width:110px;"
+                 title="中低收入戶滿70歲、重大傷病等健保法規定免自付保費的眷屬，不算保費口數"></label>
           <label>雇主險（團保）
             <span style="display:flex;align-items:center;gap:8px;font-weight:400;padding:6px 0;">
               <input id="sf_empins_status" type="checkbox" style="width:18px;height:18px;">
@@ -549,6 +554,8 @@
             </span>
           </label>
         </div>
+        <div id="sf_ins_hint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
+        <datalist id="insAmountList"></datalist>
       </div>
       <div class="detail-section">
         <h4>門禁卡（入職發卡與通行權限）</h4>
@@ -688,7 +695,7 @@
             <option value="退保">退保</option>
           </select>
         </label>
-        <label style="display:none;">投保金額<input id="ic_salary" type="number" placeholder="例：38200"></label>
+        <label>投保金額<input id="ic_salary" type="number" list="insAmountList" placeholder="選人員會自動帶入" style="max-width:150px;"></label>
         <label>生效(異動)日期<input id="ic_date" type="date"></label>
         <label>親屬加保
           <select id="ic_has_dep">
@@ -696,7 +703,9 @@
             <option value="1">是</option>
           </select>
         </label>
-        <label>親屬加保人數<input id="ic_dep_count" type="number" min="0" value="0"></label>
+        <label>親屬加保人數<input id="ic_dep_count" type="number" min="0" value="0" style="max-width:110px;"></label>
+        <label>其中免計費眷口<input id="ic_dep_free" type="number" min="0" value="0" style="max-width:110px;"
+               title="中低收入戶滿70歲、重大傷病等健保法規定免自付保費的眷屬，不算保費口數"></label>
         <label>備註<input id="ic_notes" placeholder="選填"></label>
       </div>
       <button class="btn" id="ic_add">新增投保資料</button>
@@ -8158,6 +8167,91 @@ function ibCalc(){
     <div class="muted" style="margin-top:6px;">員工健保 ${n(b.employee_health)} × (1＋眷口 ${dep}) ＝ ${n(ph)}；勞退自提沒算在裡面。</div>`;
 }
 
+// ===== 一個人的勞健保試算 =====
+// 投保金額只存一個數字，四種保險各自套自己的上限；
+// 健保眷屬自付：本人一份＋眷屬每口一份，超過 3 口以 3 口計（健保法第 18 條），
+// 中低收入戶滿 70 歲、重大傷病等免計費的眷屬不算在口數裡。
+function insBillableDeps(dep, free){
+  return Math.min(Math.max((Number(dep) || 0) - (Number(free) || 0), 0), 3);
+}
+function insEstimate(amount, dep, free, injuryRate){
+  const a = Number(amount) || 0;
+  if(!a) return null;
+  const labor   = Math.min(a, IB_LABOR_MAX);
+  const injury  = Math.min(a, IB_INJURY_MAX);
+  const pension = Math.min(Math.max(a, IB_PENSION_MIN), IB_PENSION_MAX);
+  const health  = Math.min(a, IB_HEALTH_MAX);
+  const lb = ibFind(labor), hb = ibFind(health);
+  if(!lb || !hb) return null;
+  const bill = insBillableDeps(dep, free);
+  const rate = Number(injuryRate) || ibInjuryRate();
+  const eInj = Math.round(injury * rate);
+  const ePen = Math.round(pension * IB_PENSION_RATE);
+  return {
+    amount:a, labor:labor, injury:injury, pension:pension, health:health,
+    billableDeps:bill, injuryRate:rate,
+    empLabor:lb.employer_labor, empInjury:eInj, empHealth:hb.employer_health, empPension:ePen,
+    empTotal:lb.employer_labor + eInj + hb.employer_health + ePen,
+    selfLabor:lb.employee_labor, selfHealthUnit:hb.employee_health,
+    selfHealth:hb.employee_health * (1 + bill),
+    selfTotal:lb.employee_labor + hb.employee_health * (1 + bill)
+  };
+}
+function insEstimateHtml(amount, dep, free){
+  const n = v => Number(v).toLocaleString('en-US');
+  const a = Number(amount) || 0;
+  if(!a) return '<span class="muted">填了投保金額就會在這裡試算勞保、職災、健保、勞退各要繳多少。</span>';
+  const x = insEstimate(a, dep, free);
+  if(!x) return '<span style="color:#b26a00;">投保金額 ' + n(a) + ' 查不到對應級距（級距表最高 120,900），請確認。</span>';
+  const cap = [];
+  if(x.labor   < a) cap.push('勞保 ' + n(x.labor) + '（上限）');
+  if(x.injury  < a) cap.push('職災 ' + n(x.injury) + '（上限）');
+  if(x.pension !== a) cap.push('勞退 ' + n(x.pension) + '（' + (x.pension > a ? '下限' : '上限') + '）');
+  if(x.health  < a) cap.push('健保 ' + n(x.health) + '（上限）');
+  const depTxt = (Number(dep) || 0) > 0
+    ? `眷屬 ${Number(dep) || 0} 人` + ((Number(free) || 0) > 0 ? `（免計費 ${Number(free)} 口）` : '')
+      + ` → 計費眷口 ${x.billableDeps} 口` + (((Number(dep) || 0) - (Number(free) || 0)) > 3 ? '（超過 3 口以 3 口計）' : '')
+    : '無眷屬';
+  return `<b>投保金額 ${n(a)}</b>　勞保 ${n(x.labor)}／職災 ${n(x.injury)}／勞退 ${n(x.pension)}／健保 ${n(x.health)}`
+    + (cap.length ? `<span style="color:#b26a00;">　※ ${cap.join('、')}</span>` : '')
+    + `<br>${depTxt}`
+    + `<br><b>公司負擔</b> 勞保 ${n(x.empLabor)} ＋ 職災 ${n(x.empInjury)}（費率 ${(x.injuryRate * 100).toFixed(2)}%） ＋ 健保 ${n(x.empHealth)} ＋ 勞退 ${n(x.empPension)} ＝ <b>${n(x.empTotal)}</b>`
+    + `<br><b>員工自付</b> 勞保 ${n(x.selfLabor)} ＋ 健保 ${n(x.selfHealthUnit)}×${1 + x.billableDeps} ＝ ${n(x.selfHealth)}　合計 <b>${n(x.selfTotal)}</b>`;
+}
+// 投保金額的下拉建議（級距表上的金額）
+function insFillAmountList(){
+  const dl = document.getElementById('insAmountList');
+  if(!dl) return;
+  dl.innerHTML = ibRows().filter(b => b.bracket_no)
+    .map(b => `<option value="${b.insured_amount}">第 ${b.bracket_no} 級</option>`).join('');
+}
+// 新增人員表單那一組欄位的即時試算
+function sfInsHint(){
+  const box = document.getElementById('sf_ins_hint');
+  if(!box) return;
+  box.innerHTML = insEstimateHtml(
+    (document.getElementById('sf_insured') || {}).value,
+    (document.getElementById('sf_dep') || {}).value,
+    (document.getElementById('sf_depfree') || {}).value);
+}
+// 編輯人員視窗那一組
+function seInsHint(){
+  const box = document.getElementById('se_ins_hint');
+  if(!box) return;
+  box.innerHTML = insEstimateHtml(
+    (document.getElementById('se_insured') || {}).value,
+    (document.getElementById('se_dep') || {}).value,
+    (document.getElementById('se_depfree') || {}).value);
+}
+['sf_insured', 'sf_dep', 'sf_depfree'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', sfInsHint);
+});
+// 編輯視窗是動態產生的，用事件代理
+document.addEventListener('input', e => {
+  if(e.target && ['se_insured', 'se_dep', 'se_depfree'].includes(e.target.id)) seInsHint();
+});
+
 function renderIbCard(){
   const body = document.getElementById('ib_tableBody');
   if(!body) return;
@@ -8166,6 +8260,8 @@ function renderIbCard(){
   if(cnt) cnt.textContent = `共 ${rows.length} 級` + ((STATE.insBrackets && STATE.insBrackets.length) ? '' : '（內建備援，雲端級距表還沒建）');
   const inj = document.getElementById('ib_inj');
   if(inj && !inj.value) inj.value = (ibInjuryRate() * 100).toFixed(2);
+  insFillAmountList();
+  sfInsHint();
   body.innerHTML = rows.map(b => `<tr>
       <td style="text-align:center;">${b.bracket_no == null ? '<span class="muted">部分工時</span>' : b.bracket_no}</td>
       <td style="text-align:right;"><b>${n(b.insured_amount)}</b></td>
@@ -11273,6 +11369,12 @@ function renderStaffModalView(e){
       <dt>司機上線日期</dt><dd>${esc(e.online_date||'—')}</dd>
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
       <dt>合作金庫帳號</dt><dd>${esc(e.bank_account||'—')}</dd>
+      <dt>勞健保投保金額</dt><dd>${e.insured_salary
+        ? Number(e.insured_salary).toLocaleString('en-US')
+          + `<span class="muted">（勞保 ${Math.min(e.insured_salary, IB_LABOR_MAX).toLocaleString('en-US')}／職災 ${Math.min(e.insured_salary, IB_INJURY_MAX).toLocaleString('en-US')}／勞退 ${Math.min(Math.max(e.insured_salary, IB_PENSION_MIN), IB_PENSION_MAX).toLocaleString('en-US')}／健保 ${Math.min(e.insured_salary, IB_HEALTH_MAX).toLocaleString('en-US')}）</span>`
+        : '—'}</dd>
+      <dt>眷屬加保</dt><dd>${(Number(e.dependents_count)||0) === 0 ? '無'
+        : `${Number(e.dependents_count)} 人${(Number(e.dependents_free_count)||0) ? `（免計費 ${Number(e.dependents_free_count)} 口）` : ''}　計費眷口 ${insBillableDeps(e.dependents_count, e.dependents_free_count)} 口`}</dd>
       <dt>雇主險（團保）</dt><dd>${e.employer_ins_status==='已加保' ? '<b>✓ 已加保</b>' : esc(e.employer_ins_status||'未加保')}</dd>
       <dt>血壓酒測機</dt><dd>${esc(e.bp_alcohol_status||'—')}${e.bp_alcohol_date?'（'+esc(e.bp_alcohol_date)+' 登錄）':''}${e.bp_alcohol_code?' 代號 '+esc(e.bp_alcohol_code):''}</dd>
       <dt>勞退自提比例</dt><dd>${(() => { const p = STATE.pensionElections.find(x=>x.employee_id===empId); return p && p.self_contribution_rate ? p.self_contribution_rate+'%' : '未自提'; })()}</dd>
@@ -11396,7 +11498,12 @@ function renderStaffModalEdit(e){
       <label>體檢日期<input id="se_medical" type="date" value="${esc(e.medical_exam_date||'')}"></label>
       <label>司機上線日期<input id="se_online" type="date" value="${esc(e.online_date||'')}"></label>
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
-      <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off"></label>
+      <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
+      <label>勞健保投保金額<input id="se_insured" type="number" list="insAmountList" value="${esc(e.insured_salary||'')}" placeholder="例：45800" style="max-width:150px;"
+             title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
+      <label>眷屬加保人數<input id="se_dep" type="number" min="0" value="${esc(e.dependents_count||0)}" style="max-width:110px;"></label>
+      <label>其中免計費眷口<input id="se_depfree" type="number" min="0" value="${esc(e.dependents_free_count||0)}" style="max-width:110px;"
+             title="中低收入戶滿70歲、重大傷病等健保法規定免自付保費的眷屬，不算保費口數"></label>
       <label>雇主險（團保）
         <span style="display:flex;align-items:center;gap:8px;font-weight:400;padding:6px 0;">
           <input id="se_empins_status" type="checkbox" style="width:18px;height:18px;" ${e.employer_ins_status==='已加保'?'checked':''}>
@@ -11405,6 +11512,7 @@ function renderStaffModalEdit(e){
         </span>
       </label>
       <label>勞退自提比例(%)<input id="se_pension_rate" type="number" step="0.5" min="0" max="6" value="${esc((STATE.pensionElections.find(p=>p.employee_id===e.id)||{}).self_contribution_rate||0)}"></label>
+      <div id="se_ins_hint" class="muted" style="grid-column:1/-1;font-size:12px;line-height:1.7;"></div>
     </div>
     <div class="detail-section">
       <h4>門禁卡通行權限</h4>
@@ -11444,6 +11552,10 @@ function renderStaffModalEdit(e){
     e.online_date = document.getElementById('se_online').value || null;
     e.access_card_no = document.getElementById('se_card').value.trim();
     e.bank_account = document.getElementById('se_bank').value.trim() || null;
+  e.insured_salary = document.getElementById('se_insured') && document.getElementById('se_insured').value
+                     ? parseInt(document.getElementById('se_insured').value, 10) : null;
+  e.dependents_count = parseInt((document.getElementById('se_dep') || {}).value, 10) || 0;
+  e.dependents_free_count = parseInt((document.getElementById('se_depfree') || {}).value, 10) || 0;
     // 打勾＝已加保；沒打勾的話，原本標記「不需加保」的就維持不動，其餘算未加保
     e.employer_ins_status = document.getElementById('se_empins_status').checked ? '已加保'
                           : (e.employer_ins_status === '不需加保' ? '不需加保' : '未加保');
@@ -12190,7 +12302,7 @@ function generateForm(){
     // 每個行號各自從新的一頁開始，一張表不會跨到下一家公司
     const PGBREAK = 'page-break-before:always;break-before:page;';
     const rowsHtml = Object.entries(byCompany).map(([companyName, list], ci) => {
-      const header = `<tr style="background:#EEF3F1;${ci ? PGBREAK : ''}"><td colspan="10" style="padding:6px 8px;border:1px solid #ccc;font-weight:700;">${esc(companyName)}</td></tr>`;
+      const header = `<tr style="background:#EEF3F1;${ci ? PGBREAK : ''}"><td colspan="8" style="padding:6px 8px;border:1px solid #ccc;font-weight:700;">${esc(companyName)}</td></tr>`;
       const memberRows = list.map((r,i) => `
         <tr>
           <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${i+1}</td>
@@ -12199,20 +12311,16 @@ function generateForm(){
           <td style="${CELLE}">${money(empLabor(r))}</td>
           <td style="${CELLE}">${money(r.latest.employer_health)}</td>
           <td style="${CELLE}">${money(r.latest.employer_pension)}</td>
-          <td style="${CELLE}font-weight:700;">${money(r.total)}</td>
           <td style="${CELLP}">${money(r.latest.personal_labor)}</td>
           <td style="${CELLP}">${money(r.latest.personal_health)}</td>
-          <td style="${CELLP}font-weight:700;">${money(r.personal)}</td>
         </tr>`).join('');
       const subtotalRow = `<tr style="font-weight:700;background:#fdfdfd;">
           <td colspan="3" style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${esc(companyName)} 小計（${list.length} 人）</td>
           <td style="${CELLE}">${money(sumOf(list, empLabor))}</td>
           <td style="${CELLE}">${money(sumOf(list, r => r.latest.employer_health))}</td>
           <td style="${CELLE}">${money(sumOf(list, r => r.latest.employer_pension))}</td>
-          <td style="${CELLE}">${money(sumOf(list, r => r.total))}</td>
           <td style="${CELLP}">${money(sumOf(list, r => r.latest.personal_labor))}</td>
           <td style="${CELLP}">${money(sumOf(list, r => r.latest.personal_health))}</td>
-          <td style="${CELLP}">${money(sumOf(list, r => r.personal))}</td>
         </tr>`;
       return header + memberRows + subtotalRow;
     }).join('');
@@ -12226,17 +12334,15 @@ function generateForm(){
             <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">序號</th>
             <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">姓名</th>
             <th rowspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">部門</th>
-            <th colspan="4" style="padding:6px 8px;border:1px solid #ccc;background:#EEF3F1;">雇主提撥</th>
-            <th colspan="3" style="padding:6px 8px;border:1px solid #ccc;background:#F6EFE3;">人員自付</th>
+            <th colspan="3" style="padding:6px 8px;border:1px solid #ccc;background:#EEF3F1;">雇主提撥</th>
+            <th colspan="2" style="padding:6px 8px;border:1px solid #ccc;background:#F6EFE3;">人員自付</th>
           </tr>
           <tr>
             <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;" title="普通事故＋就業保險＋職業災害">勞保</th>
             <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">健保</th>
             <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞退(6%)</th>
-            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">雇主小計</th>
             <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">勞保</th>
             <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">健保</th>
-            <th style="padding:6px 8px;border:1px solid #ccc;background:#f5f5f5;">人員小計</th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
@@ -12246,10 +12352,8 @@ function generateForm(){
             <td style="${CELLE}">${money(sumOf(rowsData, empLabor))}</td>
             <td style="${CELLE}">${money(sumOf(rowsData, r => r.latest.employer_health))}</td>
             <td style="${CELLE}">${money(sumOf(rowsData, r => r.latest.employer_pension))}</td>
-            <td style="${CELLE}">${money(grandTotal)}</td>
             <td style="${CELLP}">${money(sumOf(rowsData, r => r.latest.personal_labor))}</td>
             <td style="${CELLP}">${money(sumOf(rowsData, r => r.latest.personal_health))}</td>
-            <td style="${CELLP}">${money(grandPersonal)}</td>
           </tr>
         </tfoot>
       </table>
@@ -12402,7 +12506,7 @@ function pcMissingOnDuty(){
 }
 
 function pensionContributionCsv(){
-  const head = ['行號','序號','姓名','部門','雇主-勞保','雇主-健保','雇主-勞退(6%)','雇主小計','人員-勞保','人員-健保','人員小計'];
+  const head = ['行號','序號','姓名','部門','雇主-勞保','雇主-健保','雇主-勞退(6%)','人員-勞保','人員-健保'];
   const empLabor = r => (r.latest.employer_labor_general || 0) + (r.latest.employer_labor_injury || 0);
   const data = pensionContributionRows();
   const byCompany = {};
@@ -12415,18 +12519,18 @@ function pensionContributionCsv(){
   Object.entries(byCompany).forEach(([companyName, list]) => {
     list.forEach((r,i) => rows.push([
       companyName, String(i+1), (r.emp.name||'') + (r.emp.onDuty ? '' : '(已離職)'), r.emp.dept_name||'',
-      n(empLabor(r)), n(r.latest.employer_health), n(r.latest.employer_pension), n(r.total),
-      n(r.latest.personal_labor), n(r.latest.personal_health), n(r.personal)
+      n(empLabor(r)), n(r.latest.employer_health), n(r.latest.employer_pension),
+      n(r.latest.personal_labor), n(r.latest.personal_health)
     ]));
     const s = (fn) => list.reduce((a,r) => a + (fn(r)||0), 0);
     rows.push([companyName + ' 小計','','','',
-      n(s(empLabor)), n(s(r => r.latest.employer_health)), n(s(r => r.latest.employer_pension)), n(s(r => r.total)),
-      n(s(r => r.latest.personal_labor)), n(s(r => r.latest.personal_health)), n(s(r => r.personal))]);
+      n(s(empLabor)), n(s(r => r.latest.employer_health)), n(s(r => r.latest.employer_pension)),
+      n(s(r => r.latest.personal_labor)), n(s(r => r.latest.personal_health))]);
   });
   const t = (fn) => data.reduce((a,r) => a + (fn(r)||0), 0);
   rows.push(['全公司合計','','','',
-    n(t(empLabor)), n(t(r => r.latest.employer_health)), n(t(r => r.latest.employer_pension)), n(t(r => r.total)),
-    n(t(r => r.latest.personal_labor)), n(t(r => r.latest.personal_health)), n(t(r => r.personal))]);
+    n(t(empLabor)), n(t(r => r.latest.employer_health)), n(t(r => r.latest.employer_pension)),
+    n(t(r => r.latest.personal_labor)), n(t(r => r.latest.personal_health))]);
   return csvLines(head, rows);
 }
 
@@ -16765,15 +16869,44 @@ document.getElementById('ic_add').addEventListener('click', async () => {
     effective_date: date,
     has_dependents: hasDep,
     dependents_count: hasDep ? (parseInt(document.getElementById('ic_dep_count').value) || 0) : 0,
+    dependents_free_count: hasDep ? (parseInt((document.getElementById('ic_dep_free') || {}).value) || 0) : 0,
     notes: document.getElementById('ic_notes').value.trim()
   });
+  // 加保／薪調同時把人員主檔的投保金額、眷口數更新成一樣的，兩邊才不會各說各話
+  {
+    const _emp = STATE.employees.find(x => x.id === empId);
+    const _amt = document.getElementById('ic_salary').value ? parseInt(document.getElementById('ic_salary').value, 10) : null;
+    if(_emp && document.getElementById('ic_type').value !== '退保'){
+      if(_amt) _emp.insured_salary = _amt;
+      _emp.dependents_count = hasDep ? (parseInt(document.getElementById('ic_dep_count').value) || 0) : 0;
+      _emp.dependents_free_count = hasDep ? (parseInt((document.getElementById('ic_dep_free') || {}).value) || 0) : 0;
+      await saveState('roster_employees', STATE.employees, true);
+    }
+  }
   await saveState('insurance_changes', STATE.insuranceChanges, true);
   if(syncInsuredDate(empId)) await saveState('roster_employees', STATE.employees, true);
   ['ic_salary','ic_date','ic_notes'].forEach(id=>document.getElementById(id).value='');
+  const _icFree = document.getElementById('ic_dep_free'); if(_icFree) _icFree.value = 0;
   document.getElementById('ic_has_dep').value = '0';
   document.getElementById('ic_dep_count').value = 0;
   renderAll();
 });
+// 選了人員就把人員主檔登記的投保金額與眷口帶進來，省得再查一次
+document.getElementById('ic_emp').addEventListener('change', () => {
+  const emp = STATE.employees.find(x => String(x.id) === document.getElementById('ic_emp').value);
+  if(!emp) return;
+  const sal = document.getElementById('ic_salary');
+  if(sal && !sal.value && emp.insured_salary) sal.value = emp.insured_salary;
+  const dep = Number(emp.dependents_count) || 0;
+  if(dep > 0){
+    document.getElementById('ic_has_dep').value = '1';
+    document.getElementById('ic_dep_count').disabled = false;
+    document.getElementById('ic_dep_count').value = dep;
+    const f = document.getElementById('ic_dep_free');
+    if(f) f.value = Number(emp.dependents_free_count) || 0;
+  }
+});
+
 document.getElementById('icTableBody').addEventListener('click', async (e) => {
   const id = e.target.getAttribute('data-del-ic');
   if(id){
@@ -18496,6 +18629,9 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     emergency_contact: document.getElementById('sf_emergency_contact').value.trim(),
     emergency_phone: document.getElementById('sf_emergency_phone').value.trim(),
     bank_account: document.getElementById('sf_bank').value.trim() || null,
+    insured_salary: document.getElementById('sf_insured').value ? parseInt(document.getElementById('sf_insured').value, 10) : null,
+    dependents_count: parseInt(document.getElementById('sf_dep').value, 10) || 0,
+    dependents_free_count: parseInt(document.getElementById('sf_depfree').value, 10) || 0,
     employer_ins_status: document.getElementById('sf_empins_status').checked ? '已加保'
                          : (document.getElementById('sf_type').value === '間接' ? '不需加保' : '未加保'),
     bp_alcohol_status: bpStatusFromGates(cardGates, document.getElementById('sf_type').value),
