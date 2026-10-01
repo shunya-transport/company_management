@@ -1670,6 +1670,7 @@
             <option value="特別事假">特別事假</option>
             <option value="生理假">生理假</option>
             <option value="公傷假">公傷假</option>
+            <option value="謀職假">謀職假（資遣預告期間另謀工作）</option>
             <option value="生日假">生日假</option>
             <option value="補休">補休</option>
             <option value="接種特休假">接種特休假</option>
@@ -17247,7 +17248,7 @@ function renderLeaveLedger(){
 
 function renderLeaveSelects(){
   document.getElementById('lv_emp').innerHTML = STATE.employees.map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.employee_no)}）</option>`).join('');
-  const baseTypes = ['事假','病假','特休','公假','婚假','喪假','產假','陪產假','特別事假','生理假','公傷假','生日假','補休','接種特休假','疫苗接種假','防疫隔離假','其他'];
+  const baseTypes = ['事假','病假','特休','公假','婚假','喪假','產假','陪產假','特別事假','生理假','公傷假','謀職假','生日假','補休','接種特休假','疫苗接種假','防疫隔離假','其他'];
   const dataTypes = [...new Set(STATE.leaveRecords.map(r=>(r.leave_type||'').trim()).filter(Boolean))];
   const types = [...new Set([...baseTypes, ...dataTypes])];
   document.getElementById('lv_type_filter').innerHTML = '<option value="all">全部假別</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
@@ -19350,8 +19351,22 @@ const LEAVE_QUOTA = {
                                note:'曾祖父母、兄弟姊妹、配偶之祖父母喪亡，喪假三日'},
   '產假':       {days:56, law:'勞動基準法第50條',        note:'分娩前後合計八星期'},
   '生理假':     {days:null, monthDays:1, law:'性別平等工作法第14條',
-                 note:'每月得請 1 日；全年逾 3 日的部分併入病假 30 日計算'}
+                 note:'每月得請 1 日；全年逾 3 日的部分併入病假 30 日計算'},
+  // 謀職假是「資遣預告期間」為了另謀工作請的假，法規限的是「每星期」不是一年，
+  // 所以用 week：跟這一筆同一個星期（週一到週日）的才累計。工資照給。
+  '謀職假':     {days:2, scope:'week', law:'勞動基準法第16條',
+                 note:'雇主資遣預告期間，勞工為另謀工作得請假，每星期不得超過 2 日之工作時間，請假期間工資照給'}
 };
+// 某一天所屬的那一個星期（週一到週日）
+function leaveWeekRange(date){
+  const d = new Date(String(date).slice(0, 10) + 'T00:00:00');
+  if(isNaN(d)) return null;
+  const back = (d.getDay() + 6) % 7;                 // 週一當第一天
+  const s = new Date(d); s.setDate(s.getDate() - back);
+  const e = new Date(s); e.setDate(e.getDate() + 6);
+  const iso = x => x.toISOString().slice(0, 10);
+  return { start: iso(s), end: iso(e) };
+}
 // 某人某一年某個假別已經請掉幾天（含法定的併計）
 function leaveQuotaUsed(empId, type, year, excludeId, refDate){
   const q0 = LEAVE_QUOTA[type];
@@ -19363,12 +19378,19 @@ function leaveQuotaUsed(empId, type, year, excludeId, refDate){
                      - new Date(String(refDate).slice(0,10) + 'T00:00:00')) / 86400000;
     return d <= 100;
   };
+  // 謀職假限的是「每星期 2 日」，所以只累計同一個星期（週一到週日）的
+  const wk = (q0 && q0.scope === 'week' && refDate) ? leaveWeekRange(refDate) : null;
+  const sameWeek = (r) => {
+    if(!wk || !r.start_date) return true;
+    const d = String(r.start_date).slice(0, 10);
+    return d >= wk.start && d <= wk.end;
+  };
   const sumOf = (t, ym) => (STATE.leaveRecords || [])
     .filter(r => r.employee_id === empId
               && String(r.leave_type || '').trim() === t
-              && ((q0 && q0.scope === 'event100')
-                    ? sameEvent(r)
-                    : String(r.start_date || '').slice(0, ym ? 7 : 4) === (ym || String(year)))
+              && ((q0 && q0.scope === 'event100') ? sameEvent(r)
+                  : (q0 && q0.scope === 'week')   ? sameWeek(r)
+                  : String(r.start_date || '').slice(0, ym ? 7 : 4) === (ym || String(year)))
               && String(r.id) !== String(excludeId))
     .reduce((s, r) => s + leaveDaysOf(r), 0);
   let used = sumOf(type);
@@ -19427,7 +19449,12 @@ function leaveQuotaCheck(empId, type, startDate, addHours, excludeId){
   const after = fmt2(used + addD);
   return {label:type, unit:'天', limit:q.days, used:used, add:addD, after:after,
           over:after > q.days, law:q.law,
-          note:(q.note || '') + (q.scope === 'event100' ? '；累計的是這次喪事（起訖日相差 100 天內）的，不是全年' : '')};
+          note:(q.note || '')
+               + (q.scope === 'event100' ? '；累計的是這次喪事（起訖日相差 100 天內）的，不是全年' : '')
+               + (q.scope === 'week' ? (() => {
+                   const w = leaveWeekRange(startDate || todayISO());
+                   return w ? `；累計的是 ${w.start} ～ ${w.end} 這一個星期的，不是全年` : '';
+                 })() : '')};
 }
 // 畫面上的即時提示（不擋，只講）
 function renderLeaveQuotaHint(empSelId, typeSelId, startId, hoursId, outId, excludeId){
