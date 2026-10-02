@@ -2375,7 +2375,7 @@
         剩餘天數是從今天算到「有效期間」的最後一天。
       </div>
       <div class="toolbar">
-        <input id="vp_search" placeholder="搜尋車號／通行證號碼／批號">
+        <input id="vp_search" placeholder="搜尋車號／板架車號／通行證號碼／批號">
         <select id="vp_vendor_filter"><option value="all">全部廠商</option></select>
         <select id="vp_cat_filter"><option value="all">全部品項</option></select>
         <select id="vp_due_filter">
@@ -2390,7 +2390,7 @@
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>車號</th><th>行號</th><th>廠商</th><th>品項</th><th>危險物品</th>
+            <th>車號</th><th>行號</th><th>廠商</th><th>品項</th><th>危險物品</th><th>板架</th>
             <th>通行證號碼(NO)</th><th>批號</th><th>有效期間</th><th>到期日</th>
             <th>剩餘天數</th><th>指定檢驗日</th><th></th>
           </tr></thead>
@@ -2408,6 +2408,41 @@
           <tbody id="vpGroupBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>依板架（拖車）查詢<span class="count-badge" id="vt_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        曳引車申請通行證時會把要掛的板架一起報上去，所以<b>一台板架會出現在好幾張通行證上</b>。
+        這張表反過來看：一台板架一列，它現在被哪些廠商／品項的通行證涵蓋、最早哪一張到期。<br>
+        要查「這台板架能不能去跑某一家」就直接搜板架車號；
+        <b>「自有」</b>是車輛主檔裡查得到的我們自己的板架，查不到的多半是客戶或靠行的板架。<br>
+        ※ 通行證正面只印得下 16 台，超過的印「詳列於背面」。那種會標 <span class="pill amber">＋背面</span>，
+        表示實際涵蓋的板架比這裡列的多——拿到背面清單後在上面那張表按「修改」，把車號補進「板架車號」欄就好。
+      </div>
+      <div class="toolbar">
+        <input id="vt_search" placeholder="搜尋板架車號／廠商／曳引車車號">
+        <select id="vt_own_filter">
+          <option value="all">全部板架</option>
+          <option value="own">只看自有板架</option>
+          <option value="other">只看非自有（客戶／靠行）</option>
+        </select>
+        <select id="vt_due_filter">
+          <option value="valid">只看還有效的通行證</option>
+          <option value="all">含已過期</option>
+        </select>
+        <button class="btn ghost" id="vt_export" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>板架車號</th><th>自有</th><th>通行證張數</th><th>廠商／品項</th>
+            <th>最早到期</th><th>剩餘天數</th><th>曳引車</th>
+          </tr></thead>
+          <tbody id="vtTableBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" id="vt_nopass" style="margin-top:10px;font-size:12.5px;line-height:1.8;"></div>
     </div>
 
     <div class="card">
@@ -2441,6 +2476,11 @@
         <label>發證監理所<input id="vp_auth" list="vpAuthList" placeholder="例：新竹區監理所"></label>
         <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
           <input id="vp_goods" placeholder="例：第2.2類:四氟甲烷(1982)三氟甲烷(1984)八氟環丁烷(1976)"></label>
+        <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">曳引車才有；多台用「、」或空白隔開，大小寫不拘</span>
+          <textarea id="vp_trailers" rows="2" style="width:100%;font-family:inherit;" placeholder="例：02-NQ、10-PX、29-H9"></textarea></label>
+        <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="vp_trailer_more" style="width:auto;margin:0;">
+          <span>通行證正面只印了前 16 台，其餘「詳列於背面」</span></label>
         <label>備註<input id="vp_notes" placeholder="選填"></label>
       </div>
       <datalist id="vpCompanyList"></datalist>
@@ -3100,8 +3140,14 @@
       <label>備註<input id="vpEditNotes"></label>
       <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
         <textarea id="vpEditGoods" rows="2" style="width:100%;font-family:inherit;"></textarea></label>
+      <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">多台用「、」或空白隔開；背面那幾台補在後面就好</span>
+        <textarea id="vpEditTrailers" rows="2" style="width:100%;font-family:inherit;"></textarea></label>
+      <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="vpEditTrailerMore" style="width:auto;margin:0;">
+        <span>正面只印前 16 台，其餘「詳列於背面」（背面的都補進上面那欄之後，記得把這裡取消勾選）</span></label>
     </div>
     <div class="muted" id="vpEditGoodsPreview" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
+    <div class="muted" id="vpEditTrailerPreview" style="margin-top:4px;font-size:12px;line-height:1.7;"></div>
     <div id="vpEditMsg" style="margin-top:8px;font-size:13px;"></div>
     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn ghost" id="vpEditCancel">取消</button>
@@ -16645,6 +16691,7 @@ function renderAll(){
   renderViTable();
   vpFillPlateSelect('vp_plate', (document.getElementById('vp_plate') || {}).value);
   renderVpTable();
+  renderVtTable();
   renderHzTable();
   renderMaintenanceTables();
   renderTireLayout();
@@ -17439,11 +17486,13 @@ function hzParse(text){
   if(m) return { items:[], note:'背面共 ' + m[1] + ' 種（明細未登錄）' };
   // 以「(四位數字)」當切點，括號前面那一段就是名稱——名稱本身常含全形括號
   // （例：氧化亞氮（一氧化二氮）、氟（20%V/V）與氮之混和氣），用字元類去框會切壞。
+  // 協明化工那批的括號裡是「列管處數」(134處)、(171處)，不是聯合國編號，一樣要拆得出來
   const items = [];
   let cls = '', last = 0;
-  const re = /\((\d{4})\)/g;
+  const re = /\((\d{4})\)|\((\d{1,4}處)\)/g;
   let x;
   while((x = re.exec(s)) !== null){
+    x[1] = x[1] || x[2];
     let chunk = s.slice(last, x.index);
     last = re.lastIndex;
     // 名稱前面可能有「第2.2、5.1類:」這種分類標頭，可能在開頭、也可能夾在中間
@@ -17459,9 +17508,12 @@ function hzParse(text){
 }
 function hzLookup(zh, un){
   const list = STATE.hazmatSubstances || [];
-  return list.find(h => String(h.un_no) === String(un) && String(h.name_zh).trim() === String(zh).trim())
-      || list.find(h => String(h.un_no) === String(un))
-      || null;
+  const hit = list.find(h => String(h.un_no) === String(un) && String(h.name_zh).trim() === String(zh).trim());
+  if(hit) return hit;
+  // 「134處」是列管處數不是 UN 編號，同一個編號底下是一堆不同的化學品，
+  // 所以這種只能用中文名對，不能用編號對。
+  if(/處$/.test(String(un))) return list.find(h => String(h.name_zh).trim() === String(zh).trim()) || null;
+  return list.find(h => String(h.un_no) === String(un)) || null;
 }
 function hzDetailHtml(goodsText){
   const r = hzParse(goodsText);
@@ -17475,7 +17527,9 @@ function hzDetailHtml(goodsText){
       <td style="text-align:center;">${i + 1}</td>
       <td>${esc(it.zh)}</td>
       <td>${h && h.name_en ? esc(h.name_en) : '<span class="muted">（對照表查不到，可在 hazmat_substances 補）</span>'}</td>
-      <td style="text-align:center;font-family:monospace;">UN ${esc(it.un)}</td>
+      <td style="text-align:center;font-family:monospace;">${/處$/.test(String(it.un))
+        ? '<span class="muted" style="font-family:inherit;">列管 ' + esc(it.un) + '</span>'
+        : 'UN ' + esc(it.un)}</td>
       <td class="muted">${esc(h && h.hazard_class ? h.hazard_class : (it.cls || ''))}</td>
     </tr>`;
   }).join('');
@@ -17512,6 +17566,152 @@ function renderHzTable(){
     </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合的物質</td></tr>`;
 }
 
+// ===== 板架（拖車） =====
+// 曳引車申請通行證時會順帶報上要掛的板架，通行證「拖車車號」那一欄就是板架。
+// 資料庫存成一串文字（trailer_plates，用「、」隔開），這裡拆成陣列用。
+// trailer_more＝true 表示正面只印得下 16 台，其餘「詳列於背面」，所以實際台數比存的多。
+function vpTrailers(p){
+  return String((p && p.trailer_plates) || '')
+    .split(/[、,，;；\s]+/)
+    .map(x => x.trim().toUpperCase())
+    .filter(Boolean);
+}
+// 車輛主檔查得到＝我們自己的板架；查不到的多半是客戶或靠行的
+function vtIsOwn(plate){
+  return (STATE.vehicles || []).some(v => String(v.plate || '').toUpperCase() === String(plate).toUpperCase());
+}
+function vtOwnLabel(plate){
+  const v = (STATE.vehicles || []).find(x => String(x.plate || '').toUpperCase() === String(plate).toUpperCase());
+  if(!v) return '<span class="pill gray">非自有</span>';
+  const off = v.status && v.status !== '在役';
+  return `<span class="pill ${off ? 'amber' : 'green'}">自有${off ? '／' + esc(v.status) : ''}</span>`;
+}
+// 這張通行證的板架清單（展開時顯示）
+function vtDetailHtml(p){
+  const list = vpTrailers(p);
+  if(!list.length){
+    return (p && p.vehicle_type && String(p.vehicle_type).indexOf('曳引') >= 0)
+      ? '<div class="muted" style="padding:6px 10px;">這張是曳引車，但通行證上沒有讀到拖車車號——按「修改」補進「板架車號」欄。</div>'
+      : '<div class="muted" style="padding:6px 10px;">這張不是曳引車，沒有附板架。</div>';
+  }
+  return `<div style="padding:4px 10px 2px;">
+      <div style="font-size:12.5px;margin-bottom:4px;">
+        板架（拖車）共 <b>${list.length}</b> 台${p.trailer_more ? '　<span class="pill amber">＋背面還有，未登錄</span>' : ''}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${list.map(t => `<span style="border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12.5px;font-family:monospace;">
+            ${esc(t)} ${vtIsOwn(t) ? '' : '<span class="muted" style="font-family:inherit;">(非自有)</span>'}</span>`).join('')}
+      </div>
+    </div>`;
+}
+// 一台板架一列：它被哪些通行證涵蓋
+function vtRows(){
+  const kw = String((document.getElementById('vt_search') || {}).value || '').trim().toUpperCase();
+  const ownF = (document.getElementById('vt_own_filter') || {}).value || 'all';
+  const dueF = (document.getElementById('vt_due_filter') || {}).value || 'valid';
+  const map = {};
+  (STATE.vehiclePasses || []).forEach(p => {
+    if(dueF === 'valid'){
+      const n = vpDaysLeft(p.expiry_date);
+      if(n !== null && n < 0) return;
+    }
+    vpTrailers(p).forEach(t => { (map[t] = map[t] || []).push(p); });
+  });
+  return Object.keys(map).map(t => {
+    const list = map[t].slice().sort((a, b) =>
+      String(a.expiry_date || '9999').localeCompare(String(b.expiry_date || '9999')));
+    return { plate: t, own: vtIsOwn(t), passes: list,
+             earliest: list.length ? list[0].expiry_date : null,
+             more: list.some(p => p.trailer_more) };
+  }).filter(r => {
+    if(ownF === 'own'   && !r.own) return false;
+    if(ownF === 'other' &&  r.own) return false;
+    if(!kw) return true;
+    if(r.plate.includes(kw)) return true;
+    return r.passes.some(p => [p.vendor, p.category, p.plate, p.pass_no]
+      .some(v => String(v || '').toUpperCase().includes(kw)));
+  }).sort((a, b) => a.plate.localeCompare(b.plate));
+}
+function renderVtTable(){
+  const body = document.getElementById('vtTableBody');
+  if(!body) return;
+  const rows = vtRows();
+  const cnt = document.getElementById('vt_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 台板架`
+    + `／自有 ${rows.filter(r => r.own).length} 台`;
+  body.innerHTML = rows.map(r => {
+    const byVendor = {};
+    r.passes.forEach(p => {
+      const k = (p.vendor || '—') + '　' + (p.category || '');
+      byVendor[k] = (byVendor[k] || 0) + 1;
+    });
+    return `<tr>
+      <td style="font-family:monospace;font-size:13.5px;">${esc(r.plate)}</td>
+      <td>${vtOwnLabel(r.plate)}</td>
+      <td><button class="name-link" data-exp-trailer="${esc(r.plate)}">${r.passes.length} 張 ▾</button>
+          ${r.more ? '<span class="pill amber">＋背面</span>' : ''}</td>
+      <td style="font-size:12.5px;">${Object.keys(byVendor).sort().map(k =>
+          esc(k) + (byVendor[k] > 1 ? `<span class="muted">×${byVendor[k]}</span>` : '')).join('<br>')}</td>
+      <td>${esc(r.earliest || '—')}</td>
+      <td>${vpPill(r.earliest)}</td>
+      <td class="muted" style="font-size:12px;">${esc([...new Set(r.passes.map(p => p.plate).filter(Boolean))].sort().join('、'))}</td>
+    </tr>
+    <tr class="vt-detail" data-detail-trailer="${esc(r.plate)}" style="display:none;">
+      <td colspan="7" style="background:rgba(0,0,0,.02);">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 2px;">
+          <thead><tr style="background:rgba(0,0,0,.03);">
+            <th>曳引車</th><th>行號</th><th>廠商</th><th>品項</th>
+            <th>通行證號碼(NO)</th><th>到期日</th><th>剩餘天數</th>
+          </tr></thead>
+          <tbody>${r.passes.map(p => `<tr>
+            <td>${esc(p.plate || '')}</td>
+            <td class="muted">${esc(p.company_name || '')}</td>
+            <td>${esc(p.vendor || '')}</td>
+            <td>${esc(p.category || '')}</td>
+            <td style="font-family:monospace;">${esc(p.pass_no || '')}</td>
+            <td>${esc(p.expiry_date || '—')}</td>
+            <td>${vpPill(p.expiry_date)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的板架</td></tr>`;
+
+  // 自有板架卻沒有任何有效通行證的，提醒一下
+  const covered = new Set();
+  (STATE.vehiclePasses || []).forEach(p => {
+    const n = vpDaysLeft(p.expiry_date);
+    if(n !== null && n < 0) return;
+    vpTrailers(p).forEach(t => covered.add(t));
+  });
+  const miss = (STATE.vehicles || [])
+    .filter(v => String(v.vehicle_category || '') === '板架'
+              && String(v.status || '') === '在役'
+              && !covered.has(String(v.plate || '').toUpperCase()))
+    .map(v => v.plate).sort();
+  const box = document.getElementById('vt_nopass');
+  if(box) box.innerHTML = miss.length
+    ? `<b>在役板架沒有出現在任何有效通行證上（${miss.length} 台）：</b><br>`
+      + `<span style="font-family:monospace;">${esc(miss.join('、'))}</span><br>`
+      + `有可能是真的沒報，也有可能是報了但印在通行證背面（上面標「＋背面」的那幾張）還沒登錄進來。`
+    : '在役板架都至少有一張有效通行證涵蓋。';
+}
+function vtExportCsv(){
+  const head = ['板架車號','自有','通行證張數','曳引車','行號','廠商','品項','通行證號碼','到期日','剩餘天數','背面另有未登錄'];
+  const rows = [];
+  vtRows().forEach(r => r.passes.forEach(p => rows.push([
+    r.plate, r.own ? '自有' : '非自有', String(r.passes.length),
+    p.plate || '', p.company_name || '', p.vendor || '', p.category || '',
+    p.pass_no || '', p.expiry_date || '',
+    (vpDaysLeft(p.expiry_date) === null ? '' : String(vpDaysLeft(p.expiry_date))),
+    p.trailer_more ? '是' : ''])));
+  const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '板架通行證對照_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click();
+}
+
 function vpRows(){
   const q = (document.getElementById('vp_search') || {}).value || '';
   const vendorF = (document.getElementById('vp_vendor_filter') || {}).value || 'all';
@@ -17519,7 +17719,7 @@ function vpRows(){
   const dueF = (document.getElementById('vp_due_filter') || {}).value || 'valid';
   const kw = String(q).trim().toUpperCase();
   return (STATE.vehiclePasses || []).filter(p => {
-    if(kw && ![p.plate, p.pass_no, p.batch_no, p.vendor, p.category]
+    if(kw && ![p.plate, p.pass_no, p.batch_no, p.vendor, p.category, p.trailer_plates]
         .some(v => String(v || '').toUpperCase().includes(kw))) return false;
     if(vendorF !== 'all' && String(p.vendor || '') !== vendorF) return false;
     if(catF !== 'all' && String(p.category || '') !== catF) return false;
@@ -17573,6 +17773,12 @@ function renderVpTable(){
         if(r.note && r.note.indexOf('背面') >= 0) return `<button class="name-link" data-exp-pass="${p.id}" style="color:#b26a00;">${esc(r.note.replace('（明細未登錄）', ''))} ▾</button>`;
         return p.goods_text ? `<button class="name-link" data-exp-pass="${p.id}">明細 ▾</button>` : '<span class="muted">—</span>';
       })()}</td>
+      <td>${(() => {
+        const ts = vpTrailers(p);
+        if(!ts.length) return '<span class="muted">—</span>';
+        return `<button class="name-link" data-exp-pass="${p.id}">${ts.length} 台 ▾</button>`
+             + (p.trailer_more ? ' <span class="pill amber" title="正面只印前16台，其餘詳列於背面">＋背面</span>' : '');
+      })()}</td>
       <td style="font-family:monospace;">${esc(p.pass_no || '')}</td>
       <td class="muted" style="font-family:monospace;">${esc(p.batch_no || '')}</td>
       <td class="muted">${esc(p.start_date || '—')} ～ ${esc(p.expiry_date || '—')}</td>
@@ -17584,9 +17790,14 @@ function renderVpTable(){
         <button class="del-btn" data-del-pass="${p.id}">刪除</button></td>
     </tr>
     <tr class="vp-detail" data-detail-pass="${p.id}" style="display:none;">
-      <td colspan="12" style="background:rgba(0,0,0,.02);">${hzDetailHtml(p.goods_text)}</td>
+      <td colspan="13" style="background:rgba(0,0,0,.02);">
+        ${hzDetailHtml(p.goods_text)}
+        <div style="border-top:1px dashed var(--line);margin-top:6px;padding-top:4px;">
+          ${vtDetailHtml(p)}
+        </div>
+      </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="12" class="empty">沒有符合條件的通行證</td></tr>`;
+  }).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的通行證</td></tr>`;
 
   // 依廠商／品項／到期日彙總
   const g = {};
@@ -17624,13 +17835,14 @@ function vpSyncCompany(){
   if(v && co && !co.value) co.value = v.company_name || '';
 }
 function vpExportCsv(){
-  const head = ['車號','行號','廠商','品項','危險物品','危險物品原文','通行證號碼','批號','生效日','到期日','剩餘天數','指定檢驗日','發證日','發證監理所','備註'];
-  const rows = vpRows().map(p => [p.plate||'', p.company_name||'', p.vendor||'', p.category||'',
+  const head = ['車號','車種','行號','廠商','品項','危險物品','危險物品原文','板架台數','板架車號','背面另有未登錄','通行證號碼','批號','生效日','到期日','剩餘天數','指定檢驗日','發證日','發證監理所','備註'];
+  const rows = vpRows().map(p => [p.plate||'', p.vehicle_type||'', p.company_name||'', p.vendor||'', p.category||'',
     hzParse(p.goods_text).items.map(it => {
       const h = hzLookup(it.zh, it.un);
       return it.zh + '(UN' + it.un + (h && h.name_en ? ' ' + h.name_en : '') + ')';
     }).join('；') || hzParse(p.goods_text).note,
     p.goods_text||'',
+    String(vpTrailers(p).length || ''), vpTrailers(p).join('、'), p.trailer_more ? '是' : '',
     p.pass_no||'', p.batch_no||'', p.start_date||'', p.expiry_date||'',
     (vpDaysLeft(p.expiry_date) === null ? '' : String(vpDaysLeft(p.expiry_date))),
     p.inspect_date||'', p.issue_date||'', p.authority||'', p.notes||'']);
@@ -17668,14 +17880,18 @@ function vpExportCsv(){
       issue_date: g('vp_issue') || null,
       authority: g('vp_auth').trim() || null,
       goods_text: g('vp_goods').trim() || null,
+      vehicle_type: v ? (v.vehicle_type || null) : null,
+      trailer_plates: vtNormalize(g('vp_trailers')) || null,
+      trailer_more: !!(document.getElementById('vp_trailer_more') || {}).checked,
       status: (vpDaysLeft(expiry) < 0) ? '已過期' : '有效',
       notes: g('vp_notes').trim() || null
     });
     try{
       msg.textContent = '存檔中…';
       await saveState('vehicle_passes', STATE.vehiclePasses, true);
-      ['vp_no','vp_batch','vp_start','vp_expiry','vp_inspect','vp_issue','vp_notes','vp_goods']
+      ['vp_no','vp_batch','vp_start','vp_expiry','vp_inspect','vp_issue','vp_notes','vp_goods','vp_trailers']
         .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+      const _tm = document.getElementById('vp_trailer_more'); if(_tm) _tm.checked = false;
       msg.textContent = '已新增。';
       renderAll();
     }catch(err){ msg.textContent = '存檔失敗：' + (err && err.message ? err.message : err); }
@@ -17695,7 +17911,11 @@ function openVpEdit(id){
   set('vpEditInspect', p.inspect_date); set('vpEditIssue', p.issue_date);
   set('vpEditAuth', p.authority); set('vpEditNotes', p.notes);
   set('vpEditGoods', p.goods_text);
+  set('vpEditTrailers', p.trailer_plates);
+  const _tm = document.getElementById('vpEditTrailerMore');
+  if(_tm) _tm.checked = !!p.trailer_more;
   vpEditGoodsPreview();
+  vpEditTrailerPreview();
   document.getElementById('vpEditMsg').textContent = '';
   document.getElementById('vpEditModal').classList.add('show');
 }
@@ -17712,6 +17932,26 @@ function vpEditGoodsPreview(){
     return esc(it.zh) + '<span class="muted">（UN ' + esc(it.un) + (h && h.name_en ? '／' + esc(h.name_en) : '') + '）</span>';
   }).join('、');
 }
+// 輸入的板架車號怎麼打都收成「02-NQ、10-PX」這種格式，順便去掉重複
+function vtNormalize(text){
+  const seen = [];
+  String(text || '').split(/[、,，;；\s]+/).forEach(x => {
+    const t = x.trim().toUpperCase();
+    if(t && seen.indexOf(t) < 0) seen.push(t);
+  });
+  return seen.join('、');
+}
+// 修改視窗裡打字就即時算台數、標出車輛主檔查不到的
+function vpEditTrailerPreview(){
+  const box = document.getElementById('vpEditTrailerPreview');
+  if(!box) return;
+  const list = vtNormalize((document.getElementById('vpEditTrailers') || {}).value).split('、').filter(Boolean);
+  if(!list.length){ box.innerHTML = '<span class="muted">曳引車才要填；填了之後「依板架查詢」就查得到這張證。</span>'; return; }
+  const other = list.filter(t => !vtIsOwn(t));
+  box.innerHTML = '共 <b>' + list.length + '</b> 台'
+    + (other.length ? '　<span style="color:#b26a00;">車輛主檔查不到 ' + other.length + ' 台（'
+        + esc(other.join('、')) + '）——客戶或靠行的板架是正常的，打錯字也會長這樣，順手看一下</span>' : '');
+}
 function closeVpEdit(){
   document.getElementById('vpEditModal').classList.remove('show');
   VP_EDIT_ID = null;
@@ -17721,6 +17961,8 @@ function closeVpEdit(){
   bind('vpEditClose', closeVpEdit);
   const _gt = document.getElementById('vpEditGoods');
   if(_gt) _gt.addEventListener('input', vpEditGoodsPreview);
+  const _tt = document.getElementById('vpEditTrailers');
+  if(_tt) _tt.addEventListener('input', vpEditTrailerPreview);
   bind('vpEditCancel', closeVpEdit);
   const m = document.getElementById('vpEditModal');
   if(m) m.addEventListener('click', e => { if(e.target.id === 'vpEditModal') closeVpEdit(); });
@@ -17745,6 +17987,8 @@ function closeVpEdit(){
     p.authority = g('vpEditAuth').trim() || null;
     p.notes = g('vpEditNotes').trim() || null;
     p.goods_text = g('vpEditGoods').trim() || null;
+    p.trailer_plates = vtNormalize(g('vpEditTrailers')) || null;
+    p.trailer_more = !!(document.getElementById('vpEditTrailerMore') || {}).checked;
     p.status = (p.expiry_date && vpDaysLeft(p.expiry_date) < 0) ? '已過期' : '有效';
     try{
       msg.style.color = ''; msg.textContent = '存檔中…';
@@ -17792,6 +18036,22 @@ function closeVpEdit(){
   ['vp_search','vp_vendor_filter','vp_cat_filter','vp_due_filter'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderVpTable);
+  });
+  ['vt_search','vt_own_filter','vt_due_filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderVtTable);
+  });
+  const vtx = document.getElementById('vt_export');
+  if(vtx) vtx.addEventListener('click', vtExportCsv);
+  const vtb = document.getElementById('vtTableBody');
+  if(vtb) vtb.addEventListener('click', e => {
+    const t = e.target.getAttribute('data-exp-trailer');
+    if(!t) return;
+    const row = vtb.querySelector(`tr.vt-detail[data-detail-trailer="${t}"]`);
+    if(!row) return;
+    const open = row.style.display === 'none';
+    row.style.display = open ? '' : 'none';
+    e.target.textContent = e.target.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
   });
   const ex = document.getElementById('vp_export');
   if(ex) ex.addEventListener('click', vpExportCsv);
