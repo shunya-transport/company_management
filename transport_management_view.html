@@ -2994,6 +2994,43 @@
   </div>
 </div>
 
+<div class="modal-backdrop no-print" id="insEditModal">
+  <div class="modal-box" style="max-width:560px;">
+    <button class="modal-close" id="insEditClose">✕</button>
+    <h3>修改這張保險</h3>
+    <div class="muted" style="margin-bottom:12px;">
+      key 錯了直接改這裡就好，<b>不要刪掉重建</b>——刪除是真的刪掉，救不回來。<br>
+      車子賣了、停駛、不保了請按「中止」；這一張一開始就打錯才用修改。
+    </div>
+    <div class="form-grid">
+      <label>車號
+        <select id="insEditPlate"></select>
+      </label>
+      <label>保險公司<input id="insEditInsurer" list="insEditInsurerList" placeholder="例：新安東京">
+        <datalist id="insEditInsurerList"></datalist>
+      </label>
+      <label>保險種類
+        <select id="insEditType">
+          <option value="任意險">任意險</option>
+          <option value="強制險">強制險</option>
+          <option value="貨物險">貨物險</option>
+        </select>
+      </label>
+      <label>有效日期<input id="insEditExpiry" type="date"></label>
+      <label style="grid-column:1/-1;">保險範圍
+        <textarea id="insEditScope" rows="3" style="width:100%;font-family:inherit;"></textarea>
+      </label>
+      <label style="grid-column:1/-1;">備註<input id="insEditNotes" placeholder="選填"></label>
+    </div>
+    <div class="muted" id="insEditOrig" style="margin-top:10px;font-size:12px;line-height:1.7;"></div>
+    <div id="insEditMsg" style="margin-top:8px;font-size:13px;"></div>
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn ghost" id="insEditCancel">取消</button>
+      <button class="btn" id="insEditSave">存檔</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop no-print" id="insOffModal">
   <div class="modal-box" style="max-width:460px;">
     <button class="modal-close" id="insOffClose">✕</button>
@@ -10781,7 +10818,7 @@ function renderViTable(){
         : renewedTo
           ? `<span class="pill gray">已續保</span> <span class="muted" style="font-size:11.5px;">新到期日 ${esc(renewedTo)}</span>`
           : `<span class="pill ${s}">${i.expiry_date ? statusLabel(i.expiry_date,30) : (esc(i.notes)||'無到期資料')}</span>`}</td>
-      <td style="white-space:nowrap;">${insIsOff(i)
+      <td style="white-space:nowrap;"><button class="name-link" data-edit-insurance="${i.id}">修改</button> ${insIsOff(i)
         ? `<button class="name-link" data-on-insurance="${i.id}">復保</button> `
         : `<button class="name-link" data-off-insurance="${i.id}">中止</button> `}<button class="del-btn" data-del-insurance="${i.id}">刪除</button></td>
     </tr>`;
@@ -17208,6 +17245,9 @@ document.getElementById('vi_add').addEventListener('click', async () => {
   renderAll();
 });
 document.getElementById('viTableBody').addEventListener('click', async (e) => {
+  const editId = e.target.getAttribute('data-edit-insurance');
+  if(editId){ openInsEdit(editId); return; }
+
   const offId = e.target.getAttribute('data-off-insurance');
   if(offId){ openInsOff(offId); return; }
 
@@ -17234,12 +17274,93 @@ document.getElementById('viTableBody').addEventListener('click', async (e) => {
       + '險種　　：' + (ins.insurance_type || '') + '\n'
       + '保險公司：' + (ins.insurance_company || '') + '\n'
       + '到期日　：' + (ins.expiry_date || '（沒有）') + '\n\n'
-      + '★ 如果只是車子賣了、停駛或不保了，請按「中止」不要按刪除 ——\n'
+      + '★ key 錯了請按「修改」直接改，不用刪掉重建。\n'
+      + '★ 車子賣了、停駛或不保了請按「中止」——\n'
       + '　 中止會保留這張保單的紀錄，只是不再跳提醒。\n'
-      + '　 刪除只適合用在「這筆一開始就key錯了」。')) return;
+      + '　 真的要刪的話，記得先確認刪的是哪一張（險種、保險公司、到期日都要對）。')) return;
     STATE.vehicleInsurance = STATE.vehicleInsurance.filter(i => String(i.id) !== id);
     await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
     renderAll();
+  }
+});
+
+// ----- 修改保險 -----
+// 以前這張表只能「新增／中止／刪除」，key 錯了只能刪掉重打，
+// 一不小心就會像 KLG-0608 那次刪到別張、要翻備份才救得回來。
+let INS_EDIT_ID = null;
+function openInsEdit(id){
+  const ins = STATE.vehicleInsurance.find(i => String(i.id) === String(id));
+  if(!ins) return;
+  INS_EDIT_ID = String(id);
+  const plateSel = document.getElementById('insEditPlate');
+  plateSel.innerHTML = (STATE.vehicles || [])
+    .map(v => `<option value="${esc(v.plate)}">${esc(v.plate)}</option>`).join('');
+  if(ins.plate && ![...plateSel.options].some(o => o.value === ins.plate)){
+    plateSel.insertAdjacentHTML('afterbegin', `<option value="${esc(ins.plate)}">${esc(ins.plate)}</option>`);
+  }
+  plateSel.value = ins.plate || '';
+  document.getElementById('insEditInsurerList').innerHTML =
+    [...new Set((STATE.vehicleInsurance || []).map(x => x.insurance_company).filter(Boolean))]
+      .map(x => `<option value="${esc(x)}">`).join('');
+  document.getElementById('insEditInsurer').value = ins.insurance_company || '';
+  const typeSel = document.getElementById('insEditType');
+  if(ins.insurance_type && ![...typeSel.options].some(o => o.value === ins.insurance_type)){
+    typeSel.insertAdjacentHTML('beforeend', `<option value="${esc(ins.insurance_type)}">${esc(ins.insurance_type)}</option>`);
+  }
+  typeSel.value = ins.insurance_type || '任意險';
+  document.getElementById('insEditExpiry').value = ins.expiry_date || '';
+  document.getElementById('insEditScope').value = ins.coverage_item || '';
+  document.getElementById('insEditNotes').value = ins.notes || '';
+  document.getElementById('insEditMsg').textContent = '';
+  document.getElementById('insEditOrig').innerHTML =
+    '原本：' + esc(ins.plate || '') + '　' + esc(ins.insurance_type || '')
+    + '　' + esc(ins.insurance_company || '（沒有保險公司）')
+    + '　有效日期 ' + esc(ins.expiry_date || '（沒有）')
+    + (insIsOff(ins) ? '　<span class="pill gray">已中止</span>（修改不會改中止狀態）' : '');
+  document.getElementById('insEditModal').classList.add('show');
+}
+function closeInsEdit(){
+  document.getElementById('insEditModal').classList.remove('show');
+  INS_EDIT_ID = null;
+}
+document.getElementById('insEditClose').addEventListener('click', closeInsEdit);
+document.getElementById('insEditCancel').addEventListener('click', closeInsEdit);
+document.getElementById('insEditModal').addEventListener('click', e => {
+  if(e.target.id === 'insEditModal') closeInsEdit();
+});
+document.getElementById('insEditSave').addEventListener('click', async () => {
+  const msgEl = document.getElementById('insEditMsg');
+  const ins = STATE.vehicleInsurance.find(i => String(i.id) === INS_EDIT_ID);
+  if(!ins){ msgEl.textContent = '找不到這一筆，請關掉重開。'; return; }
+  const plate = document.getElementById('insEditPlate').value;
+  const expiry = document.getElementById('insEditExpiry').value || null;
+  if(!plate){ msgEl.style.color = 'var(--red)'; msgEl.textContent = '請選車號'; return; }
+  // 同一台車、同一險種、同一個到期日已經有別張了 → 多半是重複輸入，問一下
+  const dup = (STATE.vehicleInsurance || []).find(x => String(x.id) !== String(ins.id)
+    && x.plate === plate
+    && String(x.insurance_type || '') === document.getElementById('insEditType').value
+    && String(x.expiry_date || '') === String(expiry || ''));
+  if(dup && !confirm('這台車已經有一張同險種、同到期日的保單了（編號 ' + dup.id + '）。\n\n'
+      + '確定還是要存成一樣的嗎？')) return;
+  try{
+    msgEl.style.color = ''; msgEl.textContent = '存檔中…';
+    ins.plate = plate;
+    ins.vehicle_id = (typeof plateToVehicleId === 'function') ? plateToVehicleId(plate) : ins.vehicle_id;
+    ins.insurance_company = document.getElementById('insEditInsurer').value.trim();
+    ins.insurance_type = document.getElementById('insEditType').value;
+    ins.expiry_date = expiry;
+    ins.coverage_item = document.getElementById('insEditScope').value.trim();
+    ins.notes = document.getElementById('insEditNotes').value.trim();
+    await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
+    // 強制險改了到期日，證件效期那張「汽車強制卡」要跟著改，不然卡會一直跳提醒
+    if(typeof vdSyncCompulsory === 'function'){
+      await vdSyncCompulsory(ins.vehicle_id, ins.insurance_type, ins.expiry_date);
+    }
+    closeInsEdit();
+    renderAll();
+  }catch(err){
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = '存檔失敗：' + (err && err.message ? err.message : err);
   }
 });
 
