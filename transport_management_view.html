@@ -2390,7 +2390,7 @@
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>車號</th><th>行號</th><th>廠商</th><th>品項</th>
+            <th>車號</th><th>行號</th><th>廠商</th><th>品項</th><th>危險物品</th>
             <th>通行證號碼(NO)</th><th>批號</th><th>有效期間</th><th>到期日</th>
             <th>剩餘天數</th><th>指定檢驗日</th><th></th>
           </tr></thead>
@@ -2411,6 +2411,21 @@
     </div>
 
     <div class="card">
+      <h2>危險物品中英對照<span class="count-badge" id="hz_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        通行證上只寫中文名與括號裡的聯合國編號（UN No.），這裡對到 UN 正式運送名稱的英文。
+        查不到的物質，在資料庫的 <code>hazmat_substances</code> 加一列就會自動出現，不用改程式。
+      </div>
+      <div class="toolbar"><input id="hz_search" placeholder="搜尋中文名／英文名／UN 編號"></div>
+      <div class="table-scroll" style="max-height:340px;">
+        <table>
+          <thead><tr><th>UN 編號</th><th>中文名</th><th>英文名（UN 正式運送名稱）</th><th>危害分類</th><th>備註</th><th>使用張數</th></tr></thead>
+          <tbody id="hzTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>新增通行證</h2>
       <div class="form-grid">
         <label>車號<select id="vp_plate"></select></label>
@@ -2424,6 +2439,8 @@
         <label>車輛指定檢驗日<input id="vp_inspect" type="date"></label>
         <label>發證日<input id="vp_issue" type="date"></label>
         <label>發證監理所<input id="vp_auth" list="vpAuthList" placeholder="例：新竹區監理所"></label>
+        <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
+          <input id="vp_goods" placeholder="例：第2.2類:四氟甲烷(1982)三氟甲烷(1984)八氟環丁烷(1976)"></label>
         <label>備註<input id="vp_notes" placeholder="選填"></label>
       </div>
       <datalist id="vpCompanyList"></datalist>
@@ -3081,7 +3098,10 @@
       <label>發證日<input id="vpEditIssue" type="date"></label>
       <label>發證監理所<input id="vpEditAuth" list="vpAuthList"></label>
       <label>備註<input id="vpEditNotes"></label>
+      <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
+        <textarea id="vpEditGoods" rows="2" style="width:100%;font-family:inherit;"></textarea></label>
     </div>
+    <div class="muted" id="vpEditGoodsPreview" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
     <div id="vpEditMsg" style="margin-top:8px;font-size:13px;"></div>
     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn ghost" id="vpEditCancel">取消</button>
@@ -3884,7 +3904,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [], vendors: [], greaseRecords: [],
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
-  adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [], vehiclePasses: [],
+  adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [], vehiclePasses: [], hazmatSubstances: [],
   equipmentTypes: [], employeeEquipment: [], tireRecords: [], tireOrders: [], tireOrderTires: [], tireOrderCharges: [], containerInspections: [], medicalExamRecords: [], pensionElections: [],
   stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
@@ -4011,6 +4031,7 @@ const TABLE_MAP = {
   vehicle_equipment: {table:'vehicle_equipment', pk:'record_id'},
   vehicle_insurance: {table:'vehicle_insurance', pk:'insurance_id'},
   vehicle_passes: {table:'vehicle_passes', pk:'pass_id'},
+  hazmat_substances: {table:'hazmat_substances', pk:'un_no'},
   vehicle_mileage_logs: {table:'vehicle_mileage_logs', pk:'log_id'},
 };
 
@@ -4828,6 +4849,7 @@ async function loadState(){
   _kick('vehicleDocuments', ['vehicle_documents', SEED.vehicle_documents || [], true]);
   _kick('vehicleInsurance', ['vehicle_insurance', SEED.vehicle_insurance || [], true]);
   _kick('vehiclePasses', ['vehicle_passes', [], true]);
+  _kick('hazmatSubstances', ['hazmat_substances', [], true]);
   _kick('employeeEquipment', ['employee_equipment', [], true]);
   _kick('tireRecords', ['tire_records', [], true]);
   _kick('tireOrders', ['tire_service_orders', [], true]);
@@ -16623,6 +16645,7 @@ function renderAll(){
   renderViTable();
   vpFillPlateSelect('vp_plate', (document.getElementById('vp_plate') || {}).value);
   renderVpTable();
+  renderHzTable();
   renderMaintenanceTables();
   renderTireLayout();
   renderTireOrderPicker();
@@ -17404,6 +17427,91 @@ function vpPill(d){
   if(n <= 60) return `<span class="pill amber">${n} 天</span>`;
   return `<span class="pill green">${n} 天</span>`;
 }
+// ===== 危險物品：把通行證上那一行原文拆成一項一項 =====
+// 原文長這樣：「第2.2、5.1類:氧化亞氮（一氧化二氮）(1070)第2.3、5.1、8類:氟（20%V/V）與氮之混和氣(3306)」
+// 規則：名稱後面緊跟著半形括號的四位數字＝聯合國編號；名稱前面可能有「第X類:」的分類標頭。
+// 中英對照查 hazmat_substances（SQL_194 建的），查不到就只顯示中文與 UN 編號。
+function hzParse(text){
+  const s = String(text || '').replace(/\s+/g, '');
+  if(!s) return { items:[], note:'' };
+  // 「詳如通行證背面共14種」這種，名稱在紙本背面，PDF 裡沒有
+  const m = s.match(/(?:詳如|詳見).*?共\s*(\d+)\s*(?:種|項)/);
+  if(m) return { items:[], note:'背面共 ' + m[1] + ' 種（明細未登錄）' };
+  // 以「(四位數字)」當切點，括號前面那一段就是名稱——名稱本身常含全形括號
+  // （例：氧化亞氮（一氧化二氮）、氟（20%V/V）與氮之混和氣），用字元類去框會切壞。
+  const items = [];
+  let cls = '', last = 0;
+  const re = /\((\d{4})\)/g;
+  let x;
+  while((x = re.exec(s)) !== null){
+    let chunk = s.slice(last, x.index);
+    last = re.lastIndex;
+    // 名稱前面可能有「第2.2、5.1類:」這種分類標頭，可能在開頭、也可能夾在中間
+    let h;
+    while((h = chunk.match(/(第[0-9．.、,，]+類)\s*[:：]/)) !== null){
+      cls = h[1];
+      chunk = chunk.slice(chunk.indexOf(h[0]) + h[0].length);
+    }
+    const zh = chunk.replace(/^[、,，;；)）]+/, '').trim();
+    if(zh) items.push({ zh: zh, un: x[1], cls: cls });
+  }
+  return { items: items, note: items.length ? '' : (s.length > 40 ? s.slice(0, 40) + '…' : s) };
+}
+function hzLookup(zh, un){
+  const list = STATE.hazmatSubstances || [];
+  return list.find(h => String(h.un_no) === String(un) && String(h.name_zh).trim() === String(zh).trim())
+      || list.find(h => String(h.un_no) === String(un))
+      || null;
+}
+function hzDetailHtml(goodsText){
+  const r = hzParse(goodsText);
+  if(!r.items.length){
+    return `<div class="muted" style="padding:6px 10px;">${esc(r.note || '沒有登錄危險物品名稱')}
+      ${r.note && r.note.indexOf('背面') >= 0 ? '　<span style="color:#b26a00;">拿到背面清單後，按「修改」把名稱貼進「危險物品名稱」欄就會自動拆開</span>' : ''}</div>`;
+  }
+  const rows = r.items.map((it, i) => {
+    const h = hzLookup(it.zh, it.un);
+    return `<tr>
+      <td style="text-align:center;">${i + 1}</td>
+      <td>${esc(it.zh)}</td>
+      <td>${h && h.name_en ? esc(h.name_en) : '<span class="muted">（對照表查不到，可在 hazmat_substances 補）</span>'}</td>
+      <td style="text-align:center;font-family:monospace;">UN ${esc(it.un)}</td>
+      <td class="muted">${esc(h && h.hazard_class ? h.hazard_class : (it.cls || ''))}</td>
+    </tr>`;
+  }).join('');
+  return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 2px;">
+      <thead><tr style="background:rgba(0,0,0,.03);">
+        <th style="width:34px;">#</th><th>中文名</th><th>英文名（UN 正式運送名稱）</th><th style="width:90px;">UN 編號</th><th>危害分類</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    <div class="muted" style="font-size:11.5px;">原文：${esc(goodsText || '')}</div>`;
+}
+function renderHzTable(){
+  const body = document.getElementById('hzTableBody');
+  if(!body) return;
+  const kw = String((document.getElementById('hz_search') || {}).value || '').trim().toUpperCase();
+  // 每一種物質被幾張通行證用到
+  const used = {};
+  (STATE.vehiclePasses || []).forEach(p => {
+    hzParse(p.goods_text).items.forEach(it => {
+      const k = it.un + '\u0001' + it.zh;
+      used[k] = (used[k] || 0) + 1;
+    });
+  });
+  const list = (STATE.hazmatSubstances || []).filter(h => !kw
+      || [h.un_no, h.name_zh, h.name_en, h.hazard_class].some(v => String(v || '').toUpperCase().includes(kw)))
+    .slice().sort((a, b) => String(a.un_no).localeCompare(String(b.un_no)) || String(a.name_zh).localeCompare(String(b.name_zh)));
+  const cnt = document.getElementById('hz_count');
+  if(cnt) cnt.textContent = `共 ${(STATE.hazmatSubstances || []).length} 種`;
+  body.innerHTML = list.map(h => `<tr>
+      <td style="font-family:monospace;">UN ${esc(h.un_no)}</td>
+      <td>${esc(h.name_zh)}</td>
+      <td>${esc(h.name_en || '')}</td>
+      <td class="muted">${esc(h.hazard_class || '')}</td>
+      <td class="muted">${esc(h.notes || '')}</td>
+      <td style="text-align:center;">${used[h.un_no + '\u0001' + h.name_zh] || ''}</td>
+    </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合的物質</td></tr>`;
+}
+
 function vpRows(){
   const q = (document.getElementById('vp_search') || {}).value || '';
   const vendorF = (document.getElementById('vp_vendor_filter') || {}).value || 'all';
@@ -17459,6 +17567,12 @@ function renderVpTable(){
       <td class="muted">${esc(p.company_name || '')}</td>
       <td>${esc(p.vendor || '')}</td>
       <td>${esc(p.category || '')}</td>
+      <td>${(() => {
+        const r = hzParse(p.goods_text);
+        if(r.items.length) return `<button class="name-link" data-exp-pass="${p.id}">${r.items.length} 種 ▾</button>`;
+        if(r.note && r.note.indexOf('背面') >= 0) return `<button class="name-link" data-exp-pass="${p.id}" style="color:#b26a00;">${esc(r.note.replace('（明細未登錄）', ''))} ▾</button>`;
+        return p.goods_text ? `<button class="name-link" data-exp-pass="${p.id}">明細 ▾</button>` : '<span class="muted">—</span>';
+      })()}</td>
       <td style="font-family:monospace;">${esc(p.pass_no || '')}</td>
       <td class="muted" style="font-family:monospace;">${esc(p.batch_no || '')}</td>
       <td class="muted">${esc(p.start_date || '—')} ～ ${esc(p.expiry_date || '—')}</td>
@@ -17468,8 +17582,11 @@ function renderVpTable(){
       <td style="white-space:nowrap;">
         <button class="name-link" data-edit-pass="${p.id}">修改</button>
         <button class="del-btn" data-del-pass="${p.id}">刪除</button></td>
+    </tr>
+    <tr class="vp-detail" data-detail-pass="${p.id}" style="display:none;">
+      <td colspan="12" style="background:rgba(0,0,0,.02);">${hzDetailHtml(p.goods_text)}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="11" class="empty">沒有符合條件的通行證</td></tr>`;
+  }).join('') || `<tr><td colspan="12" class="empty">沒有符合條件的通行證</td></tr>`;
 
   // 依廠商／品項／到期日彙總
   const g = {};
@@ -17507,8 +17624,13 @@ function vpSyncCompany(){
   if(v && co && !co.value) co.value = v.company_name || '';
 }
 function vpExportCsv(){
-  const head = ['車號','行號','廠商','品項','通行證號碼','批號','生效日','到期日','剩餘天數','指定檢驗日','發證日','發證監理所','備註'];
+  const head = ['車號','行號','廠商','品項','危險物品','危險物品原文','通行證號碼','批號','生效日','到期日','剩餘天數','指定檢驗日','發證日','發證監理所','備註'];
   const rows = vpRows().map(p => [p.plate||'', p.company_name||'', p.vendor||'', p.category||'',
+    hzParse(p.goods_text).items.map(it => {
+      const h = hzLookup(it.zh, it.un);
+      return it.zh + '(UN' + it.un + (h && h.name_en ? ' ' + h.name_en : '') + ')';
+    }).join('；') || hzParse(p.goods_text).note,
+    p.goods_text||'',
     p.pass_no||'', p.batch_no||'', p.start_date||'', p.expiry_date||'',
     (vpDaysLeft(p.expiry_date) === null ? '' : String(vpDaysLeft(p.expiry_date))),
     p.inspect_date||'', p.issue_date||'', p.authority||'', p.notes||'']);
@@ -17545,13 +17667,14 @@ function vpExportCsv(){
       inspect_date: g('vp_inspect') || null,
       issue_date: g('vp_issue') || null,
       authority: g('vp_auth').trim() || null,
+      goods_text: g('vp_goods').trim() || null,
       status: (vpDaysLeft(expiry) < 0) ? '已過期' : '有效',
       notes: g('vp_notes').trim() || null
     });
     try{
       msg.textContent = '存檔中…';
       await saveState('vehicle_passes', STATE.vehiclePasses, true);
-      ['vp_no','vp_batch','vp_start','vp_expiry','vp_inspect','vp_issue','vp_notes']
+      ['vp_no','vp_batch','vp_start','vp_expiry','vp_inspect','vp_issue','vp_notes','vp_goods']
         .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
       msg.textContent = '已新增。';
       renderAll();
@@ -17571,8 +17694,23 @@ function openVpEdit(id){
   set('vpEditStart', p.start_date); set('vpEditExpiry', p.expiry_date);
   set('vpEditInspect', p.inspect_date); set('vpEditIssue', p.issue_date);
   set('vpEditAuth', p.authority); set('vpEditNotes', p.notes);
+  set('vpEditGoods', p.goods_text);
+  vpEditGoodsPreview();
   document.getElementById('vpEditMsg').textContent = '';
   document.getElementById('vpEditModal').classList.add('show');
+}
+// 修改視窗裡打字就即時拆給你看，貼錯格式馬上發現
+function vpEditGoodsPreview(){
+  const box = document.getElementById('vpEditGoodsPreview');
+  if(!box) return;
+  const t = (document.getElementById('vpEditGoods') || {}).value || '';
+  if(!t.trim()){ box.innerHTML = '<span class="muted">貼上通行證的危險物品名稱，這裡會即時拆成一項一項。</span>'; return; }
+  const r = hzParse(t);
+  if(!r.items.length){ box.innerHTML = `<span style="color:#b26a00;">拆不出來（${esc(r.note || '')}）—— 名稱後面要接半形括號的四位 UN 編號，例如 三氟化氮(2451)</span>`; return; }
+  box.innerHTML = '拆出 <b>' + r.items.length + '</b> 項：' + r.items.map(it => {
+    const h = hzLookup(it.zh, it.un);
+    return esc(it.zh) + '<span class="muted">（UN ' + esc(it.un) + (h && h.name_en ? '／' + esc(h.name_en) : '') + '）</span>';
+  }).join('、');
 }
 function closeVpEdit(){
   document.getElementById('vpEditModal').classList.remove('show');
@@ -17581,6 +17719,8 @@ function closeVpEdit(){
 {
   const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
   bind('vpEditClose', closeVpEdit);
+  const _gt = document.getElementById('vpEditGoods');
+  if(_gt) _gt.addEventListener('input', vpEditGoodsPreview);
   bind('vpEditCancel', closeVpEdit);
   const m = document.getElementById('vpEditModal');
   if(m) m.addEventListener('click', e => { if(e.target.id === 'vpEditModal') closeVpEdit(); });
@@ -17604,6 +17744,7 @@ function closeVpEdit(){
     p.issue_date = g('vpEditIssue') || null;
     p.authority = g('vpEditAuth').trim() || null;
     p.notes = g('vpEditNotes').trim() || null;
+    p.goods_text = g('vpEditGoods').trim() || null;
     p.status = (p.expiry_date && vpDaysLeft(p.expiry_date) < 0) ? '已過期' : '有效';
     try{
       msg.style.color = ''; msg.textContent = '存檔中…';
@@ -17619,6 +17760,16 @@ function closeVpEdit(){
 {
   const body = document.getElementById('vpTableBody');
   if(body) body.addEventListener('click', async e => {
+    const xid = e.target.getAttribute('data-exp-pass');
+    if(xid){
+      const row = body.querySelector(`tr.vp-detail[data-detail-pass="${xid}"]`);
+      if(row){
+        const open = row.style.display === 'none';
+        row.style.display = open ? '' : 'none';
+        e.target.textContent = e.target.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
+      }
+      return;
+    }
     const eid = e.target.getAttribute('data-edit-pass');
     if(eid){ openVpEdit(eid); return; }
     const did = e.target.getAttribute('data-del-pass');
@@ -17636,6 +17787,8 @@ function closeVpEdit(){
       renderAll();
     }
   });
+  const _hs = document.getElementById('hz_search');
+  if(_hs) _hs.addEventListener('input', renderHzTable);
   ['vp_search','vp_vendor_filter','vp_cat_filter','vp_due_filter'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderVpTable);
