@@ -422,6 +422,7 @@
       <button data-tab="leases">板架管理</button>
       <button data-tab="container">貨櫃運送</button>
       <button data-tab="repair">設備報修</button>
+      <button data-tab="passes">通行證查詢</button>
       <button data-tab="trainings">人員証照及訓練</button>
       <button data-tab="permits">工作證名冊</button>
       <button data-tab="mileage">車輛里程統計</button>
@@ -2366,6 +2367,74 @@
   </div>
 
 
+  <div id="passes" class="panel">
+    <div class="card">
+      <h2>通行證查詢<span class="count-badge" id="vp_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        載運危險物品臨時通行證。一張證對應一台車、一個廠商、一個品項，到期要重新申請。
+        剩餘天數是從今天算到「有效期間」的最後一天。
+      </div>
+      <div class="toolbar">
+        <input id="vp_search" placeholder="搜尋車號／通行證號碼／批號">
+        <select id="vp_vendor_filter"><option value="all">全部廠商</option></select>
+        <select id="vp_cat_filter"><option value="all">全部品項</option></select>
+        <select id="vp_due_filter">
+          <option value="valid">有效中（含 60 天內到期）</option>
+          <option value="60">60 天內到期</option>
+          <option value="30">30 天內到期</option>
+          <option value="expired">已過期</option>
+          <option value="all">全部</option>
+        </select>
+        <button class="btn ghost" id="vp_export" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>車號</th><th>行號</th><th>廠商</th><th>品項</th>
+            <th>通行證號碼(NO)</th><th>批號</th><th>有效期間</th><th>到期日</th>
+            <th>剩餘天數</th><th>指定檢驗日</th><th></th>
+          </tr></thead>
+          <tbody id="vpTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>依廠商／品項彙總</h2>
+      <div class="muted" style="margin-bottom:10px;">同一批申請的通行證到期日通常一樣，這裡看每一批還剩幾天、幾台車。</div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>廠商</th><th>品項</th><th>到期日</th><th>台數</th><th>剩餘天數</th><th>車號</th></tr></thead>
+          <tbody id="vpGroupBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>新增通行證</h2>
+      <div class="form-grid">
+        <label>車號<select id="vp_plate"></select></label>
+        <label>行號<input id="vp_company" list="vpCompanyList" placeholder="例：順亞運通股份有限公司"></label>
+        <label>廠商<input id="vp_vendor" list="vpVendorList" placeholder="例：晶呈科技股份有限公司"></label>
+        <label>品項<input id="vp_cat" list="vpCatList" placeholder="例：14種、25%氟－75%"></label>
+        <label>通行證號碼(NO)<input id="vp_no" placeholder="例：51D11525240"></label>
+        <label>通行證批號<input id="vp_batch" placeholder="例：D511150713015"></label>
+        <label>生效日<input id="vp_start" type="date"></label>
+        <label>到期日<input id="vp_expiry" type="date"></label>
+        <label>車輛指定檢驗日<input id="vp_inspect" type="date"></label>
+        <label>發證日<input id="vp_issue" type="date"></label>
+        <label>發證監理所<input id="vp_auth" list="vpAuthList" placeholder="例：新竹區監理所"></label>
+        <label>備註<input id="vp_notes" placeholder="選填"></label>
+      </div>
+      <datalist id="vpCompanyList"></datalist>
+      <datalist id="vpVendorList"></datalist>
+      <datalist id="vpCatList"></datalist>
+      <datalist id="vpAuthList"></datalist>
+      <button class="btn" id="vp_add">新增通行證</button>
+      <div id="vp_add_msg" class="muted" style="margin-top:8px;font-size:12.5px;"></div>
+    </div>
+  </div>
+
   <div id="repair" class="panel">
     <div class="card">
       <h2>不能出車 / 待處理看板<span class="count-badge" id="rp_board_count"></span></h2>
@@ -2991,6 +3060,33 @@
   <div class="modal-box" style="max-width:820px;">
     <button class="modal-close" id="certPhotoClose">✕</button>
     <div id="certPhotoContent"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop no-print" id="vpEditModal">
+  <div class="modal-box" style="max-width:620px;">
+    <button class="modal-close" id="vpEditClose">✕</button>
+    <h3>修改通行證</h3>
+    <div class="muted" style="margin-bottom:12px;">key 錯了直接改這裡；整批重新申請請用「新增通行證」，舊的留著當紀錄。</div>
+    <div class="form-grid">
+      <label>車號<select id="vpEditPlate"></select></label>
+      <label>行號<input id="vpEditCompany" list="vpCompanyList"></label>
+      <label>廠商<input id="vpEditVendor" list="vpVendorList"></label>
+      <label>品項<input id="vpEditCat" list="vpCatList"></label>
+      <label>通行證號碼(NO)<input id="vpEditNo"></label>
+      <label>通行證批號<input id="vpEditBatch"></label>
+      <label>生效日<input id="vpEditStart" type="date"></label>
+      <label>到期日<input id="vpEditExpiry" type="date"></label>
+      <label>車輛指定檢驗日<input id="vpEditInspect" type="date"></label>
+      <label>發證日<input id="vpEditIssue" type="date"></label>
+      <label>發證監理所<input id="vpEditAuth" list="vpAuthList"></label>
+      <label>備註<input id="vpEditNotes"></label>
+    </div>
+    <div id="vpEditMsg" style="margin-top:8px;font-size:13px;"></div>
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn ghost" id="vpEditCancel">取消</button>
+      <button class="btn" id="vpEditSave">存檔</button>
+    </div>
   </div>
 </div>
 
@@ -3788,7 +3884,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [], vendors: [], greaseRecords: [],
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
-  adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [],
+  adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [], vehiclePasses: [],
   equipmentTypes: [], employeeEquipment: [], tireRecords: [], tireOrders: [], tireOrderTires: [], tireOrderCharges: [], containerInspections: [], medicalExamRecords: [], pensionElections: [],
   stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
@@ -3914,6 +4010,7 @@ const TABLE_MAP = {
   vehicle_documents: {table:'vehicle_documents', pk:'doc_id'},
   vehicle_equipment: {table:'vehicle_equipment', pk:'record_id'},
   vehicle_insurance: {table:'vehicle_insurance', pk:'insurance_id'},
+  vehicle_passes: {table:'vehicle_passes', pk:'pass_id'},
   vehicle_mileage_logs: {table:'vehicle_mileage_logs', pk:'log_id'},
 };
 
@@ -4214,6 +4311,7 @@ const COMPUTED_FIELDS = {
   maintenance_schedules: ['plate'],
   trailer_leases: ['plate','vtype','lessee_name','inspection_expiry'],
   vehicle_insurance: ['plate'],
+  // 通行證的車號是真的欄位（車子不在主檔也要能登），不是 join 出來的，所以不列在這裡
   vehicle_mileage_logs: ['plate'],
   lessees: ['name'],
 };
@@ -4729,6 +4827,7 @@ async function loadState(){
   _kick('docChecklist', ['doc_checklist', SEED.doc_checklist || [], true]);
   _kick('vehicleDocuments', ['vehicle_documents', SEED.vehicle_documents || [], true]);
   _kick('vehicleInsurance', ['vehicle_insurance', SEED.vehicle_insurance || [], true]);
+  _kick('vehiclePasses', ['vehicle_passes', [], true]);
   _kick('employeeEquipment', ['employee_equipment', [], true]);
   _kick('tireRecords', ['tire_records', [], true]);
   _kick('tireOrders', ['tire_service_orders', [], true]);
@@ -16522,6 +16621,8 @@ function renderAll(){
   renderFleetTable();
   renderVdTable();
   renderViTable();
+  vpFillPlateSelect('vp_plate', (document.getElementById('vp_plate') || {}).value);
+  renderVpTable();
   renderMaintenanceTables();
   renderTireLayout();
   renderTireOrderPicker();
@@ -17283,6 +17384,267 @@ document.getElementById('viTableBody').addEventListener('click', async (e) => {
     renderAll();
   }
 });
+
+// ===================== 通行證查詢 =====================
+// 載運危險物品臨時通行證（vehicle_passes，SQL_192 建的）。
+// 一張證＝一台車 × 一個廠商 × 一個品項，到期要整批重新申請，所以舊的留著當紀錄，
+// 清單預設只看還有效的。
+function vpDaysLeft(d){
+  if(!d) return null;
+  const t = new Date(String(d).slice(0, 10) + 'T00:00:00');
+  if(isNaN(t)) return null;
+  const now = new Date(todayISO() + 'T00:00:00');
+  return Math.round((t - now) / 86400000);
+}
+function vpPill(d){
+  const n = vpDaysLeft(d);
+  if(n === null) return '<span class="pill gray">無到期日</span>';
+  if(n < 0)  return `<span class="pill red">已過期 ${-n} 天</span>`;
+  if(n <= 30) return `<span class="pill red">${n} 天</span>`;
+  if(n <= 60) return `<span class="pill amber">${n} 天</span>`;
+  return `<span class="pill green">${n} 天</span>`;
+}
+function vpRows(){
+  const q = (document.getElementById('vp_search') || {}).value || '';
+  const vendorF = (document.getElementById('vp_vendor_filter') || {}).value || 'all';
+  const catF = (document.getElementById('vp_cat_filter') || {}).value || 'all';
+  const dueF = (document.getElementById('vp_due_filter') || {}).value || 'valid';
+  const kw = String(q).trim().toUpperCase();
+  return (STATE.vehiclePasses || []).filter(p => {
+    if(kw && ![p.plate, p.pass_no, p.batch_no, p.vendor, p.category]
+        .some(v => String(v || '').toUpperCase().includes(kw))) return false;
+    if(vendorF !== 'all' && String(p.vendor || '') !== vendorF) return false;
+    if(catF !== 'all' && String(p.category || '') !== catF) return false;
+    const n = vpDaysLeft(p.expiry_date);
+    if(dueF === 'valid')   return n === null || n >= 0;
+    if(dueF === '60')      return n !== null && n >= 0 && n <= 60;
+    if(dueF === '30')      return n !== null && n >= 0 && n <= 30;
+    if(dueF === 'expired') return n !== null && n < 0;
+    return true;
+  }).sort((a, b) => String(a.expiry_date || '9999').localeCompare(String(b.expiry_date || '9999'))
+                 || String(a.plate || '').localeCompare(String(b.plate || '')));
+}
+function renderVpTable(){
+  const body = document.getElementById('vpTableBody');
+  if(!body) return;
+  // 篩選用的下拉（第一次或資料變了就重建）
+  const fill = (id, values) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const cur = sel.value;
+    const head = sel.options[0] ? sel.options[0].outerHTML : '';
+    sel.innerHTML = head + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  };
+  const all = STATE.vehiclePasses || [];
+  fill('vp_vendor_filter', [...new Set(all.map(p => p.vendor).filter(Boolean))].sort());
+  fill('vp_cat_filter',    [...new Set(all.map(p => p.category).filter(Boolean))].sort());
+  ['vpCompanyList|company_name', 'vpVendorList|vendor', 'vpCatList|category', 'vpAuthList|authority']
+    .forEach(x => {
+      const [id, k] = x.split('|');
+      const dl = document.getElementById(id);
+      if(dl) dl.innerHTML = [...new Set(all.map(p => p[k]).filter(Boolean))].sort()
+        .map(v => `<option value="${esc(v)}">`).join('');
+    });
+
+  const rows = vpRows();
+  const soon = rows.filter(p => { const n = vpDaysLeft(p.expiry_date); return n !== null && n >= 0 && n <= 60; }).length;
+  const cnt = document.getElementById('vp_count');
+  if(cnt) cnt.textContent = `共 ${rows.length} 張` + (soon ? `／60 天內到期 ${soon} 張` : '');
+
+  body.innerHTML = rows.map(p => {
+    const n = vpDaysLeft(p.expiry_date);
+    return `<tr${n !== null && n < 0 ? ' style="opacity:.55;"' : ''}>
+      <td>${esc(p.plate || '')}</td>
+      <td class="muted">${esc(p.company_name || '')}</td>
+      <td>${esc(p.vendor || '')}</td>
+      <td>${esc(p.category || '')}</td>
+      <td style="font-family:monospace;">${esc(p.pass_no || '')}</td>
+      <td class="muted" style="font-family:monospace;">${esc(p.batch_no || '')}</td>
+      <td class="muted">${esc(p.start_date || '—')} ～ ${esc(p.expiry_date || '—')}</td>
+      <td>${esc(p.expiry_date || '—')}</td>
+      <td>${vpPill(p.expiry_date)}</td>
+      <td class="muted">${esc(p.inspect_date || '—')}</td>
+      <td style="white-space:nowrap;">
+        <button class="name-link" data-edit-pass="${p.id}">修改</button>
+        <button class="del-btn" data-del-pass="${p.id}">刪除</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="11" class="empty">沒有符合條件的通行證</td></tr>`;
+
+  // 依廠商／品項／到期日彙總
+  const g = {};
+  vpRows().forEach(p => {
+    const k = [p.vendor || '—', p.category || '—', p.expiry_date || '—'].join('\u0001');
+    (g[k] = g[k] || []).push(p);
+  });
+  const gbody = document.getElementById('vpGroupBody');
+  if(gbody){
+    gbody.innerHTML = Object.keys(g).sort((a, b) => a.split('\u0001')[2].localeCompare(b.split('\u0001')[2]))
+      .map(k => {
+        const [vendor, cat, exp] = k.split('\u0001');
+        const list = g[k];
+        return `<tr>
+          <td>${esc(vendor)}</td><td>${esc(cat)}</td><td>${esc(exp)}</td>
+          <td>${list.length} 台</td><td>${vpPill(exp === '—' ? null : exp)}</td>
+          <td class="muted" style="font-size:12px;">${esc(list.map(p => p.plate).filter(Boolean).sort().join('、'))}</td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="6" class="empty">沒有資料</td></tr>`;
+  }
+}
+function vpFillPlateSelect(id, current){
+  const sel = document.getElementById(id);
+  if(!sel) return;
+  const plates = (STATE.vehicles || []).map(v => v.plate).filter(Boolean);
+  if(current && !plates.includes(current)) plates.unshift(current);
+  sel.innerHTML = plates.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  if(current) sel.value = current;
+}
+// 選了車號就把行號帶出來
+function vpSyncCompany(){
+  const plate = (document.getElementById('vp_plate') || {}).value;
+  const v = (STATE.vehicles || []).find(x => x.plate === plate);
+  const co = document.getElementById('vp_company');
+  if(v && co && !co.value) co.value = v.company_name || '';
+}
+function vpExportCsv(){
+  const head = ['車號','行號','廠商','品項','通行證號碼','批號','生效日','到期日','剩餘天數','指定檢驗日','發證日','發證監理所','備註'];
+  const rows = vpRows().map(p => [p.plate||'', p.company_name||'', p.vendor||'', p.category||'',
+    p.pass_no||'', p.batch_no||'', p.start_date||'', p.expiry_date||'',
+    (vpDaysLeft(p.expiry_date) === null ? '' : String(vpDaysLeft(p.expiry_date))),
+    p.inspect_date||'', p.issue_date||'', p.authority||'', p.notes||'']);
+  const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '通行證清單_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click();
+}
+// ----- 新增 -----
+{
+  const _add = document.getElementById('vp_add');
+  if(_add) _add.addEventListener('click', async () => {
+    const msg = document.getElementById('vp_add_msg');
+    const g = id => (document.getElementById(id) || {}).value || '';
+    const plate = g('vp_plate'), no = g('vp_no').trim(), expiry = g('vp_expiry');
+    if(!plate){ msg.textContent = '請選車號'; return; }
+    if(!expiry){ msg.textContent = '請填到期日（通行證上的「有效期間」最後一天）'; return; }
+    if(no && (STATE.vehiclePasses || []).some(p => String(p.pass_no || '').trim() === no)){
+      if(!confirm('通行證號碼「' + no + '」已經有一張了，確定還要再新增嗎？')) return;
+    }
+    const v = (STATE.vehicles || []).find(x => x.plate === plate);
+    STATE.vehiclePasses.push({
+      id: nextId(STATE.vehiclePasses),
+      vehicle_id: v ? (v.vehicle_id || v.id) : null,
+      plate: plate,
+      company_name: g('vp_company').trim() || (v ? (v.company_name || '') : ''),
+      vendor: g('vp_vendor').trim(),
+      category: g('vp_cat').trim(),
+      pass_no: no || null,
+      batch_no: g('vp_batch').trim() || null,
+      start_date: g('vp_start') || null,
+      expiry_date: expiry,
+      inspect_date: g('vp_inspect') || null,
+      issue_date: g('vp_issue') || null,
+      authority: g('vp_auth').trim() || null,
+      status: (vpDaysLeft(expiry) < 0) ? '已過期' : '有效',
+      notes: g('vp_notes').trim() || null
+    });
+    try{
+      msg.textContent = '存檔中…';
+      await saveState('vehicle_passes', STATE.vehiclePasses, true);
+      ['vp_no','vp_batch','vp_start','vp_expiry','vp_inspect','vp_issue','vp_notes']
+        .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+      msg.textContent = '已新增。';
+      renderAll();
+    }catch(err){ msg.textContent = '存檔失敗：' + (err && err.message ? err.message : err); }
+  });
+}
+// ----- 修改／刪除 -----
+let VP_EDIT_ID = null;
+function openVpEdit(id){
+  const p = (STATE.vehiclePasses || []).find(x => String(x.id) === String(id));
+  if(!p) return;
+  VP_EDIT_ID = String(id);
+  vpFillPlateSelect('vpEditPlate', p.plate || '');
+  const set = (eid, v) => { const el = document.getElementById(eid); if(el) el.value = v == null ? '' : v; };
+  set('vpEditCompany', p.company_name); set('vpEditVendor', p.vendor);
+  set('vpEditCat', p.category); set('vpEditNo', p.pass_no); set('vpEditBatch', p.batch_no);
+  set('vpEditStart', p.start_date); set('vpEditExpiry', p.expiry_date);
+  set('vpEditInspect', p.inspect_date); set('vpEditIssue', p.issue_date);
+  set('vpEditAuth', p.authority); set('vpEditNotes', p.notes);
+  document.getElementById('vpEditMsg').textContent = '';
+  document.getElementById('vpEditModal').classList.add('show');
+}
+function closeVpEdit(){
+  document.getElementById('vpEditModal').classList.remove('show');
+  VP_EDIT_ID = null;
+}
+{
+  const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  bind('vpEditClose', closeVpEdit);
+  bind('vpEditCancel', closeVpEdit);
+  const m = document.getElementById('vpEditModal');
+  if(m) m.addEventListener('click', e => { if(e.target.id === 'vpEditModal') closeVpEdit(); });
+  bind('vpEditSave', async () => {
+    const msg = document.getElementById('vpEditMsg');
+    const p = (STATE.vehiclePasses || []).find(x => String(x.id) === VP_EDIT_ID);
+    if(!p){ msg.textContent = '找不到這一筆，請關掉重開。'; return; }
+    const g = id => (document.getElementById(id) || {}).value || '';
+    const plate = g('vpEditPlate');
+    const v = (STATE.vehicles || []).find(x => x.plate === plate);
+    p.plate = plate;
+    p.vehicle_id = v ? (v.vehicle_id || v.id) : p.vehicle_id;
+    p.company_name = g('vpEditCompany').trim();
+    p.vendor = g('vpEditVendor').trim();
+    p.category = g('vpEditCat').trim();
+    p.pass_no = g('vpEditNo').trim() || null;
+    p.batch_no = g('vpEditBatch').trim() || null;
+    p.start_date = g('vpEditStart') || null;
+    p.expiry_date = g('vpEditExpiry') || null;
+    p.inspect_date = g('vpEditInspect') || null;
+    p.issue_date = g('vpEditIssue') || null;
+    p.authority = g('vpEditAuth').trim() || null;
+    p.notes = g('vpEditNotes').trim() || null;
+    p.status = (p.expiry_date && vpDaysLeft(p.expiry_date) < 0) ? '已過期' : '有效';
+    try{
+      msg.style.color = ''; msg.textContent = '存檔中…';
+      await saveState('vehicle_passes', STATE.vehiclePasses, true);
+      closeVpEdit();
+      renderAll();
+    }catch(err){
+      msg.style.color = 'var(--red)';
+      msg.textContent = '存檔失敗：' + (err && err.message ? err.message : err);
+    }
+  });
+}
+{
+  const body = document.getElementById('vpTableBody');
+  if(body) body.addEventListener('click', async e => {
+    const eid = e.target.getAttribute('data-edit-pass');
+    if(eid){ openVpEdit(eid); return; }
+    const did = e.target.getAttribute('data-del-pass');
+    if(did){
+      const p = (STATE.vehiclePasses || []).find(x => String(x.id) === did);
+      if(!p) return;
+      if(!confirm('確定要刪除這一張通行證嗎？\n\n'
+        + '車號　：' + (p.plate || '') + '\n'
+        + '廠商　：' + (p.vendor || '') + '　' + (p.category || '') + '\n'
+        + '證號　：' + (p.pass_no || '') + '\n'
+        + '到期日：' + (p.expiry_date || '') + '\n\n'
+        + '★ 到期的舊證建議留著當紀錄，不用刪；key 錯了請按「修改」。')) return;
+      STATE.vehiclePasses = STATE.vehiclePasses.filter(x => String(x.id) !== did);
+      await saveState('vehicle_passes', STATE.vehiclePasses, true);
+      renderAll();
+    }
+  });
+  ['vp_search','vp_vendor_filter','vp_cat_filter','vp_due_filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderVpTable);
+  });
+  const ex = document.getElementById('vp_export');
+  if(ex) ex.addEventListener('click', vpExportCsv);
+  const ps = document.getElementById('vp_plate');
+  if(ps) ps.addEventListener('change', vpSyncCompany);
+}
 
 // ----- 修改保險 -----
 // 以前這張表只能「新增／中止／刪除」，key 錯了只能刪掉重打，
