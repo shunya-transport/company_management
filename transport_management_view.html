@@ -2417,8 +2417,9 @@
         這張表反過來看：一台板架一列，它現在被哪些廠商／品項的通行證涵蓋、最早哪一張到期。<br>
         要查「這台板架能不能去跑某一家」就直接搜板架車號；
         <b>「自有」</b>是車輛主檔裡查得到的我們自己的板架，查不到的多半是客戶或靠行的板架。<br>
-        ※ 通行證正面只印得下 16 台，超過的印「詳列於背面」。那種會標 <span class="pill amber">＋背面</span>，
-        表示實際涵蓋的板架比這裡列的多——拿到背面清單後在上面那張表按「修改」，把車號補進「板架車號」欄就好。
+        ※ 通行證正面只印得下 16 台，其餘印在背面；背面那幾頁已經一起讀進來了，
+        所以這裡看到的是<b>完整</b>的板架清單（每一張都跟通行證背面寫的「詳列拖車 N 輛」對過數目）。
+        自有板架排在前面，客戶／靠行的排後面。
       </div>
       <div class="toolbar">
         <input id="vt_search" placeholder="搜尋板架車號／廠商／曳引車車號">
@@ -2448,13 +2449,15 @@
     <div class="card">
       <h2>危險物品中英對照<span class="count-badge" id="hz_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
-        通行證上只寫中文名與括號裡的聯合國編號（UN No.），這裡對到 UN 正式運送名稱的英文。
-        查不到的物質，在資料庫的 <code>hazmat_substances</code> 加一列就會自動出現，不用改程式。
+        通行證上只寫中文名與括號裡的聯合國編號（UN No.），這裡對到現場在講的簡稱／化學式（NF3、SiH4、C4F8…）
+        與 UN 正式運送名稱的英文。搜尋框直接打 NF3 或 SiH4 就找得到。<br>
+        查不到的物質，在資料庫的 <code>hazmat_substances</code> 加一列就會自動出現，不用改程式；
+        括號裡寫「134處」那種是毒性及關注化學物質的列管處數，不是聯合國編號。
       </div>
-      <div class="toolbar"><input id="hz_search" placeholder="搜尋中文名／英文名／UN 編號"></div>
+      <div class="toolbar"><input id="hz_search" placeholder="搜尋中文名／簡稱化學式（NF3、SiH4…）／英文名／UN 編號"></div>
       <div class="table-scroll" style="max-height:340px;">
         <table>
-          <thead><tr><th>UN 編號</th><th>中文名</th><th>英文名（UN 正式運送名稱）</th><th>危害分類</th><th>備註</th><th>使用張數</th></tr></thead>
+          <thead><tr><th>UN 編號</th><th>中文名</th><th>簡稱／化學式</th><th>英文名（UN 正式運送名稱）</th><th>危害分類</th><th>備註</th><th>使用張數</th></tr></thead>
           <tbody id="hzTableBody"></tbody>
         </table>
       </div>
@@ -17506,13 +17509,17 @@ function hzParse(text){
   }
   return { items: items, note: items.length ? '' : (s.length > 40 ? s.slice(0, 40) + '…' : s) };
 }
+// 通行證原文拆解時空白會被拿掉（「Hypomer MT-2350」會變成「HypomerMT-2350」），
+// 所以比對名稱時兩邊的空白都先去掉，不然德謙那種商品名會對不到。
+function hzNorm(s){ return String(s == null ? '' : s).replace(/\s+/g, ''); }
 function hzLookup(zh, un){
   const list = STATE.hazmatSubstances || [];
-  const hit = list.find(h => String(h.un_no) === String(un) && String(h.name_zh).trim() === String(zh).trim());
+  const z = hzNorm(zh);
+  const hit = list.find(h => String(h.un_no) === String(un) && hzNorm(h.name_zh) === z);
   if(hit) return hit;
   // 「134處」是列管處數不是 UN 編號，同一個編號底下是一堆不同的化學品，
   // 所以這種只能用中文名對，不能用編號對。
-  if(/處$/.test(String(un))) return list.find(h => String(h.name_zh).trim() === String(zh).trim()) || null;
+  if(/處$/.test(String(un))) return list.find(h => hzNorm(h.name_zh) === z) || null;
   return list.find(h => String(h.un_no) === String(un)) || null;
 }
 function hzDetailHtml(goodsText){
@@ -17525,8 +17532,11 @@ function hzDetailHtml(goodsText){
     const h = hzLookup(it.zh, it.un);
     return `<tr>
       <td style="text-align:center;">${i + 1}</td>
-      <td>${esc(it.zh)}</td>
-      <td>${h && h.name_en ? esc(h.name_en) : '<span class="muted">（對照表查不到，可在 hazmat_substances 補）</span>'}</td>
+      <td>${esc(h && h.name_zh ? h.name_zh : it.zh)}</td>
+      <td style="font-family:monospace;font-size:12px;">${h && h.abbr ? esc(h.abbr) : '<span class="muted" style="font-family:inherit;">—</span>'}</td>
+      <td>${h && h.name_en ? esc(h.name_en)
+        : (h ? '<span class="muted">—（這一項還沒填英文名）</span>'
+             : '<span class="muted">（對照表查不到，可在 hazmat_substances 補一列）</span>')}</td>
       <td style="text-align:center;font-family:monospace;">${/處$/.test(String(it.un))
         ? '<span class="muted" style="font-family:inherit;">列管 ' + esc(it.un) + '</span>'
         : 'UN ' + esc(it.un)}</td>
@@ -17535,7 +17545,7 @@ function hzDetailHtml(goodsText){
   }).join('');
   return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 2px;">
       <thead><tr style="background:rgba(0,0,0,.03);">
-        <th style="width:34px;">#</th><th>中文名</th><th>英文名（UN 正式運送名稱）</th><th style="width:90px;">UN 編號</th><th>危害分類</th>
+        <th style="width:34px;">#</th><th>中文名</th><th style="width:130px;">簡稱／化學式</th><th>英文名（UN 正式運送名稱）</th><th style="width:90px;">UN 編號</th><th>危害分類</th>
       </tr></thead><tbody>${rows}</tbody></table>
     <div class="muted" style="font-size:11.5px;">原文：${esc(goodsText || '')}</div>`;
 }
@@ -17552,29 +17562,40 @@ function renderHzTable(){
     });
   });
   const list = (STATE.hazmatSubstances || []).filter(h => !kw
-      || [h.un_no, h.name_zh, h.name_en, h.hazard_class].some(v => String(v || '').toUpperCase().includes(kw)))
+      || [h.un_no, h.name_zh, h.abbr, h.name_en, h.hazard_class].some(v => String(v || '').toUpperCase().includes(kw)))
     .slice().sort((a, b) => String(a.un_no).localeCompare(String(b.un_no)) || String(a.name_zh).localeCompare(String(b.name_zh)));
   const cnt = document.getElementById('hz_count');
   if(cnt) cnt.textContent = `共 ${(STATE.hazmatSubstances || []).length} 種`;
   body.innerHTML = list.map(h => `<tr>
-      <td style="font-family:monospace;">UN ${esc(h.un_no)}</td>
+      <td style="font-family:monospace;">${/處$/.test(String(h.un_no))
+        ? '<span class="muted" style="font-family:inherit;">列管 ' + esc(h.un_no) + '</span>'
+        : 'UN ' + esc(h.un_no)}</td>
       <td>${esc(h.name_zh)}</td>
+      <td style="font-family:monospace;font-size:12.5px;">${esc(h.abbr || '')}</td>
       <td>${esc(h.name_en || '')}</td>
       <td class="muted">${esc(h.hazard_class || '')}</td>
       <td class="muted">${esc(h.notes || '')}</td>
       <td style="text-align:center;">${used[h.un_no + '\u0001' + h.name_zh] || ''}</td>
-    </tr>`).join('') || `<tr><td colspan="6" class="empty">沒有符合的物質</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="7" class="empty">沒有符合的物質</td></tr>`;
 }
 
 // ===== 板架（拖車） =====
 // 曳引車申請通行證時會順帶報上要掛的板架，通行證「拖車車號」那一欄就是板架。
 // 資料庫存成一串文字（trailer_plates，用「、」隔開），這裡拆成陣列用。
 // trailer_more＝true 表示正面只印得下 16 台，其餘「詳列於背面」，所以實際台數比存的多。
+const VP_TRAILER_CACHE = new Map();
 function vpTrailers(p){
-  return String((p && p.trailer_plates) || '')
-    .split(/[、,，;；\s]+/)
-    .map(x => x.trim().toUpperCase())
-    .filter(Boolean);
+  const raw = String((p && p.trailer_plates) || '');
+  if(!raw) return [];
+  // 同一批申請的通行證板架清單一模一樣（整個系統只有三十幾份不同的清單），
+  // 一份清單最多 226 台，所以拆過就記起來，不要每次重畫都拆一遍。
+  let v = VP_TRAILER_CACHE.get(raw);
+  if(!v){
+    v = raw.split(/[、,，;；\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+    if(VP_TRAILER_CACHE.size > 300) VP_TRAILER_CACHE.clear();
+    VP_TRAILER_CACHE.set(raw, v);
+  }
+  return v;
 }
 // 車輛主檔查得到＝我們自己的板架；查不到的多半是客戶或靠行的
 function vtIsOwn(plate){
@@ -17594,14 +17615,20 @@ function vtDetailHtml(p){
       ? '<div class="muted" style="padding:6px 10px;">這張是曳引車，但通行證上沒有讀到拖車車號——按「修改」補進「板架車號」欄。</div>'
       : '<div class="muted" style="padding:6px 10px;">這張不是曳引車，沒有附板架。</div>';
   }
+  const own = list.filter(vtIsOwn);
   return `<div style="padding:4px 10px 2px;">
       <div style="font-size:12.5px;margin-bottom:4px;">
-        板架（拖車）共 <b>${list.length}</b> 台${p.trailer_more ? '　<span class="pill amber">＋背面還有，未登錄</span>' : ''}
+        板架（拖車）共 <b>${list.length}</b> 台（自有 ${own.length} 台）${p.trailer_more ? '　<span class="pill amber">＋背面還有，未登錄</span>' : ''}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${list.map(t => `<span style="border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12.5px;font-family:monospace;">
-            ${esc(t)} ${vtIsOwn(t) ? '' : '<span class="muted" style="font-family:inherit;">(非自有)</span>'}</span>`).join('')}
-      </div>
+      <div style="font-size:12.5px;margin-bottom:4px;">自有板架：${own.length
+        ? `<span style="font-family:monospace;">${esc(own.join('、'))}</span>`
+        : '<span class="muted">這張證上沒有我們自己的板架</span>'}</div>
+      <details style="font-size:12.5px;">
+        <summary style="cursor:pointer;color:var(--accent,#b26a00);">全部 ${list.length} 台（含客戶／靠行的）</summary>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+          ${list.map(t => `<span style="border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12.5px;font-family:monospace;${vtIsOwn(t) ? 'background:rgba(0,128,0,.06);' : ''}">${esc(t)}</span>`).join('')}
+        </div>
+      </details>
     </div>`;
 }
 // 一台板架一列：它被哪些通行證涵蓋
@@ -17630,7 +17657,34 @@ function vtRows(){
     if(r.plate.includes(kw)) return true;
     return r.passes.some(p => [p.vendor, p.category, p.plate, p.pass_no]
       .some(v => String(v || '').toUpperCase().includes(kw)));
-  }).sort((a, b) => a.plate.localeCompare(b.plate));
+  }).sort((a, b) => (a.own === b.own ? 0 : (a.own ? -1 : 1)) || a.plate.localeCompare(b.plate));
+}
+// 一台板架可能掛在一兩百張通行證上，所以明細按下去才畫
+function vtPassListHtml(plate){
+  const list = (STATE.vehiclePasses || [])
+    .filter(p => vpTrailers(p).indexOf(String(plate).toUpperCase()) >= 0)
+    .sort((a, b) => String(a.expiry_date || '9999').localeCompare(String(b.expiry_date || '9999')));
+  const dueF = (document.getElementById('vt_due_filter') || {}).value || 'valid';
+  const rows = list.filter(p => {
+    if(dueF !== 'valid') return true;
+    const n = vpDaysLeft(p.expiry_date);
+    return n === null || n >= 0;
+  });
+  return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 2px;">
+      <thead><tr style="background:rgba(0,0,0,.03);">
+        <th>曳引車</th><th>行號</th><th>廠商</th><th>品項</th>
+        <th>通行證號碼(NO)</th><th>到期日</th><th>剩餘天數</th>
+      </tr></thead>
+      <tbody>${rows.map(p => `<tr>
+        <td>${esc(p.plate || '')}</td>
+        <td class="muted">${esc(p.company_name || '')}</td>
+        <td>${esc(p.vendor || '')}</td>
+        <td>${esc(p.category || '')}</td>
+        <td style="font-family:monospace;">${esc(p.pass_no || '')}</td>
+        <td>${esc(p.expiry_date || '—')}</td>
+        <td>${vpPill(p.expiry_date)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
 }
 function renderVtTable(){
   const body = document.getElementById('vtTableBody');
@@ -17656,24 +17710,8 @@ function renderVtTable(){
       <td>${vpPill(r.earliest)}</td>
       <td class="muted" style="font-size:12px;">${esc([...new Set(r.passes.map(p => p.plate).filter(Boolean))].sort().join('、'))}</td>
     </tr>
-    <tr class="vt-detail" data-detail-trailer="${esc(r.plate)}" style="display:none;">
-      <td colspan="7" style="background:rgba(0,0,0,.02);">
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 2px;">
-          <thead><tr style="background:rgba(0,0,0,.03);">
-            <th>曳引車</th><th>行號</th><th>廠商</th><th>品項</th>
-            <th>通行證號碼(NO)</th><th>到期日</th><th>剩餘天數</th>
-          </tr></thead>
-          <tbody>${r.passes.map(p => `<tr>
-            <td>${esc(p.plate || '')}</td>
-            <td class="muted">${esc(p.company_name || '')}</td>
-            <td>${esc(p.vendor || '')}</td>
-            <td>${esc(p.category || '')}</td>
-            <td style="font-family:monospace;">${esc(p.pass_no || '')}</td>
-            <td>${esc(p.expiry_date || '—')}</td>
-            <td>${vpPill(p.expiry_date)}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </td>
+    <tr class="vt-detail" data-detail-trailer="${esc(r.plate)}" data-filled="0" style="display:none;">
+      <td colspan="7" style="background:rgba(0,0,0,.02);"></td>
     </tr>`;
   }).join('') || `<tr><td colspan="7" class="empty">沒有符合條件的板架</td></tr>`;
 
@@ -17693,7 +17731,7 @@ function renderVtTable(){
   if(box) box.innerHTML = miss.length
     ? `<b>在役板架沒有出現在任何有效通行證上（${miss.length} 台）：</b><br>`
       + `<span style="font-family:monospace;">${esc(miss.join('、'))}</span><br>`
-      + `有可能是真的沒報，也有可能是報了但印在通行證背面（上面標「＋背面」的那幾張）還沒登錄進來。`
+      + `通行證正反面的板架都已經讀進來了，所以這幾台應該是真的沒報，或是報在我們手上沒有的那張證上。`
     : '在役板架都至少有一張有效通行證涵蓋。';
 }
 function vtExportCsv(){
@@ -17769,7 +17807,14 @@ function renderVpTable(){
       <td>${esc(p.category || '')}</td>
       <td>${(() => {
         const r = hzParse(p.goods_text);
-        if(r.items.length) return `<button class="name-link" data-exp-pass="${p.id}">${r.items.length} 種 ▾</button>`;
+        if(r.items.length){
+          // 一兩種的直接把簡稱寫出來（NF3、SiH4），多的才只顯示種數
+          const abbrs = r.items.map(it => (hzLookup(it.zh, it.un) || {}).abbr)
+            .filter(Boolean).map(a => String(a).replace(/（.*$/, ''));
+          const tag = (abbrs.length && abbrs.length === r.items.length && abbrs.length <= 3)
+            ? `<span style="font-family:monospace;font-size:11.5px;" class="muted">${esc(abbrs.join('、'))}</span><br>` : '';
+          return tag + `<button class="name-link" data-exp-pass="${p.id}">${r.items.length} 種 ▾</button>`;
+        }
         if(r.note && r.note.indexOf('背面') >= 0) return `<button class="name-link" data-exp-pass="${p.id}" style="color:#b26a00;">${esc(r.note.replace('（明細未登錄）', ''))} ▾</button>`;
         return p.goods_text ? `<button class="name-link" data-exp-pass="${p.id}">明細 ▾</button>` : '<span class="muted">—</span>';
       })()}</td>
@@ -17789,13 +17834,8 @@ function renderVpTable(){
         <button class="name-link" data-edit-pass="${p.id}">修改</button>
         <button class="del-btn" data-del-pass="${p.id}">刪除</button></td>
     </tr>
-    <tr class="vp-detail" data-detail-pass="${p.id}" style="display:none;">
-      <td colspan="13" style="background:rgba(0,0,0,.02);">
-        ${hzDetailHtml(p.goods_text)}
-        <div style="border-top:1px dashed var(--line);margin-top:6px;padding-top:4px;">
-          ${vtDetailHtml(p)}
-        </div>
-      </td>
+    <tr class="vp-detail" data-detail-pass="${p.id}" data-filled="0" style="display:none;">
+      <td colspan="13" style="background:rgba(0,0,0,.02);"></td>
     </tr>`;
   }).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的通行證</td></tr>`;
 
@@ -17839,7 +17879,9 @@ function vpExportCsv(){
   const rows = vpRows().map(p => [p.plate||'', p.vehicle_type||'', p.company_name||'', p.vendor||'', p.category||'',
     hzParse(p.goods_text).items.map(it => {
       const h = hzLookup(it.zh, it.un);
-      return it.zh + '(UN' + it.un + (h && h.name_en ? ' ' + h.name_en : '') + ')';
+      return it.zh + '(' + (h && h.abbr ? h.abbr + ' ' : '')
+           + (/處$/.test(String(it.un)) ? '列管' + it.un : 'UN' + it.un)
+           + (h && h.name_en ? ' ' + h.name_en : '') + ')';
     }).join('；') || hzParse(p.goods_text).note,
     p.goods_text||'',
     String(vpTrailers(p).length || ''), vpTrailers(p).join('、'), p.trailer_more ? '是' : '',
@@ -17929,7 +17971,9 @@ function vpEditGoodsPreview(){
   if(!r.items.length){ box.innerHTML = `<span style="color:#b26a00;">拆不出來（${esc(r.note || '')}）—— 名稱後面要接半形括號的四位 UN 編號，例如 三氟化氮(2451)</span>`; return; }
   box.innerHTML = '拆出 <b>' + r.items.length + '</b> 項：' + r.items.map(it => {
     const h = hzLookup(it.zh, it.un);
-    return esc(it.zh) + '<span class="muted">（UN ' + esc(it.un) + (h && h.name_en ? '／' + esc(h.name_en) : '') + '）</span>';
+    const code = /處$/.test(String(it.un)) ? '列管 ' + esc(it.un) : 'UN ' + esc(it.un);
+    return esc(it.zh) + '<span class="muted">（' + (h && h.abbr ? esc(h.abbr) + '／' : '') + code
+         + (h && h.name_en ? '／' + esc(h.name_en) : '') + '）</span>';
   }).join('、');
 }
 // 輸入的板架車號怎麼打都收成「02-NQ、10-PX」這種格式，順便去掉重複
@@ -18008,6 +18052,16 @@ function closeVpEdit(){
     if(xid){
       const row = body.querySelector(`tr.vp-detail[data-detail-pass="${xid}"]`);
       if(row){
+        // 第一次按下去才把明細畫出來
+        if(row.getAttribute('data-filled') !== '1'){
+          const pp = (STATE.vehiclePasses || []).find(x => String(x.id) === String(xid));
+          row.firstElementChild.innerHTML = pp
+            ? hzDetailHtml(pp.goods_text)
+              + '<div style="border-top:1px dashed var(--line);margin-top:6px;padding-top:4px;">'
+              + vtDetailHtml(pp) + '</div>'
+            : '';
+          row.setAttribute('data-filled', '1');
+        }
         const open = row.style.display === 'none';
         row.style.display = open ? '' : 'none';
         e.target.textContent = e.target.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
@@ -18049,6 +18103,10 @@ function closeVpEdit(){
     if(!t) return;
     const row = vtb.querySelector(`tr.vt-detail[data-detail-trailer="${t}"]`);
     if(!row) return;
+    if(row.getAttribute('data-filled') !== '1'){
+      row.firstElementChild.innerHTML = vtPassListHtml(t);
+      row.setAttribute('data-filled', '1');
+    }
     const open = row.style.display === 'none';
     row.style.display = open ? '' : 'none';
     e.target.textContent = e.target.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
