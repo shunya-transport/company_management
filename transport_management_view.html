@@ -608,6 +608,35 @@
     </div>
 
     <div class="card">
+      <h2>月報結轉（產生新一期）<span class="count-badge" id="ins_carry_badge"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        月報本來只能等勞保局、健保署的對帳單來了再匯進系統，所以月初印不出當月的提撥表。
+        這裡可以<b>先用在職名冊＋投保金額＋現行級距把新的一期算出來</b>，表單生成就有東西可以拉；
+        對帳單到了再核對、有差額就改。<br>
+        算法跟上面的級距試算一樣：勞保 12.5%（公司 70%／員工 20%，上限 45,800）、
+        健保 5.17%（公司 60%×1.56／員工 30%，上限 313,000，眷口超過 3 口以 3 口計）、
+        職災依<b>各人上一期的行業費率</b>、勞退 6%（下限 1,500、上限 150,000），四項各自四捨五入。
+      </div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <label>以哪一期為底<select id="ins_carry_src"></select></label>
+        <label>要產生哪一期<input id="ins_carry_dst" placeholder="例：115/09" style="max-width:140px;"></label>
+        <label>人員範圍
+          <select id="ins_carry_scope">
+            <option value="onduty">目前在職人員（建議）</option>
+            <option value="same">跟來源那一期同一批人</option>
+          </select>
+        </label>
+      </div>
+      <div class="toolbar">
+        <button class="btn ghost" id="ins_carry_calc">試算這一期</button>
+        <button class="btn" id="ins_carry_save" style="display:none;">寫入月報</button>
+        <button class="btn ghost no-print" id="ins_carry_csv" style="display:none;">匯出 CSV</button>
+      </div>
+      <div id="ins_carry_msg" style="margin:8px 0;font-size:13px;"></div>
+      <div id="ins_carry_result"></div>
+    </div>
+
+    <div class="card">
       <h2>勞健保級距對照表<span class="count-badge" id="ib_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
         現行級距與費率：勞保 12.5%（普通事故 11.5%＋就保 1%；公司 70%、員工 20%，最低 11,100、最高 45,800）、
@@ -4947,7 +4976,12 @@ async function loadState(){
       + 'employer_labor_general,employer_labor_injury,employer_health,employer_pension,personal_labor,personal_health,'
       + 'labor_rate,employment_rate,health_rate,injury_rate,employee_id';
     const _im = await supaFetchAll('insurance_monthly_records?select=' + _imCols + '&order=year_roc.desc,month.desc,record_id.asc');
-    if(_im && _im.length) STATE.insuranceMonthly = _im;
+    if(_im && _im.length){
+      // 這張表的主鍵叫 record_id，別的地方一律用 id，先對起來
+      _im.forEach(r => { if(r.id == null) r.id = r.record_id; });
+      STATE.insuranceMonthly = _im;
+      STATE.insMonthlyLive = true;          // 真的讀到雲端了，結轉才敢寫回去
+    }
   }catch(e){ console.error('insurance_monthly_records 讀取失敗，改用內建', e); }
   // 勞健保級距表（SQL_182 建的）。撈不到就用程式裡那份內建備援，畫面照樣能看。
   STATE.insBrackets = [];
@@ -8292,6 +8326,350 @@ function ibInjuryRate(){
   });
   const k = Object.keys(c).sort((a,b) => c[b] - c[a])[0];
   return k ? Number(k) : 0.0021;
+}
+
+// ===================== 月報結轉 =====================
+// 月報是從勞保局／健保署的對帳單匯進來的，系統本身不會自己長出新的一期，
+// 所以月初要印提撥表時「拉不出這個月」。這裡用在職名冊把新的一期算出來先頂著。
+let INS_CARRY_CACHE = null;
+
+function insAllKeys(){
+  return [...new Set((STATE.insuranceMonthly || []).map(insMonthlyKey).filter(k => k > 0))]
+    .sort((a, b) => b - a);
+}
+function insNextKey(key){
+  const y = Math.floor(key / 100), m = key % 100;
+  return m >= 12 ? (y + 1) * 100 + 1 : y * 100 + (m + 1);
+}
+function insParseKey(text){
+  const raw = String(text || '').replace(/[^0-9]/g, '');
+  if(raw.length < 4) return 0;
+  const y = parseInt(raw.slice(0, 3), 10), m = parseInt(raw.slice(3), 10);
+  return (y > 0 && m >= 1 && m <= 12) ? y * 100 + m : 0;
+}
+// 上一期「實際計費」的健保眷口數。
+// 人員主檔登記的眷屬數不等於有在公司健保加保（有人掛在配偶那邊），
+// 所以結轉時以對帳單算出來的口數為準：員工自付健保 ÷ 該級距的員工單價 − 1。
+function insCarryBilledDeps(srcRow){
+  if(!srcRow) return null;
+  const hb = ibFind(Math.min(Number(srcRow.health_insured_amount) || 0, IB_HEALTH_MAX));
+  if(!hb || !hb.employee_health) return null;
+  const k = Math.round((Number(srcRow.personal_health) || 0) / hb.employee_health) - 1;
+  return (k >= 0 && k <= 3) ? k : null;
+}
+// 這個人這一期該用的職災費率：先用他自己上一期的，再退而求其次用同公司最常見的
+function insCarryInjuryRate(srcRow, companyName, srcRows){
+  const own = Number(srcRow && srcRow.injury_rate) || 0;
+  if(own > 0) return own;
+  const c = {};
+  (srcRows || []).forEach(r => {
+    if(String(r.company_name || '') !== String(companyName || '')) return;
+    const v = Number(r.injury_rate) || 0;
+    if(v > 0) c[v] = (c[v] || 0) + 1;
+  });
+  const k = Object.keys(c).sort((a, b) => c[b] - c[a])[0];
+  return k ? Number(k) : ibInjuryRate();
+}
+// 投保金額從哪裡來：人員主檔登記的優先（薪調過會是新的），沒有就沿用上一期
+function insCarryAmount(emp, srcRow){
+  const fromRoster = Number(emp && emp.insured_salary) || 0;
+  if(fromRoster > 0) return { amount: fromRoster, from: '人員主檔' };
+  const prev = Math.max(
+    Number(srcRow && srcRow.labor_insured_amount) || 0,
+    Number(srcRow && srcRow.injury_insured_amount) || 0,
+    Number(srcRow && srcRow.pension_insured_amount) || 0,
+    Number(srcRow && srcRow.health_insured_amount) || 0);
+  return prev > 0 ? { amount: prev, from: '沿用上一期' } : { amount: 0, from: '查不到' };
+}
+function insCarryBuild(){
+  const srcKey = Number((document.getElementById('ins_carry_src') || {}).value) || insLatestKey();
+  const dstKey = insParseKey((document.getElementById('ins_carry_dst') || {}).value) || insNextKey(srcKey);
+  const scope  = (document.getElementById('ins_carry_scope') || {}).value || 'onduty';
+  const all = STATE.insuranceMonthly || [];
+  const srcRows = all.filter(r => insMonthlyKey(r) === srcKey);
+  const nm = v => String(v || '').trim();
+  const srcByName = new Map(srcRows.map(r => [nm(r.name), r]));
+  const emps = STATE.employees || [];
+
+  // 這一期要有誰
+  let people;
+  if(scope === 'same'){
+    people = srcRows.map(r => ({ src: r, emp: pcRosterOf(r) }));
+  }else{
+    people = emps.filter(e => e.status === '在職')
+      .map(e => ({ emp: e, src: srcByName.get(nm(e.name)) || null }));
+  }
+
+  const rows = [], skipped = [];
+  people.forEach(p => {
+    const e = p.emp, s = p.src;
+    const name = nm(e ? e.name : (s && s.name));
+    const company = (e && e.company_name) || (s && s.company_name) || '未設定行號';
+    const amt = insCarryAmount(e, s);
+    const dep  = (e && e.dependents_count != null) ? Number(e.dependents_count)
+               : Number((s && s.dependents_count) || 0);
+    const free = (e && Array.isArray(e.dependents_detail) && e.dependents_detail.length)
+               ? depFreeCount(e.dependents_detail)
+               : Number((e && e.dependents_free_count) || 0);
+    const rate = insCarryInjuryRate(s, company, srcRows);
+    if(!amt.amount){ skipped.push({ name: name, company: company, why: '查不到投保金額（人員主檔與上一期都沒有）' }); return; }
+    // 健保眷口：以上一期對帳單實際計費的口數為準，查不出來才用人員主檔登記的
+    const depRoster = insBillableDeps(dep, free);
+    const depBilled = insCarryBilledDeps(s);
+    const depUse = (depBilled == null) ? depRoster : depBilled;
+    const depFrom = (depBilled == null) ? '人員主檔眷屬數' : '上一期對帳單';
+    const x = insEstimate(amt.amount, depUse, 0, rate);
+    if(!x){ skipped.push({ name: name, company: company, why: '投保金額 ' + amt.amount + ' 查不到對應級距' }); return; }
+    rows.push({
+      name: name, company: company, isNew: !s, amountFrom: amt.from,
+      emp: e, src: s, est: x, dep: dep, free: free, rate: rate,
+      depUse: depUse, depFrom: depFrom, depRoster: depRoster, depBilled: depBilled,
+      row: {
+        year_roc: Math.floor(dstKey / 100), month: dstKey % 100,
+        account_type: (s && s.account_type) || (e && e.employee_type) || null,
+        name: name,
+        employee_no: (e && e.employee_no) || (s && s.employee_no) || null,
+        region: (e && e.region) || (s && s.region) || null,
+        company_name: company,
+        dept_name: (e && e.dept_name) || (s && s.dept_name) || null,
+        position_name: (e && e.position_name) || (s && s.position_name) || null,
+        insured_date: (e && e.insured_date) || (s && s.insured_date) || null,
+        labor_insured_amount: x.labor, injury_insured_amount: x.injury,
+        pension_insured_amount: x.pension, health_insured_amount: x.health,
+        dependents_count: depUse,
+        employer_labor_general: x.empLabor, employer_labor_injury: x.empInjury,
+        employer_health: x.empHealth, employer_pension: x.empPension,
+        personal_labor: x.selfLabor, personal_health: x.selfHealth,
+        labor_rate: Number((s && s.labor_rate) || 0.115),
+        employment_rate: Number((s && s.employment_rate) || 0.01),
+        health_rate: Number((s && s.health_rate) || 0.0517),
+        injury_rate: rate,
+        employee_id: (e && e.id) != null ? e.id : ((s && s.employee_id) != null ? s.employee_id : null)
+      }
+    });
+  });
+  // 上一期有、這一期不帶入的（多半是離職）
+  const keep = new Set(rows.map(r => r.name));
+  const dropped = srcRows.filter(r => !keep.has(nm(r.name)))
+    .map(r => { const e = pcRosterOf(r); return { name: nm(r.name), company: r.company_name,
+      why: e ? ('名冊狀態「' + (e.status || '未填') + '」') : '名冊裡已經沒有這個人' }; });
+  return { srcKey: srcKey, dstKey: dstKey, rows: rows, skipped: skipped, dropped: dropped,
+           exists: all.filter(r => insMonthlyKey(r) === dstKey).length };
+}
+function insCarryRender(){
+  const box = document.getElementById('ins_carry_result');
+  const msg = document.getElementById('ins_carry_msg');
+  if(!box) return;
+  const d = INS_CARRY_CACHE;
+  if(!d){ box.innerHTML = ''; return; }
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const byCo = {};
+  d.rows.forEach(r => {
+    const k = r.company || '未設定行號';
+    const c = byCo[k] = byCo[k] || { n:0, emp:0, self:0 };
+    c.n++; c.emp += r.est.empTotal; c.self += r.est.selfTotal;
+  });
+  const cell = 'padding:4px 10px;border:1px solid var(--line,#ddd);text-align:right;';
+  const head = 'padding:4px 10px;border:1px solid var(--line,#ddd);background:rgba(0,0,0,.03);';
+  const tot = { n:0, emp:0, self:0 };
+  Object.values(byCo).forEach(c => { tot.n += c.n; tot.emp += c.emp; tot.self += c.self; });
+  // 跟來源那一期比
+  const src = (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === d.srcKey);
+  const srcEmp = src.reduce((s, r) => s + (r.employer_labor_general||0) + (r.employer_labor_injury||0)
+                                        + (r.employer_health||0) + (r.employer_pension||0), 0);
+  const diff = tot.emp - srcEmp;
+  box.innerHTML = `
+    <table style="border-collapse:collapse;font-size:13px;margin-bottom:10px;">
+      <tr><th style="${head}">行號</th><th style="${head}">人數</th><th style="${head}">公司負擔</th><th style="${head}">員工自付</th></tr>
+      ${Object.keys(byCo).sort().map(k => `<tr>
+        <th style="${head};text-align:left;">${esc(k)}</th>
+        <td style="${cell}">${byCo[k].n}</td>
+        <td style="${cell}">${n(byCo[k].emp)}</td>
+        <td style="${cell}">${n(byCo[k].self)}</td></tr>`).join('')}
+      <tr><th style="${head};text-align:left;">合計</th>
+        <td style="${cell}"><b>${tot.n}</b></td>
+        <td style="${cell}"><b>${n(tot.emp)}</b></td>
+        <td style="${cell}"><b>${n(tot.self)}</b></td></tr>
+    </table>
+    <div class="muted" style="font-size:12.5px;line-height:1.8;">
+      跟 ${esc(insKeyLabel(d.srcKey))}（${src.length} 人、公司負擔 ${n(srcEmp)}）相比：
+      人數 ${tot.n - src.length >= 0 ? '＋' : ''}${tot.n - src.length} 人、
+      公司負擔 ${diff >= 0 ? '＋' : '－'}${n(Math.abs(diff))} 元。
+      ${d.rows.filter(r => r.isNew).length ? '<br><b>新進來的：</b>'
+        + esc(d.rows.filter(r => r.isNew).map(r => r.name).join('、')) : ''}
+      ${d.dropped.length ? '<br><b>不帶入的：</b>'
+        + esc(d.dropped.map(r => r.name + '（' + r.why + '）').join('、')) : ''}
+      ${d.skipped.length ? '<br><span style="color:var(--red,#c0392b);"><b>算不出來、不會寫入的：</b>'
+        + esc(d.skipped.map(r => r.name + '（' + r.why + '）').join('、')) + '</span>' : ''}
+      ${d.rows.filter(r => r.amountFrom === '沿用上一期').length
+        ? '<br>其中 ' + d.rows.filter(r => r.amountFrom === '沿用上一期').length
+          + ' 人的投保金額是沿用上一期（人員主檔沒有登記投保金額）' : ''}
+      ${d.rows.filter(r => r.depBilled != null && r.depBilled !== r.depRoster).length
+        ? '<br><span style="color:#b26a00;">眷口以上一期對帳單為準，跟人員主檔登記的不一樣：'
+          + esc(d.rows.filter(r => r.depBilled != null && r.depBilled !== r.depRoster)
+                 .map(r => r.name + '（對帳單 ' + r.depBilled + ' 口／主檔 ' + r.depRoster + ' 口）').join('、'))
+          + '</span>' : ''}
+    </div>
+    ${insCarryDiffHtml(d)}`;
+  const badge = document.getElementById('ins_carry_badge');
+  if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + d.rows.length + ' 人';
+  document.getElementById('ins_carry_save').style.display = d.rows.length ? '' : 'none';
+  document.getElementById('ins_carry_csv').style.display  = d.rows.length ? '' : 'none';
+  if(msg && d.exists){
+    msg.style.color = '#b26a00';
+    msg.innerHTML = `⚠ ${esc(insKeyLabel(d.dstKey))} 月報裡已經有 <b>${d.exists}</b> 筆了。`
+      + `按「寫入月報」會<b>先把這一期原有的刪掉再重寫</b>，確定要重做再按。`;
+  }
+}
+// 跟上一期逐人比：哪幾個人的金額變了、變多少。
+// 月中加保／離職那幾筆上一期本來就是按日折算，結轉成整月一定會變多，這裡會標出來。
+const INS_CARRY_FIELDS = [
+  ['employer_labor_general', '雇主-勞保'], ['employer_labor_injury', '雇主-職災'],
+  ['employer_health', '雇主-健保'], ['employer_pension', '雇主-勞退'],
+  ['personal_labor', '員工-勞保'], ['personal_health', '員工-健保']
+];
+function insCarryDiffRows(d){
+  const nm = v => String(v || '').trim();
+  const src = new Map((STATE.insuranceMonthly || [])
+    .filter(r => insMonthlyKey(r) === d.srcKey).map(r => [nm(r.name), r]));
+  const out = [];
+  d.rows.forEach(r => {
+    const s = src.get(r.name);
+    if(!s) return;
+    const o = r.row;
+    const amtChanged = (Number(s.labor_insured_amount) || 0) !== o.labor_insured_amount
+                    || (Number(s.health_insured_amount) || 0) !== o.health_insured_amount;
+    INS_CARRY_FIELDS.forEach(([k, label]) => {
+      const a = Number(s[k]) || 0, b = Number(o[k]) || 0;
+      if(a === b) return;
+      let why = '';
+      if(k === 'personal_health' && (Number(s.dependents_count) || 0) !== o.dependents_count){
+        why = '眷口 ' + (Number(s.dependents_count) || 0) + ' → ' + o.dependents_count;
+      }else if(amtChanged){
+        why = '投保金額 ' + (Number(s.labor_insured_amount) || 0) + ' → ' + o.labor_insured_amount;
+      }else if(b > a){
+        why = '上一期可能是按日折算（月中加保／薪調），這一期算整月';
+      }else{
+        why = '上一期金額較高，請確認';
+      }
+      out.push({ name: r.name, company: r.company, field: label, prev: a, now: b, diff: b - a, why: why });
+    });
+  });
+  return out.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+}
+function insCarryDiffHtml(d){
+  const rows = insCarryDiffRows(d);
+  if(!rows.length) return '<div class="muted" style="margin-top:8px;font-size:12.5px;">每個人的金額都跟上一期一樣。</div>';
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const people = new Set(rows.map(r => r.name)).size;
+  return `<details style="margin-top:10px;">
+    <summary style="cursor:pointer;font-size:13px;">跟上一期不一樣的有 <b>${people}</b> 人、${rows.length} 個欄位（點開看明細）</summary>
+    <div class="table-scroll" style="max-height:300px;margin-top:8px;">
+      <table style="font-size:12.5px;">
+        <thead><tr><th>姓名</th><th>行號</th><th>欄位</th><th style="text-align:right;">上一期</th>
+          <th style="text-align:right;">這一期</th><th style="text-align:right;">差額</th><th>可能原因</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${esc(r.name)}</td><td class="muted">${esc(r.company)}</td><td>${esc(r.field)}</td>
+          <td style="text-align:right;">${n(r.prev)}</td>
+          <td style="text-align:right;">${n(r.now)}</td>
+          <td style="text-align:right;color:${r.diff > 0 ? '#c0392b' : '#2e7d32'};">${r.diff > 0 ? '＋' : '－'}${n(Math.abs(r.diff))}</td>
+          <td class="muted">${esc(r.why)}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </details>`;
+}
+function insCarryFillSrc(){
+  const sel = document.getElementById('ins_carry_src');
+  if(!sel) return;
+  const cur = sel.value;
+  const keys = insAllKeys();
+  sel.innerHTML = keys.map(k => `<option value="${k}">${esc(insKeyLabel(k))}</option>`).join('');
+  if(keys.length){
+    sel.value = (cur && keys.indexOf(Number(cur)) >= 0) ? cur : String(keys[0]);
+    const dst = document.getElementById('ins_carry_dst');
+    if(dst && !dst.value) dst.value = insKeyLabel(insNextKey(Number(sel.value)));
+  }
+}
+function insCarryCsv(){
+  if(!INS_CARRY_CACHE) return;
+  const head = ['年','月','行號','員工編號','姓名','部門','職稱','投保金額來源','眷口來源',
+                '勞保投保','職災投保','勞退投保','健保投保','眷口',
+                '雇主-勞保','雇主-職災','雇主-健保','雇主-勞退','員工-勞保','員工-健保','職災費率'];
+  const rows = INS_CARRY_CACHE.rows.map(r => {
+    const o = r.row;
+    return [o.year_roc, o.month, o.company_name, o.employee_no || '', o.name, o.dept_name || '',
+            o.position_name || '', r.amountFrom, r.depFrom,
+            o.labor_insured_amount, o.injury_insured_amount, o.pension_insured_amount, o.health_insured_amount,
+            o.dependents_count, o.employer_labor_general, o.employer_labor_injury, o.employer_health,
+            o.employer_pension, o.personal_labor, o.personal_health, (o.injury_rate * 100).toFixed(2) + '%'];
+  });
+  const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '勞健保月報_' + insKeyLabel(INS_CARRY_CACHE.dstKey).replace('/', '') + '_結轉試算.csv';
+  a.click();
+}
+{
+  const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  bind('ins_carry_calc', () => {
+    const msg = document.getElementById('ins_carry_msg');
+    msg.style.color = ''; msg.textContent = '';
+    INS_CARRY_CACHE = insCarryBuild();
+    if(!INS_CARRY_CACHE.srcKey){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '系統裡還沒有任何一期月報，無法結轉。'; return; }
+    if(!INS_CARRY_CACHE.dstKey){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '「要產生哪一期」請填民國年月，例如 115/09。'; return; }
+    insCarryRender();
+  });
+  bind('ins_carry_csv', insCarryCsv);
+  bind('ins_carry_save', async () => {
+    const msg = document.getElementById('ins_carry_msg');
+    const d = INS_CARRY_CACHE;
+    if(!d || !d.rows.length) return;
+    if(!STATE.insMonthlyLive){
+      msg.style.color = 'var(--red,#c0392b)';
+      msg.textContent = '月報這份資料開啟時沒有從雲端讀成功（目前是內建備援），為了不要寫壞雲端資料，這次不寫入。請重新整理頁面再試。';
+      return;
+    }
+    if(!confirm('要把 ' + insKeyLabel(d.dstKey) + ' 的月報寫進雲端嗎？\n\n'
+        + '人數：' + d.rows.length + ' 人\n'
+        + (d.exists ? '★ 這一期原有的 ' + d.exists + ' 筆會先被刪掉再重寫。\n' : '')
+        + '\n這是系統「算」出來的，不是對帳單上的數字。\n'
+        + '對帳單到了請再核對一次，有差額就改。')) return;
+    try{
+      msg.style.color = ''; msg.textContent = '寫入中…';
+      const y = Math.floor(d.dstKey / 100), m = d.dstKey % 100;
+      if(d.exists){
+        await supaFetch(`insurance_monthly_records?year_roc=eq.${y}&month=eq.${m}`, { method:'DELETE' });
+      }
+      const body = d.rows.map(r => r.row);
+      for(let i = 0; i < body.length; i += 200){
+        await supaFetch('insurance_monthly_records', {
+          method:'POST',
+          headers:{'Prefer':'return=minimal'},
+          body: JSON.stringify(body.slice(i, i + 200))
+        });
+      }
+      // 重新把月報讀回來，表單生成那邊才看得到新的一期
+      const cols = 'record_id,year_roc,month,account_type,name,employee_no,region,company_name,dept_name,position_name,'
+        + 'insured_date,labor_insured_amount,injury_insured_amount,pension_insured_amount,health_insured_amount,dependents_count,'
+        + 'employer_labor_general,employer_labor_injury,employer_health,employer_pension,personal_labor,personal_health,'
+        + 'labor_rate,employment_rate,health_rate,injury_rate,employee_id';
+      const fresh = await supaFetchAll('insurance_monthly_records?select=' + cols + '&order=year_roc.desc,month.desc,record_id.asc');
+      if(fresh && fresh.length){
+        fresh.forEach(r => { if(r.id == null) r.id = r.record_id; });
+        STATE.insuranceMonthly = fresh;
+      }
+      INS_CARRY_CACHE = null;
+      document.getElementById('ins_carry_result').innerHTML = '';
+      document.getElementById('ins_carry_save').style.display = 'none';
+      document.getElementById('ins_carry_csv').style.display = 'none';
+      msg.style.color = 'var(--green,#2e7d32)';
+      msg.textContent = insKeyLabel(d.dstKey) + ' 已寫入 ' + d.rows.length + ' 筆，表單生成那邊現在拉得到了。';
+      renderAll();
+    }catch(err){
+      msg.style.color = 'var(--red,#c0392b)';
+      msg.textContent = '寫入失敗：' + (err && err.message ? err.message : err);
+    }
+  });
 }
 
 // 目前這一期的金額跟級距對一次。判斷「按日折算」的規則跟 SQL_183 一樣：
@@ -16759,6 +17137,7 @@ function renderAll(){
   renderInstrumentsTable();
   renderCalibrationTable();
   renderCompanyInsuredCount();
+  insCarryFillSrc();
   renderIbCard();
   renderFleetTable();
   renderVdTable();
