@@ -631,6 +631,13 @@
         <button class="btn ghost" id="ins_carry_calc">試算這一期</button>
         <button class="btn" id="ins_carry_save" style="display:none;">寫入月報</button>
         <button class="btn ghost no-print" id="ins_carry_csv" style="display:none;">匯出 CSV</button>
+        <button class="btn ghost no-print" id="ins_payroll_csv">匯出薪資匯入檔 CSV</button>
+        <label class="muted" style="font-weight:400;">日期格式
+          <select id="ins_payroll_datefmt" style="width:auto;">
+            <option value="roc">民國（115/09/09）</option>
+            <option value="ad">西元（2026-09-09）</option>
+          </select>
+        </label>
       </div>
       <div id="ins_carry_msg" style="margin:8px 0;font-size:13px;"></div>
       <div id="ins_carry_result"></div>
@@ -8868,6 +8875,105 @@ function insCarryDiffHtml(d){
       </table>
     </div>
   </details>`;
+}
+// ===== 薪資匯入檔 =====
+// 薪資系統那張表有 46 欄，標★的是要我們填的。資料直接讀已經寫好的月報那一期，
+// 不是讀試算結果 —— 你改過什麼、對帳單修過什麼，匯出的就是最後存進去的版本。
+const INS_PAYROLL_HEAD = ["\n\n年份","\n\n月份","\n\n分帳","★\n\n姓名\n","★\n\n區別\n","★\n\n編號\n",
+  "★\n\n行號\n","\n\n部門","★\n\n職稱\n","★\n\n身份證字號\n","出生日期","加保日期",
+  "\n勞保\n投保\n金額","\n職災\n投保\n金額","★\n勞退\n投保\n金額","\n健保\n投保\n金額",
+  "本月勞保計算日數","眷屬加保人數","備註","★\n其他\n扣款\n金額","★\n其他\n退款\n金額",
+  "勞保局預補助","健保局預補助","個人勞保補繳","個人勞保退費","個人健保補繳","個人健保退費",
+  "雇主勞保補繳","雇主勞保退費","雇主健保補繳","雇主健保退費","勞退補繳","勞退退費",
+  "★\n個人負擔勞保","★\n個人負擔健保","雇主負擔勞保一般","雇主負擔勞保職災","雇主負擔健保",
+  "★\n雇主負擔勞退","勞保費率","就保費率","健保費率","職災費率","眷口數計算/人",
+  "公司負擔比例\n個人健保 30%\n雇主健保100%","★\n到職日期"];
+// 在職名冊找不到就找離職名冊（當月離職的人也要出現在薪資表上）
+function insPayrollEmp(r){
+  const nm = v => String(v || '').trim();
+  const byId = list => (r.employee_id != null)
+    ? list.find(e => String(e.id) === String(r.employee_id)) : null;
+  return byId(STATE.employees || []) || (STATE.employees || []).find(e => nm(e.name) === nm(r.name))
+      || byId(STATE.employeesHistory || []) || (STATE.employeesHistory || []).find(e => nm(e.name) === nm(r.name))
+      || null;
+}
+function insPayrollDate(d){
+  const s = String(d || '').slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  const fmt = (document.getElementById('ins_payroll_datefmt') || {}).value || 'roc';
+  if(fmt === 'ad') return s;
+  return (Number(s.slice(0, 4)) - 1911) + '/' + s.slice(5, 7) + '/' + s.slice(8, 10);
+}
+function insPayrollCsv(){
+  const msg = document.getElementById('ins_carry_msg');
+  const key = insParseKey((document.getElementById('ins_carry_dst') || {}).value)
+           || Number((document.getElementById('ins_carry_src') || {}).value) || insLatestKey();
+  const rows = (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key);
+  if(!rows.length){
+    msg.style.color = 'var(--red,#c0392b)';
+    msg.textContent = insKeyLabel(key) + ' 的月報還沒有資料，先按「試算這一期」再「寫入月報」，才有東西可以匯出。';
+    return;
+  }
+  const y = Math.floor(key / 100), m = key % 100;
+  const num = v => (v == null || v === '') ? '' : String(Math.round(Number(v) || 0));
+  const out = rows.slice().sort((a, b) =>
+      String(a.company_name || '').localeCompare(String(b.company_name || ''), 'zh-Hant')
+      || String(a.employee_no || '').localeCompare(String(b.employee_no || ''))
+      || String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant'))
+    .map(r => {
+      const e = insPayrollEmp(r);
+      const c = new Array(INS_PAYROLL_HEAD.length).fill('');
+      c[0]  = String(y);                                   // 年份（民國）
+      c[1]  = String(m);                                   // 月份
+      c[3]  = r.name || '';                                // ★姓名
+      c[4]  = (e && e.region) || r.region || '';           // ★區別
+      c[5]  = r.employee_no || (e && e.employee_no) || ''; // ★編號
+      c[6]  = r.company_name || (e && e.company_name) || '';   // ★行號
+      c[7]  = r.dept_name || (e && e.dept_name) || '';     // 部門
+      c[8]  = r.position_name || (e && e.position_name) || ''; // ★職稱
+      c[9]  = (e && e.id_number) || '';                    // ★身分證字號
+      c[10] = insPayrollDate(e && e.birth_date);           // 出生日期
+      c[11] = insPayrollDate(r.insured_date || (e && e.insured_date)); // 加保日期
+      c[12] = num(r.labor_insured_amount);
+      c[13] = num(r.injury_insured_amount);
+      c[14] = num(r.pension_insured_amount);               // ★勞退投保金額
+      c[15] = num(r.health_insured_amount);
+      c[17] = num(r.dependents_count);
+      // c[19] c[20] 其他扣款／退款：系統沒有這種資料，留白讓你自己填
+      c[33] = num(r.personal_labor);                       // ★個人負擔勞保
+      c[34] = num(r.personal_health);                      // ★個人負擔健保
+      c[35] = num(r.employer_labor_general);
+      c[36] = num(r.employer_labor_injury);
+      c[37] = num(r.employer_health);
+      c[38] = num(r.employer_pension);                     // ★雇主負擔勞退
+      c[39] = r.labor_rate != null ? String(r.labor_rate) : '';
+      c[40] = r.employment_rate != null ? String(r.employment_rate) : '';
+      c[41] = r.health_rate != null ? String(r.health_rate) : '';
+      c[42] = r.injury_rate != null ? String(r.injury_rate) : '';
+      c[45] = insPayrollDate(e && e.hire_date);            // ★到職日期
+      return c;
+    });
+  // 身分證字號、到職日期查不到的提醒一下，免得貼回去才發現空的
+  const noId = out.filter(c => !c[9]).map(c => c[3]);
+  const noHire = out.filter(c => !c[45]).map(c => c[3]);
+  // 這張表的欄位名稱本身含換行，csvLines 的表頭沒加引號會把檔案切壞，所以自己包
+  const q = x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+  const text = [INS_PAYROLL_HEAD.map(q).join(',')]
+    .concat(out.map(r => r.map(q).join(','))).join('\r\n');
+  const blob = new Blob(['\ufeff' + text], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '勞健保薪資匯入檔_' + y + String(m).padStart(2, '0') + '.csv';
+  a.click();
+  msg.style.color = noId.length || noHire.length ? '#b26a00' : 'var(--green,#2e7d32)';
+  msg.innerHTML = insKeyLabel(key) + ' 已匯出 ' + out.length + ' 人。'
+    + (noId.length ? '<br>查不到身分證字號：' + esc(noId.join('、')) + '（請到人員管理補）' : '')
+    + (noHire.length ? '<br>查不到到職日期：' + esc(noHire.join('、')) : '')
+    + '<br><span class="muted">「其他扣款金額」「其他退款金額」系統沒有這種資料，留白給你自己填。</span>';
+}
+{
+  const _pc = document.getElementById('ins_payroll_csv');
+  if(_pc) _pc.addEventListener('click', insPayrollCsv);
 }
 function insCarryFillSrc(){
   const sel = document.getElementById('ins_carry_src');
