@@ -8575,9 +8575,18 @@ function insCarryApply(i){
     injury_rate: r.rate
   });
 }
+// 行號下拉：公司主檔優先，撈不到就從人員名冊與月報湊出來
+function insCarryCompanyOptions(){
+  const s = new Set();
+  (STATE.companyInfo || []).forEach(c => { if(c.company_name) s.add(c.company_name); });
+  (STATE.employees || []).forEach(e => { if(e.company_name) s.add(e.company_name); });
+  (STATE.insuranceMonthly || []).forEach(r => { if(r.company_name) s.add(r.company_name); });
+  return [...s].filter(x => x && x !== '未設定行號').sort();
+}
 function insCarryWhyHtml(r){
   const bits = [];
   if(!(Number(r.amount) > 0)) bits.push('<span style="color:var(--red,#c0392b);font-weight:600;">沒有投保金額，請在左邊填，不填不會寫入</span>');
+  if(!r.company || r.company === '未設定行號') bits.push('<span style="color:var(--red,#c0392b);font-weight:600;">沒有行號，請在左邊選（人員資料裡也要補）</span>');
   if(r.left) bits.push('<span class="pill amber">當月離職</span>');
   else if(r.isNew) bits.push('<span class="pill green">本期新增</span>');
   if(r.days < INS_DAY_BASE) bits.push('<span class="muted">' + esc(r.win && r.win.note ? r.win.note : '按日折算') + '</span>');
@@ -8591,13 +8600,17 @@ function insCarryPeopleTable(d){
   return `<div class="table-scroll" style="max-height:420px;margin:10px 0;">
     <table style="font-size:12.5px;">
       <thead><tr>
-        <th>姓名</th><th>行號</th><th style="width:110px;">投保金額</th>
+        <th>姓名</th><th style="width:150px;">行號</th><th style="width:110px;">投保金額</th>
         <th style="width:72px;">眷口</th><th style="width:88px;">投保日數</th><th style="width:60px;">健保</th>
         <th style="text-align:right;">公司負擔</th><th style="text-align:right;">員工自付</th><th>備註</th>
       </tr></thead>
       <tbody id="insCarryBody">${d.rows.map((r, i) => `<tr data-cr="${i}">
         <td>${esc(r.name)}</td>
-        <td class="muted">${esc(String(r.company).replace('股份有限公司', '').replace('有限公司', ''))}</td>
+        <td><select class="cr-in" data-cr-k="company" data-cr-i="${i}"
+             style="width:142px;font-size:12px;${(!r.company || r.company === '未設定行號') ? 'border-color:#c0392b;background:rgba(192,57,43,.06);' : ''}">
+             ${(!r.company || r.company === '未設定行號') ? '<option value="">（未設定）</option>' : ''}
+             ${insCarryCompanyOptions().map(c => `<option value="${esc(c)}"${c === r.company ? ' selected' : ''}>${esc(c.replace('股份有限公司', '').replace('有限公司', ''))}</option>`).join('')}
+           </select></td>
         <td><input type="number" class="cr-in" data-cr-k="amount" data-cr-i="${i}" value="${r.amount || ''}"
              placeholder="請填" list="insAmountList" style="width:96px;${r.amount ? '' : 'border-color:#c0392b;background:rgba(192,57,43,.06);'}"></td>
         <td><input type="number" class="cr-in" data-cr-k="depUse" data-cr-i="${i}" value="${r.depUse}" min="0" max="3" style="width:56px;"></td>
@@ -8767,14 +8780,20 @@ function insCarryRender(){
     ${insCarryDiffHtml(d)}`;
   insCarryRefreshTotals();
   const body = document.getElementById('insCarryBody');
-  if(body) body.addEventListener('input', e => {
+  if(body) ['input', 'change'].forEach(evt => body.addEventListener(evt, e => {
     const el = e.target;
     const i = el.getAttribute && el.getAttribute('data-cr-i');
     if(i == null) return;
     const k = el.getAttribute('data-cr-k');
     const r = INS_CARRY_CACHE.rows[Number(i)];
     if(!r) return;
-    if(k === 'chargeHealth') r.chargeHealth = el.checked;
+    if(k === 'company'){
+      r.company = el.value || '未設定行號';
+      r.row.company_name = r.company;
+      el.style.borderColor = (!el.value) ? '#c0392b' : '';
+      el.style.background  = (!el.value) ? 'rgba(192,57,43,.06)' : '';
+    }
+    else if(k === 'chargeHealth') r.chargeHealth = el.checked;
     else if(k === 'depUse')  r.depUse = Math.max(0, Math.min(3, Number(el.value) || 0));
     else if(k === 'days')    r.days = Math.max(0, Math.min(INS_DAY_BASE, Number(el.value) || 0));
     else if(k === 'amount')  r.amount = Math.max(0, Number(el.value) || 0);
@@ -8784,7 +8803,7 @@ function insCarryRender(){
     if(te) te.textContent = fmt(r.est.empTotal);
     if(ts) ts.textContent = fmt(r.est.selfTotal);
     insCarryRefreshTotals();
-  });
+  }));
   document.getElementById('ins_carry_save').style.display = d.rows.length ? '' : 'none';
   document.getElementById('ins_carry_csv').style.display  = d.rows.length ? '' : 'none';
   if(msg && d.exists){
@@ -8903,6 +8922,10 @@ function insCarryCsv(){
     }
     const _ok = d.rows.filter(r => Number(r.amount) > 0);
     const _no = d.rows.filter(r => !(Number(r.amount) > 0));
+    const _noCo = _ok.filter(r => !r.company || r.company === '未設定行號');
+    if(_noCo.length && !confirm('以下 ' + _noCo.length + ' 人沒有行號，提撥表會把他們歸到「未設定行號」那一組：\n\n'
+        + _noCo.map(r => '　・' + r.name).join('\n')
+        + '\n\n要先回去選行號嗎？按「取消」回去選，按「確定」照樣寫入。')) return;
     if(!confirm('要把 ' + insKeyLabel(d.dstKey) + ' 的月報寫進雲端嗎？\n\n'
         + '人數：' + _ok.length + ' 人\n'
         + (_no.length ? '★ 以下 ' + _no.length + ' 人沒有投保金額，不會寫入：\n'
