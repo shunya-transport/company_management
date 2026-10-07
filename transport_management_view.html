@@ -8347,6 +8347,63 @@ function insParseKey(text){
   const y = parseInt(raw.slice(0, 3), 10), m = parseInt(raw.slice(3), 10);
   return (y > 0 && m >= 1 && m <= 12) ? y * 100 + m : 0;
 }
+// 勞保 12.5%（公司 70%、員工 20%）、勞退 6%。按日折算時要用沒四捨五入過的原始數字算，
+// 最後才進位一次 —— 這是拿公司自己的對帳單反推出來的：
+//   陳建宏 30,300 × 12.5% × 70% × 27/30 = 2,386.125 → 2,386（對帳單 2,386）
+//   邱于甄 36,300 × 12.5% × 70% × 12/30 = 1,270.5   → 1,271（對帳單 1,271）
+// 健保則不折算，加保當月就收整月（同樣由對帳單確認：陳建宏 6/4 加保，勞保折 27 天、健保收整月）。
+const IB_LABOR_RATE = 0.125, IB_LABOR_EMP_SHARE = 0.7, IB_LABOR_SELF_SHARE = 0.2;
+const INS_DAY_BASE = 30;
+
+function insMonthRange(key){
+  const y = Math.floor(key / 100) + 1911, m = key % 100;
+  const last = new Date(y, m, 0).getDate();
+  const p = n => String(n).padStart(2, '0');
+  return { first: `${y}-${p(m)}-01`, last: `${y}-${p(m)}-${p(last)}`, days: last };
+}
+// 這個人在這一期的投保起訖與日數。
+// 加保日：投保清單最後一筆「加保」；沒有就用人員主檔的加保日或到職日。
+// 退保日：投保清單的「退保」，或離職名冊的離職日。
+function insCarryWindow(emp, key){
+  const R = insMonthRange(key);
+  const id = emp && emp.id;
+  const ics = (STATE.insuranceChanges || []).filter(r => String(r.employee_id) === String(id)
+    && String(r.change_type || '').indexOf('眷屬') < 0);
+  const dOf = r => String(r.effective_date || '').slice(0, 10);
+  const ins = ics.filter(r => String(r.change_type || '').indexOf('加保') >= 0 && dOf(r) && dOf(r) <= R.last)
+                 .map(dOf).sort();
+  const out = ics.filter(r => String(r.change_type || '').indexOf('退保') >= 0 && dOf(r))
+                 .map(dOf).sort();
+  let from = ins.length ? ins[ins.length - 1]
+           : String((emp && (emp.insured_date || emp.hire_date)) || '').slice(0, 10);
+  let to = out.length ? out[out.length - 1] : '';
+  if(!to && emp && emp.resign_date) to = String(emp.resign_date).slice(0, 10);
+  // 退保日比最後一次加保日早，表示那是更早以前的事（例如離職又復職），不算
+  if(to && from && to < from) to = '';
+  const start = (from && from > R.first) ? from : R.first;
+  const end   = (to && to < R.last) ? to : R.last;
+  if(from && from > R.last)  return { days: 0, from: from, to: to, note: '這一期還沒加保' };
+  if(to && to < R.first)     return { days: 0, from: from, to: to, note: '這一期之前就退保了' };
+  const dayNo = s => { const d = new Date(s + 'T00:00:00'); return isNaN(d) ? null : d.getTime() / 86400000; };
+  const a = dayNo(start), b = dayNo(end);
+  let days = (a === null || b === null) ? R.days : Math.round(b - a) + 1;
+  days = Math.max(0, Math.min(days, R.days));
+  const full = (days >= R.days);
+  return { days: full ? INS_DAY_BASE : days, from: from, to: to, full: full,
+           note: full ? '' : ((start > R.first ? start.slice(5) + ' 加保' : '')
+                            + (end < R.last ? (start > R.first ? '、' : '') + end.slice(5) + ' 退保' : '')) };
+}
+// 投保金額：人員主檔 → 投保清單最後一筆加保／薪調 → 上一期月報
+function insCarrySalaryFromChanges(emp, key){
+  const R = insMonthRange(key);
+  const id = emp && emp.id;
+  const list = (STATE.insuranceChanges || []).filter(r => String(r.employee_id) === String(id)
+      && String(r.change_type || '').indexOf('眷屬') < 0
+      && Number(r.insured_salary) > 0
+      && String(r.effective_date || '').slice(0, 10) <= R.last)
+    .sort((a, b) => String(a.effective_date).localeCompare(String(b.effective_date)));
+  return list.length ? Number(list[list.length - 1].insured_salary) : 0;
+}
 // 上一期「實際計費」的健保眷口數。
 // 人員主檔登記的眷屬數不等於有在公司健保加保（有人掛在配偶那邊），
 // 所以結轉時以對帳單算出來的口數為準：員工自付健保 ÷ 該級距的員工單價 − 1。
@@ -8370,16 +8427,36 @@ function insCarryInjuryRate(srcRow, companyName, srcRows){
   const k = Object.keys(c).sort((a, b) => c[b] - c[a])[0];
   return k ? Number(k) : ibInjuryRate();
 }
-// 投保金額從哪裡來：人員主檔登記的優先（薪調過會是新的），沒有就沿用上一期
-function insCarryAmount(emp, srcRow){
+// 投保金額從哪裡來：人員主檔 → 投保清單的加保／薪調 → 上一期月報
+// 新報到的人上一期沒有月報，就是靠投保清單那筆「加保」才有金額可以算
+function insCarryAmount(emp, srcRow, key){
   const fromRoster = Number(emp && emp.insured_salary) || 0;
   if(fromRoster > 0) return { amount: fromRoster, from: '人員主檔' };
+  const fromIc = insCarrySalaryFromChanges(emp, key);
+  if(fromIc > 0) return { amount: fromIc, from: '投保清單' };
   const prev = Math.max(
     Number(srcRow && srcRow.labor_insured_amount) || 0,
     Number(srcRow && srcRow.injury_insured_amount) || 0,
     Number(srcRow && srcRow.pension_insured_amount) || 0,
     Number(srcRow && srcRow.health_insured_amount) || 0);
   return prev > 0 ? { amount: prev, from: '沿用上一期' } : { amount: 0, from: '查不到' };
+}
+// 按日折算：勞保、職災、勞退乘上日數/30；健保整月（可在表上關掉）
+function insCarryEstimate(amount, dep, rate, days, chargeHealth){
+  const x = insEstimate(amount, dep, 0, rate);
+  if(!x) return null;
+  const d = Math.max(0, Math.min(Number(days) || 0, INS_DAY_BASE));
+  if(d < INS_DAY_BASE){
+    x.empLabor   = Math.round(x.labor   * IB_LABOR_RATE * IB_LABOR_EMP_SHARE  * d / INS_DAY_BASE);
+    x.selfLabor  = Math.round(x.labor   * IB_LABOR_RATE * IB_LABOR_SELF_SHARE * d / INS_DAY_BASE);
+    x.empInjury  = Math.round(x.injury  * x.injuryRate * d / INS_DAY_BASE);
+    x.empPension = Math.round(x.pension * IB_PENSION_RATE * d / INS_DAY_BASE);
+  }
+  if(chargeHealth === false){ x.empHealth = 0; x.selfHealth = 0; }
+  x.days = d;
+  x.empTotal  = x.empLabor + x.empInjury + x.empHealth + x.empPension;
+  x.selfTotal = x.selfLabor + x.selfHealth;
+  return x;
 }
 function insCarryBuild(){
   const srcKey = Number((document.getElementById('ins_carry_src') || {}).value) || insLatestKey();
@@ -8391,38 +8468,50 @@ function insCarryBuild(){
   const srcByName = new Map(srcRows.map(r => [nm(r.name), r]));
   const emps = STATE.employees || [];
 
-  // 這一期要有誰
+  // 這一期要有誰：在職的，加上「這一期才離職」的（來兩天就走的人當月還是有投保）
+  const R = insMonthRange(dstKey);
   let people;
   if(scope === 'same'){
     people = srcRows.map(r => ({ src: r, emp: pcRosterOf(r) }));
   }else{
     people = emps.filter(e => e.status === '在職')
       .map(e => ({ emp: e, src: srcByName.get(nm(e.name)) || null }));
+    const seen = new Set(people.map(p => nm(p.emp && p.emp.name)));
+    (STATE.employeesHistory || []).forEach(h => {
+      const rd = String(h.resign_date || '').slice(0, 10);
+      if(!rd || rd < R.first || rd > R.last) return;     // 不是這一期離職的就不管
+      if(seen.has(nm(h.name))) return;
+      people.push({ emp: h, src: srcByName.get(nm(h.name)) || null, left: true });
+    });
   }
 
-  const rows = [], skipped = [];
+  const rows = [], skipped = [], dropped = [];
   people.forEach(p => {
     const e = p.emp, s = p.src;
     const name = nm(e ? e.name : (s && s.name));
     const company = (e && e.company_name) || (s && s.company_name) || '未設定行號';
-    const amt = insCarryAmount(e, s);
+    const amt = insCarryAmount(e, s, dstKey);
+    const win = insCarryWindow(e, dstKey);
     const dep  = (e && e.dependents_count != null) ? Number(e.dependents_count)
                : Number((s && s.dependents_count) || 0);
     const free = (e && Array.isArray(e.dependents_detail) && e.dependents_detail.length)
                ? depFreeCount(e.dependents_detail)
                : Number((e && e.dependents_free_count) || 0);
     const rate = insCarryInjuryRate(s, company, srcRows);
-    if(!amt.amount){ skipped.push({ name: name, company: company, why: '查不到投保金額（人員主檔與上一期都沒有）' }); return; }
+    if(win.days <= 0){ dropped.push({ name: name, company: company, why: win.note || '這一期沒有投保' }); return; }
+    if(!amt.amount){ skipped.push({ name: name, company: company,
+      why: '查不到投保金額（人員主檔、投保清單、上一期月報都沒有）—— 請先到「新增勞健保投保資料」登一筆加保' }); return; }
     // 健保眷口：以上一期對帳單實際計費的口數為準，查不出來才用人員主檔登記的
     const depRoster = insBillableDeps(dep, free);
     const depBilled = insCarryBilledDeps(s);
     const depUse = (depBilled == null) ? depRoster : depBilled;
     const depFrom = (depBilled == null) ? '人員主檔眷屬數' : '上一期對帳單';
-    const x = insEstimate(amt.amount, depUse, 0, rate);
+    const x = insCarryEstimate(amt.amount, depUse, rate, win.days, true);
     if(!x){ skipped.push({ name: name, company: company, why: '投保金額 ' + amt.amount + ' 查不到對應級距' }); return; }
     rows.push({
       name: name, company: company, isNew: !s, amountFrom: amt.from,
       emp: e, src: s, est: x, dep: dep, free: free, rate: rate,
+      amount: amt.amount, days: win.days, win: win, chargeHealth: true, left: !!p.left,
       depUse: depUse, depFrom: depFrom, depRoster: depRoster, depBilled: depBilled,
       row: {
         year_roc: Math.floor(dstKey / 100), month: dstKey % 100,
@@ -8450,11 +8539,91 @@ function insCarryBuild(){
   });
   // 上一期有、這一期不帶入的（多半是離職）
   const keep = new Set(rows.map(r => r.name));
-  const dropped = srcRows.filter(r => !keep.has(nm(r.name)))
-    .map(r => { const e = pcRosterOf(r); return { name: nm(r.name), company: r.company_name,
-      why: e ? ('名冊狀態「' + (e.status || '未填') + '」') : '名冊裡已經沒有這個人' }; });
+  srcRows.filter(r => !keep.has(nm(r.name)) && !dropped.some(d => d.name === nm(r.name)))
+    .forEach(r => { const e = pcRosterOf(r); dropped.push({ name: nm(r.name), company: r.company_name,
+      why: e ? ('名冊狀態「' + (e.status || '未填') + '」') : '名冊裡已經沒有這個人' }); });
   return { srcKey: srcKey, dstKey: dstKey, rows: rows, skipped: skipped, dropped: dropped,
            exists: all.filter(r => insMonthlyKey(r) === dstKey).length };
+}
+// 表上改了什麼就重算那一列
+function insCarryApply(i){
+  const r = INS_CARRY_CACHE && INS_CARRY_CACHE.rows[i];
+  if(!r) return;
+  const x = insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth);
+  if(!x) return;
+  r.est = x;
+  Object.assign(r.row, {
+    labor_insured_amount: x.labor, injury_insured_amount: x.injury,
+    pension_insured_amount: x.pension, health_insured_amount: x.health,
+    dependents_count: r.depUse,
+    employer_labor_general: x.empLabor, employer_labor_injury: x.empInjury,
+    employer_health: x.empHealth, employer_pension: x.empPension,
+    personal_labor: x.selfLabor, personal_health: x.selfHealth,
+    injury_rate: r.rate
+  });
+}
+function insCarryWhyHtml(r){
+  const bits = [];
+  if(r.left) bits.push('<span class="pill amber">當月離職</span>');
+  else if(r.isNew) bits.push('<span class="pill green">本期新增</span>');
+  if(r.days < INS_DAY_BASE) bits.push('<span class="muted">' + esc(r.win && r.win.note ? r.win.note : '按日折算') + '</span>');
+  if(r.amountFrom !== '人員主檔') bits.push('<span class="muted">金額來自' + esc(r.amountFrom) + '</span>');
+  if(r.depBilled != null && r.depBilled !== r.depRoster)
+    bits.push('<span style="color:#b26a00;">眷口依對帳單 ' + r.depBilled + ' 口（主檔 ' + r.depRoster + '）</span>');
+  return bits.join('　');
+}
+function insCarryPeopleTable(d){
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  return `<div class="table-scroll" style="max-height:420px;margin:10px 0;">
+    <table style="font-size:12.5px;">
+      <thead><tr>
+        <th>姓名</th><th>行號</th><th style="width:110px;">投保金額</th>
+        <th style="width:72px;">眷口</th><th style="width:88px;">投保日數</th><th style="width:60px;">健保</th>
+        <th style="text-align:right;">公司負擔</th><th style="text-align:right;">員工自付</th><th>備註</th>
+      </tr></thead>
+      <tbody id="insCarryBody">${d.rows.map((r, i) => `<tr data-cr="${i}">
+        <td>${esc(r.name)}</td>
+        <td class="muted">${esc(String(r.company).replace('股份有限公司', '').replace('有限公司', ''))}</td>
+        <td><input type="number" class="cr-in" data-cr-k="amount" data-cr-i="${i}" value="${r.amount}" style="width:96px;"></td>
+        <td><input type="number" class="cr-in" data-cr-k="depUse" data-cr-i="${i}" value="${r.depUse}" min="0" max="3" style="width:56px;"></td>
+        <td><input type="number" class="cr-in" data-cr-k="days" data-cr-i="${i}" value="${r.days}" min="0" max="30" style="width:64px;"
+             title="勞保、職災、勞退按這個日數 ÷ 30 折算；整月請填 30"></td>
+        <td style="text-align:center;"><input type="checkbox" class="cr-in" data-cr-k="chargeHealth" data-cr-i="${i}"
+             ${r.chargeHealth ? 'checked' : ''} style="width:auto;margin:0;" title="健保不按日折算，加保當月就收整月；同月加保又退保要不要收請依對帳單勾選"></td>
+        <td style="text-align:right;" data-cr-emp="${i}">${n(r.est.empTotal)}</td>
+        <td style="text-align:right;" data-cr-self="${i}">${n(r.est.selfTotal)}</td>
+        <td>${insCarryWhyHtml(r)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+function insCarryRefreshTotals(){
+  const d = INS_CARRY_CACHE;
+  if(!d) return;
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const byCo = {};
+  d.rows.forEach(r => {
+    const k = r.company || '未設定行號';
+    const c = byCo[k] = byCo[k] || { n:0, emp:0, self:0 };
+    c.n++; c.emp += r.est.empTotal; c.self += r.est.selfTotal;
+  });
+  const box = document.getElementById('insCarryTotals');
+  if(!box) return;
+  const cell = 'padding:4px 10px;border:1px solid var(--line,#ddd);text-align:right;';
+  const head = 'padding:4px 10px;border:1px solid var(--line,#ddd);background:rgba(0,0,0,.03);';
+  const tot = { n:0, emp:0, self:0 };
+  Object.values(byCo).forEach(c => { tot.n += c.n; tot.emp += c.emp; tot.self += c.self; });
+  box.innerHTML = `<table style="border-collapse:collapse;font-size:13px;">
+      <tr><th style="${head}">行號</th><th style="${head}">人數</th><th style="${head}">公司負擔</th><th style="${head}">員工自付</th></tr>
+      ${Object.keys(byCo).sort().map(k => `<tr>
+        <th style="${head};text-align:left;">${esc(k)}</th>
+        <td style="${cell}">${byCo[k].n}</td><td style="${cell}">${n(byCo[k].emp)}</td><td style="${cell}">${n(byCo[k].self)}</td></tr>`).join('')}
+      <tr><th style="${head};text-align:left;">合計</th>
+        <td style="${cell}"><b>${tot.n}</b></td><td style="${cell}"><b>${n(tot.emp)}</b></td>
+        <td style="${cell}"><b>${n(tot.self)}</b></td></tr>
+    </table>`;
+  const badge = document.getElementById('ins_carry_badge');
+  if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + d.rows.length + ' 人';
 }
 function insCarryRender(){
   const box = document.getElementById('ins_carry_result');
@@ -8479,24 +8648,21 @@ function insCarryRender(){
                                         + (r.employer_health||0) + (r.employer_pension||0), 0);
   const diff = tot.emp - srcEmp;
   box.innerHTML = `
-    <table style="border-collapse:collapse;font-size:13px;margin-bottom:10px;">
-      <tr><th style="${head}">行號</th><th style="${head}">人數</th><th style="${head}">公司負擔</th><th style="${head}">員工自付</th></tr>
-      ${Object.keys(byCo).sort().map(k => `<tr>
-        <th style="${head};text-align:left;">${esc(k)}</th>
-        <td style="${cell}">${byCo[k].n}</td>
-        <td style="${cell}">${n(byCo[k].emp)}</td>
-        <td style="${cell}">${n(byCo[k].self)}</td></tr>`).join('')}
-      <tr><th style="${head};text-align:left;">合計</th>
-        <td style="${cell}"><b>${tot.n}</b></td>
-        <td style="${cell}"><b>${n(tot.emp)}</b></td>
-        <td style="${cell}"><b>${n(tot.self)}</b></td></tr>
-    </table>
+    <div id="insCarryTotals" style="margin-bottom:10px;"></div>
+    ${insCarryPeopleTable(d)}
     <div class="muted" style="font-size:12.5px;line-height:1.8;">
+      表格裡的<b>投保金額、眷口、投保日數</b>都可以直接改，改完下面的合計會跟著變，按「寫入月報」存的就是改過的數字。
+      折算規則：勞保、職災、勞退 ＝ 月保費 × 投保日數 ÷ 30；<b>健保不折算</b>，加保當月就收整月
+      （同一個月加保又退保的，健保要不要收請依對帳單把那一格的勾取消）。<br>
       跟 ${esc(insKeyLabel(d.srcKey))}（${src.length} 人、公司負擔 ${n(srcEmp)}）相比：
       人數 ${tot.n - src.length >= 0 ? '＋' : ''}${tot.n - src.length} 人、
       公司負擔 ${diff >= 0 ? '＋' : '－'}${n(Math.abs(diff))} 元。
-      ${d.rows.filter(r => r.isNew).length ? '<br><b>新進來的：</b>'
-        + esc(d.rows.filter(r => r.isNew).map(r => r.name).join('、')) : ''}
+      ${d.rows.filter(r => r.isNew && !r.left).length ? '<br><b>新進來的：</b>'
+        + esc(d.rows.filter(r => r.isNew && !r.left)
+               .map(r => r.name + (r.days < INS_DAY_BASE ? '（' + r.days + ' 天）' : '')).join('、')) : ''}
+      ${d.rows.filter(r => r.left).length ? '<br><b>當月離職但仍要計保費的：</b>'
+        + esc(d.rows.filter(r => r.left)
+               .map(r => r.name + '（' + r.days + ' 天）').join('、')) : ''}
       ${d.dropped.length ? '<br><b>不帶入的：</b>'
         + esc(d.dropped.map(r => r.name + '（' + r.why + '）').join('、')) : ''}
       ${d.skipped.length ? '<br><span style="color:var(--red,#c0392b);"><b>算不出來、不會寫入的：</b>'
@@ -8511,8 +8677,26 @@ function insCarryRender(){
           + '</span>' : ''}
     </div>
     ${insCarryDiffHtml(d)}`;
-  const badge = document.getElementById('ins_carry_badge');
-  if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + d.rows.length + ' 人';
+  insCarryRefreshTotals();
+  const body = document.getElementById('insCarryBody');
+  if(body) body.addEventListener('input', e => {
+    const el = e.target;
+    const i = el.getAttribute && el.getAttribute('data-cr-i');
+    if(i == null) return;
+    const k = el.getAttribute('data-cr-k');
+    const r = INS_CARRY_CACHE.rows[Number(i)];
+    if(!r) return;
+    if(k === 'chargeHealth') r.chargeHealth = el.checked;
+    else if(k === 'depUse')  r.depUse = Math.max(0, Math.min(3, Number(el.value) || 0));
+    else if(k === 'days')    r.days = Math.max(0, Math.min(INS_DAY_BASE, Number(el.value) || 0));
+    else if(k === 'amount')  r.amount = Math.max(0, Number(el.value) || 0);
+    insCarryApply(Number(i));
+    const fmt = v => Number(v || 0).toLocaleString('en-US');
+    const te = body.querySelector(`[data-cr-emp="${i}"]`), ts = body.querySelector(`[data-cr-self="${i}"]`);
+    if(te) te.textContent = fmt(r.est.empTotal);
+    if(ts) ts.textContent = fmt(r.est.selfTotal);
+    insCarryRefreshTotals();
+  });
   document.getElementById('ins_carry_save').style.display = d.rows.length ? '' : 'none';
   document.getElementById('ins_carry_csv').style.display  = d.rows.length ? '' : 'none';
   if(msg && d.exists){
@@ -8593,14 +8777,14 @@ function insCarryFillSrc(){
 function insCarryCsv(){
   if(!INS_CARRY_CACHE) return;
   const head = ['年','月','行號','員工編號','姓名','部門','職稱','投保金額來源','眷口來源',
-                '勞保投保','職災投保','勞退投保','健保投保','眷口',
+                '勞保投保','職災投保','勞退投保','健保投保','眷口','投保日數',
                 '雇主-勞保','雇主-職災','雇主-健保','雇主-勞退','員工-勞保','員工-健保','職災費率'];
   const rows = INS_CARRY_CACHE.rows.map(r => {
     const o = r.row;
     return [o.year_roc, o.month, o.company_name, o.employee_no || '', o.name, o.dept_name || '',
             o.position_name || '', r.amountFrom, r.depFrom,
             o.labor_insured_amount, o.injury_insured_amount, o.pension_insured_amount, o.health_insured_amount,
-            o.dependents_count, o.employer_labor_general, o.employer_labor_injury, o.employer_health,
+            o.dependents_count, r.days, o.employer_labor_general, o.employer_labor_injury, o.employer_health,
             o.employer_pension, o.personal_labor, o.personal_health, (o.injury_rate * 100).toFixed(2) + '%'];
   });
   const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
