@@ -8625,6 +8625,68 @@ function insCarryRefreshTotals(){
   const badge = document.getElementById('ins_carry_badge');
   if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + d.rows.length + ' 人';
 }
+// 這一期有誰到職、離職、加保、退保。
+// 結轉算不到某個人時，看這裡最快：這裡是空的＝那個人還沒建檔。
+function insCarryHrMoves(key){
+  const R = insMonthRange(key);
+  const inMonth = d => { const s = String(d || '').slice(0, 10); return s && s >= R.first && s <= R.last ? s : ''; };
+  const out = [];
+  (STATE.employees || []).forEach(e => {
+    const h = inMonth(e.hire_date), rh = inMonth(e.rehire_date);
+    if(h)  out.push({ kind:'到職', name:e.name, date:h, where:'在職名冊' });
+    if(rh) out.push({ kind:'復職', name:e.name, date:rh, where:'在職名冊' });
+  });
+  (STATE.employeesHistory || []).forEach(e => {
+    const h = inMonth(e.hire_date), r = inMonth(e.resign_date);
+    if(h) out.push({ kind:'到職', name:e.name, date:h, where:'離職名冊' });
+    if(r) out.push({ kind:'離職', name:e.name, date:r, where:'離職名冊' });
+  });
+  const who = id => {
+    const e = (STATE.employees || []).find(x => String(x.id) === String(id))
+          || (STATE.employeesHistory || []).find(x => String(x.id) === String(id));
+    return e ? e.name : ('員工編號 ' + id);
+  };
+  (STATE.insuranceChanges || []).forEach(r => {
+    const d = inMonth(r.effective_date);
+    if(!d) return;
+    const t = String(r.change_type || '');
+    if(t.indexOf('眷屬') >= 0) return;
+    if(t.indexOf('加保') >= 0) out.push({ kind:'加保', name:who(r.employee_id), date:d, where:'投保清單'
+      + (Number(r.insured_salary) > 0 ? '　投保金額 ' + Number(r.insured_salary).toLocaleString('en-US') : '　沒填投保金額') });
+    else if(t.indexOf('退保') >= 0) out.push({ kind:'退保', name:who(r.employee_id), date:d, where:'投保清單' });
+    else if(t.indexOf('薪調') >= 0) out.push({ kind:'薪調', name:who(r.employee_id), date:d, where:'投保清單'
+      + (Number(r.insured_salary) > 0 ? '　投保金額 ' + Number(r.insured_salary).toLocaleString('en-US') : '') });
+  });
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'zh-Hant'));
+}
+function insCarryHrHtml(d){
+  const moves = insCarryHrMoves(d.dstKey);
+  const inRows = new Set(d.rows.map(r => r.name));
+  const head = '<b>' + esc(insKeyLabel(d.dstKey)) + ' 這一期的人事異動</b>';
+  if(!moves.length){
+    return `<div style="margin-top:10px;padding:8px 10px;border:1px solid #b26a00;border-radius:6px;background:rgba(178,106,0,.06);font-size:12.5px;line-height:1.8;">
+      ${head}：<b>一筆都沒有。</b><br>
+      如果你知道這個月有人到職或離職，表示<b>那些人還沒建檔</b>，結轉當然算不到他們。請先：<br>
+      ・新人 → 人員管理「新增人員」建檔，再到「新增勞健保投保資料」登一筆<b>加保</b>（投保金額一定要填）<br>
+      ・離職 → 在人員清單按「離職」，系統會自動補一筆退保<br>
+      建好之後回到這裡重按「試算這一期」就會出現。
+    </div>`;
+  }
+  return `<details style="margin-top:10px;" open>
+    <summary style="cursor:pointer;font-size:13px;">${head}（${moves.length} 筆）</summary>
+    <div class="table-scroll" style="max-height:260px;margin-top:8px;">
+      <table style="font-size:12.5px;">
+        <thead><tr><th style="width:70px;">異動</th><th>姓名</th><th style="width:110px;">日期</th><th>來源</th><th>有沒有算進這一期</th></tr></thead>
+        <tbody>${moves.map(m => `<tr>
+          <td>${esc(m.kind)}</td><td>${esc(m.name)}</td><td>${esc(m.date)}</td>
+          <td class="muted">${esc(m.where)}</td>
+          <td>${inRows.has(m.name) ? '<span class="pill green">有</span>'
+                : '<span class="pill red">沒有</span><span class="muted">　看上面「不帶入」或「算不出來」的說明</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </details>`;
+}
 function insCarryRender(){
   const box = document.getElementById('ins_carry_result');
   const msg = document.getElementById('ins_carry_msg');
@@ -8665,8 +8727,10 @@ function insCarryRender(){
                .map(r => r.name + '（' + r.days + ' 天）').join('、')) : ''}
       ${d.dropped.length ? '<br><b>不帶入的：</b>'
         + esc(d.dropped.map(r => r.name + '（' + r.why + '）').join('、')) : ''}
-      ${d.skipped.length ? '<br><span style="color:var(--red,#c0392b);"><b>算不出來、不會寫入的：</b>'
-        + esc(d.skipped.map(r => r.name + '（' + r.why + '）').join('、')) + '</span>' : ''}
+      ${d.skipped.length ? '<br><span style="color:var(--red,#c0392b);"><b>算不出來、不會寫入的 '
+        + d.skipped.length + ' 人：</b><br>'
+        + d.skipped.map(r => '　・' + esc(r.name) + '（' + esc(r.company) + '）' + esc(r.why)).join('<br>')
+        + '</span>' : ''}
       ${d.rows.filter(r => r.amountFrom === '沿用上一期').length
         ? '<br>其中 ' + d.rows.filter(r => r.amountFrom === '沿用上一期').length
           + ' 人的投保金額是沿用上一期（人員主檔沒有登記投保金額）' : ''}
@@ -8676,6 +8740,7 @@ function insCarryRender(){
                  .map(r => r.name + '（對帳單 ' + r.depBilled + ' 口／主檔 ' + r.depRoster + ' 口）').join('、'))
           + '</span>' : ''}
     </div>
+    ${insCarryHrHtml(d)}
     ${insCarryDiffHtml(d)}`;
   insCarryRefreshTotals();
   const body = document.getElementById('insCarryBody');
