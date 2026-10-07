@@ -1425,11 +1425,19 @@
         <input id="il_emp_search" placeholder="搜尋姓名或員工編號" style="flex:1;">
         <button class="btn ghost" id="il_emp_all">全選</button>
         <button class="btn ghost" id="il_emp_none">清除</button>
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;white-space:nowrap;">
+          <input type="checkbox" id="il_emp_left" style="width:auto;margin:0;"> 含已離職人員
+        </label>
         <span class="muted" id="il_emp_count"></span>
       </div>
-      <div class="table-scroll" style="max-height:220px;margin-bottom:14px;">
+      <div class="table-scroll" style="max-height:220px;margin-bottom:10px;">
         <div id="il_emp_list" style="padding:8px 12px;"></div>
       </div>
+      <label style="display:block;font-size:12px;color:var(--text-2);font-weight:500;margin-bottom:6px;">
+        名冊裡沒有的人員（補很舊的資料時用，多人用「、」或逗號隔開）
+      </label>
+      <input id="il_emp_manual" placeholder="例：王大明、陳小華" style="margin-bottom:6px;">
+      <div class="muted" id="il_emp_manual_hint" style="font-size:12px;line-height:1.7;margin-bottom:14px;"></div>
       <button class="btn" id="il_add">新增內訓紀錄</button>
     </div>
 
@@ -13287,21 +13295,84 @@ function renderInternalLogSelects(){
   renderIlEmpList();
 }
 
+// 人員主檔只留在職的，離職的人只在訓練紀錄裡留下姓名（employee_id 是空的）。
+// 補舊資料時要能把這些人勾出來，所以從訓練紀錄反推一份「已離職人員」名單。
+function ilLeftPeople(){
+  const onDuty = new Set((STATE.employees || []).map(e => String(e.name || '').trim()));
+  const m = new Map();
+  (STATE.trainingLog || []).forEach(t => {
+    const nm = String(t.name || '').trim();
+    if(!nm || onDuty.has(nm)) return;
+    const cur = m.get(nm) || { name: nm, dept_name: '', last: '', n: 0 };
+    cur.n++;
+    const d = String(t.training_date || '').slice(0, 10);
+    if(d > cur.last){ cur.last = d; cur.dept_name = t.dept_name || cur.dept_name; }
+    m.set(nm, cur);
+  });
+  return [...m.values()].sort((a, b) => String(b.last).localeCompare(String(a.last))
+                                     || a.name.localeCompare(b.name, 'zh-Hant'));
+}
 function renderIlEmpList(){
   const q = document.getElementById('il_emp_search').value.trim();
+  const withLeft = !!(document.getElementById('il_emp_left') || {}).checked;
   const list = STATE.employees.filter(e => !q || e.name.includes(q) || (e.employee_no||'').includes(q));
+  const left = withLeft ? ilLeftPeople().filter(e => !q || e.name.includes(q)) : [];
   const checkedIds = new Set(Array.from(document.querySelectorAll('#il_emp_list input:checked')).map(el=>el.value));
-  document.getElementById('il_emp_list').innerHTML = list.map(e => `
+  const onDutyHtml = list.map(e => `
     <label style="display:inline-flex;align-items:center;gap:5px;margin:3px 12px 3px 0;font-size:13px;font-weight:400;">
       <input type="checkbox" value="${e.id}" class="il-emp-cb" style="width:auto;" ${checkedIds.has(String(e.id))?'checked':''}>
       ${esc(e.name)}（${esc(e.employee_no)}）
-    </label>`).join('') || '<div class="muted">無符合的人員</div>';
+    </label>`).join('');
+  // 已離職的用「L:姓名」當值，存檔時 employee_id 留空，跟既有的歷史紀錄一致
+  const leftHtml = left.length ? `
+    <div style="margin:10px 0 2px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-3);">
+      已離職（人員主檔已經沒有了，是從訓練紀錄裡找出來的；括號是最後一次受訓日期）
+    </div>` + left.map(e => {
+      const v = 'L:' + e.name;
+      return `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 12px 3px 0;font-size:13px;font-weight:400;opacity:.9;">
+        <input type="checkbox" value="${esc(v)}" class="il-emp-cb" style="width:auto;" ${checkedIds.has(v)?'checked':''}>
+        ${esc(e.name)}<span class="muted">（${esc(e.last || '無日期')}）</span>
+      </label>`;
+    }).join('') : '';
+  document.getElementById('il_emp_list').innerHTML =
+    (onDutyHtml + leftHtml) || '<div class="muted">無符合的人員</div>';
   updateIlEmpCount();
   document.querySelectorAll('.il-emp-cb').forEach(cb => cb.addEventListener('change', updateIlEmpCount));
 }
+// 自行輸入的名字：拆開、去重，並標出名冊裡已經有的（免得重複建一個人）
+function ilManualNames(){
+  const raw = String((document.getElementById('il_emp_manual') || {}).value || '');
+  const out = [];
+  raw.split(/[、,，;；\s]+/).forEach(x => {
+    const nm = x.trim();
+    if(nm && out.indexOf(nm) < 0) out.push(nm);
+  });
+  return out;
+}
+function ilManualHint(){
+  const box = document.getElementById('il_emp_manual_hint');
+  if(!box) return;
+  const names = ilManualNames();
+  if(!names.length){
+    box.innerHTML = '這裡打的名字會直接寫進訓練紀錄（不會建人員主檔），適合補已經離職很久、紀錄裡也查不到的人。';
+    return;
+  }
+  const onDuty = names.filter(n => (STATE.employees || []).some(e => String(e.name).trim() === n));
+  const known  = names.filter(n => onDuty.indexOf(n) < 0 && ilLeftPeople().some(e => e.name === n));
+  const brand  = names.filter(n => onDuty.indexOf(n) < 0 && known.indexOf(n) < 0);
+  let s = '會新增 <b>' + names.length + '</b> 位：';
+  const parts = [];
+  if(onDuty.length) parts.push('<span style="color:#b26a00;">' + esc(onDuty.join('、'))
+    + ' 在現職名冊裡，請改用上面的勾選（這樣才會帶到員工編號與部門）</span>');
+  if(known.length) parts.push(esc(known.join('、')) + ' 訓練紀錄裡找得到，勾「含已離職人員」也選得到');
+  if(brand.length) parts.push('新名字：' + esc(brand.join('、')));
+  box.innerHTML = s + parts.join('；');
+}
 function updateIlEmpCount(){
   const n = document.querySelectorAll('#il_emp_list input:checked').length;
-  document.getElementById('il_emp_count').textContent = n ? `已選 ${n} 人` : '';
+  const m = (typeof ilManualNames === 'function') ? ilManualNames().length : 0;
+  document.getElementById('il_emp_count').textContent =
+    (n + m) ? `已選 ${n + m} 人` + (m ? `（含自行輸入 ${m} 位）` : '') : '';
 }
 
 const MAINT_ST_PENDING = '待補資料';
@@ -19235,19 +19306,56 @@ document.getElementById('log_year_filter').addEventListener('change', renderTrai
 document.getElementById('log_result_filter').addEventListener('change', renderTrainingLogTable);
 
 document.getElementById('il_emp_search').addEventListener('input', renderIlEmpList);
+{
+  const _left = document.getElementById('il_emp_left');
+  if(_left) _left.addEventListener('change', renderIlEmpList);
+  const _man = document.getElementById('il_emp_manual');
+  if(_man){
+    _man.addEventListener('input', () => { ilManualHint(); updateIlEmpCount(); });
+    ilManualHint();
+  }
+}
 document.getElementById('il_emp_all').addEventListener('click', () => {
-  document.querySelectorAll('.il-emp-cb').forEach(cb => cb.checked = true);
+  // 全選只選現職的；已離職的一次全勾通常不是你要的，要的話自己點
+  document.querySelectorAll('.il-emp-cb').forEach(cb => {
+    if(!String(cb.value).startsWith('L:')) cb.checked = true;
+  });
   updateIlEmpCount();
 });
 document.getElementById('il_emp_none').addEventListener('click', () => {
   document.querySelectorAll('#il_emp_list input').forEach(cb => cb.checked = false);
+  const _man = document.getElementById('il_emp_manual');
+  if(_man){ _man.value = ''; ilManualHint(); }
   updateIlEmpCount();
 });
 
 document.getElementById('il_add').addEventListener('click', async () => {
-  const checked = Array.from(document.querySelectorAll('#il_emp_list input:checked')).map(el => parseInt(el.value));
+  // 三種來源：現職（勾選，值是員工編號）、已離職（勾選，值是「L:姓名」）、自行輸入的名字
+  const vals = Array.from(document.querySelectorAll('#il_emp_list input:checked')).map(el => el.value);
+  const people = [];
+  vals.forEach(v => {
+    if(String(v).startsWith('L:')){
+      const nm = String(v).slice(2);
+      const h = ilLeftPeople().find(x => x.name === nm);
+      people.push({ employee_id: null, name: nm, dept_name: (h && h.dept_name) || '' });
+    }else{
+      const emp = (STATE.employees || []).find(e => String(e.id) === String(v));
+      if(emp) people.push({ employee_id: emp.id, name: emp.name, dept_name: emp.dept_name });
+    }
+  });
+  ilManualNames().forEach(nm => {
+    if(people.some(p => p.name === nm)) return;
+    const emp = (STATE.employees || []).find(e => String(e.name).trim() === nm);
+    if(emp){ people.push({ employee_id: emp.id, name: emp.name, dept_name: emp.dept_name }); return; }
+    const h = ilLeftPeople().find(x => x.name === nm);
+    people.push({ employee_id: null, name: nm, dept_name: (h && h.dept_name) || '' });
+  });
   const date = document.getElementById('il_date').value;
-  if(checked.length===0 || !date){ alert('請至少勾選一位人員並填寫受訓日期'); return; }
+  if(people.length === 0 || !date){ alert('請至少勾選一位人員（或在下面輸入姓名）並填寫受訓日期'); return; }
+  const noId = people.filter(p => !p.employee_id);
+  if(noId.length && !confirm('以下 ' + noId.length + ' 位不在現職人員主檔裡，紀錄會只留姓名（沒有員工編號）：\n\n'
+      + noId.map(p => '・' + p.name).join('\n')
+      + '\n\n這跟系統裡既有的離職人員歷史紀錄是一樣的寫法。確定要新增嗎？')) return;
   const stage = document.getElementById('il_stage').value;
   const courseName = `${stage}-${document.getElementById('il_course').value}`;
   const code = document.getElementById('il_code').value.trim();
@@ -19257,20 +19365,22 @@ document.getElementById('il_add').addEventListener('click', async () => {
   const result = document.getElementById('il_result').value;
   const notes = document.getElementById('il_notes').value.trim();
 
-  checked.forEach(empId => {
-    const emp = STATE.employees.find(e => e.id === empId);
-    if(!emp) return;
+  people.forEach(p => {
     STATE.trainingLog.unshift({
-      id: nextId(STATE.trainingLog), employee_id: empId, name: emp.name, dept_name: emp.dept_name,
+      id: nextId(STATE.trainingLog), employee_id: p.employee_id, name: p.name, dept_name: p.dept_name,
       category: '內訓', course_name: courseName, course_code: code,
       hours, training_unit: unit, eval_method: evalMethod, result, training_date: date, notes
     });
   });
   await saveState('training_log', STATE.trainingLog, true);
-  ['il_code','il_date','il_hours','il_notes'].forEach(id=>document.getElementById(id).value='');
+  ['il_code','il_date','il_hours','il_notes','il_emp_manual'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value='';
+  });
   document.querySelectorAll('#il_emp_list input').forEach(cb => cb.checked = false);
   updateIlEmpCount();
-  alert(`已為 ${checked.length} 位人員新增內訓紀錄`);
+  if(typeof ilManualHint === 'function') ilManualHint();
+  alert(`已為 ${people.length} 位人員新增內訓紀錄`
+    + (noId.length ? `（其中 ${noId.length} 位沒有員工編號，只留姓名）` : ''));
   renderAll();
 });
 
