@@ -8386,7 +8386,10 @@ function insCarryWindow(emp, key){
   if(to && to < R.first)     return { days: 0, from: from, to: to, note: '這一期之前就退保了' };
   const dayNo = s => { const d = new Date(s + 'T00:00:00'); return isNaN(d) ? null : d.getTime() / 86400000; };
   const a = dayNo(start), b = dayNo(end);
-  let days = (a === null || b === null) ? R.days : Math.round(b - a) + 1;
+  // 退保當天保險效力就終止，那一天不計費；沒有退保就算到月底（含當天）。
+  // 例：9/9 加保、9/11 退保 → 2 天；6/4 加保、月底還在 → 27 天。
+  const endIsQuit = !!(to && to <= R.last);
+  let days = (a === null || b === null) ? R.days : Math.round(b - a) + (endIsQuit ? 0 : 1);
   days = Math.max(0, Math.min(days, R.days));
   const full = (days >= R.days);
   return { days: full ? INS_DAY_BASE : days, from: from, to: to, full: full,
@@ -8440,6 +8443,13 @@ function insCarryAmount(emp, srcRow, key){
     Number(srcRow && srcRow.pension_insured_amount) || 0,
     Number(srcRow && srcRow.health_insured_amount) || 0);
   return prev > 0 ? { amount: prev, from: '沿用上一期' } : { amount: 0, from: '查不到' };
+}
+// 還沒有投保金額（或金額查不到級距）時的空殼，讓這個人照樣能出現在表上
+function insCarryZero(amount, rate, days){
+  return { amount:Number(amount) || 0, labor:0, injury:0, pension:0, health:0,
+           billableDeps:0, injuryRate:Number(rate) || 0, days:Number(days) || 0,
+           empLabor:0, empInjury:0, empHealth:0, empPension:0, empTotal:0,
+           selfLabor:0, selfHealthUnit:0, selfHealth:0, selfTotal:0 };
 }
 // 按日折算：勞保、職災、勞退乘上日數/30；健保整月（可在表上關掉）
 function insCarryEstimate(amount, dep, rate, days, chargeHealth){
@@ -8499,15 +8509,17 @@ function insCarryBuild(){
                : Number((e && e.dependents_free_count) || 0);
     const rate = insCarryInjuryRate(s, company, srcRows);
     if(win.days <= 0){ dropped.push({ name: name, company: company, why: win.note || '這一期沒有投保' }); return; }
-    if(!amt.amount){ skipped.push({ name: name, company: company,
-      why: '查不到投保金額（人員主檔、投保清單、上一期月報都沒有）—— 請先到「新增勞健保投保資料」登一筆加保' }); return; }
+    // 查不到投保金額的人也要列出來，金額欄留白讓人當場補，不要默默消失
     // 健保眷口：以上一期對帳單實際計費的口數為準，查不出來才用人員主檔登記的
     const depRoster = insBillableDeps(dep, free);
     const depBilled = insCarryBilledDeps(s);
     const depUse = (depBilled == null) ? depRoster : depBilled;
     const depFrom = (depBilled == null) ? '人員主檔眷屬數' : '上一期對帳單';
-    const x = insCarryEstimate(amt.amount, depUse, rate, win.days, true);
-    if(!x){ skipped.push({ name: name, company: company, why: '投保金額 ' + amt.amount + ' 查不到對應級距' }); return; }
+    const x = insCarryEstimate(amt.amount, depUse, rate, win.days, true)
+           || insCarryZero(amt.amount, rate, win.days);
+    if(amt.amount && !insCarryEstimate(amt.amount, depUse, rate, win.days, true)){
+      skipped.push({ name: name, company: company, why: '投保金額 ' + amt.amount + ' 查不到對應級距（級距表最高 120,900）' });
+    }
     rows.push({
       name: name, company: company, isNew: !s, amountFrom: amt.from,
       emp: e, src: s, est: x, dep: dep, free: free, rate: rate,
@@ -8549,9 +8561,10 @@ function insCarryBuild(){
 function insCarryApply(i){
   const r = INS_CARRY_CACHE && INS_CARRY_CACHE.rows[i];
   if(!r) return;
-  const x = insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth);
-  if(!x) return;
+  const x = insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth)
+        || insCarryZero(r.amount, r.rate, r.days);
   r.est = x;
+  r.needAmount = !(Number(r.amount) > 0);
   Object.assign(r.row, {
     labor_insured_amount: x.labor, injury_insured_amount: x.injury,
     pension_insured_amount: x.pension, health_insured_amount: x.health,
@@ -8564,6 +8577,7 @@ function insCarryApply(i){
 }
 function insCarryWhyHtml(r){
   const bits = [];
+  if(!(Number(r.amount) > 0)) bits.push('<span style="color:var(--red,#c0392b);font-weight:600;">沒有投保金額，請在左邊填，不填不會寫入</span>');
   if(r.left) bits.push('<span class="pill amber">當月離職</span>');
   else if(r.isNew) bits.push('<span class="pill green">本期新增</span>');
   if(r.days < INS_DAY_BASE) bits.push('<span class="muted">' + esc(r.win && r.win.note ? r.win.note : '按日折算') + '</span>');
@@ -8584,7 +8598,8 @@ function insCarryPeopleTable(d){
       <tbody id="insCarryBody">${d.rows.map((r, i) => `<tr data-cr="${i}">
         <td>${esc(r.name)}</td>
         <td class="muted">${esc(String(r.company).replace('股份有限公司', '').replace('有限公司', ''))}</td>
-        <td><input type="number" class="cr-in" data-cr-k="amount" data-cr-i="${i}" value="${r.amount}" style="width:96px;"></td>
+        <td><input type="number" class="cr-in" data-cr-k="amount" data-cr-i="${i}" value="${r.amount || ''}"
+             placeholder="請填" list="insAmountList" style="width:96px;${r.amount ? '' : 'border-color:#c0392b;background:rgba(192,57,43,.06);'}"></td>
         <td><input type="number" class="cr-in" data-cr-k="depUse" data-cr-i="${i}" value="${r.depUse}" min="0" max="3" style="width:56px;"></td>
         <td><input type="number" class="cr-in" data-cr-k="days" data-cr-i="${i}" value="${r.days}" min="0" max="30" style="width:64px;"
              title="勞保、職災、勞退按這個日數 ÷ 30 折算；整月請填 30"></td>
@@ -8602,11 +8617,12 @@ function insCarryRefreshTotals(){
   if(!d) return;
   const n = v => Number(v || 0).toLocaleString('en-US');
   const byCo = {};
-  d.rows.forEach(r => {
+  d.rows.filter(r => Number(r.amount) > 0).forEach(r => {
     const k = r.company || '未設定行號';
     const c = byCo[k] = byCo[k] || { n:0, emp:0, self:0 };
     c.n++; c.emp += r.est.empTotal; c.self += r.est.selfTotal;
   });
+  const noAmt = d.rows.filter(r => !(Number(r.amount) > 0)).length;
   const box = document.getElementById('insCarryTotals');
   if(!box) return;
   const cell = 'padding:4px 10px;border:1px solid var(--line,#ddd);text-align:right;';
@@ -8623,7 +8639,13 @@ function insCarryRefreshTotals(){
         <td style="${cell}"><b>${n(tot.self)}</b></td></tr>
     </table>`;
   const badge = document.getElementById('ins_carry_badge');
-  if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + d.rows.length + ' 人';
+  if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + tot.n + ' 人'
+    + (noAmt ? '（另有 ' + noAmt + ' 人待補金額）' : '');
+  const warn = document.getElementById('insCarryNoAmt');
+  if(warn) warn.innerHTML = noAmt
+    ? `<span style="color:var(--red,#c0392b);">還有 <b>${noAmt}</b> 人沒有投保金額（表上標紅的那幾格），`
+      + `填好才會一起寫入；不填的話這一期就會少掉他們。</span>`
+    : '';
 }
 // 這一期有誰到職、離職、加保、退保。
 // 結轉算不到某個人時，看這裡最快：這裡是空的＝那個人還沒建檔。
@@ -8710,7 +8732,8 @@ function insCarryRender(){
                                         + (r.employer_health||0) + (r.employer_pension||0), 0);
   const diff = tot.emp - srcEmp;
   box.innerHTML = `
-    <div id="insCarryTotals" style="margin-bottom:10px;"></div>
+    <div id="insCarryTotals" style="margin-bottom:6px;"></div>
+    <div id="insCarryNoAmt" style="margin-bottom:8px;font-size:12.5px;"></div>
     ${insCarryPeopleTable(d)}
     <div class="muted" style="font-size:12.5px;line-height:1.8;">
       表格裡的<b>投保金額、眷口、投保日數</b>都可以直接改，改完下面的合計會跟著變，按「寫入月報」存的就是改過的數字。
@@ -8878,8 +8901,12 @@ function insCarryCsv(){
       msg.textContent = '月報這份資料開啟時沒有從雲端讀成功（目前是內建備援），為了不要寫壞雲端資料，這次不寫入。請重新整理頁面再試。';
       return;
     }
+    const _ok = d.rows.filter(r => Number(r.amount) > 0);
+    const _no = d.rows.filter(r => !(Number(r.amount) > 0));
     if(!confirm('要把 ' + insKeyLabel(d.dstKey) + ' 的月報寫進雲端嗎？\n\n'
-        + '人數：' + d.rows.length + ' 人\n'
+        + '人數：' + _ok.length + ' 人\n'
+        + (_no.length ? '★ 以下 ' + _no.length + ' 人沒有投保金額，不會寫入：\n'
+            + _no.map(r => '　・' + r.name).join('\n') + '\n' : '')
         + (d.exists ? '★ 這一期原有的 ' + d.exists + ' 筆會先被刪掉再重寫。\n' : '')
         + '\n這是系統「算」出來的，不是對帳單上的數字。\n'
         + '對帳單到了請再核對一次，有差額就改。')) return;
@@ -8889,7 +8916,8 @@ function insCarryCsv(){
       if(d.exists){
         await supaFetch(`insurance_monthly_records?year_roc=eq.${y}&month=eq.${m}`, { method:'DELETE' });
       }
-      const body = d.rows.map(r => r.row);
+      const body = d.rows.filter(r => Number(r.amount) > 0).map(r => r.row);
+      if(!body.length){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '沒有任何一個人有投保金額，不寫入。'; return; }
       for(let i = 0; i < body.length; i += 200){
         await supaFetch('insurance_monthly_records', {
           method:'POST',
@@ -8912,7 +8940,7 @@ function insCarryCsv(){
       document.getElementById('ins_carry_save').style.display = 'none';
       document.getElementById('ins_carry_csv').style.display = 'none';
       msg.style.color = 'var(--green,#2e7d32)';
-      msg.textContent = insKeyLabel(d.dstKey) + ' 已寫入 ' + d.rows.length + ' 筆，表單生成那邊現在拉得到了。';
+      msg.textContent = insKeyLabel(d.dstKey) + ' 已寫入 ' + body.length + ' 筆，表單生成那邊現在拉得到了。';
       renderAll();
     }catch(err){
       msg.style.color = 'var(--red,#c0392b)';
