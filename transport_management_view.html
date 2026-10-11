@@ -2428,11 +2428,9 @@
         <label>發證監理所<input id="vp_auth" list="vpAuthList" placeholder="例：新竹區監理所"></label>
         <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
           <input id="vp_goods" placeholder="例：第2.2類:四氟甲烷(1982)三氟甲烷(1984)八氟環丁烷(1976)"></label>
-        <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">曳引車才有；多台用「、」或空白隔開，大小寫不拘</span>
-          <textarea id="vp_trailers" rows="2" style="width:100%;font-family:inherit;" placeholder="例：02-NQ、10-PX、29-H9"></textarea></label>
-        <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="vp_trailer_more" style="width:auto;margin:0;">
-          <span>通行證正面只印了前 16 台，其餘「詳列於背面」</span></label>
+        <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">曳引車才有；多台用「、」或空白隔開，大小寫不拘。<b>正面印不下、詳列在背面的那幾台也請一起打進來</b>，「依板架查詢」才查得完整</span>
+          <textarea id="vp_trailers" rows="3" style="width:100%;font-family:inherit;" placeholder="例：02-NQ、10-PX、29-H9……（背面那幾台接著打就好）"></textarea>
+          <span class="muted" id="vp_trailer_hint" style="font-weight:400;font-size:12px;"></span></label>
         <label>備註<input id="vp_notes" placeholder="選填"></label>
       </div>
       <datalist id="vpCompanyList"></datalist>
@@ -3210,11 +3208,8 @@
       <label>備註<input id="vpEditNotes"></label>
       <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
         <textarea id="vpEditGoods" rows="2" style="width:100%;font-family:inherit;"></textarea></label>
-      <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">多台用「、」或空白隔開；背面那幾台補在後面就好</span>
-        <textarea id="vpEditTrailers" rows="2" style="width:100%;font-family:inherit;"></textarea></label>
-      <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="vpEditTrailerMore" style="width:auto;margin:0;">
-        <span>正面只印前 16 台，其餘「詳列於背面」（背面的都補進上面那欄之後，記得把這裡取消勾選）</span></label>
+      <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">多台用「、」或空白隔開；<b>正反面全部打進來</b></span>
+        <textarea id="vpEditTrailers" rows="3" style="width:100%;font-family:inherit;"></textarea></label>
     </div>
     <div class="muted" id="vpEditGoodsPreview" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
     <div class="muted" id="vpEditTrailerPreview" style="margin-top:4px;font-size:12px;line-height:1.7;"></div>
@@ -18463,6 +18458,8 @@ function renderHzTable(){
 // ===== 板架（拖車） =====
 // 曳引車申請通行證時會順帶報上要掛的板架，通行證「拖車車號」那一欄就是板架。
 // 資料庫存成一串文字（trailer_plates，用「、」隔開），這裡拆成陣列用。
+// 修改視窗打開時這張證原本有沒有標「背面還有」，用來提醒使用者補齊
+let VP_EDIT_WAS_MORE = false;
 // trailer_more＝true 表示正面只印得下 16 台，其餘「詳列於背面」，所以實際台數比存的多。
 const VP_TRAILER_CACHE = new Map();
 function vpTrailers(p){
@@ -18971,7 +18968,7 @@ function vpExportCsv(){
       goods_text: g('vp_goods').trim() || null,
       vehicle_type: v ? (v.vehicle_type || null) : null,
       trailer_plates: vtNormalize(g('vp_trailers')) || null,
-      trailer_more: !!(document.getElementById('vp_trailer_more') || {}).checked,
+      trailer_more: false,   // 板架一律正反面全部輸入，不再標「背面還有」
       status: (vpDaysLeft(expiry) < 0) ? '已過期' : '有效',
       notes: g('vp_notes').trim() || null
     });
@@ -18980,7 +18977,7 @@ function vpExportCsv(){
       await saveState('vehicle_passes', STATE.vehiclePasses, true);
       ['vp_no','vp_batch','vp_start','vp_expiry','vp_inspect','vp_issue','vp_notes','vp_goods','vp_trailers']
         .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-      const _tm = document.getElementById('vp_trailer_more'); if(_tm) _tm.checked = false;
+      const _th = document.getElementById('vp_trailer_hint'); if(_th) _th.textContent = '';
       msg.textContent = '已新增。';
       renderAll();
     }catch(err){ msg.textContent = '存檔失敗：' + (err && err.message ? err.message : err); }
@@ -19001,8 +18998,7 @@ function openVpEdit(id){
   set('vpEditAuth', p.authority); set('vpEditNotes', p.notes);
   set('vpEditGoods', p.goods_text);
   set('vpEditTrailers', p.trailer_plates);
-  const _tm = document.getElementById('vpEditTrailerMore');
-  if(_tm) _tm.checked = !!p.trailer_more;
+  VP_EDIT_WAS_MORE = !!p.trailer_more;
   vpEditGoodsPreview();
   vpEditTrailerPreview();
   document.getElementById('vpEditMsg').textContent = '';
@@ -19033,15 +19029,32 @@ function vtNormalize(text){
   return seen.join('、');
 }
 // 修改視窗裡打字就即時算台數、標出車輛主檔查不到的
+// 新增表單打板架時即時回報台數，順便提醒有沒有打錯字
+function vpAddTrailerHint(){
+  const box = document.getElementById('vp_trailer_hint');
+  if(!box) return;
+  const list = vtNormalize((document.getElementById('vp_trailers') || {}).value).split('、').filter(Boolean);
+  if(!list.length){ box.textContent = ''; return; }
+  const other = list.filter(t => !vtIsOwn(t));
+  box.innerHTML = '共 <b>' + list.length + '</b> 台'
+    + '　<span class="muted">（跟通行證背面寫的「詳列拖車 N 輛」核一下數目）</span>'
+    + (other.length ? '<br><span style="color:#b26a00;">車輛主檔查不到 ' + other.length + ' 台（'
+        + esc(other.join('、')) + '）——客戶或靠行的板架是正常的，打錯字也會長這樣</span>' : '');
+}
 function vpEditTrailerPreview(){
   const box = document.getElementById('vpEditTrailerPreview');
   if(!box) return;
+  const warn = VP_EDIT_WAS_MORE
+    ? '<br><span style="color:#b26a00;">這張證原本標著「背面還有未登錄」。按儲存會把那個標記清掉，'
+      + '所以請先確認背面那幾台也打進去了。</span>' : '';
   const list = vtNormalize((document.getElementById('vpEditTrailers') || {}).value).split('、').filter(Boolean);
-  if(!list.length){ box.innerHTML = '<span class="muted">曳引車才要填；填了之後「依板架查詢」就查得到這張證。</span>'; return; }
+  if(!list.length){ box.innerHTML = '<span class="muted">曳引車才要填；填了之後「依板架查詢」就查得到這張證。</span>' + warn; return; }
   const other = list.filter(t => !vtIsOwn(t));
   box.innerHTML = '共 <b>' + list.length + '</b> 台'
-    + (other.length ? '　<span style="color:#b26a00;">車輛主檔查不到 ' + other.length + ' 台（'
-        + esc(other.join('、')) + '）——客戶或靠行的板架是正常的，打錯字也會長這樣，順手看一下</span>' : '');
+    + '　<span class="muted">（跟通行證背面寫的「詳列拖車 N 輛」核一下數目）</span>'
+    + (other.length ? '<br><span style="color:#b26a00;">車輛主檔查不到 ' + other.length + ' 台（'
+        + esc(other.join('、')) + '）——客戶或靠行的板架是正常的，打錯字也會長這樣，順手看一下</span>' : '')
+    + warn;
 }
 function closeVpEdit(){
   document.getElementById('vpEditModal').classList.remove('show');
@@ -19054,6 +19067,8 @@ function closeVpEdit(){
   if(_gt) _gt.addEventListener('input', vpEditGoodsPreview);
   const _tt = document.getElementById('vpEditTrailers');
   if(_tt) _tt.addEventListener('input', vpEditTrailerPreview);
+  const _at = document.getElementById('vp_trailers');
+  if(_at) _at.addEventListener('input', vpAddTrailerHint);
   bind('vpEditCancel', closeVpEdit);
   const m = document.getElementById('vpEditModal');
   if(m) m.addEventListener('click', e => { if(e.target.id === 'vpEditModal') closeVpEdit(); });
@@ -19079,7 +19094,7 @@ function closeVpEdit(){
     p.notes = g('vpEditNotes').trim() || null;
     p.goods_text = g('vpEditGoods').trim() || null;
     p.trailer_plates = vtNormalize(g('vpEditTrailers')) || null;
-    p.trailer_more = !!(document.getElementById('vpEditTrailerMore') || {}).checked;
+    p.trailer_more = false;   // 存檔就代表板架已經補齊，清掉「背面還有」的標記
     p.status = (p.expiry_date && vpDaysLeft(p.expiry_date) < 0) ? '已過期' : '有效';
     try{
       msg.style.color = ''; msg.textContent = '存檔中…';
