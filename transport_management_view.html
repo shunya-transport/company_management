@@ -2477,7 +2477,8 @@
       <div class="muted" style="margin-bottom:10px;">
         同一批申請的通行證到期日通常一樣，這裡看每一批還剩幾天、幾台車。<br>
         品項寫「16種」「29種」看不出載的是什麼，所以<b>危險物品</b>那一欄把整批的物質都列出來
-        （含簡稱／化學式）；超過 3 種的按一下就展開完整清單，匯出的總表也會一起帶出去。<br>
+        （含簡稱／化學式）；超過 3 種的按一下就展開完整清單。<br>
+        「生成續辦總表 Excel」會依目前的頁籤與篩選，產出四個工作表：續辦總表、逐台明細、車號對照（哪台車能跑哪一家）、物質明細。<br>
         同一家、同一個品項重新申請下來，按<b>「續辦」</b>一次把整批的證號、批號、生效日、到期日換新，
         不用一台一台進「修改」；舊證號會寫進備註留痕。<br>
         已經不跑的廠商或物質，按最右邊的<b>「暫不續辦」</b>，那一組就會移到「暫不續辦」頁籤，
@@ -2489,7 +2490,8 @@
           <button class="btn ghost" data-vpg="renew">要續辦</button>
           <button class="btn ghost" data-vpg="hold">暫不續辦</button>
         </span>
-        <button class="btn ghost" id="vpg_export" style="padding:8px 14px;font-size:13px;">生成續辦總表 CSV</button>
+        <button class="btn ghost" id="vpg_export" style="padding:8px 14px;font-size:13px;">生成續辦總表 Excel</button>
+        <button class="name-link" id="vpg_export_csv" style="font-size:12px;">（要 CSV 按這裡）</button>
       </div>
       <div class="table-scroll">
         <table style="table-layout:fixed;width:100%;min-width:1280px;">
@@ -18415,7 +18417,8 @@ function hzParse(text){
     last = re.lastIndex;
     // 名稱前面可能有「第2.2、5.1類:」這種分類標頭，可能在開頭、也可能夾在中間
     let h;
-    while((h = chunk.match(/(第[0-9．.、,，]+類)\s*[:：]/)) !== null){
+    // 有的通行證漏了「第」字（2.3、8、5.1類:氯），一樣當成分類標頭拆掉
+    while((h = chunk.match(/((?:第)?[0-9][0-9．.、,，]*類)\s*[:：]/)) !== null){
       cls = h[1];
       chunk = chunk.slice(chunk.indexOf(h[0]) + h[0].length);
     }
@@ -18427,6 +18430,9 @@ function hzParse(text){
 // 通行證原文拆解時空白會被拿掉（「Hypomer MT-2350」會變成「HypomerMT-2350」），
 // 所以比對名稱時兩邊的空白都先去掉，不然德謙那種商品名會對不到。
 function hzNorm(s){ return String(s == null ? '' : s).replace(/\s+/g, ''); }
+const HZ_NOS = new Set(['1953','1954','1955','1956','1964','3156','3157','3160','3161','3162','3163',
+  '3303','3304','3305','3306','3307','3308','3309','3310','1992','1993','2922','3129','3130','3131',
+  '3132','3393','3394','3395','3396','3397','3398','3399','3501','3082','3077','2810','2811']);
 function hzLookup(zh, un){
   const list = STATE.hazmatSubstances || [];
   const z = hzNorm(zh);
@@ -18435,8 +18441,17 @@ function hzLookup(zh, un){
   // 「134處」是列管處數不是 UN 編號，同一個編號底下是一堆不同的化學品，
   // 所以這種只能用中文名對，不能用編號對。
   if(/處$/.test(String(un))) return list.find(h => hzNorm(h.name_zh) === z) || null;
-  return list.find(h => String(h.un_no) === String(un)) || null;
+  // N.O.S.（未另列明）通用號碼底下是很多種不同的混合氣／化學品，只看號碼一定會對錯，
+  // 例如 3306 有 20%氟/80%氮、19%氟/氬、25%氟/75%氮…，這種一律只認中文名。
+  if(HZ_NOS.has(String(un))) return null;
+  // 其他號碼：對照表裡只有一筆才用號碼補（例：通行證寫「矽甲烷」、對照表寫「四氫化矽」）
+  const same = list.filter(h => String(h.un_no) === String(un));
+  return same.length === 1 ? same[0] : null;
 }
+// 對照表那一筆是不是「同名」對到的（不是靠號碼補的）
+function hzIsExact(h, zh){ return !!(h && hzNorm(h.name_zh) === hzNorm(zh)); }
+// 顯示用中文名：同名對到就用對照表的寫法（有保留空白），否則一律照通行證原文
+function hzName(it, h){ return hzIsExact(h, it.zh) ? h.name_zh : it.zh; }
 function hzDetailHtml(goodsText){
   const r = hzParse(goodsText);
   if(!r.items.length){
@@ -18447,7 +18462,7 @@ function hzDetailHtml(goodsText){
     const h = hzLookup(it.zh, it.un);
     return `<tr>
       <td style="text-align:center;">${i + 1}</td>
-      <td>${esc(h && h.name_zh ? h.name_zh : it.zh)}</td>
+      <td>${esc(hzName(it, h))}</td>
       <td style="font-family:monospace;font-size:12px;">${h && h.abbr ? esc(h.abbr) : '<span class="muted" style="font-family:inherit;">—</span>'}</td>
       <td>${h && h.name_en ? esc(h.name_en)
         : (h ? '<span class="muted">—（這一項還沒填英文名）</span>'
@@ -18859,12 +18874,12 @@ function vpGroupGoods(list){
 function vpGoodsLabel(it){
   const h = hzLookup(it.zh, it.un);
   const ab = h && h.abbr ? String(h.abbr).replace(/（.*$/, '').trim() : '';
-  return ab || (h && h.name_zh) || it.zh;
+  return ab || hzName(it, h);
 }
 // 匯出用：中文(簡稱 UN編號)
 function vpGoodsFull(it){
   const h = hzLookup(it.zh, it.un);
-  return (h && h.name_zh ? h.name_zh : it.zh)
+  return hzName(it, h)
     + '(' + (h && h.abbr ? String(h.abbr).replace(/（.*$/, '').trim() + ' ' : '')
     + (/處$/.test(String(it.un)) ? '列管' + it.un : 'UN' + it.un) + ')';
 }
@@ -18924,22 +18939,66 @@ function renderVpGroups(){
     || `<tr><td colspan="8" class="empty">${VPG_TAB === 'hold' ? '目前沒有標成暫不續辦的廠商／品項' : '沒有資料'}</td></tr>`;
 }
 // 續辦總表：一批一列，照目前的篩選與頁籤出
+// ---- 續辦總表共用的小工具 ----
+function vpgROC(d){
+  const x = String(d || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(x)
+    ? (Number(x.slice(0, 4)) - 1911) + '/' + x.slice(5, 7) + '/' + x.slice(8, 10) : '';
+}
+// 行號縮短：順亞運通股份有限公司 → 順亞
+function vpgCo(name){
+  return String(name || '').replace(/(運通|通運)?(股份)?有限公司$/, '').replace(/（股）公司$/, '') || '';
+}
+function vpgVendorShort(name){
+  return String(name || '').replace(/(股份)?有限公司$/, '').replace(/（股）公司$/, '');
+}
+// 行號分布：「順亞 8／利福 7」（以不重複車號計）
+function vpgCoCount(list){
+  const m = {};
+  const seen = new Set();
+  list.forEach(p => {
+    const k = (p.plate || '') + '\u0001' + (p.company_name || '');
+    if(seen.has(k)) return; seen.add(k);
+    const c = vpgCo(p.company_name) || '—';
+    m[c] = (m[c] || 0) + 1;
+  });
+  return Object.keys(m).sort((a, b) => m[b] - m[a]).map(k => k + ' ' + m[k]).join('／');
+}
+function vpgPlates(list){ return [...new Set(list.map(p => p.plate).filter(Boolean))].sort(); }
+function vpgGoodsLine(r){
+  if(!r.items.length) return r.gnote || '';
+  return r.items.map(it => {
+    const h = hzLookup(it.zh, it.un);
+    const ab = h && h.abbr ? String(h.abbr).replace(/（.*$/, '').trim() : '';
+    const nm = hzName(it, h);
+    return (ab && hzNorm(ab) !== hzNorm(nm)) ? nm + '(' + ab + ')' : nm;
+  }).join('、');
+}
+function vpgFilterText(){
+  const v = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const t = id => { const el = document.getElementById(id);
+                    return el && el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0].textContent : ''; };
+  const tab = { all: '全部', renew: '要續辦', hold: '暫不續辦' }[VPG_TAB] || '全部';
+  const q = v('vp_search').trim();
+  return '頁籤：' + tab + '｜到期：' + t('vp_due_filter') + '｜廠商：' + t('vp_vendor_filter')
+       + '｜品項：' + t('vp_cat_filter') + (q ? '｜搜尋：' + q : '');
+}
+
 function vpGroupCsv(){
-  const head = ['廠商','品項','物質數','危險物品（簡稱）','危險物品（完整）','到期日','剩餘天數',
-                '續辦狀態','不續辦原因','台數','車號','行號','通行證號碼','批號'];
+  const head = ['剩餘天數','到期日','續辦狀態','廠商','品項','物質數','危險物品',
+                '台數','張數','行號','車號','批號','不續辦原因','通行證號碼'];
   const rows = VPG_CACHE.map(r => {
     const n = vpDaysLeft(r.exp === '—' ? null : r.exp);
-    return [r.vendor, r.cat,
+    return [(n === null ? '' : String(n)), vpgROC(r.exp) || r.exp,
+            r.hold ? '暫不續辦' : '續辦', r.vendor, r.cat,
             r.items.length ? String(r.items.length) : '',
-            r.items.map(vpGoodsLabel).join('、') || r.gnote || '',
-            r.items.map(vpGoodsFull).join('；') || r.gnote || '',
-            r.exp, (n === null ? '' : String(n)),
-            r.hold ? '暫不續辦' : '續辦', r.note || '',
-            String(r.list.length),
-            r.list.map(p => p.plate).filter(Boolean).sort().join('、'),
-            [...new Set(r.list.map(p => p.company_name).filter(Boolean))].join('、'),
-            r.list.map(p => p.pass_no).filter(Boolean).join('、'),
-            [...new Set(r.list.map(p => p.batch_no).filter(Boolean))].join('、')];
+            vpgGoodsLine(r),
+            String(vpgPlates(r.list).length), String(r.list.length),
+            vpgCoCount(r.list),
+            vpgPlates(r.list).join('、'),
+            [...new Set(r.list.map(p => p.batch_no).filter(Boolean))].join('、'),
+            r.note || '',
+            r.list.map(p => p.pass_no).filter(Boolean).join('、')];
   });
   const tab = { all: '全部', renew: '要續辦', hold: '暫不續辦' }[VPG_TAB] || '全部';
   const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
@@ -18950,6 +19009,331 @@ function vpGroupCsv(){
   const msg = document.getElementById('vpg_msg');
   if(msg){ msg.style.color = 'var(--green,#2e7d32)';
            msg.textContent = '已產生「' + tab + '」總表，共 ' + rows.length + ' 批。'; }
+}
+// ===== 續辦總表（Excel）=====
+// ExcelJS 第一次按的時候才從 CDN 載，平常不會拖慢頁面；載不到就自動改出 CSV。
+const VP_XLSX_SRC = ['https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+                     'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'];
+let VP_XLSX_LOADING = null;
+function vpLoadExcelJS(){
+  if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if(VP_XLSX_LOADING) return VP_XLSX_LOADING;
+  VP_XLSX_LOADING = (async () => {
+    for(const src of VP_XLSX_SRC){
+      try{
+        await new Promise((ok, ng) => {
+          const sc = document.createElement('script');
+          sc.src = src; sc.onload = ok; sc.onerror = ng;
+          document.head.appendChild(sc);
+        });
+        if(window.ExcelJS) return window.ExcelJS;
+      }catch(e){ /* 換下一個來源 */ }
+    }
+    throw new Error('ExcelJS 載不進來');
+  })();
+  VP_XLSX_LOADING.catch(() => { VP_XLSX_LOADING = null; });
+  return VP_XLSX_LOADING;
+}
+// 顯示寬度：中日韓字算 2、其他算 1，用來估儲存格要幾行
+function vpgDispW(t){
+  let w = 0;
+  for(const ch of String(t || '')) w += /[⺀-鿿豈-﫿＀-￯　-〿]/.test(ch) ? 2 : 1;
+  return w;
+}
+function vpgLines(t, colW){
+  return String(t || '').split('\n')
+    .reduce((n, seg) => n + Math.max(1, Math.ceil(vpgDispW(seg) / Math.max(4, colW - 1.5))), 0);
+}
+async function vpGroupXlsx(){
+  const msg = document.getElementById('vpg_msg');
+  const say = (t, c) => { if(msg){ msg.style.color = c || ''; msg.textContent = t; } };
+  if(!VPG_CACHE.length){ say('目前這個頁籤沒有資料可以匯出。', 'var(--red,#c0392b)'); return; }
+  say('產生 Excel 中…');
+  let XL;
+  try{ XL = await vpLoadExcelJS(); }
+  catch(e){
+    say('Excel 套件載不進來（可能是網路擋住），先改出 CSV。', '#b26a00');
+    vpGroupCsv(); return;
+  }
+  const tab = { all: '全部', renew: '要續辦', hold: '暫不續辦' }[VPG_TAB] || '全部';
+  const today = todayISO();
+  const wb = new XL.Workbook();
+  wb.creator = '運輸管理資料庫'; wb.created = new Date();
+
+  // ---- 樣式 ----
+  const C = { head:'FF2F5597', headTx:'FFFFFFFF', line:'FFD9D9D9', month:'FF8EA9DB',
+              expBg:'FFF8D7DA', expTx:'FF9C0006', redBg:'FFFCE4E4', redTx:'FFC00000',
+              ambBg:'FFFFF2CC', ambTx:'FF9C5700', grnBg:'FFE2EFDA', grnTx:'FF375623',
+              holdBg:'FFEDEDED', holdTx:'FF8C8C8C', title:'FF1F2937', sub:'FF6B7280', zebra:'FFF8F9FB' };
+  const FONT = '微軟正黑體';
+  const thin = { style:'thin', color:{ argb:C.line } };
+  const box = { top:thin, left:thin, bottom:thin, right:thin };
+  const fill = argb => ({ type:'pattern', pattern:'solid', fgColor:{ argb } });
+  const urg = n => n === null ? null
+    : n < 0 ? { bg:C.expBg, tx:C.expTx, bold:true }
+    : n <= 30 ? { bg:C.redBg, tx:C.redTx, bold:true }
+    : n <= 60 ? { bg:C.ambBg, tx:C.ambTx, bold:false }
+    : { bg:C.grnBg, tx:C.grnTx, bold:false };
+  const titleRows = (ws, title, sub, span) => {
+    ws.mergeCells(1, 1, 1, span); ws.mergeCells(2, 1, 2, span);
+    const t = ws.getCell(1, 1);
+    t.value = title; t.font = { name:FONT, size:15, bold:true, color:{ argb:C.title } };
+    t.alignment = { vertical:'middle' };
+    ws.getRow(1).height = 26;
+    const u = ws.getCell(2, 1);
+    u.value = sub; u.font = { name:FONT, size:10, color:{ argb:C.sub } };
+    u.alignment = { vertical:'middle', wrapText:true };
+    ws.getRow(2).height = 30;
+  };
+  const headRow = (ws, rowNo, cols) => {
+    const row = ws.getRow(rowNo);
+    cols.forEach((c, i) => {
+      const cell = row.getCell(i + 1);
+      cell.value = c.h;
+      cell.font = { name:FONT, size:10.5, bold:true, color:{ argb:C.headTx } };
+      cell.fill = fill(C.head);
+      cell.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+      cell.border = box;
+      ws.getColumn(i + 1).width = c.w;
+    });
+    row.height = 22;
+  };
+  const stamp = vpgROC(today);
+  const filterTxt = vpgFilterText();
+
+  // ===================== ① 續辦總表 =====================
+  const ws1 = wb.addWorksheet('續辦總表', { views:[{ state:'frozen', xSplit:4, ySplit:3, zoomScale:100 }] });
+  const cols1 = [
+    { k:'days',   h:'剩餘天數', w:8.5 }, { k:'exp',   h:'到期日', w:12 },
+    { k:'status', h:'續辦狀態', w:9 },   { k:'vendor',h:'廠商',   w:24 },
+    { k:'cat',    h:'品項',     w:16 },  { k:'n',     h:'物質數', w:6.5 },
+    { k:'goods',  h:'危險物品（中文名／簡稱）', w:48 },
+    { k:'veh',    h:'台數',     w:6 },   { k:'pass',  h:'張數',   w:6 },
+    { k:'co',     h:'行號',     w:15 },  { k:'plates',h:'車號',   w:50 },
+    { k:'batch',  h:'通行證批號', w:17 }, { k:'note',  h:'不續辦原因', w:16 } ];
+  titleRows(ws1, '通行證續辦總表', stamp + ' 產出　共 ' + VPG_CACHE.length + ' 批　' + filterTxt
+    + '\n剩餘天數：紅＝30 天內、黃＝60 天內、綠＝60 天以上；灰色列＝暫不續辦。台數是不重複車輛數，張數是通行證張數（同一台車可能有兩張）。', cols1.length);
+  headRow(ws1, 3, cols1);
+  let prevMonth = '';
+  VPG_CACHE.forEach((r, i) => {
+    const n = vpDaysLeft(r.exp === '—' ? null : r.exp);
+    const plates = vpgPlates(r.list);
+    const v = {
+      days: n, exp: vpgROC(r.exp) || r.exp, status: r.hold ? '暫不續辦' : '續辦',
+      vendor: r.vendor, cat: r.cat, n: r.items.length || null,
+      goods: vpgGoodsLine(r), veh: plates.length, pass: r.list.length,
+      co: vpgCoCount(r.list),
+      // 車號每 4 台換一行，避免在「KLC-」後面被折斷
+      plates: plates.map((x, k) => x + (k < plates.length - 1 ? ((k % 4 === 3) ? '、\n' : '、') : '')).join(''),
+      batch: [...new Set(r.list.map(p => p.batch_no).filter(Boolean))].join('\n'),
+      note: r.note || '' };
+    const row = ws1.getRow(4 + i);
+    cols1.forEach((c, j) => { row.getCell(j + 1).value = v[c.k]; });
+    // 行高：看危險物品、車號、批號哪一欄最長
+    const lines = Math.max(
+      vpgLines(v.goods, 48), String(v.plates).split('\n').length, vpgLines(v.batch, 17),
+      vpgLines(v.vendor, 24), vpgLines(v.cat, 16), vpgLines(v.note, 16), 1);
+    row.height = Math.min(400, Math.max(20, lines * 14.5 + 6));
+    const month = String(r.exp).slice(0, 7);
+    cols1.forEach((c, j) => {
+      const cell = row.getCell(j + 1);
+      cell.font = { name:FONT, size:10.5, color: r.hold ? { argb:C.holdTx } : undefined };
+      const narrow = ['days','exp','status','n','veh','pass'].includes(c.k);
+      cell.alignment = { vertical:'top', wrapText:!narrow, horizontal: narrow ? 'center' : 'left' };
+      cell.border = Object.assign({}, box,
+        (i > 0 && month !== prevMonth) ? { top:{ style:'medium', color:{ argb:C.month } } } : {});
+      if(i % 2 === 1) cell.fill = fill(C.zebra);
+    });
+    prevMonth = month;
+    const u = urg(n);
+    const dc = row.getCell(1);
+    if(r.hold){ dc.fill = fill(C.holdBg); row.getCell(3).fill = fill(C.holdBg); }
+    else if(u){ dc.fill = fill(u.bg); dc.font = { name:FONT, size:10.5, bold:u.bold, color:{ argb:u.tx } };
+                row.getCell(2).font = { name:FONT, size:10.5, bold:u.bold, color:{ argb:u.tx } }; }
+    row.getCell(4).font = { name:FONT, size:10.5, bold:!r.hold, color: r.hold ? { argb:C.holdTx } : undefined };
+  });
+  ws1.autoFilter = { from:{ row:3, column:1 }, to:{ row:3 + VPG_CACHE.length, column:cols1.length } };
+  ws1.pageSetup = { orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0,
+                    margins:{ left:0.3, right:0.3, top:0.4, bottom:0.4, header:0.2, footer:0.2 } };
+  ws1.pageSetup.printTitlesRow = '3:3';
+  ws1.headerFooter.oddFooter = '&L通行證續辦總表 ' + stamp + '&R第 &P / &N 頁';
+
+  // ===================== ② 逐台明細 =====================
+  const ws2 = wb.addWorksheet('逐台明細', { views:[{ state:'frozen', xSplit:0, ySplit:3 }] });
+  const cols2 = [
+    { h:'到期日', w:12 }, { h:'剩餘天數', w:8.5 }, { h:'續辦狀態', w:9 }, { h:'廠商', w:24 },
+    { h:'品項', w:16 }, { h:'車號', w:10 }, { h:'行號', w:8 }, { h:'通行證號碼', w:14 },
+    { h:'通行證批號', w:16 }, { h:'生效日', w:12 }, { h:'指定檢驗日', w:12 }, { h:'板架台數', w:8 } ];
+  const flat = [];
+  VPG_CACHE.forEach(r => r.list.forEach(p => flat.push({ r, p })));
+  flat.sort((a, b) => String(a.p.expiry_date || '').localeCompare(String(b.p.expiry_date || ''))
+    || String(a.r.vendor).localeCompare(String(b.r.vendor), 'zh-Hant')
+    || String(a.r.cat).localeCompare(String(b.r.cat), 'zh-Hant')
+    || String(a.p.plate || '').localeCompare(String(b.p.plate || '')));
+  titleRows(ws2, '通行證逐台明細', stamp + ' 產出　共 ' + flat.length + ' 張　' + filterTxt
+    + '\n一張通行證一列。要查某台車有哪些證，在「車號」欄篩選就好。', cols2.length);
+  headRow(ws2, 3, cols2);
+  flat.forEach(({ r, p }, i) => {
+    const n = vpDaysLeft(p.expiry_date);
+    const row = ws2.getRow(4 + i);
+    const vals = [vpgROC(p.expiry_date), n, r.hold ? '暫不續辦' : '續辦', r.vendor, r.cat,
+                  p.plate || '', vpgCo(p.company_name), p.pass_no || '', p.batch_no || '',
+                  vpgROC(p.start_date), vpgROC(p.inspect_date), vpTrailers(p).length || null];
+    vals.forEach((x, j) => {
+      const cell = row.getCell(j + 1);
+      cell.value = x;
+      cell.font = { name:FONT, size:10.5, color: r.hold ? { argb:C.holdTx } : undefined };
+      cell.alignment = { vertical:'middle', horizontal: [1,2,3,6,7,10,11,12].includes(j + 1) ? 'center' : 'left' };
+      cell.border = box;
+      if(i % 2 === 1) cell.fill = fill(C.zebra);
+    });
+    const u = urg(n);
+    if(!r.hold && u){ row.getCell(2).fill = fill(u.bg); row.getCell(2).font = { name:FONT, size:10.5, bold:u.bold, color:{ argb:u.tx } }; }
+    row.getCell(8).font = { name:'Consolas', size:10.5, color: r.hold ? { argb:C.holdTx } : undefined };
+    row.height = 18;
+  });
+  ws2.autoFilter = { from:{ row:3, column:1 }, to:{ row:3 + flat.length, column:cols2.length } };
+  ws2.pageSetup = { orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0 };
+  ws2.pageSetup.printTitlesRow = '3:3';
+
+  // ===================== ③ 車號對照 =====================
+  // 一台車一列、一個「廠商＋品項」一欄，格子裡是那張證的到期日：
+  // 派車時要知道「這台車能不能去跑某一家」，橫著看一列就知道。
+  const keyOf = r => r.vendor + '\u0001' + r.cat;
+  const grpKeys = [];
+  const grpHold = {};
+  VPG_CACHE.forEach(r => { const k = keyOf(r); if(!grpKeys.includes(k)) grpKeys.push(k); grpHold[k] = grpHold[k] || r.hold; });
+  grpKeys.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  const cell3 = {};   // 車號 → 欄 → 最晚到期日
+  const coOf = {};
+  VPG_CACHE.forEach(r => r.list.forEach(p => {
+    if(!p.plate) return;
+    const m = cell3[p.plate] = cell3[p.plate] || {};
+    const k = keyOf(r);
+    if(!m[k] || String(p.expiry_date || '') > m[k]) m[k] = String(p.expiry_date || '');
+    coOf[p.plate] = coOf[p.plate] || vpgCo(p.company_name);
+  }));
+  const plates3 = Object.keys(cell3).sort((a, b) =>
+    String(coOf[a]).localeCompare(String(coOf[b]), 'zh-Hant') || a.localeCompare(b));
+  const span3 = 3 + grpKeys.length;
+  const ws3 = wb.addWorksheet('車號對照', { views:[{ state:'frozen', xSplit:3, ySplit:4 }] });
+  titleRows(ws3, '車號 × 廠商品項 對照', stamp + ' 產出　' + plates3.length + ' 台車 × ' + grpKeys.length + ' 個廠商品項　'
+    + '格子裡是那張通行證的到期日（同一格有兩張取較晚的），空白＝沒有這張證。顏色同總表。', Math.min(span3, 14));
+  // 第 3 列：廠商（同一家合併），第 4 列：品項
+  const r3 = ws3.getRow(3), r4 = ws3.getRow(4);
+  [['車號', 10], ['行號', 7], ['證數', 6]].forEach(([h, w], j) => {
+    ws3.mergeCells(3, j + 1, 4, j + 1);
+    const c = r3.getCell(j + 1);
+    c.value = h; c.font = { name:FONT, size:10.5, bold:true, color:{ argb:C.headTx } };
+    c.fill = fill(C.head); c.alignment = { vertical:'middle', horizontal:'center' }; c.border = box;
+    ws3.getColumn(j + 1).width = w;
+  });
+  let startCol = 4;
+  for(let j = 0; j < grpKeys.length; j++){
+    const [vd, ct] = grpKeys[j].split('\u0001');
+    let k = j;
+    while(k + 1 < grpKeys.length && grpKeys[k + 1].split('\u0001')[0] === vd) k++;
+    const c0 = 4 + j, c1 = 4 + k;
+    if(c1 > c0) ws3.mergeCells(3, c0, 3, c1);
+    const hc = r3.getCell(c0);
+    hc.value = vpgVendorShort(vd);
+    hc.font = { name:FONT, size:10, bold:true, color:{ argb:C.headTx } };
+    hc.fill = fill(C.head); hc.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+    for(let x = c0; x <= c1; x++){ r3.getCell(x).border = box; r3.getCell(x).fill = fill(C.head); }
+    for(let x = j; x <= k; x++){
+      const cc = r4.getCell(4 + x);
+      cc.value = grpKeys[x].split('\u0001')[1] + (grpHold[grpKeys[x]] ? '\n（暫不續辦）' : '');
+      cc.font = { name:FONT, size:9.5, bold:true, color:{ argb: grpHold[grpKeys[x]] ? C.holdTx : 'FF1F3864' } };
+      cc.fill = fill('FFD9E1F2'); cc.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+      cc.border = box;
+      ws3.getColumn(4 + x).width = 12;
+    }
+    j = k;
+  }
+  r3.height = 30;
+  r4.height = Math.min(120, Math.max(30, Math.max(...grpKeys.map(k => vpgLines(k.split('\u0001')[1], 12))) * 13 + 8));
+  plates3.forEach((pl, i) => {
+    const row = ws3.getRow(5 + i);
+    const m = cell3[pl];
+    row.getCell(1).value = pl; row.getCell(2).value = coOf[pl] || '';
+    row.getCell(3).value = Object.keys(m).length;
+    [1, 2, 3].forEach(x => {
+      const c = row.getCell(x);
+      c.font = { name:FONT, size:10.5, bold: x === 1 };
+      c.alignment = { vertical:'middle', horizontal: x === 1 ? 'left' : 'center' };
+      c.border = box;
+    });
+    grpKeys.forEach((k, j) => {
+      const c = row.getCell(4 + j);
+      c.border = box; c.alignment = { vertical:'middle', horizontal:'center' };
+      if(!m[k]){ if(i % 2 === 1) c.fill = fill(C.zebra); return; }
+      const n = vpDaysLeft(m[k]);
+      c.value = vpgROC(m[k]);
+      if(grpHold[k]){ c.fill = fill(C.holdBg); c.font = { name:FONT, size:10, color:{ argb:C.holdTx } }; }
+      else { const u = urg(n); if(u){ c.fill = fill(u.bg); c.font = { name:FONT, size:10, bold:u.bold, color:{ argb:u.tx } }; } }
+    });
+    row.height = 18;
+  });
+  ws3.pageSetup = { orientation:'landscape', paperSize:8, fitToPage:true, fitToWidth:1, fitToHeight:0 };
+  ws3.pageSetup.printTitlesRow = '3:4';
+
+  // ===================== ④ 物質明細 =====================
+  const ws4 = wb.addWorksheet('物質明細', { views:[{ state:'frozen', xSplit:0, ySplit:3 }] });
+  const cols4 = [ { h:'廠商', w:24 }, { h:'品項', w:16 }, { h:'#', w:5 }, { h:'中文名（照通行證）', w:40 },
+                  { h:'簡稱／化學式', w:16 }, { h:'英文名（UN 正式運送名稱）', w:42 }, { h:'UN 編號', w:10 },
+                  { h:'危害分類', w:26 } ];
+  titleRows(ws4, '危險物品明細（依廠商＋品項）', stamp + ' 產出　中文名一律照通行證上的寫法；簡稱與英文是對照表補的，'
+    + '對照表查不到的留空。「列管 134 處」是毒性及關注化學物質的列管處數，不是 UN 編號。', cols4.length);
+  headRow(ws4, 3, cols4);
+  let rr = 4, band = 0;
+  grpKeys.forEach(k => {
+    const [vd, ct] = k.split('\u0001');
+    const rs = VPG_CACHE.filter(r => keyOf(r) === k);
+    const seen = new Set(); const its = [];
+    rs.forEach(r => r.items.forEach(it => {
+      const kk = hzNorm(it.zh) + '\u0001' + it.un;
+      if(!seen.has(kk)){ seen.add(kk); its.push(it); }
+    }));
+    const note = rs.map(r => r.gnote).filter(Boolean)[0] || '';
+    const bg = (band++ % 2) ? C.zebra : null;
+    const put = (vals, opt) => {
+      const row = ws4.getRow(rr++);
+      vals.forEach((x, j) => {
+        const c = row.getCell(j + 1);
+        c.value = x; c.border = box;
+        c.font = Object.assign({ name: j === 4 ? 'Consolas' : FONT, size:10.5 }, opt && opt.font || {});
+        c.alignment = { vertical:'middle', wrapText:true, horizontal: [3,7].includes(j + 1) ? 'center' : 'left' };
+        if(bg) c.fill = fill(bg);
+      });
+      row.height = Math.max(18, Math.max(vpgLines(vals[0], 24), vpgLines(vals[1], 16),
+                                         vpgLines(vals[3], 40), vpgLines(vals[5], 42)) * 14.5 + 4);
+    };
+    if(!its.length){
+      put([vd, ct, '', note || '（沒有登錄危險物品名稱）', '', '', '', ''], { font:{ color:{ argb:C.ambTx } } });
+      return;
+    }
+    its.forEach((it, i) => {
+      const h = hzLookup(it.zh, it.un);
+      put([vd, ct, i + 1, hzName(it, h), h && h.abbr ? String(h.abbr) : '',
+           h && h.name_en ? h.name_en : '',
+           /處$/.test(String(it.un)) ? '列管 ' + it.un : 'UN ' + it.un,
+           (h && h.hazard_class) || it.cls || '']);
+    });
+  });
+  ws4.autoFilter = { from:{ row:3, column:1 }, to:{ row:rr - 1, column:cols4.length } };
+  ws4.pageSetup = { orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0 };
+  ws4.pageSetup.printTitlesRow = '3:3';
+
+  // ---- 下載 ----
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '通行證續辦總表_' + tab + '_' + today.replace(/-/g, '') + '.xlsx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  say('已產生「' + tab + '」續辦總表 Excel：' + VPG_CACHE.length + ' 批、' + flat.length + ' 張、'
+      + plates3.length + ' 台車。', 'var(--green,#2e7d32)');
 }
 function vpFillPlateSelect(id, current){
   const sel = document.getElementById(id);
@@ -19350,7 +19734,9 @@ function closeVpEdit(){
       renderVpGroups();
     });
     const gx = document.getElementById('vpg_export');
-    if(gx) gx.addEventListener('click', vpGroupCsv);
+    if(gx) gx.addEventListener('click', vpGroupXlsx);
+    const gc = document.getElementById('vpg_export_csv');
+    if(gc) gc.addEventListener('click', vpGroupCsv);
     const gb = document.getElementById('vpGroupBody');
     if(gb) gb.addEventListener('click', e => {
       const x = e.target.getAttribute && e.target.getAttribute('data-vpg-exp');
