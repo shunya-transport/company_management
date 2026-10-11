@@ -8113,7 +8113,8 @@ function insCarryBuild(){
       depUse: depUse, depFrom: depFrom, depRoster: depRoster, depBilled: depBilled,
       row: {
         year_roc: Math.floor(dstKey / 100), month: dstKey % 100,
-        account_type: (s && s.account_type) || (e && e.employee_type) || null,
+        // 帳別沿用上一期；新人才看人員主檔的直接／間接，寫法對齊月報（直-直、間接）
+        account_type: (s && s.account_type) || ({ '直接':'直-直', '間接':'間接', '間':'間接' }[e && e.employee_type] || (e && e.employee_type)) || null,
         name: name,
         employee_no: (e && e.employee_no) || (s && s.employee_no) || null,
         region: (e && e.region) || (s && s.region) || null,
