@@ -2478,6 +2478,8 @@
         同一批申請的通行證到期日通常一樣，這裡看每一批還剩幾天、幾台車。<br>
         品項寫「16種」「29種」看不出載的是什麼，所以<b>危險物品</b>那一欄把整批的物質都列出來
         （含簡稱／化學式）；超過 3 種的按一下就展開完整清單，匯出的總表也會一起帶出去。<br>
+        同一家、同一個品項重新申請下來，按<b>「續辦」</b>一次把整批的證號、批號、生效日、到期日換新，
+        不用一台一台進「修改」；舊證號會寫進備註留痕。<br>
         已經不跑的廠商或物質，按最右邊的<b>「暫不續辦」</b>，那一組就會移到「暫不續辦」頁籤，
         上面的到期提醒也不再算它；按「恢復續辦」隨時改得回來，不會動到通行證本身。
       </div>
@@ -2494,7 +2496,7 @@
           <colgroup>
             <col style="width:190px;"><col style="width:128px;"><col style="width:230px;">
             <col style="width:98px;"><col style="width:64px;"><col style="width:106px;">
-            <col><col style="width:150px;">
+            <col><col style="width:116px;">
           </colgroup>
           <thead><tr>
             <th>廠商</th><th>品項</th><th>危險物品</th><th>到期日</th><th>台數</th><th>剩餘天數</th><th>車號</th><th>續辦狀態</th>
@@ -3185,6 +3187,43 @@
   <div class="modal-box" style="max-width:820px;">
     <button class="modal-close" id="certPhotoClose">✕</button>
     <div id="certPhotoContent"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop no-print" id="vpRenewModal">
+  <div class="modal-box" style="max-width:860px;">
+    <button class="modal-close" id="vpRenewClose">✕</button>
+    <h3>整批續辦</h3>
+    <div class="muted" id="vpRenewHead" style="margin-bottom:12px;"></div>
+    <div class="form-grid">
+      <label>新生效日<input id="vpRenewStart" type="date"></label>
+      <label>新到期日<input id="vpRenewExpiry" type="date">
+        <span class="muted" style="font-weight:400;font-size:12px;">填生效日會自動帶「六個月減一天」，不對就直接改</span></label>
+      <label>新通行證批號<input id="vpRenewBatch" placeholder="整批同一個，留空就沿用舊批號"></label>
+      <label>新發證日<input id="vpRenewIssue" type="date"></label>
+    </div>
+    <label style="display:block;margin-top:12px;">批次貼上新證號
+      <span class="muted" style="font-weight:400;font-size:12px;">從通行證或 Excel 複製一整欄貼進來，一行一個，會照下面的順序自動填入</span>
+      <textarea id="vpRenewPaste" rows="3" style="width:100%;font-family:monospace;font-size:12.5px;"
+        placeholder="51D11530001&#10;51D11530002&#10;51D11530003"></textarea></label>
+    <div class="table-scroll" style="max-height:300px;margin-top:10px;">
+      <table style="font-size:12.5px;">
+        <thead><tr>
+          <th style="width:96px;">車號</th><th style="width:150px;">舊通行證號碼</th>
+          <th style="width:160px;">新通行證號碼</th><th style="width:130px;">新指定檢驗日</th><th>舊有效期間</th>
+        </tr></thead>
+        <tbody id="vpRenewBody"></tbody>
+      </table>
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:12.5px;">
+      新證號留空的那幾台<b>不會動</b>，所以這次只續辦部分車輛也沒問題。<br>
+      舊證號與舊期間會寫進備註留痕（例：<code>115/10/11 續辦：原 51D11511539（115/04/13～115/10/12）</code>）。
+    </div>
+    <div id="vpRenewMsg" style="margin-top:8px;font-size:13px;"></div>
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn ghost" id="vpRenewCancel">取消</button>
+      <button class="btn" id="vpRenewSave">更新這一批</button>
+    </div>
   </div>
 </div>
 
@@ -18738,10 +18777,18 @@ function vpIsHold(vendor, cat){
   const r = vpRenewOf(vendor, cat);
   return !!(r && String(r.status || '') === '暫不續辦');
 }
-async function vpRenewSet(vendor, cat, hold){
+async function vpRenewSet(vendor, cat, hold, quiet){
   const list = STATE.passRenewals || (STATE.passRenewals = []);
   let r = vpRenewOf(vendor, cat);
   const label = (vendor || '—') + '／' + (cat || '—');
+  if(quiet){
+    if(!r) return;
+    r.status = hold ? '暫不續辦' : '續辦';
+    if(!hold) r.note = null;
+    r.updated_at = new Date().toISOString();
+    await saveState('pass_renewals', list, true);
+    return;
+  }
   if(hold && !r){
     const note = prompt('「' + label + '」暫不續辦。\n原因可以留空，直接按「確定」就好。', '');
     if(note === null) return;
@@ -18866,6 +18913,7 @@ function renderVpGroups(){
       <td style="white-space:nowrap;">${r.hold ? '<span class="pill gray">暫不續辦</span>' : vpPill(r.exp === '—' ? null : r.exp)}</td>
       <td class="muted" style="font-size:12px;white-space:normal;word-break:keep-all;overflow-wrap:break-word;line-height:1.9;">${esc(r.list.map(p => p.plate).filter(Boolean).sort().join('、'))}</td>
       <td style="white-space:nowrap;">
+        <button class="btn" style="padding:4px 10px;font-size:12px;margin-bottom:4px;" data-vpg-renew="${i}">續辦</button><br>
         <button class="btn ghost" style="padding:4px 10px;font-size:12px;" data-vpg-i="${i}">${r.hold ? '恢復續辦' : '暫不續辦'}</button>
         ${r.hold && r.note ? `<div class="muted" style="font-size:11.5px;margin-top:4px;white-space:normal;">${esc(r.note)}</div>` : ''}
       </td>
@@ -19056,6 +19104,146 @@ function vpEditTrailerPreview(){
         + esc(other.join('、')) + '）——客戶或靠行的板架是正常的，打錯字也會長這樣，順手看一下</span>' : '')
     + warn;
 }
+// ===== 整批續辦 =====
+// 同一家廠商、同一個品項、同一個到期日的那一批，一次換新證號與期間。
+// 這是「更新」不是「新增」：證還是同一張證的延續，只是期間換了，
+// 所以不會多出一堆同內容的列，舊證號改寫進備註保留。
+let VP_RENEW = null;
+// 通行證效期慣例是「生效日起六個月減一天」（115/04/13 → 115/10/12）
+function vpROC(d){
+  const x = String(d || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(x)
+    ? (Number(x.slice(0, 4)) - 1911) + '/' + x.slice(5, 7) + '/' + x.slice(8, 10) : '—';
+}
+function vpPlusMonthsMinus1(iso, months){
+  const s = String(iso || '').slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1 + months, d));
+  if(dt.getUTCDate() !== d) dt.setUTCDate(0);      // 遇到 8/31 → 2/31 這種，退到當月最後一天
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0, 10);
+}
+function openVpRenew(i){
+  const r = VPG_CACHE[Number(i)];
+  if(!r) return;
+  VP_RENEW = r;
+  const head = document.getElementById('vpRenewHead');
+  head.innerHTML = '<b>' + esc(r.vendor) + '　' + esc(r.cat) + '</b>　'
+    + r.list.length + ' 台　舊到期日 ' + esc(r.exp)
+    + (r.items.length ? '<br>危險物品：' + esc(r.items.map(vpGoodsLabel).join('、')) : '')
+    + (r.hold ? '<br><span style="color:#b26a00;">這一組目前標著「暫不續辦」，存檔後會自動改回「續辦」。</span>' : '');
+  const st = document.getElementById('vpRenewStart');
+  st.value = todayISO();
+  document.getElementById('vpRenewExpiry').value = vpPlusMonthsMinus1(st.value, 6);
+  document.getElementById('vpRenewBatch').value = '';
+  document.getElementById('vpRenewBatch').placeholder =
+    '整批同一個，留空就沿用舊批號（' + ([...new Set(r.list.map(p => p.batch_no).filter(Boolean))].join('、') || '無') + '）';
+  document.getElementById('vpRenewIssue').value = '';
+  document.getElementById('vpRenewPaste').value = '';
+  document.getElementById('vpRenewMsg').textContent = '';
+  const sorted = r.list.slice().sort((a, b) => String(a.plate || '').localeCompare(String(b.plate || '')));
+  VP_RENEW.sorted = sorted;
+  document.getElementById('vpRenewBody').innerHTML = sorted.map((p, k) => `<tr>
+      <td>${esc(p.plate || '')}</td>
+      <td class="muted" style="font-family:monospace;">${esc(p.pass_no || '—')}</td>
+      <td><input class="vp-rn-no" data-k="${k}" style="width:100%;font-family:monospace;font-size:12.5px;" placeholder="留空＝不動"></td>
+      <td><input class="vp-rn-insp" data-k="${k}" type="date" style="width:100%;font-size:12px;"></td>
+      <td class="muted">${esc(p.start_date || '—')} ～ ${esc(p.expiry_date || '—')}</td>
+    </tr>`).join('');
+  document.getElementById('vpRenewModal').classList.add('show');
+}
+function closeVpRenew(){
+  document.getElementById('vpRenewModal').classList.remove('show');
+  VP_RENEW = null;
+}
+function vpRenewApplyPaste(){
+  const raw = (document.getElementById('vpRenewPaste') || {}).value || '';
+  const list = raw.split(/[\r\n,、\s]+/).map(x => x.trim()).filter(Boolean);
+  const inputs = [...document.querySelectorAll('#vpRenewBody .vp-rn-no')];
+  inputs.forEach((el, k) => { if(list[k]) el.value = list[k]; });
+  const msg = document.getElementById('vpRenewMsg');
+  if(!msg) return;
+  if(!list.length){ msg.textContent = ''; return; }
+  msg.style.color = list.length === inputs.length ? 'var(--green,#2e7d32)' : '#b26a00';
+  msg.textContent = '貼上 ' + list.length + ' 個證號，這一批有 ' + inputs.length + ' 台'
+    + (list.length === inputs.length ? '，數目剛好。' : '，數目對不上，請確認順序是不是跟上面的車號一致。');
+}
+async function vpRenewSaveBatch(){
+  const r = VP_RENEW;
+  const msg = document.getElementById('vpRenewMsg');
+  if(!r){ return; }
+  const start  = (document.getElementById('vpRenewStart') || {}).value || '';
+  const expiry = (document.getElementById('vpRenewExpiry') || {}).value || '';
+  const batch  = ((document.getElementById('vpRenewBatch') || {}).value || '').trim();
+  const issue  = (document.getElementById('vpRenewIssue') || {}).value || '';
+  const bad = x => { msg.style.color = 'var(--red,#c0392b)'; msg.textContent = x; };
+  if(!start || !expiry) return bad('新生效日與新到期日都要填。');
+  if(expiry <= start)   return bad('新到期日要在新生效日之後。');
+  const nos = [...document.querySelectorAll('#vpRenewBody .vp-rn-no')].map(el => el.value.trim());
+  const insps = [...document.querySelectorAll('#vpRenewBody .vp-rn-insp')].map(el => el.value || '');
+  const picked = nos.map((n, k) => n ? k : -1).filter(k => k >= 0);
+  if(!picked.length) return bad('一個新證號都沒填，沒有東西要更新。');
+  // 證號不能跟別張撞，也不能自己重複
+  const dupIn = nos.filter(Boolean).filter((v, i, a) => a.indexOf(v) !== i);
+  if(dupIn.length) return bad('新證號有重複：' + [...new Set(dupIn)].join('、'));
+  const mine = new Set(r.sorted.map(p => String(p.pass_no || '')));
+  const clash = nos.filter(Boolean).filter(n =>
+    (STATE.vehiclePasses || []).some(p => String(p.pass_no || '').trim() === n) && !mine.has(n));
+  if(clash.length) return bad('這些證號系統裡已經有別張在用：' + [...new Set(clash)].join('、'));
+
+  const skipped = r.sorted.filter((p, k) => !nos[k]).map(p => p.plate);
+  if(!confirm('要把這一批更新成新的期間嗎？\n\n'
+      + r.vendor + '　' + r.cat + '\n'
+      + '新期間：' + start + ' ～ ' + expiry + '\n'
+      + '更新：' + picked.length + ' 台\n'
+      + (skipped.length ? '不動（沒填新證號）：' + skipped.length + ' 台　' + skipped.join('、') + '\n' : '')
+      + '\n舊證號會寫進備註留痕。')) return;
+
+  // 備註裡用 115/10/11 這種短格式，不要用 todayROC() 的「中華民國 115 年…」
+  const _t = todayISO();
+  const stamp = (Number(_t.slice(0, 4)) - 1911) + '/' + _t.slice(5, 7) + '/' + _t.slice(8, 10);
+  picked.forEach(k => {
+    const p = r.sorted[k];
+    const trail = stamp + ' 續辦：原 ' + (p.pass_no || '無證號')
+                + '（' + vpROC(p.start_date) + '～' + vpROC(p.expiry_date) + '）';
+    p.notes = p.notes ? (p.notes + '；' + trail) : trail;
+    p.pass_no     = nos[k];
+    if(batch) p.batch_no = batch;
+    p.start_date  = start;
+    p.expiry_date = expiry;
+    if(issue) p.issue_date = issue;
+    if(insps[k]) p.inspect_date = insps[k];
+    p.status = (expiry < todayISO()) ? '已過期' : '有效';
+  });
+
+  msg.style.color = ''; msg.textContent = '存檔中…';
+  try{
+    await saveState('vehicle_passes', STATE.vehiclePasses, true);
+    // 續辦了就不該再標暫不續辦
+    if(r.hold) await vpRenewSet(r.vendor, r.cat, false, true);
+    msg.style.color = 'var(--green,#2e7d32)';
+    msg.textContent = '已更新 ' + picked.length + ' 台'
+      + (skipped.length ? '，另有 ' + skipped.length + ' 台沒填新證號沒有動' : '') + '。';
+    renderVpTable();
+    setTimeout(closeVpRenew, 900);
+  }catch(e){
+    msg.style.color = 'var(--red,#c0392b)';
+    msg.textContent = '存不進去：' + (e && e.message ? e.message : e);
+  }
+}
+{
+  const bind = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  bind('vpRenewClose', 'click', closeVpRenew);
+  bind('vpRenewCancel', 'click', closeVpRenew);
+  bind('vpRenewSave', 'click', vpRenewSaveBatch);
+  bind('vpRenewPaste', 'input', vpRenewApplyPaste);
+  bind('vpRenewStart', 'change', () => {
+    const st = (document.getElementById('vpRenewStart') || {}).value;
+    const ex = document.getElementById('vpRenewExpiry');
+    if(st && ex) ex.value = vpPlusMonthsMinus1(st, 6);
+  });
+}
 function closeVpEdit(){
   document.getElementById('vpEditModal').classList.remove('show');
   VP_EDIT_ID = null;
@@ -19185,6 +19373,8 @@ function closeVpEdit(){
         e.target.textContent = e.target.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
         return;
       }
+      const rn = e.target.getAttribute && e.target.getAttribute('data-vpg-renew');
+      if(rn !== null && rn !== undefined){ openVpRenew(rn); return; }
       const i = e.target.getAttribute && e.target.getAttribute('data-vpg-i');
       if(i === null || i === undefined) return;
       const r = VPG_CACHE[Number(i)];
