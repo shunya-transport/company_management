@@ -2413,6 +2413,37 @@
 
   <div id="passes" class="panel">
     <div class="card">
+      <h2>新增通行證</h2>
+      <div class="form-grid">
+        <label>車號<select id="vp_plate"></select></label>
+        <label>行號<input id="vp_company" list="vpCompanyList" placeholder="例：順亞運通股份有限公司"></label>
+        <label>廠商<input id="vp_vendor" list="vpVendorList" placeholder="例：晶呈科技股份有限公司"></label>
+        <label>品項<input id="vp_cat" list="vpCatList" placeholder="例：14種、25%氟－75%"></label>
+        <label>通行證號碼(NO)<input id="vp_no" placeholder="例：51D11525240"></label>
+        <label>通行證批號<input id="vp_batch" placeholder="例：D511150713015"></label>
+        <label>生效日<input id="vp_start" type="date"></label>
+        <label>到期日<input id="vp_expiry" type="date"></label>
+        <label>車輛指定檢驗日<input id="vp_inspect" type="date"></label>
+        <label>發證日<input id="vp_issue" type="date"></label>
+        <label>發證監理所<input id="vp_auth" list="vpAuthList" placeholder="例：新竹區監理所"></label>
+        <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
+          <input id="vp_goods" placeholder="例：第2.2類:四氟甲烷(1982)三氟甲烷(1984)八氟環丁烷(1976)"></label>
+        <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">曳引車才有；多台用「、」或空白隔開，大小寫不拘</span>
+          <textarea id="vp_trailers" rows="2" style="width:100%;font-family:inherit;" placeholder="例：02-NQ、10-PX、29-H9"></textarea></label>
+        <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="vp_trailer_more" style="width:auto;margin:0;">
+          <span>通行證正面只印了前 16 台，其餘「詳列於背面」</span></label>
+        <label>備註<input id="vp_notes" placeholder="選填"></label>
+      </div>
+      <datalist id="vpCompanyList"></datalist>
+      <datalist id="vpVendorList"></datalist>
+      <datalist id="vpCatList"></datalist>
+      <datalist id="vpAuthList"></datalist>
+      <button class="btn" id="vp_add">新增通行證</button>
+      <div id="vp_add_msg" class="muted" style="margin-top:8px;font-size:12.5px;"></div>
+    </div>
+
+    <div class="card">
       <h2>通行證查詢<span class="count-badge" id="vp_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
         載運危險物品臨時通行證。一張證對應一台車、一個廠商、一個品項，到期要重新申請。
@@ -2444,14 +2475,33 @@
     </div>
 
     <div class="card">
-      <h2>依廠商／品項彙總</h2>
-      <div class="muted" style="margin-bottom:10px;">同一批申請的通行證到期日通常一樣，這裡看每一批還剩幾天、幾台車。</div>
+      <h2>依廠商／品項彙總<span class="count-badge" id="vpg_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        同一批申請的通行證到期日通常一樣，這裡看每一批還剩幾天、幾台車。<br>
+        已經不跑的廠商或物質，按最右邊的<b>「暫不續辦」</b>，那一組就會移到「暫不續辦」頁籤，
+        上面的到期提醒也不再算它；按「恢復續辦」隨時改得回來，不會動到通行證本身。
+      </div>
+      <div class="toolbar">
+        <span id="vpgTabs" style="display:inline-flex;gap:6px;">
+          <button class="btn ghost" data-vpg="all">全部</button>
+          <button class="btn ghost" data-vpg="renew">要續辦</button>
+          <button class="btn ghost" data-vpg="hold">暫不續辦</button>
+        </span>
+        <button class="btn ghost" id="vpg_export" style="padding:8px 14px;font-size:13px;">生成續辦總表 CSV</button>
+      </div>
       <div class="table-scroll">
-        <table>
-          <thead><tr><th>廠商</th><th>品項</th><th>到期日</th><th>台數</th><th>剩餘天數</th><th>車號</th></tr></thead>
+        <table style="table-layout:fixed;width:100%;min-width:1080px;">
+          <colgroup>
+            <col style="width:200px;"><col style="width:170px;"><col style="width:100px;">
+            <col style="width:70px;"><col style="width:112px;"><col><col style="width:160px;">
+          </colgroup>
+          <thead><tr>
+            <th>廠商</th><th>品項</th><th>到期日</th><th>台數</th><th>剩餘天數</th><th>車號</th><th>續辦狀態</th>
+          </tr></thead>
           <tbody id="vpGroupBody"></tbody>
         </table>
       </div>
+      <div id="vpg_msg" class="muted" style="margin-top:8px;font-size:12.5px;"></div>
     </div>
 
     <div class="card">
@@ -2507,36 +2557,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>新增通行證</h2>
-      <div class="form-grid">
-        <label>車號<select id="vp_plate"></select></label>
-        <label>行號<input id="vp_company" list="vpCompanyList" placeholder="例：順亞運通股份有限公司"></label>
-        <label>廠商<input id="vp_vendor" list="vpVendorList" placeholder="例：晶呈科技股份有限公司"></label>
-        <label>品項<input id="vp_cat" list="vpCatList" placeholder="例：14種、25%氟－75%"></label>
-        <label>通行證號碼(NO)<input id="vp_no" placeholder="例：51D11525240"></label>
-        <label>通行證批號<input id="vp_batch" placeholder="例：D511150713015"></label>
-        <label>生效日<input id="vp_start" type="date"></label>
-        <label>到期日<input id="vp_expiry" type="date"></label>
-        <label>車輛指定檢驗日<input id="vp_inspect" type="date"></label>
-        <label>發證日<input id="vp_issue" type="date"></label>
-        <label>發證監理所<input id="vp_auth" list="vpAuthList" placeholder="例：新竹區監理所"></label>
-        <label style="grid-column:1/-1;">危險物品名稱（照通行證抄，格式：名稱(UN編號) 一個接一個）
-          <input id="vp_goods" placeholder="例：第2.2類:四氟甲烷(1982)三氟甲烷(1984)八氟環丁烷(1976)"></label>
-        <label style="grid-column:1/-1;">板架（拖車）車號　<span class="muted" style="font-weight:400;">曳引車才有；多台用「、」或空白隔開，大小寫不拘</span>
-          <textarea id="vp_trailers" rows="2" style="width:100%;font-family:inherit;" placeholder="例：02-NQ、10-PX、29-H9"></textarea></label>
-        <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="vp_trailer_more" style="width:auto;margin:0;">
-          <span>通行證正面只印了前 16 台，其餘「詳列於背面」</span></label>
-        <label>備註<input id="vp_notes" placeholder="選填"></label>
-      </div>
-      <datalist id="vpCompanyList"></datalist>
-      <datalist id="vpVendorList"></datalist>
-      <datalist id="vpCatList"></datalist>
-      <datalist id="vpAuthList"></datalist>
-      <button class="btn" id="vp_add">新增通行證</button>
-      <div id="vp_add_msg" class="muted" style="margin-top:8px;font-size:12.5px;"></div>
-    </div>
   </div>
 
   <div id="repair" class="panel">
@@ -3997,7 +4017,7 @@ let STATE = { lessees: [], leases: [], trainingTypes: [], trainings: [], employe
   docItems: [], docChecklist: [], vehicleDocuments: [], maintenanceStandards: [], maintRecords: [], maintItems: [], vendors: [], greaseRecords: [],
   refPositions: [], refDepartments: [], refYards: [], refCompanies: [], internalTrainingTypes: [],
   adminRewards: [], adminVendors: [], adminCustomers: [], adminDeputies: [], adminTolls: [],
-  adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [], vehiclePasses: [], hazmatSubstances: [],
+  adminInstructorReqs: [], adminSpecialistReqs: [], adminAnnualPlan: [], refRewardTypes: [], vehicleInsurance: [], vehiclePasses: [], passRenewals: [], hazmatSubstances: [],
   equipmentTypes: [], employeeEquipment: [], tireRecords: [], tireOrders: [], tireOrderTires: [], tireOrderCharges: [], containerInspections: [], medicalExamRecords: [], pensionElections: [],
   stockItems: [], stockTransactions: [], instruments: [], calibrationRecords: [], ureaLogs: [], ureaStockIn: [], ureaOpening: [], vehicleEquipment: [], medicalKitItems: [], annualLeaveTiers: [], leaveRecords: [], overtimeRecords: [],
   companyPhones: [], officeExtensions: [], officeLocations: [],
@@ -4124,6 +4144,7 @@ const TABLE_MAP = {
   vehicle_equipment: {table:'vehicle_equipment', pk:'record_id'},
   vehicle_insurance: {table:'vehicle_insurance', pk:'insurance_id'},
   vehicle_passes: {table:'vehicle_passes', pk:'pass_id'},
+  pass_renewals: {table:'pass_renewals', pk:'renewal_id'},
   hazmat_substances: {table:'hazmat_substances', pk:'un_no'},
   vehicle_mileage_logs: {table:'vehicle_mileage_logs', pk:'log_id'},
 };
@@ -4942,6 +4963,7 @@ async function loadState(){
   _kick('vehicleDocuments', ['vehicle_documents', SEED.vehicle_documents || [], true]);
   _kick('vehicleInsurance', ['vehicle_insurance', SEED.vehicle_insurance || [], true]);
   _kick('vehiclePasses', ['vehicle_passes', [], true]);
+  _kick('passRenewals', ['pass_renewals', [], true]);
   _kick('hazmatSubstances', ['hazmat_substances', [], true]);
   _kick('employeeEquipment', ['employee_equipment', [], true]);
   _kick('tireRecords', ['tire_records', [], true]);
@@ -18650,9 +18672,14 @@ function renderVpTable(){
     });
 
   const rows = vpRows();
-  const soon = rows.filter(p => { const n = vpDaysLeft(p.expiry_date); return n !== null && n >= 0 && n <= 60; }).length;
+  // 標了「暫不續辦」的那幾組不算進到期提醒 —— 反正到期也不會再去辦
+  const soon = rows.filter(p => { const n = vpDaysLeft(p.expiry_date);
+    return n !== null && n >= 0 && n <= 60 && !vpIsHold(p.vendor, p.category); }).length;
+  const held = rows.filter(p => vpIsHold(p.vendor, p.category)).length;
   const cnt = document.getElementById('vp_count');
-  if(cnt) cnt.textContent = `共 ${rows.length} 張` + (soon ? `／60 天內到期 ${soon} 張` : '');
+  if(cnt) cnt.textContent = `共 ${rows.length} 張`
+    + (soon ? `／60 天內到期 ${soon} 張` : '')
+    + (held ? `／暫不續辦 ${held} 張` : '');
 
   body.innerHTML = rows.map(p => {
     const n = vpDaysLeft(p.expiry_date);
@@ -18660,7 +18687,8 @@ function renderVpTable(){
       <td>${esc(p.plate || '')}</td>
       <td class="muted">${esc(p.company_name || '')}</td>
       <td>${esc(p.vendor || '')}</td>
-      <td>${esc(p.category || '')}</td>
+      <td>${esc(p.category || '')}${vpIsHold(p.vendor, p.category)
+        ? ' <span class="pill gray" style="font-size:10.5px;">暫不續辦</span>' : ''}</td>
       <td>${(() => {
         const r = hzParse(p.goods_text);
         if(r.items.length){
@@ -18695,25 +18723,131 @@ function renderVpTable(){
     </tr>`;
   }).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的通行證</td></tr>`;
 
-  // 依廠商／品項／到期日彙總
+  renderVpGroups();
+}
+
+// ===== 續辦狀態（pass_renewals，SQL_207 建的）=====
+// 單位是「廠商＋品項」，不是單張通行證：同一批不管有幾台車都只標一次，
+// 以後同一家同一個品項再申請新證，也會自動沿用這個狀態。
+function vpRenewKey(vendor, cat){ return (vendor || '—') + '\u0001' + (cat || '—'); }
+function vpRenewOf(vendor, cat){
+  const k = vpRenewKey(vendor, cat);
+  return (STATE.passRenewals || []).find(r => vpRenewKey(r.vendor, r.category) === k) || null;
+}
+function vpIsHold(vendor, cat){
+  const r = vpRenewOf(vendor, cat);
+  return !!(r && String(r.status || '') === '暫不續辦');
+}
+async function vpRenewSet(vendor, cat, hold){
+  const list = STATE.passRenewals || (STATE.passRenewals = []);
+  let r = vpRenewOf(vendor, cat);
+  const label = (vendor || '—') + '／' + (cat || '—');
+  if(hold && !r){
+    const note = prompt('「' + label + '」暫不續辦。\n原因可以留空，直接按「確定」就好。', '');
+    if(note === null) return;
+    list.push({ id: nextId(list), vendor: vendor || '—', category: cat || '—',
+                status: '暫不續辦', note: note.trim() || null,
+                updated_at: new Date().toISOString() });
+  } else if(hold){
+    const note = prompt('「' + label + '」暫不續辦。\n原因可以留空，直接按「確定」就好。', r.note || '');
+    if(note === null) return;
+    r.status = '暫不續辦'; r.note = note.trim() || null; r.updated_at = new Date().toISOString();
+  } else {
+    if(!r) return;
+    if(!confirm('「' + label + '」恢復成要續辦？到期提醒會重新把它算進去。')) return;
+    r.status = '續辦'; r.note = null; r.updated_at = new Date().toISOString();
+  }
+  const msg = document.getElementById('vpg_msg');
+  if(msg){ msg.style.color = ''; msg.textContent = '存檔中…'; }
+  try{
+    await saveState('pass_renewals', list, true);
+    if(msg){ msg.style.color = 'var(--green,#2e7d32)'; msg.textContent = label + ' 已更新為「' + (hold ? '暫不續辦' : '續辦') + '」。'; }
+  }catch(e){
+    if(msg){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '存不進去：' + (e && e.message ? e.message : e); }
+  }
+  renderVpTable();
+}
+
+// 依廠商／品項／到期日分組，順便把續辦狀態帶上
+let VPG_TAB = 'all';
+let VPG_CACHE = [];
+function vpGroupRows(){
   const g = {};
   vpRows().forEach(p => {
     const k = [p.vendor || '—', p.category || '—', p.expiry_date || '—'].join('\u0001');
     (g[k] = g[k] || []).push(p);
   });
+  return Object.keys(g)
+    .sort((a, b) => a.split('\u0001')[2].localeCompare(b.split('\u0001')[2])
+                 || a.localeCompare(b, 'zh-Hant'))
+    .map(k => {
+      const [vendor, cat, exp] = k.split('\u0001');
+      const r = vpRenewOf(vendor, cat);
+      return { vendor, cat, exp, list: g[k],
+               hold: !!(r && String(r.status || '') === '暫不續辦'),
+               note: (r && r.note) || '' };
+    });
+}
+function renderVpGroups(){
   const gbody = document.getElementById('vpGroupBody');
-  if(gbody){
-    gbody.innerHTML = Object.keys(g).sort((a, b) => a.split('\u0001')[2].localeCompare(b.split('\u0001')[2]))
-      .map(k => {
-        const [vendor, cat, exp] = k.split('\u0001');
-        const list = g[k];
-        return `<tr>
-          <td>${esc(vendor)}</td><td>${esc(cat)}</td><td>${esc(exp)}</td>
-          <td>${list.length} 台</td><td>${vpPill(exp === '—' ? null : exp)}</td>
-          <td class="muted" style="font-size:12px;">${esc(list.map(p => p.plate).filter(Boolean).sort().join('、'))}</td>
-        </tr>`;
-      }).join('') || `<tr><td colspan="6" class="empty">沒有資料</td></tr>`;
+  if(!gbody) return;
+  const all = vpGroupRows();
+  const nHold = all.filter(r => r.hold).length;
+  VPG_CACHE = all.filter(r => VPG_TAB === 'all' ? true : (VPG_TAB === 'hold' ? r.hold : !r.hold));
+
+  const tabs = document.getElementById('vpgTabs');
+  if(tabs){
+    const label = { all: '全部', renew: '要續辦', hold: '暫不續辦' };
+    const num   = { all: all.length, renew: all.length - nHold, hold: nHold };
+    [...tabs.querySelectorAll('[data-vpg]')].forEach(b => {
+      const k = b.getAttribute('data-vpg');
+      b.textContent = label[k] + '（' + num[k] + '）';
+      const on = (k === VPG_TAB);
+      b.style.background  = on ? 'var(--brand, #2f5597)' : '';
+      b.style.color       = on ? '#fff' : '';
+      b.style.borderColor = on ? 'transparent' : '';
+      b.style.fontWeight  = on ? '600' : '';
+    });
   }
+  const badge = document.getElementById('vpg_count');
+  if(badge) badge.textContent = `共 ${all.length} 批` + (nHold ? `／暫不續辦 ${nHold} 批` : '');
+
+  gbody.innerHTML = VPG_CACHE.map((r, i) => `<tr${r.hold ? ' style="opacity:.6;background:rgba(0,0,0,.025);"' : ''}>
+      <td>${esc(r.vendor)}</td>
+      <td>${esc(r.cat)}</td>
+      <td style="white-space:nowrap;">${esc(r.exp)}</td>
+      <td style="white-space:nowrap;">${r.list.length} 台</td>
+      <td style="white-space:nowrap;">${r.hold ? '<span class="pill gray">暫不續辦</span>' : vpPill(r.exp === '—' ? null : r.exp)}</td>
+      <td class="muted" style="font-size:12px;white-space:normal;word-break:keep-all;overflow-wrap:break-word;line-height:1.9;">${esc(r.list.map(p => p.plate).filter(Boolean).sort().join('、'))}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn ghost" style="padding:4px 10px;font-size:12px;" data-vpg-i="${i}">${r.hold ? '恢復續辦' : '暫不續辦'}</button>
+        ${r.hold && r.note ? `<div class="muted" style="font-size:11.5px;margin-top:4px;white-space:normal;">${esc(r.note)}</div>` : ''}
+      </td>
+    </tr>`).join('')
+    || `<tr><td colspan="7" class="empty">${VPG_TAB === 'hold' ? '目前沒有標成暫不續辦的廠商／品項' : '沒有資料'}</td></tr>`;
+}
+// 續辦總表：一批一列，照目前的篩選與頁籤出
+function vpGroupCsv(){
+  const head = ['廠商','品項','到期日','剩餘天數','續辦狀態','不續辦原因','台數','車號','行號','通行證號碼','批號'];
+  const rows = VPG_CACHE.map(r => {
+    const n = vpDaysLeft(r.exp === '—' ? null : r.exp);
+    return [r.vendor, r.cat, r.exp, (n === null ? '' : String(n)),
+            r.hold ? '暫不續辦' : '續辦', r.note || '',
+            String(r.list.length),
+            r.list.map(p => p.plate).filter(Boolean).sort().join('、'),
+            [...new Set(r.list.map(p => p.company_name).filter(Boolean))].join('、'),
+            r.list.map(p => p.pass_no).filter(Boolean).join('、'),
+            [...new Set(r.list.map(p => p.batch_no).filter(Boolean))].join('、')];
+  });
+  const tab = { all: '全部', renew: '要續辦', hold: '暫不續辦' }[VPG_TAB] || '全部';
+  const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '通行證續辦總表_' + tab + '_' + todayISO().replace(/-/g, '') + '.csv';
+  a.click();
+  const msg = document.getElementById('vpg_msg');
+  if(msg){ msg.style.color = 'var(--green,#2e7d32)';
+           msg.textContent = '已產生「' + tab + '」總表，共 ' + rows.length + ' 批。'; }
 }
 function vpFillPlateSelect(id, current){
   const sel = document.getElementById(id);
@@ -18947,6 +19081,24 @@ function closeVpEdit(){
     const el = document.getElementById(id);
     if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderVpTable);
   });
+  {
+    const tabs = document.getElementById('vpgTabs');
+    if(tabs) tabs.addEventListener('click', e => {
+      const k = e.target.getAttribute && e.target.getAttribute('data-vpg');
+      if(!k) return;
+      VPG_TAB = k;
+      renderVpGroups();
+    });
+    const gx = document.getElementById('vpg_export');
+    if(gx) gx.addEventListener('click', vpGroupCsv);
+    const gb = document.getElementById('vpGroupBody');
+    if(gb) gb.addEventListener('click', e => {
+      const i = e.target.getAttribute && e.target.getAttribute('data-vpg-i');
+      if(i === null || i === undefined) return;
+      const r = VPG_CACHE[Number(i)];
+      if(r) vpRenewSet(r.vendor, r.cat, !r.hold);
+    });
+  }
   ['vt_search','vt_own_filter','vt_due_filter'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderVtTable);
