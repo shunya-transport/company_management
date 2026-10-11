@@ -320,7 +320,7 @@
       <label>日期<input type="date" id="pc_date"></label>
       <label>科目<select id="pc_subject"></select></label>
       <label>金額<input type="number" id="pc_amount" min="0" step="1" placeholder="0"></label>
-      <label><span id="pc_payee_lb">領款人</span><input type="text" id="pc_payee" list="payeeList" placeholder="例：李奕樺"></label>
+      <label><span id="pc_payee_lb">領款人</span><input type="text" id="pc_payee" list="payeeList" placeholder="例：王小明"></label>
       <label style="grid-column:span 2;">摘要<input type="text" id="pc_memo" placeholder="例：聯華磅費、KLJ-3207 驗車"></label>
       <label>單據狀態<select id="pc_status"><option>已入帳</option><option>待補單據</option></select></label>
       <label>用途／備註<input type="text" id="pc_purpose" placeholder="可留空"></label>
@@ -792,7 +792,7 @@ function bookEntries(bid){
 //     零用金付訖 當場用抽屜的現金付掉            → 要扣
 //     舊帳已結  舊資料，當年是從抽屜出去的      → 要扣
 //
-//   使用者 115/08/13：「張誌元的零用金確定是不會進任何一個零用金帳，會由公司匯款」。
+//   使用者 115/08/13：「那位司機的零用金確定是不會進任何一個零用金帳，會由公司匯款」。
 //   所以不能寫成「結清了就扣」—— 那樣按下批次結清（銀行匯的錢）會把抽屜餘額扣掉。
 //   目前已結清的 4,870 全部是「舊帳已結」，所以這一版算出來一樣是 40,104，
 //   但以後真的按批次結清就不會再動到零用金了。
@@ -925,7 +925,7 @@ function curDir(){ const el = document.querySelector('input[name="pcDir"]:checke
 function applyDirUI(dir){
   const inc = dir === '收入';
   const lb = $('pc_payee_lb'); if(lb) lb.textContent = inc ? '交款人／來源' : '領款人';
-  const pe = $('pc_payee');    if(pe) pe.placeholder = inc ? '例：公司匯款、王小明退還' : '例：李奕樺';
+  const pe = $('pc_payee');    if(pe) pe.placeholder = inc ? '例：公司匯款、王小明退還' : '例：王小明';
   const me = $('pc_memo');
   if(me) me.placeholder = inc ? '例：公司撥補現金、退還多領的代墊款'
                               : (WEIGH_TAB ? '例：聯華磅費、KLJ-3207 驗車' : '例：加油、辦公室清潔');
@@ -1051,7 +1051,7 @@ function renderRecent(){
 // 金額（amount）是抽屜實際付出去的錢，餘額永遠以它為準；
 // weigh_fee 只是把「這筆裡面有多少是司機先墊的」標出來，給主管看要還他多少，不影響任何餘額。
 //
-// ★ 115/08/06 起這一套不再只管磅費。使用者：「張誌元申請零用金的部份，還會有驗車驗板的
+// ★ 115/08/06 起這一套不再只管磅費。使用者：「那位司機申請零用金的部份，還會有驗車驗板的
 //   費用，也會有其他的，那幫我重整，但一樣也是批次結清」。
 //   欄位名稱 weigh_fee / weigh_station / weigh_date 刻意沒改 —— 改名要同時動三個網頁和
 //   一整批舊資料，風險遠大於好處。改的是它們的「意思」：
@@ -1104,12 +1104,12 @@ function weighTag(e){
 // 結清＝已經匯款給司機了。settle_batch 有值就是結清，金額（amount / weigh_fee）永遠不會因為結清而改變。
 function isSettled(e){ return !!(e && e.settle_batch && String(e.settle_batch).trim()); }
 // 磅費有兩種：
-//   (一) 司機自己先掏現金付磅場，公司事後要「匯款」還他 —— 目前只有台中貨櫃的張誌元是這一種。
+//   (一) 司機自己先掏現金付磅場，公司事後要「匯款」還他 —— 目前只有台中貨櫃的那位司機是這一種。
 //   (二) 當場就從零用金的現金付掉了，錢已經到磅場，沒有人要拿回錢 —— 其他司機都是這一種。
 // 第二種用這個固定字串佔住 settle_batch，這樣它就不會一直躺在「還沒匯款」裡吵人，
 // 但又跟真的匯款批次分得開（批號是 1150805-1 這種數字格式，不會撞到）。
 const WG_CASH_TAG = '零用金付訖';
-// SQL #47 把張誌元 115/07 以前那些「早就匯過款、但系統裡沒有批號可以引用」的舊資料
+// SQL #47 把那位司機 115/07 以前那些「早就匯過款、但系統裡沒有批號可以引用」的舊資料
 // 標成這個字。刻意不假造 1150805-1 那種批號，也刻意不讓它跑到「匯款批次紀錄」裡去，
 // 免得下面多出一個按得下「取消結清」「重下載清單」的假批次。
 const WG_OLD_TAG  = '舊帳已結';
@@ -1328,13 +1328,13 @@ function wqMemo(r){
   if(s && d) s += '(' + d + ')';
   return s;
 }
-// 使用者 115/08/05 交代：「目前要匯磅費的只有張誌元而已，其他都是從零用金出」。
+// 使用者 115/08/05 交代：「目前要匯磅費的只有那位司機而已，其他都是從零用金出」。
 // 所以這裡只是把下拉「預設」選好，選錯隨時可以在畫面上改，不是硬性限制；
 // 以後多了一位要匯款的司機，把名字加進這個陣列就好。
 const WG_TRANSFER_DRIVERS = ['張誌元'];
 // 這位司機的錢是「當場零用金付掉」還是「要匯款還他」：只看上面那份名單，不猜。
 // ★ 115/08/06 改掉舊做法。舊版還會去翻這個人過去的紀錄、看哪一種佔多數來猜，
-//   結果吳景芳、李文源這種只要有一兩筆舊帳是用真的匯款批號結清的，就被猜成「要匯款」，
+//   結果某幾位同仁這種只要有一兩筆舊帳是用真的匯款批號結清的，就被猜成「要匯款」，
 //   新記的錢明明是當場用零用金付掉的，卻一直躺在會計那邊的「代墊費用待付」等主管匯錢。
 //   使用者的規則本來就很單純——要匯款的只有名單上那幾位——照名單走就好。
 //   萬一真的標錯了，下面明細每一列都有出口可以改回來，不會像以前那樣卡死。
@@ -1377,7 +1377,7 @@ function renderWqDriver(){
     + only.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') + '</optgroup>';
   sel.innerHTML = h;
   if(keep){ sel.value = keep; if(sel.value !== keep) sel.value = ''; }
-  // 使用者：「我只要輸入張誌元的磅費」——預設選這本帳最常出現的那位磅費司機，
+  // 使用者：「我只要輸入那位司機的磅費」——預設選這本帳最常出現的那位磅費司機，
   // 要匯款的那幾位（WG_TRANSFER_DRIVERS）在這本帳有紀錄的話優先。
   if(!sel.value){
     const hasOpt = n => Array.prototype.some.call(sel.options, o => o.value === n);
@@ -2055,7 +2055,7 @@ function wire(){
         const date = $('wq_date').value;
         if(!date) throw new Error('請填記帳日');
         const stt  = '已入帳';
-        // 這位司機是不是當場零用金付掉的，看他過去的紀錄（張誌元＝要匯款）
+        // 這位司機是不是當場零用金付掉的，看他過去的紀錄（那位司機＝要匯款）
         const cash = wqDriverCashDefault(drv);
         const use = [];
         WQ_ROWS.forEach((r, i) => {
