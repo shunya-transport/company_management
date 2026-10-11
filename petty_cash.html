@@ -880,7 +880,7 @@ async function loadAll(){
   // 車號名單，給「驗車／驗板」那一欄的下拉用。讀不到就退回讓人自己打，不會讓整頁掛掉。
   try{
     const vs = await sbSelect('vehicles', 'select=plate,status,vehicle_category&order=plate.asc');
-    STATE.vehicles = (vs || []).filter(v => v.plate && v.status !== '報廢' && v.status !== '繳銷');
+    STATE.vehicles = (vs || []).filter(v => v.plate && v.status !== '報廢' && v.status !== '繳銷' && v.status !== '賣出');
   }catch(e){ STATE.vehicles = []; }
   // 在職司機名單，給「代墊費用登錄」的下拉用。
   // 這一頁有登入閘門才敢讀 employees；沒有登入的公開頁面（電動板車預約、尿素登記）刻意不讀這張表。

@@ -35,7 +35,7 @@ async function main() {
   ]);
 
   // 報廢、繳銷的車不寄（跟儀表板 isRetiredVehicle 一樣）；「待賣出」「停用」照常寄
-  const retired = new Set(vehicles.filter(v => v.status === '報廢' || v.status === '繳銷').map(v => v.vehicle_id));
+  const retired = new Set(vehicles.filter(v => v.status === '報廢' || v.status === '繳銷' || v.status === '賣出').map(v => v.vehicle_id));
   const vehicleById = Object.fromEntries(vehicles.map(v => [v.vehicle_id, v]));
   const lesseeById = Object.fromEntries(lessees.map(l => [l.lessee_id, l.lessee_name]));
   const employeeById = Object.fromEntries(employees.map(e => [e.employee_id, e.name]));

@@ -809,7 +809,7 @@ async function loadRefs(){
     sbGet('vehicles?select=vehicle_id,plate_number,status,vehicle_category&vehicle_category=eq.' + encodeURIComponent('車輛') + '&order=plate_number.asc')
   ]);
   STATE.employees = emps || [];
-  STATE.vehicles = (vehs || []).filter(v => v.status !== '報廢' && v.status !== '繳銷');
+  STATE.vehicles = (vehs || []).filter(v => v.status !== '報廢' && v.status !== '繳銷' && v.status !== '賣出');
 }
 async function loadMonth(ym){
   const from = ym + '-01';

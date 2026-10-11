@@ -217,8 +217,8 @@ async function load(){
     const vById={}; vehicles.forEach(v=>vById[v.vehicle_id]=v);
     const latestMileage={};
     mlogs.forEach(m=>{ if(!(m.vehicle_id in latestMileage)) latestMileage[m.vehicle_id]=m.mileage; });
-    // 報廢、繳銷的車不列（跟儀表板一樣）
-    ROWS = sched.filter(s=>{ const v=vById[s.vehicle_id]; return !(v && (v.status==='報廢' || v.status==='繳銷')); }).map(s=>{
+    // 報廢、繳銷、賣出的車不列（跟儀表板一樣）
+    ROWS = sched.filter(s=>{ const v=vById[s.vehicle_id]; return !(v && (v.status==='報廢' || v.status==='繳銷' || v.status==='賣出')); }).map(s=>{
       const v=vById[s.vehicle_id]||{};
       return computeRow(s, v.plate_number||('車#'+s.vehicle_id), v.base_location||'—', latestMileage[s.vehicle_id] ?? v.current_mileage ?? null);
     });

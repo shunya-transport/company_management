@@ -920,7 +920,7 @@
 
     <div class="card">
       <h2>待賣出車輛<span class="count-badge" id="fleet_pending_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">在「編輯車輛」把「賣出/報廢/繳銷原因」選成「待賣出」的車會移到這裡，不再出現在上面的車輛清單／板架清單。<b>這些車仍然算在役</b>——保險、保養、驗車、里程、油耗一切照舊統計與提醒，不會因為掛了待賣出就漏掉。真的賣掉之後，把狀態改成「報廢」或「繳銷」，就會往上移到「車輛/板架歷史」。</div>
+      <div class="muted" style="margin-bottom:10px;">在「編輯車輛」把「賣出/報廢/繳銷原因」選成「待賣出」的車會移到這裡，不再出現在上面的車輛清單／板架清單。<b>這些車仍然算在役</b>——保險、保養、驗車、里程、油耗一切照舊統計與提醒，不會因為掛了待賣出就漏掉。真的賣掉之後，把「賣出/報廢/繳銷原因」改成「賣出」（狀態會自動跟著變成賣出），就會往上移到「車輛/板架歷史」。</div>
       <div class="toolbar">
         <input id="fleet_pending_search" placeholder="搜尋車號">
       </div>
@@ -7830,7 +7830,8 @@ function isWithinDays(dateStr, days){
 // 加「繳銷」是因為繳銷車輛以前只能掛在「停用」，會一直留在主清單裡礙眼，
 // 使用者只好按刪除，結果連歷史都查不到。現在繳銷會跟報廢一樣進歷史區。
 function isRetiredVehicle(v){
-  return !!v && (v.status === '報廢' || v.status === '繳銷');
+  // 115/10/11 加「賣出」。原因選了「賣出」但狀態還停在在役的舊資料也算（HAA-680 就是這樣跑回車輛清單的）
+  return !!v && (v.status === '報廢' || v.status === '繳銷' || v.status === '賣出' || v.retirement_reason === '賣出');
 }
 
 // ===== 「待賣出」：車還在，只是在等買主 =====
@@ -7838,7 +7839,8 @@ function isRetiredVehicle(v){
 // 都要照常跑，若併進退場車輛，這些到期提醒會整台消失，賣掉之前反而出事。
 // 所以它只影響「車輛管理」分頁的清單位置：從車輛清單／板架清單移到
 // 「車輛/板架歷史」下方的「待賣出車輛」，不跟真正在跑的車混在一起。
-// 真的賣掉之後，把狀態改成「報廢」或「繳銷」，就會照原本的流程進歷史區。
+// 真的賣掉之後，把原因改成「賣出」（狀態會跟著變賣出），就會照原本的流程進歷史區。
+const VEH_OUT = ['賣出', '報廢', '繳銷'];   // 退場的狀態／原因（狀態與原因共用這三個值）
 function isPendingSaleVehicle(v){
   return !!v && !isRetiredVehicle(v) && v.retirement_reason === '待賣出';
 }
@@ -10960,6 +10962,7 @@ function renderVehicleModalEdit(v){
         <select id="ve_status">
           <option value="在役" ${v.status==='在役'?'selected':''}>在役</option>
           <option value="停用" ${v.status==='停用'?'selected':''}>停用</option>
+          <option value="賣出" ${v.status==='賣出'?'selected':''}>賣出</option>
           <option value="報廢" ${v.status==='報廢'?'selected':''}>報廢</option>
           <option value="繳銷" ${v.status==='繳銷'?'selected':''}>繳銷</option>
         </select>
@@ -10972,7 +10975,7 @@ function renderVehicleModalEdit(v){
       </label>
       <label>加油卡號<input id="ve_fuel_card" value="${esc(v.fuel_card_no||'')}"></label>
       <label>ETC標籤編號<input id="ve_etc" value="${esc(v.etc_tag_no||'')}"></label>
-      <label>賣出/報廢/繳銷日期（狀態選報廢或繳銷時填寫；日期不可考就留白，留白不會被歷史區的一年期限藏起來）<input id="ve_retire_date" type="date" value="${esc(v.retirement_date||'')}"></label>
+      <label>賣出/報廢/繳銷日期（賣出、報廢或繳銷時填寫；日期不可考就留白，留白不會被歷史區的一年期限藏起來）<input id="ve_retire_date" type="date" value="${esc(v.retirement_date||'')}"></label>
       <label>賣出/報廢/繳銷原因（選「待賣出」的車還沒賣掉，仍算在役：保險、保養、驗車、里程提醒都照常跑，只是清單位置會從「車輛清單／板架清單」移到「車輛/板架歷史」下方的「待賣出車輛」）
         <select id="ve_retire_reason">
           <option value="" ${!v.retirement_reason?'selected':''}>未設定</option>
@@ -10993,6 +10996,14 @@ function renderVehicleModalEdit(v){
     <button class="btn ghost" id="vehicleModalCancelBtn">取消</button>
   `;
   document.getElementById('vehicleModalCancelBtn').addEventListener('click', () => renderVehicleModalView(v));
+  // 畫面上就先對齊：原因選賣出／報廢／繳銷 → 狀態跟著變；狀態選了退場、原因還空著 → 原因跟著帶
+  document.getElementById('ve_retire_reason').addEventListener('change', e => {
+    if(VEH_OUT.includes(e.target.value)) document.getElementById('ve_status').value = e.target.value;
+  });
+  document.getElementById('ve_status').addEventListener('change', e => {
+    const rs = document.getElementById('ve_retire_reason');
+    if(VEH_OUT.includes(e.target.value) && (!rs.value || rs.value === '待賣出')) rs.value = e.target.value;
+  });
 
   async function doSaveVehicle(){
     // 公司別要換算成 company_id 才存得住，對不到就先擋下來，不要動到其他欄位
@@ -11018,6 +11029,10 @@ function renderVehicleModalEdit(v){
     v.etc_tag_no = document.getElementById('ve_etc').value.trim();
     v.retirement_date = document.getElementById('ve_retire_date').value || null;
     v.retirement_reason = document.getElementById('ve_retire_reason').value || null;
+    // 狀態與原因對齊：原因選了賣出／報廢／繳銷、狀態卻還是在役或停用 → 狀態跟著原因走；
+    // 反過來狀態選了賣出／報廢／繳銷、原因空白或還掛著待賣出 → 原因帶成同一個。
+    if(VEH_OUT.includes(v.retirement_reason) && !VEH_OUT.includes(v.status)) v.status = v.retirement_reason;
+    if(VEH_OUT.includes(v.status) && (!v.retirement_reason || v.retirement_reason === '待賣出')) v.retirement_reason = v.status;
     if(isRetiredVehicle(v)){
       // 日期只有在「這一次才改成報廢/繳銷」時才自動帶今天；
       // 原本就是退場狀態、日期本來就留白的舊車，維持留白，不用推估值去補。
@@ -11037,7 +11052,8 @@ function renderVehicleModalEdit(v){
 
   document.getElementById('vehicleModalSaveBtn').addEventListener('click', async () => {
     const wasNotRetired = !isRetiredVehicle(v);
-    const nowRetiring = ['報廢','繳銷'].indexOf(document.getElementById('ve_status').value) >= 0;
+    const nowRetiring = VEH_OUT.includes(document.getElementById('ve_status').value)
+                     || VEH_OUT.includes(document.getElementById('ve_retire_reason').value);
     if(nowRetiring && wasNotRetired){
       // 新的報廢/賣出動作，先跳出二次確認，不立刻執行
       document.getElementById('ve_retire_confirm').style.display = 'block';
@@ -11051,6 +11067,7 @@ function renderVehicleModalEdit(v){
   });
   document.getElementById('ve_retire_confirm_no').addEventListener('click', () => {
     document.getElementById('ve_status').value = v.status; // 還原狀態選單，不套用報廢
+    document.getElementById('ve_retire_reason').value = v.retirement_reason || '';
     document.getElementById('ve_retire_confirm').style.display = 'none';
     document.getElementById('vehicleModalSaveBtn').style.display = 'inline-block';
   });
