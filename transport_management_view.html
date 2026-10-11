@@ -2478,6 +2478,8 @@
       <h2>依廠商／品項彙總<span class="count-badge" id="vpg_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
         同一批申請的通行證到期日通常一樣，這裡看每一批還剩幾天、幾台車。<br>
+        品項寫「16種」「29種」看不出載的是什麼，所以<b>危險物品</b>那一欄把整批的物質都列出來
+        （含簡稱／化學式）；超過 3 種的按一下就展開完整清單，匯出的總表也會一起帶出去。<br>
         已經不跑的廠商或物質，按最右邊的<b>「暫不續辦」</b>，那一組就會移到「暫不續辦」頁籤，
         上面的到期提醒也不再算它；按「恢復續辦」隨時改得回來，不會動到通行證本身。
       </div>
@@ -2490,13 +2492,14 @@
         <button class="btn ghost" id="vpg_export" style="padding:8px 14px;font-size:13px;">生成續辦總表 CSV</button>
       </div>
       <div class="table-scroll">
-        <table style="table-layout:fixed;width:100%;min-width:1080px;">
+        <table style="table-layout:fixed;width:100%;min-width:1280px;">
           <colgroup>
-            <col style="width:200px;"><col style="width:170px;"><col style="width:100px;">
-            <col style="width:70px;"><col style="width:112px;"><col><col style="width:160px;">
+            <col style="width:190px;"><col style="width:128px;"><col style="width:230px;">
+            <col style="width:98px;"><col style="width:64px;"><col style="width:106px;">
+            <col><col style="width:150px;">
           </colgroup>
           <thead><tr>
-            <th>廠商</th><th>品項</th><th>到期日</th><th>台數</th><th>剩餘天數</th><th>車號</th><th>續辦狀態</th>
+            <th>廠商</th><th>品項</th><th>危險物品</th><th>到期日</th><th>台數</th><th>剩餘天數</th><th>車號</th><th>續辦狀態</th>
           </tr></thead>
           <tbody id="vpGroupBody"></tbody>
         </table>
@@ -18783,10 +18786,43 @@ function vpGroupRows(){
     .map(k => {
       const [vendor, cat, exp] = k.split('\u0001');
       const r = vpRenewOf(vendor, cat);
+      const gd = vpGroupGoods(g[k]);
       return { vendor, cat, exp, list: g[k],
+               goods: gd.texts, items: gd.items, gnote: gd.note,
                hold: !!(r && String(r.status || '') === '暫不續辦'),
                note: (r && r.note) || '' };
     });
+}
+// 同一批通行證的危險物品原文通常一模一樣，但偶爾會有一兩張不同（補辦、換批）。
+// 這裡把整批的原文去重後各自拆開，再把物質合併成一份不重複清單。
+function vpGroupGoods(list){
+  const texts = [...new Set(list.map(p => p.goods_text).filter(Boolean))];
+  const items = [];
+  const seen = new Set();
+  const notes = [];
+  texts.forEach(t => {
+    const r = hzParse(t);
+    r.items.forEach(it => {
+      const k = hzNorm(it.zh) + '\u0001' + it.un;
+      if(seen.has(k)) return;
+      seen.add(k); items.push(it);
+    });
+    if(!r.items.length && r.note) notes.push(r.note);
+  });
+  return { texts, items, note: [...new Set(notes)].join('；') };
+}
+// 一項物質顯示成「簡稱」，沒簡稱就用中文名
+function vpGoodsLabel(it){
+  const h = hzLookup(it.zh, it.un);
+  const ab = h && h.abbr ? String(h.abbr).replace(/（.*$/, '').trim() : '';
+  return ab || (h && h.name_zh) || it.zh;
+}
+// 匯出用：中文(簡稱 UN編號)
+function vpGoodsFull(it){
+  const h = hzLookup(it.zh, it.un);
+  return (h && h.name_zh ? h.name_zh : it.zh)
+    + '(' + (h && h.abbr ? String(h.abbr).replace(/（.*$/, '').trim() + ' ' : '')
+    + (/處$/.test(String(it.un)) ? '列管' + it.un : 'UN' + it.un) + ')';
 }
 function renderVpGroups(){
   const gbody = document.getElementById('vpGroupBody');
@@ -18815,6 +18851,19 @@ function renderVpGroups(){
   gbody.innerHTML = VPG_CACHE.map((r, i) => `<tr${r.hold ? ' style="opacity:.6;background:rgba(0,0,0,.025);"' : ''}>
       <td>${esc(r.vendor)}</td>
       <td>${esc(r.cat)}</td>
+      <td style="white-space:normal;line-height:1.8;">${(() => {
+        if(r.items.length){
+          const labs = r.items.map(vpGoodsLabel);
+          const head = labs.length <= 3
+            ? `<span style="font-size:12px;">${esc(labs.join('、'))}</span><br>`
+            : `<span class="muted" style="font-size:11.5px;">${esc(labs.slice(0, 3).join('、'))} …</span><br>`;
+          return head + `<button class="name-link" data-vpg-exp="${i}" style="font-size:12px;">`
+               + (labs.length <= 3 ? '明細 ▾' : r.items.length + ' 種 ▾') + '</button>';
+        }
+        if(r.gnote) return `<span style="color:#b26a00;font-size:12px;">${esc(r.gnote.replace('（明細未登錄）', ''))}</span>`
+                         + `<br><span class="muted" style="font-size:11px;">明細還沒登錄</span>`;
+        return '<span class="muted">—</span>';
+      })()}</td>
       <td style="white-space:nowrap;">${esc(r.exp)}</td>
       <td style="white-space:nowrap;">${r.list.length} 台</td>
       <td style="white-space:nowrap;">${r.hold ? '<span class="pill gray">暫不續辦</span>' : vpPill(r.exp === '—' ? null : r.exp)}</td>
@@ -18823,15 +18872,23 @@ function renderVpGroups(){
         <button class="btn ghost" style="padding:4px 10px;font-size:12px;" data-vpg-i="${i}">${r.hold ? '恢復續辦' : '暫不續辦'}</button>
         ${r.hold && r.note ? `<div class="muted" style="font-size:11.5px;margin-top:4px;white-space:normal;">${esc(r.note)}</div>` : ''}
       </td>
+    </tr>
+    <tr class="vpg-detail" data-vpg-detail="${i}" data-filled="0" style="display:none;">
+      <td colspan="8" style="background:rgba(0,0,0,.02);"></td>
     </tr>`).join('')
-    || `<tr><td colspan="7" class="empty">${VPG_TAB === 'hold' ? '目前沒有標成暫不續辦的廠商／品項' : '沒有資料'}</td></tr>`;
+    || `<tr><td colspan="8" class="empty">${VPG_TAB === 'hold' ? '目前沒有標成暫不續辦的廠商／品項' : '沒有資料'}</td></tr>`;
 }
 // 續辦總表：一批一列，照目前的篩選與頁籤出
 function vpGroupCsv(){
-  const head = ['廠商','品項','到期日','剩餘天數','續辦狀態','不續辦原因','台數','車號','行號','通行證號碼','批號'];
+  const head = ['廠商','品項','物質數','危險物品（簡稱）','危險物品（完整）','到期日','剩餘天數',
+                '續辦狀態','不續辦原因','台數','車號','行號','通行證號碼','批號'];
   const rows = VPG_CACHE.map(r => {
     const n = vpDaysLeft(r.exp === '—' ? null : r.exp);
-    return [r.vendor, r.cat, r.exp, (n === null ? '' : String(n)),
+    return [r.vendor, r.cat,
+            r.items.length ? String(r.items.length) : '',
+            r.items.map(vpGoodsLabel).join('、') || r.gnote || '',
+            r.items.map(vpGoodsFull).join('；') || r.gnote || '',
+            r.exp, (n === null ? '' : String(n)),
             r.hold ? '暫不續辦' : '續辦', r.note || '',
             String(r.list.length),
             r.list.map(p => p.plate).filter(Boolean).sort().join('、'),
@@ -19093,6 +19150,26 @@ function closeVpEdit(){
     if(gx) gx.addEventListener('click', vpGroupCsv);
     const gb = document.getElementById('vpGroupBody');
     if(gb) gb.addEventListener('click', e => {
+      const x = e.target.getAttribute && e.target.getAttribute('data-vpg-exp');
+      if(x !== null && x !== undefined){
+        const row = gb.querySelector(`tr.vpg-detail[data-vpg-detail="${x}"]`);
+        const r = VPG_CACHE[Number(x)];
+        if(!row || !r) return;
+        if(row.getAttribute('data-filled') !== '1'){
+          row.firstElementChild.innerHTML =
+            `<div class="muted" style="padding:4px 10px 0;font-size:12px;">`
+            + esc(r.vendor) + '　' + esc(r.cat) + '　' + esc(r.exp)
+            + '　共 ' + r.items.length + ' 種'
+            + (r.goods.length > 1 ? '（這一批有 ' + r.goods.length + ' 種不同的登錄內容，分開列）' : '')
+            + '</div>'
+            + r.goods.map(t => hzDetailHtml(t)).join('');
+          row.setAttribute('data-filled', '1');
+        }
+        const open = row.style.display === 'none';
+        row.style.display = open ? '' : 'none';
+        e.target.textContent = e.target.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
+        return;
+      }
       const i = e.target.getAttribute && e.target.getAttribute('data-vpg-i');
       if(i === null || i === undefined) return;
       const r = VPG_CACHE[Number(i)];
