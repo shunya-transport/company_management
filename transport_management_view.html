@@ -1498,7 +1498,7 @@
     <div class="card">
       <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
       <div class="toolbar">
-        <input id="log_search" placeholder="搜尋姓名或課程名稱">
+        <input id="log_search" placeholder="搜尋姓名、課程名稱或編號（例：115-008）">
         <select id="log_year_filter"><option value="all">全部年份</option></select>
         <select id="log_result_filter">
           <option value="all">全部結果</option>
@@ -3755,7 +3755,26 @@ function statusLabel(dateStr, soonDays){
   return `${d} 天後到期`;
 }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+function nextId(arr){
+  let m = Math.max(0, ...arr.map(x=>x.id||0));
+  // 只載入最近兩年的表（訓練紀錄、工時、維修）：畫面上看不到的舊資料編號可能比較大，
+  // 只看畫面上這一份會配到舊資料的編號（115/10/16 內訓 115-008 存不進去就是這樣）。
+  if(typeof STATE_KEY_OF === 'object' && typeof WIN_MAX_ID === 'object'){
+    for(const prop in STATE_KEY_OF){
+      if(STATE[prop] === arr){ m = Math.max(m, WIN_MAX_ID[STATE_KEY_OF[prop]] || 0); break; }
+    }
+  }
+  return m + 1;
+}
+// 只載入兩年的表，另外記住雲端整張表目前最大的編號
+const WIN_MAX_ID = {};
+async function refreshWinMaxId(key){
+  const map = TABLE_MAP[key];
+  if(!map) return 0;
+  const r = await supaFetch(`${map.table}?select=${map.pk}&order=${map.pk}.desc.nullslast&limit=1`);
+  WIN_MAX_ID[key] = (r && r[0] && Number(r[0][map.pk])) || 0;
+  return WIN_MAX_ID[key];
+}
 // ===== 編號配發：不能只看眼前這一份清單 =====
 // nextId(STATE.employees) 只看在職名冊。但離職的人是從 employees 整列刪掉、搬到
 // employees_history 的，而他名下的必繳文件、證照、領用、勞健保紀錄全部留著（刻意保留，
@@ -5115,6 +5134,7 @@ async function loadState(){
   _kick('maintRecords', ['maint_records', SEED.maint_records || [], true]);
   _kick('adminRewards', ['admin_rewards', SEED.admin_rewards || [], true]);
   _kick('adminTolls', ['admin_tolls', SEED.admin_tolls || [], true]);
+  Object.keys(LOAD_WINDOW).forEach(k => refreshWinMaxId(k).catch(() => 0));   // 配新編號用（見 nextId）
 
   STATE.trainingTypes = SEED.training_types || [];
   STATE.internalTrainings = [];
@@ -17870,11 +17890,14 @@ function renderTrainingLogTable(){
   const q = document.getElementById('log_search').value.trim();
   const yearF = document.getElementById('log_year_filter').value;
   const resultF = document.getElementById('log_result_filter').value;
-  let rows = STATE.trainingLog;
-  if(q) rows = rows.filter(t => (t.name||'').includes(q) || (t.course_name||'').includes(q));
+  // 新的在最上面：雲端是照編號回傳的，舊寫法新增的紀錄會排在幾千筆後面，
+  // 而畫面只列前 200 筆，所以剛輸入的內訓重新整理後就「不見了」（115/10/16 內訓 115-008）。
+  let rows = STATE.trainingLog.slice().sort((a, b) =>
+    String(b.training_date || '').localeCompare(String(a.training_date || '')) || (Number(b.id) || 0) - (Number(a.id) || 0));
+  if(q) rows = rows.filter(t => [t.name, t.course_name, t.course_code, t.dept_name].some(v => String(v || '').includes(q)));   // 編號（例：115-008）也搜得到
   if(yearF !== 'all') rows = rows.filter(t => (t.training_date||'').startsWith(yearF));
   if(resultF !== 'all') rows = rows.filter(t => t.result === resultF);
-  document.getElementById('training_log_count').textContent = `共 ${rows.length} 筆`;
+  document.getElementById('training_log_count').textContent = `共 ${rows.length} 筆` + (rows.length > 200 ? '（只列最新 200 筆，舊的請用搜尋或年份找）' : '');
   const shown = rows.slice(0, 200);
   document.getElementById('trainingLogBody').innerHTML = shown.map(t => `
     <tr>
@@ -22462,6 +22485,8 @@ document.getElementById('il_emp_none').addEventListener('click', () => {
 });
 
 document.getElementById('il_add').addEventListener('click', async () => {
+  // 先問雲端目前最大編號，同事剛新增的也算進去，免得配到別人的編號
+  try{ await refreshWinMaxId('training_log'); }catch(e){}
   // 三種來源：現職（勾選，值是員工編號）、已離職（勾選，值是「L:姓名」）、自行輸入的名字
   const vals = Array.from(document.querySelectorAll('#il_emp_list input:checked')).map(el => el.value);
   const people = [];

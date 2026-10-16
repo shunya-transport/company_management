@@ -415,7 +415,7 @@
         <div class="card">
           <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
           <div class="toolbar">
-            <input id="log_search" placeholder="搜尋姓名或課程名稱">
+            <input id="log_search" placeholder="搜尋姓名、課程名稱或編號（例：115-008）">
             <select id="log_year_filter"><option value="all">全部年份</option></select>
             <select id="log_result_filter">
               <option value="all">全部結果</option>
@@ -1505,11 +1505,14 @@ function renderTrainingLogTable(){
   const q = document.getElementById('log_search').value.trim();
   const yearF = document.getElementById('log_year_filter').value;
   const resultF = document.getElementById('log_result_filter').value;
-  let rows = STATE.trainingLog;
-  if(q) rows = rows.filter(t => (t.name||'').includes(q) || (t.course_name||'').includes(q));
+  // 新的在最上面：雲端是照編號回傳的，舊寫法新增的紀錄會排在幾千筆後面，
+  // 而畫面只列前 200 筆，所以剛輸入的內訓重新整理後就「不見了」（115/10/16 內訓 115-008）。
+  let rows = STATE.trainingLog.slice().sort((a, b) =>
+    String(b.training_date || '').localeCompare(String(a.training_date || '')) || (Number(b.id) || 0) - (Number(a.id) || 0));
+  if(q) rows = rows.filter(t => [t.name, t.course_name, t.course_code, t.dept_name].some(v => String(v || '').includes(q)));   // 編號（例：115-008）也搜得到
   if(yearF !== 'all') rows = rows.filter(t => (t.training_date||'').startsWith(yearF));
   if(resultF !== 'all') rows = rows.filter(t => t.result === resultF);
-  document.getElementById('training_log_count').textContent = `共 ${rows.length} 筆`;
+  document.getElementById('training_log_count').textContent = `共 ${rows.length} 筆` + (rows.length > 200 ? '（只列最新 200 筆，舊的請用搜尋或年份找）' : '');
   const shown = rows.slice(0, 200);
   document.getElementById('trainingLogBody').innerHTML = shown.map(t => `
     <tr>
