@@ -4947,7 +4947,7 @@ async function writeConflictOK(key, map, obj){
 // 沒有基準時整列寫回去，行為跟以前一樣。
 function buildWritePlan(key, list){
   const map = TABLE_MAP[key];
-  const plan = { inserts: [], updates: [] };
+  const plan = { inserts: [], updates: [], insertItems: [] };
   if(!map) return plan;
   const strip = COMPUTED_FIELDS[key] || [];
   const hasBase = Array.isArray(LAST_GOOD[key]);
@@ -4960,7 +4960,7 @@ function buildWritePlan(key, list){
   (list || []).forEach(item => {
     if(!item) return;
     const d = hasBase ? rowDiffForSave(key, item) : null;
-    if(!d){ plan.inserts.push(fullRow(item)); return; }   // 新增的列（或沒有基準）
+    if(!d){ plan.inserts.push(fullRow(item)); plan.insertItems.push(item); return; }   // 新增的列（或沒有基準）
     const body = Object.assign({}, d);
     strip.forEach(f => delete body[f]);
     if(!Object.keys(body).length) return;                 // 這一列沒改到，不用送
@@ -4998,6 +4998,40 @@ const PATCH_MAX = 60;
 // ★ 新增的列送出前，先問雲端這些編號是不是已經有人用了。
 //   nextId() 只看這個分頁手上的資料，兩個人各自新增同一張表就會拿到同一個編號，
 //   後存的人用 upsert 會把先存的人那一整列默默蓋掉。查到撞號就停下來，不寫入。
+// 新增的列撞到雲端已經有的編號時，這幾張「不會被別張表拿編號去掛」的表就自動換一個新編號再存，
+// 不用叫使用者重新整理（115/10/21：保險新增跳出「編號 99 在雲端已經有資料了」）。
+// 人員、車輛、庫存品項、輪胎服務單這種編號會被別的資料掛著的表不在名單裡，照舊停下來。
+const AUTO_RENUMBER = new Set(['vehicle_insurance', 'vehicle_documents', 'training_log', 'maintenance_records',
+  'fuel_logs', 'toll_records', 'leave_records', 'overtime_records', 'grease_records', 'employee_trainings',
+  'employee_rewards', 'insurance_change_records', 'vehicle_mileage_logs', 'urea_logs', 'urea_stock_in',
+  'emission_test_records', 'calibration_records', 'medical_exam_records', 'axle_maintenance_records',
+  'stock_transactions', 'container_inspections', 'work_hour_daily', 'vehicle_equipment_transfers']);
+async function usedNewIds(map, rows){
+  const ids = [...new Set(rows.map(r => r[map.pk]).filter(v => v !== null && v !== undefined && v !== ''))];
+  const used = [];
+  for(let i = 0; i < ids.length; i += 150){
+    const part = ids.slice(i, i + 150);
+    const hit = await supaFetch(`${map.table}?select=${map.pk}&${map.pk}=in.(${part.map(v => encodeURIComponent(v)).join(',')})`);
+    (hit || []).forEach(r => used.push(r[map.pk]));
+  }
+  return used;
+}
+async function renumberInserts(map, plan, used){
+  for(let round = 0; round < 3 && used.length; round++){
+    const top = await supaFetch(`${map.table}?select=${map.pk}&order=${map.pk}.desc.nullslast&limit=1`);
+    let next = Math.max(Number(top && top[0] && top[0][map.pk]) || 0,
+                        ...plan.inserts.map(r => Number(r[map.pk]) || 0)) + 1;
+    const usedSet = new Set(used.map(String));
+    plan.inserts.forEach((r, i) => {
+      if(!usedSet.has(String(r[map.pk]))) return;
+      r[map.pk] = next;
+      if(plan.insertItems && plan.insertItems[i]) plan.insertItems[i].id = next;   // 畫面上那一筆也跟著換
+      next++;
+    });
+    used = await usedNewIds(map, plan.inserts);
+  }
+  return used;
+}
 async function assertNewIdsFree(map, rows){
   const ids = [...new Set(rows.map(r => r[map.pk]).filter(v => v !== null && v !== undefined && v !== ''))];
   for(let i = 0; i < ids.length; i += 150){
@@ -5015,7 +5049,14 @@ async function assertNewIdsFree(map, rows){
 async function flushWrites(key, map, plan){
   if(plan.inserts.length){
     // 只有「有基準」時 inserts 才真的是新列；沒基準時是整表寫回，那種不能拿來比
-    if(plan.hasBase) await assertNewIdsFree(map, plan.inserts);
+    if(plan.hasBase){
+      if(AUTO_RENUMBER.has(map.table)){
+        const left = await renumberInserts(map, plan, await usedNewIds(map, plan.inserts));
+        if(left.length) await assertNewIdsFree(map, plan.inserts);   // 換了三次還撞到才停下來
+      }else{
+        await assertNewIdsFree(map, plan.inserts);
+      }
+    }
     await postUpsert(map, plan.inserts);
   }
   if(!plan.updates.length) return;
