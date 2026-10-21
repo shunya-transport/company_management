@@ -4583,6 +4583,9 @@ function dbErrorHint(err){
   }
   return '';
 }
+// 錯誤提示裡用的中文表名
+const SAVE_KEY_LABEL = { employee_trainings: '外訓證照', training_log: '內部訓練歷程', roster_vehicles: '車輛', roster_employees: '人員',
+  vehicle_documents: '車輛證件', vehicle_insurance: '車輛保險', maint_records: '維修保養', leave_records: '請假', company_phones: '公務門號' };
 async function saveState(key, value, shared){
   const map = TABLE_MAP[key];
   if(!map) return;
@@ -4663,6 +4666,14 @@ async function saveState(key, value, shared){
     rememberGood(key, value);   // 這一份已經跟雲端一致了，下次失敗就還原成這個樣子
     SAVE_TRAIL.push(key);
   }catch(err){
+    // 存單筆前發現「同事（或另一個分頁）已經先改過這一筆」，使用者選了不覆蓋 —— 這不是錯誤，
+    // 不跳紅色大警告，只說明發生什麼事、下一步怎麼做（115/10/21：使用者看到紅條以為壞掉了）。
+    if(/^已取消存檔/.test(String(err && err.message || ''))){
+      rollbackAfterFail(key, value);
+      showStorageWarning('「' + (SAVE_KEY_LABEL[key] || key) + '」這次沒有存：這一筆在你開啟頁面之後，雲端已經有人改過（同事、另一個分頁或訓練管理系統），'
+        + '你在確認視窗選了「不覆蓋」，所以什麼都沒改。請重新整理頁面，看過最新內容後再改一次。');
+      throw err;
+    }
     console.error('saveState failed for', key, err);
     // 把清單還原成雲端目前的樣子。沒還原的話，剛才那一筆會留在畫面上，
     // 排除問題後再按一次儲存就會變成兩筆。
