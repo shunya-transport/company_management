@@ -945,7 +945,7 @@
           <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出/繳銷車輛
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
-          <input type="checkbox" id="vi_show_off" style="width:auto;"> 顯示已中止的保險
+          <input type="checkbox" id="vi_show_off" style="width:auto;"> 顯示已中止／已續保的舊保單
         </label>
         <button class="btn ghost" id="vi_export90" style="padding:8px 14px;font-size:13px;">匯出 90 天內到期</button>
       </div>
@@ -10492,6 +10492,9 @@ function renderViTable(){
   const viLatest = insLatestByKey();
   let rows = STATE.vehicleInsurance.filter(i => {
     if(insIsOff(i) && !showOff) return false;   // 中止的預設收起來，清單才乾淨
+    // 已經有新保單接上的舊保單，預設也收起來（115/10/21：使用者以為有效日期沒更新）。
+    // 勾「顯示已中止／已續保的舊保單」或狀態選「已續保」才列出來。
+    if(statusF === 'all' && !showOff && insRenewedTo(i, viLatest)) return false;
     const v = STATE.vehicles.find(x => x.plate === i.plate);
     return showRetired || !v || !isRetiredVehicle(v);
   });
