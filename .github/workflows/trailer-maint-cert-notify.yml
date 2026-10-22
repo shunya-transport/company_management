@@ -17,6 +17,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '22'
+          # 每次都抓 22 版最新的修補版（115/10 Node.js 安全更新要求 22.23.4 以上），
+          # 不用等 GitHub 的機器映像更新
+          check-latest: true
 
       - name: 執行到期檢查並寄信
         env:
