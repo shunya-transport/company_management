@@ -5028,6 +5028,16 @@ async function loadState(){
       STATE.insMonthlyLive = true;          // 真的讀到雲端了，結轉才敢寫回去
     }
   }catch(e){ console.error('insurance_monthly_records 讀取失敗，改用內建', e); }
+  // 勞保計費規則、繳款單調整、繳款單總額（SQL_223）。表還沒建也不影響其他功能，照預設費率算。
+  {
+    const _opt = async (p) => { try{ return (await supaFetchAll(p)) || []; }catch(e){ console.warn(p.split('?')[0] + ' 讀不到，用預設', e); return []; } };
+    const [_irs, _iadj, _ibill] = await Promise.all([
+      _opt('insurance_rate_settings?select=*&order=effective_from.desc'),
+      _opt('insurance_adjustments?select=*&order=year_roc.desc,month.desc,id.asc'),
+      _opt('insurance_bills?select=*&order=year_roc.desc,month.desc')
+    ]);
+    STATE.insRateSettings = _irs; STATE.insAdjustments = _iadj; STATE.insBills = _ibill;
+  }
   // 勞健保級距表（SQL_182 建的）。撈不到就用程式裡那份內建備援，畫面照樣能看。
   STATE.insBrackets = [];
   try{
@@ -8031,6 +8041,40 @@ function insParseKey(text){
 // 健保則不折算，加保當月就收整月（同樣由對帳單確認：員工甲 6/4 加保，勞保折 27 天、健保收整月）。
 const IB_LABOR_RATE = 0.125, IB_LABOR_EMP_SHARE = 0.7, IB_LABOR_SELF_SHARE = 0.2;
 const INS_DAY_BASE = 30;
+// 費率以 insurance_rate_settings 為準（SQL_223，依勞保局 115/09 繳款單），讀不到才用這組預設：
+//   勞保 11.5%、就保 1%，個人 20%／單位 70%；職災依行號（順亞 0.39%）；墊償 0.025%。
+//   勞保、就保要「分開」四捨五入再相加，合成 12.5% 一起算會差 1 元（例：33,300 於 9/14 加保，單位應繳 1,725 不是 1,726）。
+const INS_RATE_DEFAULT = { labor_rate:0.115, employment_rate:0.01, self_share:0.2, employer_share:0.7,
+  injury_rate:null, arrears_rate:0.00025 };
+function insRate(company, key){
+  const R = key ? insMonthRange(key) : null;
+  const list = (STATE.insRateSettings || [])
+    .filter(s => !R || !s.effective_from || String(s.effective_from).slice(0, 10) <= R.last)
+    .sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')));
+  const co = String(company || '');
+  const own = co ? list.find(s => s.company_name && co.indexOf(s.company_name) >= 0) : null;
+  const all = list.find(s => !s.company_name);
+  const pick = k => {
+    for(const s of [own, all]){ if(s && s[k] != null && s[k] !== '' && !isNaN(Number(s[k]))) return Number(s[k]); }
+    return INS_RATE_DEFAULT[k];
+  };
+  const qd = [own, all].find(s => s && s.quit_day_counts != null);
+  return { labor:pick('labor_rate'), employment:pick('employment_rate'), self:pick('self_share'),
+           emp:pick('employer_share'), injury:pick('injury_rate'), arrears:pick('arrears_rate'),
+           quitDayCounts: qd ? (qd.quit_day_counts !== false && qd.quit_day_counts !== 'false') : true };
+}
+// 這一期、這個行號在繳款單上的調整（傷病免計沖還、政府補助沖還、追溯退保、墊償基金…）
+function insAdjFor(key, company){
+  const co = String(company || '');
+  return (STATE.insAdjustments || []).filter(a => (Number(a.year_roc) * 100 + Number(a.month)) === key
+    && (!co || !a.company_name || co.indexOf(a.company_name) >= 0 || String(a.company_name).indexOf(co) >= 0));
+}
+function insBillFor(key, company){
+  const co = String(company || '');
+  return (STATE.insBills || []).find(b => (Number(b.year_roc) * 100 + Number(b.month)) === key
+    && String(b.bill_type || '勞保局') === '勞保局'
+    && (co.indexOf(b.company_name) >= 0 || String(b.company_name).indexOf(co) >= 0)) || null;
+}
 
 function insMonthRange(key){
   const y = Math.floor(key / 100) + 1911, m = key % 100;
@@ -8054,6 +8098,7 @@ function insCarryWindow(emp, key){
   let from = ins.length ? ins[ins.length - 1]
            : String((emp && (emp.insured_date || emp.hire_date)) || '').slice(0, 10);
   let to = out.length ? out[out.length - 1] : '';
+  const toFromIc = !!to;      // 退保日是投保清單上的（＝勞保局的退保日），不是離職日推的
   if(!to && emp && emp.resign_date) to = String(emp.resign_date).slice(0, 10);
   // 退保日比最後一次加保日早，表示那是更早以前的事（例如離職又復職），不算
   if(to && from && to < from) to = '';
@@ -8063,10 +8108,12 @@ function insCarryWindow(emp, key){
   if(to && to < R.first)     return { days: 0, from: from, to: to, note: '這一期之前就退保了' };
   const dayNo = s => { const d = new Date(s + 'T00:00:00'); return isNaN(d) ? null : d.getTime() / 86400000; };
   const a = dayNo(start), b = dayNo(end);
-  // 退保當天保險效力就終止，那一天不計費；沒有退保就算到月底（含當天）。
-  // 例：9/9 加保、9/11 退保 → 2 天；6/4 加保、月底還在 → 27 天。
+  // 勞保局按日計費是「加保日起到退保日止」兩頭都算（115/09 繳款單：9/09 加保、9/10 退保 → 2 天）。
+  // 投保清單沒有退保、只有離職日時，照舊不算離職當天（離職日通常是退保的隔天）。
+  // 31 日不計：一個月最多 30 天。例：9/14 加保、月底還在 → 17 天。
   const endIsQuit = !!(to && to <= R.last);
-  let days = (a === null || b === null) ? R.days : Math.round(b - a) + (endIsQuit ? 0 : 1);
+  const quitCounts = toFromIc && insRate(emp && emp.company_name, key).quitDayCounts;
+  let days = (a === null || b === null) ? R.days : Math.round(b - a) + ((endIsQuit && !quitCounts) ? 0 : 1);
   days = Math.max(0, Math.min(days, R.days));
   const full = (days >= R.days);
   return { days: full ? INS_DAY_BASE : days, from: from, to: to, full: full,
@@ -8096,6 +8143,9 @@ function insCarryBilledDeps(srcRow){
 }
 // 這個人這一期該用的職災費率：先用他自己上一期的，再退而求其次用同公司最常見的
 function insCarryInjuryRate(srcRow, companyName, srcRows){
+  // 行號有登記職災費率（insurance_rate_settings）就用登記的，比上一期月報可靠
+  const st = Number(insRate(companyName).injury) || 0;
+  if(st > 0) return st;
   const own = Number(srcRow && srcRow.injury_rate) || 0;
   if(own > 0) return own;
   const c = {};
@@ -8134,8 +8184,11 @@ function insCarryEstimate(amount, dep, rate, days, chargeHealth){
   if(!x) return null;
   const d = Math.max(0, Math.min(Number(days) || 0, INS_DAY_BASE));
   if(d < INS_DAY_BASE){
-    x.empLabor   = Math.round(x.labor   * IB_LABOR_RATE * IB_LABOR_EMP_SHARE  * d / INS_DAY_BASE);
-    x.selfLabor  = Math.round(x.labor   * IB_LABOR_RATE * IB_LABOR_SELF_SHARE * d / INS_DAY_BASE);
+    // 勞保、就保分開四捨五入再相加（勞保局繳款單的算法）
+    const k = insRate();
+    const part = (rate, share) => Math.round(x.labor * rate * share * d / INS_DAY_BASE);
+    x.empLabor   = part(k.labor, k.emp)  + part(k.employment, k.emp);
+    x.selfLabor  = part(k.labor, k.self) + part(k.employment, k.self);
     x.empInjury  = Math.round(x.injury  * x.injuryRate * d / INS_DAY_BASE);
     x.empPension = Math.round(x.pension * IB_PENSION_RATE * d / INS_DAY_BASE);
   }
@@ -8310,24 +8363,47 @@ function insCarryRefreshTotals(){
   const byCo = {};
   d.rows.filter(r => Number(r.amount) > 0).forEach(r => {
     const k = r.company || '未設定行號';
-    const c = byCo[k] = byCo[k] || { n:0, emp:0, self:0 };
+    const c = byCo[k] = byCo[k] || { n:0, emp:0, self:0, bli:0, wage:0 };
     c.n++; c.emp += r.est.empTotal; c.self += r.est.selfTotal;
+    // 勞保局那張單：勞保＋就保＋職災（個人＋單位）；墊償提繳薪資＝勞保投保薪資 × 日數/30
+    c.bli  += (r.est.empLabor || 0) + (r.est.empInjury || 0) + (r.est.selfLabor || 0);
+    c.wage += Math.round((Number(r.est.labor) || 0) * Math.min(Number(r.days) || 0, INS_DAY_BASE) / INS_DAY_BASE);
+  });
+  // 墊償基金（有登記就用登記的）、沖還／補助／追溯退保
+  Object.keys(byCo).forEach(k => {
+    const c = byCo[k], adj = insAdjFor(d.dstKey, k);
+    const fund = adj.filter(a => a.adj_type === '墊償基金');
+    c.arrears = fund.length ? fund.reduce((s, a) => s + (Number(a.employer_amount) || 0), 0)
+                            : Math.round(c.wage * insRate(k, d.dstKey).arrears);
+    c.adj = adj.filter(a => a.adj_type !== '墊償基金')
+               .reduce((s, a) => s + (Number(a.personal_amount) || 0) + (Number(a.employer_amount) || 0), 0);
+    c.bliTotal = c.bli + c.arrears + c.adj;
   });
   const noAmt = d.rows.filter(r => !(Number(r.amount) > 0)).length;
   const box = document.getElementById('insCarryTotals');
   if(!box) return;
   const cell = 'padding:4px 10px;border:1px solid var(--line,#ddd);text-align:right;';
   const head = 'padding:4px 10px;border:1px solid var(--line,#ddd);background:rgba(0,0,0,.03);';
-  const tot = { n:0, emp:0, self:0 };
-  Object.values(byCo).forEach(c => { tot.n += c.n; tot.emp += c.emp; tot.self += c.self; });
+  const tot = { n:0, emp:0, self:0, bli:0, arrears:0, adj:0, bliTotal:0 };
+  Object.values(byCo).forEach(c => { tot.n += c.n; tot.emp += c.emp; tot.self += c.self;
+    tot.bli += c.bli; tot.arrears += c.arrears; tot.adj += c.adj; tot.bliTotal += c.bliTotal; });
+  const sg = v => (v > 0 ? '＋' : v < 0 ? '－' : '') + n(Math.abs(v));
   box.innerHTML = `<table style="border-collapse:collapse;font-size:13px;">
-      <tr><th style="${head}">行號</th><th style="${head}">人數</th><th style="${head}">公司負擔</th><th style="${head}">員工自付</th></tr>
+      <tr><th style="${head}">行號</th><th style="${head}">人數</th><th style="${head}">公司負擔</th><th style="${head}">員工自付</th>
+        <th style="${head}" title="勞保＋就保＋職災，個人＋單位">勞保局：保險費</th>
+        <th style="${head}" title="工資墊償基金 0.025%">墊償</th>
+        <th style="${head}" title="傷病免計沖還、政府補助、追溯退保等，見下方「繳款單調整」">沖還／調整</th>
+        <th style="${head}">勞保局單（估）</th></tr>
       ${Object.keys(byCo).sort().map(k => `<tr>
         <th style="${head};text-align:left;">${esc(k)}</th>
-        <td style="${cell}">${byCo[k].n}</td><td style="${cell}">${n(byCo[k].emp)}</td><td style="${cell}">${n(byCo[k].self)}</td></tr>`).join('')}
+        <td style="${cell}">${byCo[k].n}</td><td style="${cell}">${n(byCo[k].emp)}</td><td style="${cell}">${n(byCo[k].self)}</td>
+        <td style="${cell}">${n(byCo[k].bli)}</td><td style="${cell}">${n(byCo[k].arrears)}</td>
+        <td style="${cell}">${byCo[k].adj ? sg(byCo[k].adj) : '—'}</td><td style="${cell}"><b>${n(byCo[k].bliTotal)}</b></td></tr>`).join('')}
       <tr><th style="${head};text-align:left;">合計</th>
         <td style="${cell}"><b>${tot.n}</b></td><td style="${cell}"><b>${n(tot.emp)}</b></td>
-        <td style="${cell}"><b>${n(tot.self)}</b></td></tr>
+        <td style="${cell}"><b>${n(tot.self)}</b></td>
+        <td style="${cell}"><b>${n(tot.bli)}</b></td><td style="${cell}"><b>${n(tot.arrears)}</b></td>
+        <td style="${cell}"><b>${tot.adj ? sg(tot.adj) : '—'}</b></td><td style="${cell}"><b>${n(tot.bliTotal)}</b></td></tr>
     </table>`;
   const badge = document.getElementById('ins_carry_badge');
   if(badge) badge.textContent = insKeyLabel(d.dstKey) + '　' + tot.n + ' 人'
@@ -8428,7 +8504,7 @@ function insCarryRender(){
     ${insCarryPeopleTable(d)}
     <div class="muted" style="font-size:12.5px;line-height:1.8;">
       表格裡的<b>投保金額、眷口、投保日數</b>都可以直接改，改完下面的合計會跟著變，按「寫入月報」存的就是改過的數字。
-      折算規則：勞保、職災、勞退 ＝ 月保費 × 投保日數 ÷ 30；<b>健保不折算</b>，加保當月就收整月
+      折算規則：勞保、職災、勞退 ＝ 月保費 × 投保日數 ÷ 30（加保日到退保日兩頭都算，31 日不算；勞保、就保分開四捨五入）；<b>健保不折算</b>，加保當月就收整月
       （同一個月加保又退保的，健保要不要收請依對帳單把那一格的勾取消）。<br>
       跟 ${esc(insKeyLabel(d.srcKey))}（${src.length} 人、公司負擔 ${n(srcEmp)}）相比：
       人數 ${tot.n - src.length >= 0 ? '＋' : ''}${tot.n - src.length} 人、
@@ -8454,6 +8530,7 @@ function insCarryRender(){
                  .map(r => r.name + '（對帳單 ' + r.depBilled + ' 口／主檔 ' + r.depRoster + ' 口）').join('、'))
           + '</span>' : ''}
     </div>
+    ${insAdjHtml(d)}
     ${insCarryHrHtml(d)}
     ${insCarryDiffHtml(d)}`;
   insCarryRefreshTotals();
@@ -8489,6 +8566,80 @@ function insCarryRender(){
     msg.innerHTML = `⚠ ${esc(insKeyLabel(d.dstKey))} 月報裡已經有 <b>${d.exists}</b> 筆了。`
       + `按「寫入月報」會<b>先把這一期原有的刪掉再重寫</b>，確定要重做再按。`;
   }
+}
+// ===== 繳款單調整（insurance_adjustments）=====
+// 勞保局繳款單第二頁那些「不是照月算」的項目：傷病給付期間免計保費的沖還、政府災害補助、追溯退保、墊償基金。
+// 登記在這裡，結轉時「勞保局單（估）」就會把它算進去，跟繳款單比較對得上。
+const INS_ADJ_TYPES = ['傷病免計沖還', '政府補助沖還', '追溯退保', '墊償基金', '其他'];
+function insAdjHtml(d){
+  const key = d.dstKey;
+  const list = insAdjFor(key, '');
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const cos = [...new Set(d.rows.map(r => r.company).filter(Boolean))].sort();
+  const bills = (STATE.insBills || []).filter(b => (Number(b.year_roc) * 100 + Number(b.month)) === key);
+  const TD = 'padding:3px 8px;border:1px solid var(--line,#ddd);';
+  return `<details style="margin:10px 0;" ${list.length ? 'open' : ''}>
+    <summary style="cursor:pointer;font-weight:700;">繳款單調整（${esc(insKeyLabel(key))}）${list.length ? '　' + list.length + ' 筆' : ''}</summary>
+    <div class="muted" style="font-size:12.5px;margin:4px 0;">傷病免計沖還、政府災害補助、追溯退保、墊償基金這類項目登記在這裡，上面「勞保局單（估）」會一起算。負數＝沖還。</div>
+    <table style="border-collapse:collapse;font-size:12.5px;">
+      <tr><th style="${TD}">行號</th><th style="${TD}">姓名</th><th style="${TD}">項目</th><th style="${TD}">期間</th>
+        <th style="${TD}">個人</th><th style="${TD}">單位</th><th style="${TD}">說明</th><th style="${TD}"></th></tr>
+      ${list.map(a => `<tr><td style="${TD}">${esc(a.company_name || '')}</td><td style="${TD}">${esc(a.name || '')}</td>
+        <td style="${TD}">${esc(a.adj_type || '')}</td>
+        <td style="${TD}">${esc([a.period_from, a.period_to].filter(Boolean).map(s => String(s).slice(0, 10)).join('～'))}</td>
+        <td style="${TD};text-align:right;">${n(a.personal_amount)}</td><td style="${TD};text-align:right;">${n(a.employer_amount)}</td>
+        <td style="${TD}">${esc(a.note || '')}</td>
+        <td style="${TD}"><button type="button" class="btn small" onclick="insAdjDel(${Number(a.id)})">刪除</button></td></tr>`).join('')
+        || `<tr><td colspan="8" style="${TD}" class="muted">這一期還沒有登記</td></tr>`}
+      <tr><td style="${TD}"><select id="ins_adj_co">${cos.map(c => `<option${c.indexOf('順亞') >= 0 ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></td>
+        <td style="${TD}"><input id="ins_adj_name" style="width:80px;" placeholder="姓名"></td>
+        <td style="${TD}"><select id="ins_adj_type">${INS_ADJ_TYPES.map(t => `<option>${t}</option>`).join('')}</select></td>
+        <td style="${TD}"><input id="ins_adj_from" type="date" style="width:130px;">～<input id="ins_adj_to" type="date" style="width:130px;"></td>
+        <td style="${TD}"><input id="ins_adj_p" type="number" style="width:80px;" placeholder="-1374"></td>
+        <td style="${TD}"><input id="ins_adj_e" type="number" style="width:80px;" placeholder="0"></td>
+        <td style="${TD}"><input id="ins_adj_note" style="width:200px;"></td>
+        <td style="${TD}"><button type="button" class="btn small" onclick="insAdjAdd()">新增</button></td></tr>
+    </table>
+    ${bills.length ? '<div style="font-size:12.5px;margin-top:6px;">已登記的繳款單：' + bills.map(b => esc(b.company_name) + ' 應繳 ' + n(b.total_amount)).join('、') + '</div>' : ''}
+    <div id="ins_adj_msg" style="font-size:12.5px;"></div>
+  </details>`;
+}
+async function insAdjAdd(){
+  const d = INS_CARRY_CACHE;
+  const msg = document.getElementById('ins_adj_msg');
+  if(!d) return;
+  const v = id => (document.getElementById(id) || {}).value || '';
+  const type = v('ins_adj_type');
+  const name = v('ins_adj_name').trim() || (type === '墊償基金' ? '（單位）' : '');
+  if(!name){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '請填姓名（墊償基金可留白）。'; return; }
+  const emp = (STATE.employees || []).find(e => String(e.name || '').trim() === name)
+           || (STATE.employeesHistory || []).find(e => String(e.name || '').trim() === name);
+  const row = { year_roc: Math.floor(d.dstKey / 100), month: d.dstKey % 100, company_name: v('ins_adj_co'),
+    name: name, adj_type: type, period_from: v('ins_adj_from') || null, period_to: v('ins_adj_to') || null,
+    personal_amount: Math.round(Number(v('ins_adj_p')) || 0), employer_amount: Math.round(Number(v('ins_adj_e')) || 0),
+    note: v('ins_adj_note') || null, source: '手動登記',
+    employee_id: emp && emp.id != null && !isNaN(Number(emp.id)) ? Number(emp.id) : null };
+  if(!row.company_name){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '請選行號。'; return; }
+  try{
+    const res = await supaFetch('insurance_adjustments', { method:'POST',
+      headers:{ 'Prefer':'return=representation' }, body: JSON.stringify([row]) });
+    (STATE.insAdjustments = STATE.insAdjustments || []).push(...(res || [row]));
+    insCarryRender();
+  }catch(err){
+    msg.style.color = 'var(--red,#c0392b)';
+    msg.textContent = /insurance_adjustments|42P01|PGRST205/.test(String(err))
+      ? '雲端還沒有 insurance_adjustments 這張表，請先執行 SQL_223。'
+      : (/23505|duplicate/.test(String(err)) ? '這一期同一個人、同一個項目已經登記過了。' : '新增失敗：' + err.message);
+  }
+}
+async function insAdjDel(id){
+  const a = (STATE.insAdjustments || []).find(x => Number(x.id) === Number(id));
+  if(!a || !confirm('刪除「' + a.name + '　' + a.adj_type + '」這筆調整？')) return;
+  try{
+    await supaFetch('insurance_adjustments?id=eq.' + Number(id), { method:'DELETE' });
+    STATE.insAdjustments = STATE.insAdjustments.filter(x => Number(x.id) !== Number(id));
+    insCarryRender();
+  }catch(err){ alert('刪除失敗：' + err.message); }
 }
 // 跟上一期逐人比：哪幾個人的金額變了、變多少。
 // 月中加保／離職那幾筆上一期本來就是按日折算，結轉成整月一定會變多，這裡會標出來。
@@ -14409,6 +14560,7 @@ function generateForm(){
           </tr>
         </tfoot>
       </table>
+      ${pcBliReconcileHtml(_pcKey, byCompany, empLabor)}
       <p style="font-size:11px;color:#999;margin-top:20px;">
         ※「雇主提撥」為公司負擔，勞保一欄已含普通事故、就業保險與職業災害；「人員自付」為由薪資扣繳的勞保、健保自付額；勞退自提未計入。<br>
         ※本表列的是<b>${esc(period)}</b>月報上實際投保的每一個人（含當月投保、月底才離職的同仁），行號也以月報上的行號為準。<br>
@@ -14854,6 +15006,31 @@ function pensionContributionCsv(){
   return csvLines(head, rows);
 }
 
+// 提撥表下方：每個行號的勞保局繳款單對帳（月報勞保＋沖還／補助＋墊償 vs 繳款單）。
+// 這一期有登記調整或繳款單才顯示。
+function pcBliReconcileHtml(key, byCompany, empLabor){
+  if(!key) return '';
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const lines = Object.entries(byCompany).map(([co, list]) => {
+    const adj = insAdjFor(key, co), bill = insBillFor(key, co);
+    if(!adj.length && !bill) return '';
+    const rows = list.reduce((s, r) => s + (empLabor(r) || 0) + (Number(r.latest.personal_labor) || 0), 0);
+    const fund = adj.filter(a => a.adj_type === '墊償基金').reduce((s, a) => s + (Number(a.employer_amount) || 0), 0);
+    const other = adj.filter(a => a.adj_type !== '墊償基金')
+                     .reduce((s, a) => s + (Number(a.personal_amount) || 0) + (Number(a.employer_amount) || 0), 0);
+    const sum = rows + fund + other;
+    const det = adj.filter(a => a.adj_type !== '墊償基金' && ((Number(a.personal_amount) || 0) + (Number(a.employer_amount) || 0)))
+      .map(a => a.name + ' ' + a.adj_type + ' ' + n((Number(a.personal_amount) || 0) + (Number(a.employer_amount) || 0))).join('、');
+    return `<div>${esc(co)}：月報勞保（個人＋單位）${n(rows)}`
+      + (other ? `　${other < 0 ? '－' : '＋'} 沖還／調整 ${n(Math.abs(other))}` : '')
+      + (fund ? `　＋ 墊償 ${n(fund)}` : '') + `　＝ <b>${n(sum)}</b>`
+      + (bill ? `　／ 勞保局繳款單 <b>${n(bill.total_amount)}</b>`
+        + (Number(bill.total_amount) === sum ? '　<span style="color:#2e7d32;">✓ 相符</span>'
+                                             : `　<span style="color:#c0392b;">差 ${n(sum - Number(bill.total_amount))}</span>`) : '')
+      + (det ? `<br><span style="color:#888;">　調整：${esc(det)}</span>` : '') + `</div>`;
+  }).filter(Boolean);
+  return lines.length ? `<div style="font-size:12px;margin-top:12px;line-height:1.8;"><b>勞保局繳款單對帳</b>${lines.join('')}</div>` : '';
+}
 // ===== 投保金額總表 =====
 // 資料來源跟「勞健保提撥計算表」同一份：勞健保月報 insurance_monthly_records。
 // 兩張表用同一份資料，數字才不會各說各話。
