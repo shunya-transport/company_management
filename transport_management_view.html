@@ -542,7 +542,10 @@
       <div class="detail-section">
         <h4>報到辦理事項</h4>
         <div class="form-grid">
+          <label>合作金庫分行<select id="sf_bank_branch" style="max-width:230px;"></select></label>
           <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
+          <label>最高學歷<input id="sf_edu" list="eduLevelList" placeholder="例：大學、高職" autocomplete="off" style="max-width:230px;"></label>
+          <label>畢業／肄業<select id="sf_edu_status" style="max-width:120px;"><option value="">（未填）</option><option>畢業</option><option>肄業</option></select></label>
           <label>勞健保投保金額<input id="sf_insured" type="number" list="insAmountList" placeholder="例：45800" style="max-width:150px;"
                  title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
           <label>眷屬加保人數<input id="sf_dep" type="number" min="0" value="0" style="max-width:110px;"
@@ -557,6 +560,7 @@
         <div id="sf_dep_list" style="margin-top:8px;"></div>
         <div id="sf_ins_hint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
         <datalist id="insAmountList"></datalist>
+        <datalist id="eduLevelList"><option value="國小"><option value="國中"><option value="高中"><option value="高職"><option value="專科"><option value="大學"><option value="碩士"><option value="博士"></datalist>
       </div>
       <div class="detail-section">
         <h4>門禁卡（入職發卡與通行權限）</h4>
@@ -12919,7 +12923,9 @@ function renderStaffModalView(e){
       <dt>體檢日期</dt><dd>${esc(e.medical_exam_date||'—')}</dd>
       <dt>司機上線日期</dt><dd>${esc(e.online_date||'—')}</dd>
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
+      <dt>合作金庫分行</dt><dd>${e.bank_branch ? esc(e.bank_branch) + (e.bank_code ? `<span class="muted">（${esc(e.bank_code)}）</span>` : '') : '—'}</dd>
       <dt>合作金庫帳號</dt><dd>${esc(e.bank_account||'—')}</dd>
+      <dt>最高學歷</dt><dd>${esc(e.education_level||'—')}${e.education_status ? '（' + esc(e.education_status) + '）' : ''}</dd>
       <dt>勞健保投保金額</dt><dd>${e.insured_salary
         ? Number(e.insured_salary).toLocaleString('en-US')
           + `<span class="muted">（勞保 ${Math.min(e.insured_salary, IB_LABOR_MAX).toLocaleString('en-US')}／職災 ${Math.min(e.insured_salary, IB_INJURY_MAX).toLocaleString('en-US')}／勞退 ${Math.min(Math.max(e.insured_salary, IB_PENSION_MIN), IB_PENSION_MAX).toLocaleString('en-US')}／健保 ${Math.min(e.insured_salary, IB_HEALTH_MAX).toLocaleString('en-US')}）</span>`
@@ -13078,7 +13084,11 @@ function renderStaffModalEdit(e){
       <label>體檢日期<input id="se_medical" type="date" value="${esc(e.medical_exam_date||'')}"></label>
       <label>司機上線日期<input id="se_online" type="date" value="${esc(e.online_date||'')}"></label>
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
+      <label>合作金庫分行<select id="se_bank_branch" style="max-width:230px;">${tcbBranchOptions(e.bank_branch)}</select></label>
       <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
+      <label>最高學歷<input id="se_edu" list="eduLevelList" value="${esc(e.education_level||'')}" placeholder="例：大學、高職" autocomplete="off" style="max-width:230px;"></label>
+      <label>畢業／肄業<select id="se_edu_status" style="max-width:120px;">${['', '畢業', '肄業'].concat(e.education_status && !['畢業','肄業'].includes(e.education_status) ? [e.education_status] : [])
+        .map(v => `<option value="${esc(v)}"${(e.education_status || '') === v ? ' selected' : ''}>${v ? esc(v) : '（未填）'}</option>`).join('')}</select></label>
       <label>勞健保投保金額<input id="se_insured" type="number" list="insAmountList" value="${esc(e.insured_salary||'')}" placeholder="例：45800" style="max-width:150px;"
              title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
       <label>眷屬加保人數<input id="se_dep" type="number" min="0" value="${esc(e.dependents_count||0)}" style="max-width:110px;"
@@ -13132,6 +13142,13 @@ function renderStaffModalEdit(e){
     e.online_date = document.getElementById('se_online').value || null;
     e.access_card_no = document.getElementById('se_card').value.trim();
     e.bank_account = document.getElementById('se_bank').value.trim() || null;
+    {
+      const _br = (document.getElementById('se_bank_branch') || {}).value || '';
+      if(_br) Object.assign(e, tcbBranchFields(_br));
+      else { e.bank_branch = null; e.bank_code = null; }
+      e.education_level  = ((document.getElementById('se_edu') || {}).value || '').trim() || null;
+      e.education_status = (document.getElementById('se_edu_status') || {}).value || null;
+    }
   e.insured_salary = document.getElementById('se_insured') && document.getElementById('se_insured').value
                      ? parseInt(document.getElementById('se_insured').value, 10) : null;
   e.dependents_count = parseInt((document.getElementById('se_dep') || {}).value, 10) || 0;
@@ -14893,6 +14910,40 @@ function ppeMatrixCsv(){
     PPE_TEAMS.map((_, i) => String(PPE_MATRIX.filter(r => (r[1][i] || 0) > 0).length))));
   return csvLines(head, rows);
 }
+// ===== 合作金庫分行（下拉選單）=====
+// 來源：合作金庫商業銀行官網「國內分行一覽表」115/07/20 版，含 OBU 共 250 家。
+// 每筆：[分行名稱, 分行代號, 分支機構代號]；機構代碼（匯款用）＝ 006 ＋ 分支機構代號。
+// 車場所在的台中、新竹、台南排最前面。分行有裁撤、新設時，照官網新版一覽表改這一份即可。
+const TCB_BRANCHES = [["台中市",[["台中分行","0220","0224"],["中興分行","0500","0501"],["五權分行","0690","0693"],["南台中分行","1070","1070"],["南屯分行","1162","1162"],["西台中分行","1173","1173"],["西屯分行","1438","1438"],["北屯分行","1494","1494"],["北台中分行","1601","1601"],["軍功分行","1656","1656"],["永安分行","1715","1715"],["中權分行","1726","1726"],["太原分行","1759","1759"],["松竹分行","1760","1760"],["中清分行","1852","1852"],["建成分行","1885","1885"],["朝馬分行","1900","1900"],["美村分行","1988","1988"],["黎明分行","2000","2000"],["精武分行","2044","2044"],["文心分行","2055","2055"],["新中分行","5160","5160"],["中港分行","5171","5171"],["衛道分行","5182","5182"],["忠明南路分行","5193","5193"],["水湳分行","5942","5942"],["豐原分行","0200","0202"],["沙鹿分行","0210","0213"],["南豐原分行","0570","0578"],["大里分行","1025","1025"],["太平分行","1128","1128"],["烏日分行","1195","1195"],["神岡分行","2077","2077"],["大雅分行","3421","3421"],["潭子分行","3616","3616"],["豐中分行","5540","5540"],["北大里分行","5551","5551"],["東沙鹿分行","5562","5562"],["后里分行","3627","3627"]]],["新竹市",[["新竹分行","0170","0176"],["北新竹分行","1243","1243"],["光復分行","1575","1575"],["竹塹分行","5632","5632"],["新竹科學園區分行","5643","5643"]]],["新竹縣",[["竹東分行","0650","0659"],["竹北分行","1313","1313"],["六家分行","3410","3410"],["東竹北分行","5517","5517"]]],["台南市",[["台南分行","0300","0305"],["成功分行","0310","0316"],["南興分行","0680","0682"],["成大分行","1014","1014"],["東台南分行","1232","1232"],["北台南分行","1472","1472"],["赤崁分行","5218","5218"],["府城分行","5229","5229"],["開元分行","5230","5230"],["新營分行","0290","0291"],["佳里分行","0610","0615"],["永康分行","1531","1531"],["北新營分行","5698","5698"],["仁德分行","5702","5702"],["南永康分行","5713","5713"]]],["台北市",[["館前分行","0020","0028"],["西門分行","0030","0039"],["延平分行","0040","0040"],["大稻埕分行","0050","0051"],["東門分行","0060","0062"],["松山分行","0070","0073"],["南京東路分行","0410","0419"],["五洲分行","0411","1335"],["大同分行","0430","0431"],["忠孝分行","0450","0453"],["景美分行","0460","0464"],["士林分行","0470","0475"],["台北分行","0540","0545"],["營業部","0560","0567"],["城東分行","0600","0604"],["大安分行","0760","0763"],["民權分行","0770","0774"],["東台北分行","0796","0796"],["城內分行","0800","0800"],["建國分行","0811","0811"],["圓山分行","0822","0822"],["信義分行","0833","0833"],["長春分行","0844","0844"],["仁愛分行","0855","0855"],["玉成分行","0866","0866"],["古亭分行","0877","0877"],["長安分行","0888","0888"],["松興分行","0899","0899"],["民族分行","0903","0903"],["復興分行","0914","0914"],["民生分行","0936","0936"],["新生分行","0947","0947"],["國際金融業務分行","1069","1069"],["復旦分行","1254","1254"],["臺大分行","1346","1346"],["三興分行","1405","1405"],["石牌分行","1427","1427"],["內湖分行","1564","1564"],["南港分行","3100","3100"],["新湖分行","3557","3557"],["自強分行","5012","5012"],["中山分行","5023","5023"],["敦南分行","5034","5034"],["世貿分行","5056","5056"],["北士林分行","5089","5089"],["信維分行","5090","5090"],["大湖分行","5115","5115"],["國醫中心分行","5137","5137"],["南門分行","5159","5159"],["大直分行","5919","5919"]]],["新北市",[["新店分行","0080","0084"],["北新分行","0081","1324"],["永和分行","0090","0095"],["三重分行","0100","0109"],["板橋分行","0110","0110"],["汐止分行","0480","0486"],["新莊分行","0490","0497"],["中和分行","0620","0626"],["東三重分行","0670","0671"],["南勢角分行","0720","0729"],["東新莊分行","0981","0981"],["蘆洲分行","0992","0992"],["海山分行","1036","1036"],["埔墘分行","1081","1081"],["雙和分行","1449","1449"],["土城分行","1450","1450"],["三峽分行","1519","1519"],["二重分行","1586","1586"],["五股分行","3122","3122"],["樹林分行","3133","3133"],["大坪林分行","3199","3199"],["鶯歌分行","3373","3373"],["新樹分行","3409","3409"],["北中和分行","3546","3546"],["丹鳳分行","3568","3568"],["北三峽分行","5300","5300"],["板新分行","5311","5311"],["寶橋分行","5355","5355"],["新泰分行","5366","5366"],["北土城分行","5377","5377"],["南汐止分行","5388","5388"],["五股工業區分行","5403","5403"],["淡水分行","9043","9043"],["林口文化分行","0660","0660"]]],["基隆市",[["基隆分行","0120","0121"],["東基隆分行","5207","5207"]]],["桃園市",[["桃園分行","0150","0154"],["大溪分行","0151","1379"],["龜山分行","0152","1368"],["中壢分行","0160","0165"],["龍潭分行","0161","1380"],["慈文分行","1092","1092"],["迴龍分行","1117","1117"],["南桃園分行","1210","1210"],["中原分行","1391","1391"],["平鎮分行","1542","1542"],["林口分行","3155","3155"],["八德分行","3443","3443"],["蘆竹分行","3535","3535"],["大園分行","3591","3591"],["青埔分行","3650","3650"],["東桃園分行","5436","5436"],["壢新分行","5447","5447"],["南崁分行","5458","5458"],["新明分行","5470","5470"],["楊梅分行","5481","5481"],["長庚分行","3638","3638"]]],["苗栗縣",[["苗栗分行","0180","0187"],["頭份分行","0190","0198"],["北苗栗分行","5528","5528"],["竹南分行","5539","5539"]]],["南投縣",[["南投分行","0250","0257"],["竹山分行","0251","1265"],["埔里分行","0700","0707"],["草屯分行","5573","5573"],["集集分行","5584","5584"]]],["彰化縣",[["彰化分行","0230","0235"],["員林分行","0240","0246"],["彰營分行","1139","1139"],["彰儲分行","1140","1140"],["溪湖分行","1184","1184"],["和美分行","1209","1209"],["大竹分行","3030","3030"],["伸港分行","3111","3111"],["鹿港分行","3395","3395"],["員新分行","5609","5609"],["南彰化分行","5610","5610"],["北斗分行","5621","5621"]]],["雲林縣",[["斗六分行","0260","0268"],["北港分行","0270","0279"],["虎尾分行","1151","1151"],["林內分行","3074","3074"],["雲林分行","5665","5665"]]],["嘉義市",[["嘉義分行","0280","0280"],["南嘉義分行","0640","0648"],["北嘉義分行","1520","1520"],["東嘉義分行","5849","5849"]]],["嘉義縣",[["朴子分行","0730","0730"],["民雄分行","3661","3661"]]],["高雄市",[["高雄分行","0340","0349"],["前鎮分行","0341","1276"],["新興分行","0350","0350"],["憲德分行","0351","1302"],["苓雅分行","0510","0512"],["三民分行","0590","0590"],["南高雄分行","0630","0637"],["東高雄分行","0780","0785"],["前金分行","1003","1003"],["灣內分行","1287","1287"],["光華分行","1461","1461"],["一心路分行","1508","1508"],["鼓山分行","3465","3465"],["高雄科技園區分行","3524","3524"],["港都分行","5241","5241"],["七賢分行","5252","5252"],["十全分行","5274","5274"],["九如分行","5285","5285"],["小港分行","5296","5296"],["楠梓分行","3649","3649"],["鳳山分行","0320","0327"],["岡山分行","0330","0338"],["路竹分行","0331","1298"],["大發分行","1553","1553"],["大社分行","3476","3476"],["林園分行","3513","3513"],["旗山分行","3580","3580"],["鳳松分行","5735","5735"],["美濃分行","5757","5757"],["大樹分行","5768","5768"],["仁美分行","6064","6064"],["五甲分行","9021","9021"]]],["屏東縣",[["屏東分行","0360","0361"],["潮州分行","0370","0372"],["屏南分行","1221","1221"],["東港分行","5816","5816"],["萬丹分行","5827","5827"],["枋寮分行","5838","5838"],["社皮分行","6097","6097"]]],["宜蘭縣",[["宜蘭分行","0130","0132"],["蘇澳分行","0140","0143"],["羅東分行","0580","0589"],["北羅東分行","5414","5414"],["礁溪分行","5425","5425"]]],["花蓮縣",[["花蓮分行","0380","0383"],["北花蓮分行","5850","5850"]]],["台東縣",[["台東分行","0390","0394"]]],["澎湖縣",[["澎湖分行","0400","0408"]]]];
+const TCB_BANK_NAME = '合作金庫商業銀行';
+function tcbBranchFind(name){
+  const n = String(name || '').trim();
+  if(!n) return null;
+  for(const [region, list] of TCB_BRANCHES){
+    const hit = list.find(b => b[0] === n || b[0] === n + '分行');
+    if(hit) return { region: region, name: hit[0], branchNo: hit[1], instNo: hit[2] };
+  }
+  return null;
+}
+// 選了分行 → 銀行、分行、機構代碼一起帶；不在一覽表上的（舊資料）只保留分行名稱
+function tcbBranchFields(name){
+  const n = String(name || '').trim();
+  if(!n) return {};
+  const b = tcbBranchFind(n);
+  return b ? { bank_name: TCB_BANK_NAME, bank_branch: b.name, bank_code: '006' + b.instNo }
+           : { bank_branch: n };
+}
+function tcbBranchOptions(current){
+  const cur = String(current || '').trim();
+  const known = tcbBranchFind(cur);
+  const sel = known ? known.name : cur;
+  return `<option value="">（請選擇分行）</option>`
+    + (cur && !known ? `<option value="${esc(cur)}" selected>${esc(cur)}（原資料，不在官網一覽表）</option>` : '')
+    + TCB_BRANCHES.map(([region, list]) => `<optgroup label="${esc(region)}">`
+        + list.map(b => `<option value="${esc(b[0])}"${b[0] === sel ? ' selected' : ''}>${esc(b[0])}（${b[1]}）</option>`).join('')
+        + `</optgroup>`).join('');
+}
+(function(){ const s = document.getElementById('sf_bank_branch'); if(s) s.innerHTML = tcbBranchOptions(''); })();
 function bankRosterRows(){
   return (STATE.employees || [])
     .filter(e => e.status === '在職')
@@ -23259,6 +23310,9 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     emergency_contact: document.getElementById('sf_emergency_contact').value.trim(),
     emergency_phone: document.getElementById('sf_emergency_phone').value.trim(),
     bank_account: document.getElementById('sf_bank').value.trim() || null,
+    ...tcbBranchFields(document.getElementById('sf_bank_branch').value),
+    education_level: document.getElementById('sf_edu').value.trim() || null,
+    education_status: document.getElementById('sf_edu_status').value || null,
     insured_salary: document.getElementById('sf_insured').value ? parseInt(document.getElementById('sf_insured').value, 10) : null,
     dependents_count: parseInt(document.getElementById('sf_dep').value, 10) || 0,
     dependents_detail: depRead('sf'),
@@ -23316,7 +23370,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
         + '」沒有存進去（上面那個錯誤訊息就是原因）。\n\n'
         + '請到「人員管理 → 在職人員清單」點他的名字，把這幾項補登一次。');
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card'].forEach(id=>document.getElementById(id).value='');
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_edu','sf_edu_status'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
   document.getElementById('sf_empins_status').checked = false;
   applyStaffTypeDefaults();
   renderStaffNoBox();
