@@ -15082,16 +15082,19 @@ function referralSchedule(e, left){
   const paid = refPaidMap(e);
   rules.forEach(r => {
     const due = refAddMonths(start, r.months);
-    const pd = String(paid[r.months] || paid[String(r.months)] || '').slice(0, 10);
+    // 已發放：一般填日期；以前發過但查不到日期的，補登成「已結案（補登）」這類文字
+    const pdRaw = String(paid[r.months] || paid[String(r.months)] || '').trim();
+    const pdIsDate = /^\d{4}-\d{2}-\d{2}/.test(pdRaw);
+    const pd = pdIsDate ? pdRaw.slice(0, 10) : '';
     let st, code;
-    if(pd){ st = '已發放 ' + pd; code = 'paid'; }
+    if(pdRaw){ st = pdIsDate ? '已發放 ' + pd : (/^已/.test(pdRaw) ? pdRaw : '已發放（' + pdRaw + '）'); code = 'paid'; }
     else if(out.excluded){ st = '不適用'; code = 'na'; }
     else if(resign && resign < due){ st = '離職，不發'; code = 'na'; }
     else if(due.slice(0, 7) === thisMonth){ st = '本月到期'; code = 'month'; }
     else if(due < today){ st = '已到期・待發放'; code = 'over'; }
     else { st = '未到期'; code = 'future'; }
     if(code === 'month' || code === 'over'){ out.due++; out.pendingAmt += r.amount; }
-    out.items.push({ months: r.months, amount: r.amount, due: due, paid: pd, status: st, code: code });
+    out.items.push({ months: r.months, amount: r.amount, due: due, paid: pd, paidText: pdIsDate ? '' : pdRaw, status: st, code: code });
   });
   return out;
 }
@@ -15100,7 +15103,7 @@ function referralEditHtml(e){
   if(!String(e.referrer_name || '').trim()) return '';
   const s = referralSchedule(e, false);
   if(!s.items.length) return '';
-  return s.items.map(it => `<label>推薦獎金 滿${it.months}個月（${it.due || '—'}）已發放日
+  return s.items.map(it => `<label>推薦獎金 滿${it.months}個月（${it.due || '—'}）已發放日${it.paidText ? `<span class="muted" style="font-weight:400;">　目前：${esc(it.paidText)}</span>` : ''}
       <input id="se_ref_paid_${it.months}" type="date" value="${esc(it.paid || '')}" style="max-width:160px;"
              title="${it.amount.toLocaleString('en-US')} 元；發放後填日期，每月提醒信就不會再列"></label>`).join('')
     + `<label>推薦獎金備註<input id="se_ref_note" value="${esc(e.referral_note || '')}" placeholder="寫「不適用…」就不列入" style="max-width:230px;"></label>`;
@@ -15109,7 +15112,9 @@ function referralReadPaid(e){
   const p = Object.assign({}, refPaidMap(e));
   document.querySelectorAll('[id^="se_ref_paid_"]').forEach(el => {
     const m = el.id.replace('se_ref_paid_', '');
-    if(el.value) p[m] = el.value; else delete p[m];
+    // 日期留白：原本是日期就清掉；原本是「已結案（補登）」這類文字就保留
+    if(el.value) p[m] = el.value;
+    else if(/^\d{4}-\d{2}-\d{2}/.test(String(p[m] || ''))) delete p[m];
   });
   return Object.keys(p).length ? p : null;
 }
