@@ -1,0 +1,30 @@
+name: 推薦人獎金提醒
+
+on:
+  schedule:
+    # 每月1號 台灣時間 08:20（UTC 00:20）
+    - cron: '20 0 1 * *'
+  workflow_dispatch: {}
+
+jobs:
+  check-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v5
+
+      - name: 設定 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          check-latest: true
+
+      - name: 檢查推薦獎金並寄信
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          # 想改寄給別的主管就在 GitHub Secrets 加 REFERRAL_NOTIFY_EMAIL（多個用逗號分隔）；沒設就寄 NOTIFY_EMAIL
+          REFERRAL_NOTIFY_EMAIL: ${{ secrets.REFERRAL_NOTIFY_EMAIL }}
+        run: node check_referral_bonus.js
