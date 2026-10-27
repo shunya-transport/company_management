@@ -819,10 +819,10 @@
     </div>
 
     <div class="card">
-      <h2>各車型車輛數<span class="count-badge" id="fleet_type_sum_badge"></span></h2>
+      <h2>各車型車輛數（含板架）<span class="count-badge" id="fleet_type_sum_badge"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
-        以<b>車輛清單</b>上的車為準（在役＋停用，不含板架、待賣出、已賣出／報廢），依車型分、各行號各幾台。
-        點車型名稱，上面的車輛清單就只列那個車型。
+        以<b>車輛清單</b>、<b>板架清單</b>上的車為準（在役＋停用，不含待賣出、已賣出／報廢），依車型分、各行號各幾台。
+        點車輛的車型名稱，上面的車輛清單就只列那個車型。
       </div>
       <div class="table-scroll">
         <table>
@@ -830,22 +830,6 @@
           <tbody id="fleetTypeSumBody"></tbody>
         </table>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>匯出車輛配備檢查表<span class="count-badge" id="eqchk_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">
-        產生跟 Google 表單彙整檔<b>一模一樣的 26 欄</b>，Excel 打開可以整片複製貼回去。
-        只拉<b>在役、而且不是待賣出</b>的營業車（堆高機、夾櫃機、公務車不在這張表的範圍）。
-        「有／NA」取自車用配備登錄的數量，濾毒罐與滅火器放的是證件效期的到期日；
-        檢查日期與檢查人員留白，由現場填。
-      </div>
-      <div class="toolbar">
-        <label class="muted">年月（民國） <input id="eqchk_ym" placeholder="11509" maxlength="5" style="width:90px;"></label>
-        <button class="btn" id="eqchk_export">匯出檢查表 CSV</button>
-        <span class="muted" id="eqchk_msg"></span>
-      </div>
-      <div class="muted" id="eqchk_note" style="margin-top:6px;"></div>
     </div>
 
     <div class="card">
@@ -1042,6 +1026,22 @@
         </table>
       </div>
       <div id="mm_note" class="muted" style="margin-top:8px;font-size:12px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>匯出車輛配備檢查表<span class="count-badge" id="eqchk_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        產生跟 Google 表單彙整檔<b>一模一樣的 26 欄</b>，Excel 打開可以整片複製貼回去。
+        只拉<b>在役、而且不是待賣出</b>的營業車（堆高機、夾櫃機、公務車不在這張表的範圍）。
+        「有／NA」取自車用配備登錄的數量，濾毒罐與滅火器放的是證件效期的到期日；
+        檢查日期與檢查人員留白，由現場填。
+      </div>
+      <div class="toolbar">
+        <label class="muted">年月（民國） <input id="eqchk_ym" placeholder="11509" maxlength="5" style="width:90px;"></label>
+        <button class="btn" id="eqchk_export">匯出檢查表 CSV</button>
+        <span class="muted" id="eqchk_msg"></span>
+      </div>
+      <div class="muted" id="eqchk_note" style="margin-top:6px;"></div>
     </div>
   </div>
 
@@ -12478,37 +12478,53 @@ function renderFleetTypeSummary(){
   const head = document.getElementById('fleetTypeSumHead');
   const body = document.getElementById('fleetTypeSumBody');
   if(!head || !body) return;
-  const pool = (STATE.vehicles || []).filter(v =>
-    v.vehicle_category === '車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v));
+  // 車輛＋板架：跟車輛清單、板架清單同一個母體（在役＋停用，不含待賣出、已退場）
+  const live = v => !isRetiredVehicle(v) && !isPendingSaleVehicle(v);
+  const groups = [
+    { key:'車輛', label:'車輛', pool:(STATE.vehicles || []).filter(v => v.vehicle_category === '車輛' && live(v)), link:true },
+    { key:'板架', label:'板架', pool:(STATE.vehicles || []).filter(v => v.vehicle_category === '板架' && live(v)), link:false }
+  ];
   const typeOf = v => String(v.vehicle_type || '').trim() || '（未填車型）';
   const coOf = v => String(v.company_name || '').trim() || '未設定行號';
-  const cnt = {}, coTot = {}, typeTot = {}, stop = {};
-  pool.forEach(v => {
-    const t = typeOf(v), c = coOf(v);
-    (cnt[t] = cnt[t] || {})[c] = (cnt[t][c] || 0) + 1;
-    coTot[c] = (coTot[c] || 0) + 1;
-    typeTot[t] = (typeTot[t] || 0) + 1;
-    if(v.status === '停用') stop[t] = (stop[t] || 0) + 1;
+  const coAll = {};
+  groups.forEach(g => {
+    g.cnt = {}; g.coTot = {}; g.typeTot = {}; g.stop = {};
+    g.pool.forEach(v => {
+      const t = typeOf(v), c = coOf(v);
+      (g.cnt[t] = g.cnt[t] || {})[c] = (g.cnt[t][c] || 0) + 1;
+      g.coTot[c] = (g.coTot[c] || 0) + 1;
+      g.typeTot[t] = (g.typeTot[t] || 0) + 1;
+      coAll[c] = (coAll[c] || 0) + 1;
+      if(v.status === '停用') g.stop[t] = (g.stop[t] || 0) + 1;
+    });
+    g.types = Object.keys(g.typeTot).sort((a, b) => g.typeTot[b] - g.typeTot[a] || a.localeCompare(b, 'zh-Hant'));
+    g.stopN = Object.values(g.stop).reduce((a, b) => a + b, 0);
   });
-  const cos = Object.keys(coTot).sort((a, b) => coTot[b] - coTot[a] || a.localeCompare(b, 'zh-Hant'));
-  const types = Object.keys(typeTot).sort((a, b) => typeTot[b] - typeTot[a] || a.localeCompare(b, 'zh-Hant'));
+  const cos = Object.keys(coAll).sort((a, b) => coAll[b] - coAll[a] || a.localeCompare(b, 'zh-Hant'));
+  const total = groups.reduce((s, g) => s + g.pool.length, 0);
   const badge = document.getElementById('fleet_type_sum_badge');
-  if(badge) badge.textContent = `${types.length} 種車型、共 ${pool.length} 台`;
+  if(badge) badge.textContent = groups.map(g => `${g.label} ${g.pool.length} 台`).join('、') + `，共 ${total} 台`;
   const R = 'text-align:right;';
+  const n = v => v ? v + ' 台' : '<span class="muted">—</span>';
   head.innerHTML = `<tr><th>車型</th>${cos.map(c => `<th style="${R}" title="${esc(c)}">${esc(shortCompany(c))}</th>`).join('')}`
     + `<th style="${R}">合計</th><th style="${R}">其中停用</th></tr>`;
   const typeSel = (document.getElementById('fleet_type_filter') || {}).value || 'all';
-  body.innerHTML = types.map(t => `<tr${typeSel === (t === '（未填車型）' ? '' : t) ? ' style="background:rgba(46,125,50,.07);"' : ''}>
-      <td>${t === '（未填車型）' ? `<span class="muted">${t}</span>`
-            : `<button class="name-link" data-fleet-type="${esc(t)}">${esc(t)}</button>`}</td>
-      ${cos.map(c => `<td style="${R}">${cnt[t][c] ? cnt[t][c] + ' 台' : '<span class="muted">—</span>'}</td>`).join('')}
-      <td style="${R}"><b>${typeTot[t]} 台</b></td>
-      <td style="${R}">${stop[t] ? stop[t] + ' 台' : '<span class="muted">—</span>'}</td></tr>`).join('')
-    + (types.length ? `<tr style="font-weight:700;background:#fafafa;"><td>合計</td>
-      ${cos.map(c => `<td style="${R}">${coTot[c]} 台</td>`).join('')}
-      <td style="${R}">${pool.length} 台</td>
-      <td style="${R}">${Object.values(stop).reduce((a, b) => a + b, 0) || '—'}${Object.keys(stop).length ? ' 台' : ''}</td></tr>` : '')
-    || `<tr><td colspan="${cos.length + 3}" class="empty">尚無車輛資料</td></tr>`;
+  const cols = cos.length + 3;
+  const html = groups.filter(g => g.pool.length).map(g =>
+      `<tr style="background:#EEF3F1;font-weight:700;"><td colspan="${cols}">${esc(g.label)}</td></tr>`
+    + g.types.map(t => `<tr${g.link && typeSel === t ? ' style="background:rgba(46,125,50,.07);"' : ''}>
+        <td style="padding-left:18px;">${t === '（未填車型）' ? `<span class="muted">${t}</span>`
+              : (g.link ? `<button class="name-link" data-fleet-type="${esc(t)}">${esc(t)}</button>` : esc(t))}</td>
+        ${cos.map(c => `<td style="${R}">${n(g.cnt[t][c])}</td>`).join('')}
+        <td style="${R}"><b>${g.typeTot[t]} 台</b></td>
+        <td style="${R}">${n(g.stop[t])}</td></tr>`).join('')
+    + `<tr style="font-weight:700;background:#fafafa;"><td>${esc(g.label)}小計</td>
+        ${cos.map(c => `<td style="${R}">${n(g.coTot[c])}</td>`).join('')}
+        <td style="${R}">${g.pool.length} 台</td><td style="${R}">${n(g.stopN)}</td></tr>`).join('');
+  body.innerHTML = html ? html + `<tr style="font-weight:700;background:#f1f1f1;"><td>合計（車輛＋板架）</td>
+        ${cos.map(c => `<td style="${R}">${n(coAll[c])}</td>`).join('')}
+        <td style="${R}">${total} 台</td><td style="${R}">${n(groups.reduce((s, g) => s + g.stopN, 0))}</td></tr>`
+    : `<tr><td colspan="${cols}" class="empty">尚無車輛資料</td></tr>`;
   if(!body._bound){
     body._bound = true;
     body.addEventListener('click', ev => {
