@@ -451,6 +451,7 @@
         <div class="form-grid">
           <label>合作金庫分行<select id="sf_bank_branch" style="max-width:230px;"></select></label>
           <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
+          <label>推薦人（介紹人）<input id="sf_referrer" list="referrerList" placeholder="沒有就留白" autocomplete="off" style="max-width:150px;" onfocus="referrerFillList()"></label>
           <label>最高學歷<input id="sf_edu" list="eduLevelList" placeholder="例：大學、高職" autocomplete="off" style="max-width:150px;"></label>
           <label>學校<input id="sf_edu_school" placeholder="例：國立勤益科技大學" autocomplete="off" style="max-width:230px;"></label>
           <label>科系<input id="sf_edu_major" placeholder="例：機械工程系" autocomplete="off" style="max-width:200px;"></label>
@@ -469,6 +470,7 @@
         <div id="sf_dep_list" style="margin-top:8px;"></div>
         <div id="sf_ins_hint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.7;"></div>
         <datalist id="insAmountList"></datalist>
+        <datalist id="referrerList"></datalist>
         <datalist id="eduLevelList"><option value="國小"><option value="國中"><option value="高中"><option value="高職"><option value="專科"><option value="大學"><option value="碩士"><option value="博士"></datalist>
       </div>
       <div class="detail-section">
@@ -2835,6 +2837,7 @@
             <option value="ppe_signoff">物品使用登記表（PPE／個人保管品，運025-A1）</option>
             <option value="ppe_matrix">各車隊基本領用量對照表</option>
             <option value="bank_roster">在職人員合作金庫帳號總表</option>
+            <option value="referral_bonus">推薦人（介紹人）獎金表</option>
             <option value="leave_slip">請假單（A4 橫式，可空白列印）</option>
             <option value="bp_sheet">血壓量測紀錄表（A4 橫式，一週一張）</option>
             <option value="alcohol_sheet">酒測量測紀錄表（A4 橫式，一週一張）</option>
@@ -5057,6 +5060,8 @@ async function loadState(){
       _opt('insurance_bills?select=*&order=year_roc.desc,month.desc')
     ]);
     STATE.insRateSettings = _irs; STATE.insAdjustments = _iadj; STATE.insBills = _ibill;
+    // 推薦人（介紹人）獎金規則（SQL_225）；讀不到用程式內建的同一組
+    STATE.referralRules = await _opt('referral_bonus_rules?select=*&order=effective_from.desc,months.asc');
   }
   // 勞健保級距表（SQL_182 建的）。撈不到就用程式裡那份內建備援，畫面照樣能看。
   STATE.insBrackets = [];
@@ -12118,6 +12123,7 @@ function renderStaffModalView(e){
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
       <dt>合作金庫分行</dt><dd>${e.bank_branch ? esc(e.bank_branch) + (e.bank_code ? `<span class="muted">（${esc(e.bank_code)}）</span>` : '') : '—'}</dd>
       <dt>合作金庫帳號</dt><dd>${esc(e.bank_account||'—')}</dd>
+      <dt>推薦人</dt><dd>${referralDetailHtml(e)}</dd>
       <dt>最高學歷</dt><dd>${[e.education_level, e.education_school, e.education_major].filter(x => String(x || '').trim()).map(x => esc(x)).join('　') || '—'}${e.education_status ? '（' + esc(e.education_status) + '）' : ''}</dd>
       <dt>勞健保投保金額</dt><dd>${e.insured_salary
         ? Number(e.insured_salary).toLocaleString('en-US')
@@ -12279,6 +12285,8 @@ function renderStaffModalEdit(e){
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
       <label>合作金庫分行<select id="se_bank_branch" style="max-width:230px;">${tcbBranchOptions(e.bank_branch)}</select></label>
       <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
+      <label>推薦人（介紹人）<input id="se_referrer" list="referrerList" value="${esc(e.referrer_name||'')}" placeholder="沒有就留白" autocomplete="off" style="max-width:150px;" onfocus="referrerFillList()"></label>
+      ${referralEditHtml(e)}
       <label>最高學歷<input id="se_edu" list="eduLevelList" value="${esc(e.education_level||'')}" placeholder="例：大學、高職" autocomplete="off" style="max-width:150px;"></label>
       <label>學校<input id="se_edu_school" value="${esc(e.education_school||'')}" placeholder="例：國立勤益科技大學" autocomplete="off" style="max-width:230px;"></label>
       <label>科系<input id="se_edu_major" value="${esc(e.education_major||'')}" placeholder="例：機械工程系" autocomplete="off" style="max-width:200px;"></label>
@@ -12342,6 +12350,9 @@ function renderStaffModalEdit(e){
       if(_br) Object.assign(e, tcbBranchFields(_br));
       else { e.bank_branch = null; e.bank_code = null; }
       e.education_level  = ((document.getElementById('se_edu') || {}).value || '').trim() || null;
+      Object.assign(e, referrerFields((document.getElementById('se_referrer') || {}).value));
+      e.referral_paid = referralReadPaid(e);
+      if(document.getElementById('se_ref_note')) e.referral_note = document.getElementById('se_ref_note').value.trim() || null;
       e.education_school = ((document.getElementById('se_edu_school') || {}).value || '').trim() || null;
       e.education_major  = ((document.getElementById('se_edu_major') || {}).value || '').trim() || null;
       e.education_status = (document.getElementById('se_edu_status') || {}).value || null;
@@ -12507,6 +12518,10 @@ const EXTRA_FIELDS = {
   payroll_case_list: [],
   transport_onduty_end: [],
   ppe_matrix: [],
+  referral_bonus: [
+    {id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'},
+    {id:'ex_ref_scope', label:'列哪些人', type:'select', opts:['還有獎金沒發完的', '全部（含已發完、不適用）']}
+  ],
   bank_roster: [
     {id:'ex_roster_date', label:'製表日期（空白＝今天）', type:'date'},
     {id:'ex_bank_mask', label:'帳號顯示方式', type:'select', opts:['完整帳號','只顯示後四碼']}
@@ -14519,7 +14534,7 @@ function generateForm(){
   const empId = parseInt(document.getElementById('form_emp').value);
   const e = formEmpList(type).find(x => x.id === empId);
   // 名冊類表單是整份人員清單，不需要先選人
-  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff','bank_roster','property_card',
+  const ROSTER_TYPES = ['employer_ins_el','employer_ins_en','contact_roster','phone_signoff','phone_pool','ext_list','stocktake_vehicle','stocktake_staff','bp_sheet','alcohol_sheet','insured_amount','ppe_matrix','ppe_signoff','bank_roster','referral_bonus','property_card',
     'payroll_deduct_notice','payroll_deduct_consent','payroll_pay_notice','min_service_bonus','payroll_case_list',
     'payroll_deduct_consent2','payroll_auth'];
   // 照舊行政系統 PDF 1:1 重做的 A4 表單（os* 那一組）：自帶版面與 @page，不套外框
@@ -14816,6 +14831,9 @@ function generateForm(){
         ${noAcct ? '※ 有 <b>' + noAcct + '</b> 位在職同仁還沒有帳號資料，已在表上標紅，請補齊後再作為匯款依據。<br>' : ''}
         ※ 資料來源：人員管理的合作金庫帳號欄位。要修改請到「人員管理 → 編輯人員」。
       </p>`;
+
+  }else if(type === 'referral_bonus'){
+    bodyHtml = referralBonusHtml();
 
   }else if(type === 'ppe_matrix'){
     const TH  = 'padding:5px 4px;border:1px solid #333;background:#f2f2f2;text-align:center;font-weight:700;';
@@ -15281,6 +15299,185 @@ function ppeMatrixCsv(){
 // ===== 在職人員合作金庫帳號總表 =====
 // 欄位是 SQL #83 建的，帳號由 supabase_bank_accounts.sql 匯入（全部合作金庫）。
 // 這是個人金融資料，印出來或匯出的檔案請比照薪資單管理。
+// ===== 推薦人（介紹人）獎金 =====
+// 規則存在 referral_bonus_rules（SQL_225），讀不到就用這組（人事資料 xlsm「介紹人」欄的說明，107.11.1 起）：
+//   被推薦人到職滿 6 個月 6,000、滿 12 個月 10,000、滿 18 個月 10,000，發給推薦人；
+//   回鍋司機離職未滿 2 年不適用。被推薦人在某個階段之前就離職，那個階段（含之後）不發。
+// 每月 1 號另有 check_referral_bonus.js 寄信提醒主管（本月到期、已到期還沒登記發放、下個月預告）。
+const REFERRAL_DEFAULT_RULES = [
+  { effective_from:'2018-11-01', months:6,  amount:6000,  rehire_gap_days:730 },
+  { effective_from:'2018-11-01', months:12, amount:10000, rehire_gap_days:730 },
+  { effective_from:'2018-11-01', months:18, amount:10000, rehire_gap_days:730 }
+];
+function referralRulesFor(startISO){
+  const all = (STATE.referralRules && STATE.referralRules.length) ? STATE.referralRules : REFERRAL_DEFAULT_RULES;
+  const ok = all.filter(r => !startISO || String(r.effective_from || '').slice(0, 10) <= startISO);
+  if(!ok.length) return [];
+  const eff = ok.map(r => String(r.effective_from).slice(0, 10)).sort().pop();   // 用最新一版規則
+  return ok.filter(r => String(r.effective_from).slice(0, 10) === eff)
+           .map(r => ({ months:Number(r.months), amount:Number(r.amount), gap:Number(r.rehire_gap_days) || 730 }))
+           .sort((a, b) => a.months - b.months);
+}
+function refAddMonths(iso, n){
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  if(!y || !m || !d) return '';
+  const t = new Date(y, m - 1 + n, 1);
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  const p = v => String(v).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(Math.min(d, last))}`;
+}
+function refPaidMap(e){
+  let p = e && e.referral_paid;
+  if(typeof p === 'string'){ try{ p = JSON.parse(p); }catch(_){ p = null; } }
+  return (p && typeof p === 'object') ? p : {};
+}
+function referrerFields(raw){
+  const n = String(raw || '').trim();
+  if(!n || n === '無') return { referrer_name: null, referrer_employee_id: null };
+  const hit = (STATE.employees || []).filter(x => String(x.name || '').trim() === n);
+  return { referrer_name: n, referrer_employee_id: hit.length === 1 && !isNaN(Number(hit[0].id)) ? Number(hit[0].id) : null };
+}
+function referrerFillList(){
+  const dl = document.getElementById('referrerList');
+  if(!dl || dl._filled) return;
+  dl._filled = true;
+  dl.innerHTML = (STATE.employees || []).filter(x => x.status === '在職')
+    .map(x => `<option value="${esc(x.name || '')}">${esc(shortCompany(x.company_name || ''))}</option>`).join('');
+}
+// 一個人的推薦獎金時程。left＝已離職（從離職歷史來的）
+function referralSchedule(e, left){
+  const today = todayISO(), thisMonth = today.slice(0, 7);
+  const start = String((e && (e.rehire_date || e.hire_date)) || '').slice(0, 10);
+  const out = { start: start, items: [], excluded: '', due: 0, pendingAmt: 0 };
+  if(!e || !String(e.referrer_name || '').trim()) return out;
+  if(!start){ out.excluded = '沒有到職日，算不出來'; return out; }
+  const rules = referralRulesFor(start);
+  if(!rules.length){ out.excluded = '到職日早於獎金辦法生效日'; return out; }
+  const note = String(e.referral_note || '').trim();
+  if(/^不適用/.test(note)) out.excluded = note;
+  // 回鍋：同名的人有離職紀錄，而且離職日距這次到職不到 2 年
+  if(!out.excluded){
+    const gap = rules[0].gap;
+    const prev = (STATE.employeesHistory || []).filter(h => String(h.name || '').trim() === String(e.name || '').trim())
+      .map(h => String(h.resign_date || '').slice(0, 10)).filter(d => d && d < start).sort().pop();
+    if(prev && (new Date(start) - new Date(prev)) / 86400000 < gap)
+      out.excluded = `不適用（回鍋，${prev} 離職，未滿 2 年）`;
+  }
+  const resign = left ? String(e.resign_date || '').slice(0, 10) : '';
+  const paid = refPaidMap(e);
+  rules.forEach(r => {
+    const due = refAddMonths(start, r.months);
+    const pd = String(paid[r.months] || paid[String(r.months)] || '').slice(0, 10);
+    let st, code;
+    if(pd){ st = '已發放 ' + pd; code = 'paid'; }
+    else if(out.excluded){ st = '不適用'; code = 'na'; }
+    else if(resign && resign < due){ st = '離職，不發'; code = 'na'; }
+    else if(due.slice(0, 7) === thisMonth){ st = '本月到期'; code = 'month'; }
+    else if(due < today){ st = '已到期・待發放'; code = 'over'; }
+    else { st = '未到期'; code = 'future'; }
+    if(code === 'month' || code === 'over'){ out.due++; out.pendingAmt += r.amount; }
+    out.items.push({ months: r.months, amount: r.amount, due: due, paid: pd, status: st, code: code });
+  });
+  return out;
+}
+function referralEditHtml(e){
+  // 有推薦人才出現發放日期欄（新填推薦人的，存檔後再開一次編輯就會出現）
+  if(!String(e.referrer_name || '').trim()) return '';
+  const s = referralSchedule(e, false);
+  if(!s.items.length) return '';
+  return s.items.map(it => `<label>推薦獎金 滿${it.months}個月（${it.due || '—'}）已發放日
+      <input id="se_ref_paid_${it.months}" type="date" value="${esc(it.paid || '')}" style="max-width:160px;"
+             title="${it.amount.toLocaleString('en-US')} 元；發放後填日期，每月提醒信就不會再列"></label>`).join('')
+    + `<label>推薦獎金備註<input id="se_ref_note" value="${esc(e.referral_note || '')}" placeholder="寫「不適用…」就不列入" style="max-width:230px;"></label>`;
+}
+function referralReadPaid(e){
+  const p = Object.assign({}, refPaidMap(e));
+  document.querySelectorAll('[id^="se_ref_paid_"]').forEach(el => {
+    const m = el.id.replace('se_ref_paid_', '');
+    if(el.value) p[m] = el.value; else delete p[m];
+  });
+  return Object.keys(p).length ? p : null;
+}
+function referralDetailHtml(e){
+  const n = String(e.referrer_name || '').trim();
+  if(!n) return '—';
+  const s = referralSchedule(e, false);
+  const col = { paid:'#2e7d32', na:'#888', month:'#b26a00', over:'#c0392b', future:'#555' };
+  return esc(n) + (s.excluded ? `<span class="muted">　${esc(s.excluded)}</span>` : '')
+    + (s.items.length ? '<br>' + s.items.map(it => `<span style="color:${col[it.code]};font-size:12.5px;">滿${it.months}個月 ${it.due} `
+        + `${it.amount.toLocaleString('en-US')} 元：${esc(it.status)}</span>`).join('<br>') : '');
+}
+function referralBonusRows(all){
+  const rows = [];
+  (STATE.employees || []).filter(e => String(e.referrer_name || '').trim())
+    .forEach(e => rows.push({ e: e, left: false, s: referralSchedule(e, false) }));
+  (STATE.employeesHistory || []).filter(e => String(e.referrer_name || '').trim())
+    .forEach(e => rows.push({ e: e, left: true, s: referralSchedule(e, true) }));
+  return rows.filter(r => all || r.s.items.some(it => it.code === 'month' || it.code === 'over' || it.code === 'future'))
+    .sort((a, b) => String(a.s.start).localeCompare(String(b.s.start)));
+}
+function referralBonusHtml(){
+  const all = (extraVal('ex_ref_scope') || '').indexOf('全部') === 0;
+  const rows = referralBonusRows(all);
+  const stamp = extraVal('ex_roster_date') || todayISO();
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const TH = 'padding:5px 6px;border:1px solid #ccc;background:#f5f5f5;';
+  const TD = 'padding:4px 6px;border:1px solid #ccc;';
+  const TDC = TD + 'text-align:center;', TDR = TD + 'text-align:right;';
+  const col = { paid:'#2e7d32', na:'#999', month:'#b26a00', over:'#c0392b', future:'#555' };
+  const ms = [...new Set(rows.flatMap(r => r.s.items.map(it => it.months)))].sort((a, b) => a - b);
+  const msUse = ms.length ? ms : referralRulesFor('').map(r => r.months);
+  const body = rows.map((r, i) => `<tr>
+      <td style="${TDC}">${i + 1}</td>
+      <td style="${TD}">${esc(r.e.name || '')}${r.left ? '<span style="color:#999;font-size:11px;">（已離職' + (r.e.resign_date ? ' ' + esc(String(r.e.resign_date).slice(0, 10)) : '') + '）</span>' : ''}</td>
+      <td style="${TD}">${esc(shortCompany(r.e.company_name || ''))}</td>
+      <td style="${TDC}">${esc(r.s.start || '')}</td>
+      <td style="${TD}">${esc(r.e.referrer_name || '')}</td>
+      ${msUse.map(m => { const it = r.s.items.find(x => x.months === m);
+        return it ? `<td style="${TDC}">${esc(it.due)}<br>${n(it.amount)}<br><span style="color:${col[it.code]};font-weight:${it.code === 'month' || it.code === 'over' ? 700 : 400};">${esc(it.status)}</span></td>`
+                  : `<td style="${TDC}">—</td>`; }).join('')}
+      <td style="${TDR}">${r.s.pendingAmt ? '<b>' + n(r.s.pendingAmt) + '</b>' : '—'}</td>
+    </tr>`).join('');
+  const byRef = {};
+  rows.forEach(r => r.s.items.forEach(it => {
+    if(it.code !== 'month' && it.code !== 'over') return;
+    const k = r.e.referrer_name;
+    (byRef[k] = byRef[k] || { amt:0, list:[] }).amt += it.amount;
+    byRef[k].list.push(r.e.name + ' 滿' + it.months + '個月');
+  }));
+  const refKeys = Object.keys(byRef).sort((a, b) => byRef[b].amt - byRef[a].amt);
+  const totalDue = refKeys.reduce((s, k) => s + byRef[k].amt, 0);
+  return `
+    <h2 style="text-align:center;letter-spacing:4px;">推薦人（介紹人）獎金表</h2>
+    <p style="text-align:center;color:#666;font-size:12px;margin:4px 0 14px;">製表日期：${esc(stamp)}　・　${all ? '全部' : '還有獎金沒發完的'} ${rows.length} 人</p>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr><th style="${TH}">序</th><th style="${TH}">被推薦人</th><th style="${TH}">行號</th><th style="${TH}">到職日</th><th style="${TH}">推薦人</th>
+        ${msUse.map(m => `<th style="${TH}">滿 ${m} 個月<br><span style="font-weight:400;">到期日／金額／狀態</span></th>`).join('')}
+        <th style="${TH}">本月應發<br>＋已到期待發</th></tr></thead>
+      <tbody>${body || `<tr><td style="${TDC}" colspan="${6 + msUse.length}">目前沒有符合的推薦紀錄</td></tr>`}</tbody>
+    </table>
+    ${refKeys.length ? `<h3 style="margin:18px 0 6px;font-size:14px;">各推薦人應發金額（本月到期＋已到期待發）</h3>
+    <table style="border-collapse:collapse;font-size:12px;">
+      <tr><th style="${TH}">推薦人</th><th style="${TH}">金額</th><th style="${TH}">明細</th></tr>
+      ${refKeys.map(k => `<tr><td style="${TD}">${esc(k)}</td><td style="${TDR}">${n(byRef[k].amt)}</td><td style="${TD}">${esc(byRef[k].list.join('、'))}</td></tr>`).join('')}
+      <tr><th style="${TH}">合計</th><th style="${TH};text-align:right;">${n(totalDue)}</th><th style="${TH}"></th></tr>
+    </table>` : ''}
+    <p style="font-size:11px;color:#999;margin-top:18px;line-height:1.7;">
+      ※ 規則：被推薦人到職滿 ${referralRulesFor('').map(r => r.months + ' 個月 ' + n(r.amount) + ' 元').join('、')}，發給推薦人；回鍋司機離職未滿 2 年不適用；某階段到期前離職，該階段起不發。<br>
+      ※ 發放後請到「人員管理 → 編輯人員」填「已發放日」，每月 1 號的提醒信就不會再列。<br>
+      ※ 「已到期・待發放」也可能是以前已經發過、只是系統沒登記，請核對後補填日期。
+    </p>`;
+}
+function referralBonusCsv(){
+  const all = (extraVal('ex_ref_scope') || '').indexOf('全部') === 0;
+  const rows = referralBonusRows(all);
+  const ms = referralRulesFor('').map(r => r.months);
+  const head = ['序號','被推薦人','是否離職','行號','到職日','推薦人'].concat(...ms.map(m => [`滿${m}個月到期日`, `滿${m}個月金額`, `滿${m}個月狀態`]), ['本月應發+已到期待發']);
+  const out = rows.map((r, i) => [String(i + 1), r.e.name || '', r.left ? '已離職' : '', r.e.company_name || '', r.s.start || '', r.e.referrer_name || '']
+    .concat(...ms.map(m => { const it = r.s.items.find(x => x.months === m); return it ? [it.due, String(it.amount), it.status] : ['', '', '']; }),
+            [String(r.s.pendingAmt || 0)]));
+  return csvLines(head, out);
+}
 // ===== 合作金庫分行（下拉選單）=====
 // 來源：合作金庫商業銀行官網「國內分行一覽表」115/07/20 版，含 OBU 共 250 家。
 // 每筆：[分行名稱, 分行代號, 分支機構代號]；機構代碼（匯款用）＝ 006 ＋ 分支機構代號。
@@ -21625,6 +21822,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     bank_account: document.getElementById('sf_bank').value.trim() || null,
     ...tcbBranchFields(document.getElementById('sf_bank_branch').value),
     education_level: document.getElementById('sf_edu').value.trim() || null,
+    ...referrerFields(document.getElementById('sf_referrer').value),
     education_school: document.getElementById('sf_edu_school').value.trim() || null,
     education_major: document.getElementById('sf_edu_major').value.trim() || null,
     education_status: document.getElementById('sf_edu_status').value || null,
@@ -21685,7 +21883,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
         + '」沒有存進去（上面那個錯誤訊息就是原因）。\n\n'
         + '請到「人員管理 → 在職人員清單」點他的名字，把這幾項補登一次。');
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_edu','sf_edu_school','sf_edu_major','sf_edu_status'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_referrer','sf_edu','sf_edu_school','sf_edu_major','sf_edu_status'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
   document.getElementById('sf_empins_status').checked = false;
   applyStaffTypeDefaults();
   renderStaffNoBox();
@@ -23568,6 +23766,7 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
     insured_amount:       {name:'投保金額總表',     fn: insuredAmountCsv},
     ppe_matrix:           {name:'各車隊基本領用量',  fn: ppeMatrixCsv},
     bank_roster:          {name:'在職人員合庫帳號總表', fn: bankRosterCsv},
+    referral_bonus:       {name:'推薦人獎金表', fn: referralBonusCsv},
   };
   const b = CSV_BUILDERS[type];
   if(!b) return;
