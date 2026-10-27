@@ -451,7 +451,9 @@
         <div class="form-grid">
           <label>合作金庫分行<select id="sf_bank_branch" style="max-width:230px;"></select></label>
           <label>合作金庫帳號<input id="sf_bank" placeholder="選填，例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
-          <label>最高學歷<input id="sf_edu" list="eduLevelList" placeholder="例：大學、高職" autocomplete="off" style="max-width:230px;"></label>
+          <label>最高學歷<input id="sf_edu" list="eduLevelList" placeholder="例：大學、高職" autocomplete="off" style="max-width:150px;"></label>
+          <label>學校<input id="sf_edu_school" placeholder="例：國立勤益科技大學" autocomplete="off" style="max-width:230px;"></label>
+          <label>科系<input id="sf_edu_major" placeholder="例：機械工程系" autocomplete="off" style="max-width:200px;"></label>
           <label>畢業／肄業<select id="sf_edu_status" style="max-width:120px;"><option value="">（未填）</option><option>畢業</option><option>肄業</option></select></label>
           <label>勞健保投保金額<input id="sf_insured" type="number" list="insAmountList" placeholder="例：45800" style="max-width:150px;"
                  title="填月薪對應的投保級距，一個數字就好。勞保會自動壓到上限 45,800，職災、勞退、健保各自套自己的上限。"></label>
@@ -12116,7 +12118,7 @@ function renderStaffModalView(e){
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
       <dt>合作金庫分行</dt><dd>${e.bank_branch ? esc(e.bank_branch) + (e.bank_code ? `<span class="muted">（${esc(e.bank_code)}）</span>` : '') : '—'}</dd>
       <dt>合作金庫帳號</dt><dd>${esc(e.bank_account||'—')}</dd>
-      <dt>最高學歷</dt><dd>${esc(e.education_level||'—')}${e.education_status ? '（' + esc(e.education_status) + '）' : ''}</dd>
+      <dt>最高學歷</dt><dd>${[e.education_level, e.education_school, e.education_major].filter(x => String(x || '').trim()).map(x => esc(x)).join('　') || '—'}${e.education_status ? '（' + esc(e.education_status) + '）' : ''}</dd>
       <dt>勞健保投保金額</dt><dd>${e.insured_salary
         ? Number(e.insured_salary).toLocaleString('en-US')
           + `<span class="muted">（勞保 ${Math.min(e.insured_salary, IB_LABOR_MAX).toLocaleString('en-US')}／職災 ${Math.min(e.insured_salary, IB_INJURY_MAX).toLocaleString('en-US')}／勞退 ${Math.min(Math.max(e.insured_salary, IB_PENSION_MIN), IB_PENSION_MAX).toLocaleString('en-US')}／健保 ${Math.min(e.insured_salary, IB_HEALTH_MAX).toLocaleString('en-US')}）</span>`
@@ -12277,7 +12279,9 @@ function renderStaffModalEdit(e){
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
       <label>合作金庫分行<select id="se_bank_branch" style="max-width:230px;">${tcbBranchOptions(e.bank_branch)}</select></label>
       <label>合作金庫帳號<input id="se_bank" value="${esc(e.bank_account||'')}" placeholder="例：0000000123456" autocomplete="off" style="max-width:230px;"></label>
-      <label>最高學歷<input id="se_edu" list="eduLevelList" value="${esc(e.education_level||'')}" placeholder="例：大學、高職" autocomplete="off" style="max-width:230px;"></label>
+      <label>最高學歷<input id="se_edu" list="eduLevelList" value="${esc(e.education_level||'')}" placeholder="例：大學、高職" autocomplete="off" style="max-width:150px;"></label>
+      <label>學校<input id="se_edu_school" value="${esc(e.education_school||'')}" placeholder="例：國立勤益科技大學" autocomplete="off" style="max-width:230px;"></label>
+      <label>科系<input id="se_edu_major" value="${esc(e.education_major||'')}" placeholder="例：機械工程系" autocomplete="off" style="max-width:200px;"></label>
       <label>畢業／肄業<select id="se_edu_status" style="max-width:120px;">${['', '畢業', '肄業'].concat(e.education_status && !['畢業','肄業'].includes(e.education_status) ? [e.education_status] : [])
         .map(v => `<option value="${esc(v)}"${(e.education_status || '') === v ? ' selected' : ''}>${v ? esc(v) : '（未填）'}</option>`).join('')}</select></label>
       <label>勞健保投保金額<input id="se_insured" type="number" list="insAmountList" value="${esc(e.insured_salary||'')}" placeholder="例：45800" style="max-width:150px;"
@@ -12338,6 +12342,8 @@ function renderStaffModalEdit(e){
       if(_br) Object.assign(e, tcbBranchFields(_br));
       else { e.bank_branch = null; e.bank_code = null; }
       e.education_level  = ((document.getElementById('se_edu') || {}).value || '').trim() || null;
+      e.education_school = ((document.getElementById('se_edu_school') || {}).value || '').trim() || null;
+      e.education_major  = ((document.getElementById('se_edu_major') || {}).value || '').trim() || null;
       e.education_status = (document.getElementById('se_edu_status') || {}).value || null;
     }
   e.insured_salary = document.getElementById('se_insured') && document.getElementById('se_insured').value
@@ -21619,6 +21625,8 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     bank_account: document.getElementById('sf_bank').value.trim() || null,
     ...tcbBranchFields(document.getElementById('sf_bank_branch').value),
     education_level: document.getElementById('sf_edu').value.trim() || null,
+    education_school: document.getElementById('sf_edu_school').value.trim() || null,
+    education_major: document.getElementById('sf_edu_major').value.trim() || null,
     education_status: document.getElementById('sf_edu_status').value || null,
     insured_salary: document.getElementById('sf_insured').value ? parseInt(document.getElementById('sf_insured').value, 10) : null,
     dependents_count: parseInt(document.getElementById('sf_dep').value, 10) || 0,
@@ -21677,7 +21685,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
         + '」沒有存進去（上面那個錯誤訊息就是原因）。\n\n'
         + '請到「人員管理 → 在職人員清單」點他的名字，把這幾項補登一次。');
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_edu','sf_edu_status'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_edu','sf_edu_school','sf_edu_major','sf_edu_status'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
   document.getElementById('sf_empins_status').checked = false;
   applyStaffTypeDefaults();
   renderStaffNoBox();
