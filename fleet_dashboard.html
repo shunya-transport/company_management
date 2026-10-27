@@ -726,6 +726,20 @@
     </div>
 
     <div class="card">
+      <h2>各車型車輛數<span class="count-badge" id="fleet_type_sum_badge"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        以<b>車輛清單</b>上的車為準（在役＋停用，不含板架、待賣出、已賣出／報廢），依車型分、各行號各幾台。
+        點車型名稱，上面的車輛清單就只列那個車型。
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead id="fleetTypeSumHead"></thead>
+          <tbody id="fleetTypeSumBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>車用配備移轉（A車 → B車 ／ 庫內資產）</h2>
       <div class="muted" style="margin-bottom:10px;">
         選好來源與目標，勾要搬的品項、填數量，按「執行移轉」。<b>不要在 A 車刪掉、再到 B 車新增</b>。
@@ -10931,6 +10945,59 @@ function renderFleetTable(){
       <td>${esc(v.retirement_date||'—')}</td>
       <td><button class="name-link" data-view-vehicle="${v.id}">查看</button></td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty">目前沒有待賣出的車輛</td></tr>`;
+  renderFleetTypeSummary();
+}
+// 各車型車輛數：車型 × 行號，跟人員管理的「各行號投保人數」同一種看法。
+// 用車輛清單同一個母體（在役＋停用、不含板架／待賣出／已退場），不受上面搜尋、篩選影響。
+function renderFleetTypeSummary(){
+  const head = document.getElementById('fleetTypeSumHead');
+  const body = document.getElementById('fleetTypeSumBody');
+  if(!head || !body) return;
+  const pool = (STATE.vehicles || []).filter(v =>
+    v.vehicle_category === '車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v));
+  const typeOf = v => String(v.vehicle_type || '').trim() || '（未填車型）';
+  const coOf = v => String(v.company_name || '').trim() || '未設定行號';
+  const cnt = {}, coTot = {}, typeTot = {}, stop = {};
+  pool.forEach(v => {
+    const t = typeOf(v), c = coOf(v);
+    (cnt[t] = cnt[t] || {})[c] = (cnt[t][c] || 0) + 1;
+    coTot[c] = (coTot[c] || 0) + 1;
+    typeTot[t] = (typeTot[t] || 0) + 1;
+    if(v.status === '停用') stop[t] = (stop[t] || 0) + 1;
+  });
+  const cos = Object.keys(coTot).sort((a, b) => coTot[b] - coTot[a] || a.localeCompare(b, 'zh-Hant'));
+  const types = Object.keys(typeTot).sort((a, b) => typeTot[b] - typeTot[a] || a.localeCompare(b, 'zh-Hant'));
+  const badge = document.getElementById('fleet_type_sum_badge');
+  if(badge) badge.textContent = `${types.length} 種車型、共 ${pool.length} 台`;
+  const R = 'text-align:right;';
+  head.innerHTML = `<tr><th>車型</th>${cos.map(c => `<th style="${R}" title="${esc(c)}">${esc(shortCompany(c))}</th>`).join('')}`
+    + `<th style="${R}">合計</th><th style="${R}">其中停用</th></tr>`;
+  const typeSel = (document.getElementById('fleet_type_filter') || {}).value || 'all';
+  body.innerHTML = types.map(t => `<tr${typeSel === (t === '（未填車型）' ? '' : t) ? ' style="background:rgba(46,125,50,.07);"' : ''}>
+      <td>${t === '（未填車型）' ? `<span class="muted">${t}</span>`
+            : `<button class="name-link" data-fleet-type="${esc(t)}">${esc(t)}</button>`}</td>
+      ${cos.map(c => `<td style="${R}">${cnt[t][c] ? cnt[t][c] + ' 台' : '<span class="muted">—</span>'}</td>`).join('')}
+      <td style="${R}"><b>${typeTot[t]} 台</b></td>
+      <td style="${R}">${stop[t] ? stop[t] + ' 台' : '<span class="muted">—</span>'}</td></tr>`).join('')
+    + (types.length ? `<tr style="font-weight:700;background:#fafafa;"><td>合計</td>
+      ${cos.map(c => `<td style="${R}">${coTot[c]} 台</td>`).join('')}
+      <td style="${R}">${pool.length} 台</td>
+      <td style="${R}">${Object.values(stop).reduce((a, b) => a + b, 0) || '—'}${Object.keys(stop).length ? ' 台' : ''}</td></tr>` : '')
+    || `<tr><td colspan="${cos.length + 3}" class="empty">尚無車輛資料</td></tr>`;
+  if(!body._bound){
+    body._bound = true;
+    body.addEventListener('click', ev => {
+      const btn = ev.target.closest && ev.target.closest('[data-fleet-type]');
+      if(!btn) return;
+      const sel = document.getElementById('fleet_type_filter');
+      if(!sel) return;
+      const t = btn.getAttribute('data-fleet-type');
+      sel.value = (sel.value === t) ? 'all' : t;      // 再點一次同一個車型就取消
+      renderFleetTable();
+      const tb = document.getElementById('fleetTableBody');
+      if(tb && sel.value !== 'all') tb.closest('.card').scrollIntoView({ behavior:'smooth', block:'start' });
+    });
+  }
 }
 
 // 這張表原本同時列「輪軸保養排程」與「輪軸保養紀錄」兩種東西，
