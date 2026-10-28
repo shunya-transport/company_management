@@ -8812,6 +8812,12 @@ function insCarryPenWage(srcRow, amount){
   const calc = Math.min(Math.max(a, IB_PENSION_MIN), IB_PENSION_MAX);
   return (sameLabor && sameInjury && w !== calc) ? w : null;
 }
+function insCarryNhiFix(x, selfZero){
+  if(!x || !selfZero) return x;
+  x.selfHealth = 0;
+  x.selfTotal = x.selfLabor + x.selfHealth;
+  return x;
+}
 function insCarryPenFix(x, penWage, days){
   if(!x || !penWage) return x;
   const d = Math.max(0, Math.min(Number(days) || 0, INS_DAY_BASE));
@@ -8926,7 +8932,9 @@ function insCarryBuild(){
     // 勞退月提繳工資是另外申報的，跟勞保不一定一樣（115/09 巫玉宏：勞保 45,800、勞退 1,500）。
     // 投保金額沒變（勞保、職災跟上一期一樣）就沿用上一期勞退名冊的提繳工資，不要用人員主檔重算。
     const penWage = insCarryPenWage(s, amt.amount);
-    const x = insCarryPenFix(insCarryEstimate(amt.amount, depUse, rate, win.days, chargeH), penWage, win.days)
+    // 上一期健保署明細表個人自付是 0、單位照收 → 有保費補助資格（115/09 一位全額補助），這一期也先當 0
+    const nhiSelfZero = !!(s && Number(s.personal_health) === 0 && Number(s.employer_health) > 0);
+    const x = insCarryNhiFix(insCarryPenFix(insCarryEstimate(amt.amount, depUse, rate, win.days, chargeH), penWage, win.days), nhiSelfZero)
            || insCarryZero(amt.amount, rate, win.days);
     if(amt.amount && !insCarryEstimate(amt.amount, depUse, rate, win.days, chargeH)){
       skipped.push({ name: name, company: company, why: '投保金額 ' + amt.amount + ' 查不到對應級距（級距表最高 120,900）' });
@@ -8934,7 +8942,7 @@ function insCarryBuild(){
     rows.push({
       name: name, company: company, isNew: !s, amountFrom: amt.from,
       emp: e, src: s, est: x, dep: dep, free: free, rate: rate,
-      amount: amt.amount, days: win.days, win: win, chargeHealth: chargeH, left: !!p.left, penWage: penWage, amount0: amt.amount,
+      amount: amt.amount, days: win.days, win: win, chargeHealth: chargeH, left: !!p.left, penWage: penWage, amount0: amt.amount, nhiSelfZero: nhiSelfZero,
       depUse: depUse, depFrom: depFrom, depRoster: depRoster, depBilled: depBilled,
       row: {
         year_roc: Math.floor(dstKey / 100), month: dstKey % 100,
@@ -8975,7 +8983,7 @@ function insCarryApply(i){
   if(!r) return;
   // 表上改了投保金額，就不再沿用上一期的勞退提繳工資
   if(r.penWage && Number(r.amount) !== Number(r.amount0)) r.penWage = null;
-  const x = insCarryPenFix(insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth), r.penWage, r.days)
+  const x = insCarryNhiFix(insCarryPenFix(insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth), r.penWage, r.days), r.nhiSelfZero)
         || insCarryZero(r.amount, r.rate, r.days);
   r.est = x;
   r.needAmount = !(Number(r.amount) > 0);
