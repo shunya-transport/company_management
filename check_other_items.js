@@ -76,7 +76,8 @@ async function main() {
     return !!(top && d && top > d);
   };
   // 報廢、繳銷的車，保單沒按「中止」也不寄（跟儀表板一樣）
-  const retired = new Set(vehicles.filter(v => v.status === '報廢' || v.status === '繳銷' || v.status === '賣出').map(v => v.vehicle_id));
+  // 「停駛」（舊資料叫停用）的車也不寄（115/10/28 使用者要求：停駛就不跑任何到期提醒）
+  const retired = new Set(vehicles.filter(v => ['報廢', '繳銷', '賣出', '停駛', '停用'].includes(v.status)).map(v => v.vehicle_id));
   const insItems = insurance.filter(i => i.expiry_date && !insOff(i) && !insSuperseded(i) && !retired.has(i.vehicle_id)).map(attachVehicle);
   const insVehicleHtml = bucketByDate(insItems.filter(i => !i.is_trailer), 'expiry_date', i => `<tr>
     <td><b>${i.plate}</b></td><td>${i.insurance_type || ''}</td><td>${i.insurance_company || ''}</td><td>${i.expiry_date}</td><td>${daysLabel(i.expiry_date)}</td>

@@ -700,7 +700,7 @@
         <label>公司別<input id="vf_company" placeholder="例：順亞運通股份有限公司" list="companyList2"></label>
         <label>發車地<input id="vf_base" placeholder="例：新竹"></label>
         <label>狀態
-          <select id="vf_status"><option value="在役">在役</option><option value="停用">停用</option><option value="報廢">報廢</option><option value="繳銷">繳銷</option></select>
+          <select id="vf_status"><option value="在役">在役</option><option value="停駛">停駛</option><option value="報廢">報廢</option><option value="繳銷">繳銷</option></select>
         </label>
       </div>
       <datalist id="companyList2"></datalist>
@@ -714,7 +714,7 @@
         <select id="fleet_status_filter">
           <option value="all">全部狀態</option>
           <option value="在役">在役</option>
-          <option value="停用">停用</option>
+          <option value="停駛">停駛</option>
         </select>
         <select id="fleet_brand_filter"><option value="all">全部廠牌</option></select>
         <select id="fleet_type_filter"><option value="all">全部車型</option></select>
@@ -732,7 +732,7 @@
     <div class="card">
       <h2>各車型車輛數（含板架）<span class="count-badge" id="fleet_type_sum_badge"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
-        以<b>車輛清單</b>、<b>板架清單</b>上的車為準（在役＋停用，不含待賣出、已賣出／報廢），依車型分、各行號各幾台。
+        以<b>車輛清單</b>、<b>板架清單</b>上的車為準（在役＋停駛，不含待賣出、已賣出／報廢），依車型分、各行號各幾台。
         點車輛的車型名稱，上面的車輛清單就只列那個車型。
       </div>
       <div class="table-scroll">
@@ -750,7 +750,7 @@
         <select id="trailer_status_filter">
           <option value="all">全部狀態</option>
           <option value="在役">在役</option>
-          <option value="停用">停用</option>
+          <option value="停駛">停駛</option>
         </select>
         <select id="trailer_size_filter"><option value="all">全部尺寸</option></select>
         <button type="button" class="btn ghost" id="trailer_export"
@@ -890,7 +890,7 @@
           <option value="off">已中止／退保</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
-          <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出/繳銷車輛
+          <input type="checkbox" id="vi_show_retired" style="width:auto;"> 顯示已報廢/賣出/繳銷/停駛車輛
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
           <input type="checkbox" id="vi_show_off" style="width:auto;"> 顯示已中止／已續保的舊保單
@@ -921,7 +921,7 @@
           <option value="gray">資料不足</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);white-space:nowrap;">
-          <input type="checkbox" id="mm_show_retired" style="width:auto;"> 顯示已報廢/繳銷車輛
+          <input type="checkbox" id="mm_show_retired" style="width:auto;"> 顯示已報廢/繳銷/停駛車輛
         </label>
         <button class="btn ghost" id="mm_export" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
       </div>
@@ -5331,7 +5331,7 @@ function renderOverview(){
   renderDlAlerts();
   const maintAlerts = [];
   STATE.vehicles.forEach(v => {
-    if(!v.maintenance_model || isRetiredVehicle(v)) return;
+    if(!v.maintenance_model || isNoReminderVehicle(v)) return;
     computeMaintenanceDue(v).forEach(d => {
       if(d.status==='red' || d.status==='amber') maintAlerts.push({plate:v.plate, ...d});
     });
@@ -5353,7 +5353,7 @@ function renderOverview(){
       // 已經續保過的舊紀錄不再提醒（同一台車、同一個險種有更晚的到期日）
       if(insRenewedTo(i, insLatest)) return false;
       const v = STATE.vehicles.find(x => x.plate === i.plate);
-      return !v || !isRetiredVehicle(v);
+      return !v || !isNoReminderVehicle(v);
     })
     .sort((a,b) => a.expiry_date.localeCompare(b.expiry_date));
   document.getElementById('overview_insurance_count').textContent = `${insuranceAlerts.length} 項`;
@@ -5371,7 +5371,7 @@ function renderOverview(){
     .filter(d => {
       if(!(d.doc_type==='滅火器' || d.doc_type==='濾毒罐') || !d.expiry_date || statusOf(d.expiry_date,30) === 'green') return false;
       const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
-      return !v || !isRetiredVehicle(v);
+      return !v || !isNoReminderVehicle(v);
     })
     .map(d => {
       const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
@@ -5381,7 +5381,7 @@ function renderOverview(){
     .filter(x => {
       if(!x.expiry_date || statusOf(x.expiry_date,30) === 'green') return false;
       const v = STATE.vehicles.find(y => y.id === x.vehicle_id);
-      return !v || !isRetiredVehicle(v);
+      return !v || !isNoReminderVehicle(v);
     })
     .map(x => {
       const v = STATE.vehicles.find(y => y.id === x.vehicle_id);
@@ -7377,6 +7377,14 @@ function isRetiredVehicle(v){
 // 「車輛/板架歷史」下方的「待賣出車輛」，不跟真正在跑的車混在一起。
 // 真的賣掉之後，把原因改成「賣出」（狀態會跟著變賣出），就會照原本的流程進歷史區。
 const VEH_OUT = ['賣出', '報廢', '繳銷'];   // 退場的狀態／原因（狀態與原因共用這三個值）
+// ===== 停駛（115/10/28 由「停用」改名）=====
+// 停駛的車暫時不跑、不驗車也不做其他檢驗，所以「所有到期提醒」都不列：
+// 總覽的保養／保險／滅火器濾毒罐醫藥箱、保險清單、證件效期、保養里程總覽，
+// 以及每月寄信的通知程式（check_trailer_maint_cert.js、check_other_items.js）與保養檢測到期總表。
+// 車子還在，所以照樣留在車輛清單／板架清單（狀態欄看得到「停駛」），恢復時把狀態改回在役，提醒就回來。
+// 舊資料還掛「停用」的一律當停駛看（SQL_227 會把資料庫裡的停用改成停駛）。
+function isSuspendedVehicle(v){ return !!v && (v.status === '停駛' || v.status === '停用'); }
+function isNoReminderVehicle(v){ return isRetiredVehicle(v) || isSuspendedVehicle(v); }
 function isPendingSaleVehicle(v){
   return !!v && !isRetiredVehicle(v) && v.retirement_reason === '待賣出';
 }
@@ -8089,15 +8097,18 @@ function insRate(company, key){
            quitDayCounts: qd ? (qd.quit_day_counts !== false && qd.quit_day_counts !== 'false') : true };
 }
 // 這一期、這個行號在繳款單上的調整（傷病免計沖還、政府補助沖還、追溯退保、墊償基金…）
-function insAdjFor(key, company){
+function insAdjFor(key, company, billType){
   const co = String(company || '');
+  const bt = billType || '勞保局';      // 勞保局（預設）／勞退：兩張單的調整分開算（SQL_226 加 bill_type）
   return (STATE.insAdjustments || []).filter(a => (Number(a.year_roc) * 100 + Number(a.month)) === key
+    && String(a.bill_type || '勞保局') === bt
     && (!co || !a.company_name || co.indexOf(a.company_name) >= 0 || String(a.company_name).indexOf(co) >= 0));
 }
-function insBillFor(key, company){
+function insBillFor(key, company, billType){
   const co = String(company || '');
+  const bt = billType || '勞保局';
   return (STATE.insBills || []).find(b => (Number(b.year_roc) * 100 + Number(b.month)) === key
-    && String(b.bill_type || '勞保局') === '勞保局'
+    && String(b.bill_type || '勞保局') === bt
     && (co.indexOf(b.company_name) >= 0 || String(b.company_name).indexOf(co) >= 0)) || null;
 }
 
@@ -9709,7 +9720,7 @@ function renderVehicleModalEdit(v){
       <label>狀態
         <select id="ve_status">
           <option value="在役" ${v.status==='在役'?'selected':''}>在役</option>
-          <option value="停用" ${v.status==='停用'?'selected':''}>停用</option>
+          <option value="停駛" ${isSuspendedVehicle(v)?'selected':''}>停駛（不跑任何到期提醒）</option>
           <option value="賣出" ${v.status==='賣出'?'selected':''}>賣出</option>
           <option value="報廢" ${v.status==='報廢'?'selected':''}>報廢</option>
           <option value="繳銷" ${v.status==='繳銷'?'selected':''}>繳銷</option>
@@ -10457,7 +10468,7 @@ function mmVisibleRows(){
       const std = STATE.maintenanceStandards.find(s => s.model_name === v.maintenance_model);
       return std && (std.small_service_km || std.large_service_km);
     })
-    .filter(v => showRetired || !isRetiredVehicle(v))
+    .filter(v => showRetired || !isNoReminderVehicle(v))
     .map(mmRowFor)
     .filter(r => !kw || String(r.v.plate || '').toUpperCase().indexOf(kw) >= 0)
     .filter(r => f === 'all' || r.status === f)
@@ -10510,7 +10521,7 @@ function renderMaintMileageCard(){
 
   // 沒列進來的車也要交代一下，免得以為漏了
   const noStd = (STATE.vehicles || []).filter(v => {
-    if(isRetiredVehicle(v)) return false;
+    if(isNoReminderVehicle(v)) return false;
     const std = STATE.maintenanceStandards.find(s => s.model_name === v.maintenance_model);
     return !std || !(std.small_service_km || std.large_service_km);
   });
@@ -10628,7 +10639,7 @@ function insDue90Rows(){
       if(!i.expiry_date) return false;
       if(insRenewedTo(i, latest)) return false;
       const v = STATE.vehicles.find(x => x.plate === i.plate);
-      if(v && isRetiredVehicle(v)) return false;
+      if(v && isNoReminderVehicle(v)) return false;
       return daysUntil(i.expiry_date) <= 90;
     })
     .slice()
@@ -10672,7 +10683,7 @@ function renderViTable(){
     // 勾「顯示已中止／已續保的舊保單」或狀態選「已續保」才列出來。
     if(statusF === 'all' && !showOff && insRenewedTo(i, viLatest)) return false;
     const v = STATE.vehicles.find(x => x.plate === i.plate);
-    return showRetired || !v || !isRetiredVehicle(v);
+    return showRetired || !v || !isNoReminderVehicle(v);
   });
   if(q) rows = rows.filter(i => (i.plate||'').includes(q));
   if(typeF!=='all') rows = rows.filter(i => i.insurance_type===typeF);
@@ -10697,7 +10708,7 @@ function renderViTable(){
     const v = STATE.vehicles.find(x => x.plate === i.plate);
     const s = vehicleInsuranceStatus(i);
     const renewedTo = insRenewedTo(i, viLatest);
-    const retiredTag = v && isRetiredVehicle(v) ? ` <span class="pill gray">已${esc(v.status)}</span>` : '';
+    const retiredTag = v && isNoReminderVehicle(v) ? ` <span class="pill gray">已${esc(v.status)}</span>` : '';
     return `<tr${insIsOff(i) ? ' style="opacity:.55;"' : ''}>
       <td>${esc(i.plate)}${retiredTag}</td>
       <td>${v ? esc(v.load_capacity||'') : ''}</td>
@@ -10802,7 +10813,7 @@ function renderVdTable(){
       const grace = (d.doc_type === '驗車' && d.expiry_date) ? addOneMonth(d.expiry_date) : d.expiry_date;
       return { d: d, v: v, grace: grace, code: grace ? statusOf(grace, 30) : 'gray' };
     })
-    .filter(r => r.v && !isRetiredVehicle(r.v));
+    .filter(r => r.v && !isNoReminderVehicle(r.v));
   if(q)  rows = rows.filter(r => (r.v.plate||'').includes(q));
   if(tf !== 'all') rows = rows.filter(r => r.d.doc_type === tf);
   if(sf !== 'all') rows = rows.filter(r => r.code === sf);
@@ -10855,7 +10866,7 @@ function renderFleetTable(){
   const typeF  = _val('fleet_type_filter');
   const tonsF  = _val('fleet_tons_filter');
   const vehicleRows = fleetPool.filter(v =>
-    (statusFilter==='all' || v.status===statusFilter) &&
+    (statusFilter==='all' || v.status===statusFilter || (statusFilter==='停駛' && isSuspendedVehicle(v))) &&
     (brandF==='all' || String(v.brand||'') === brandF) &&
     (typeF ==='all' || String(v.vehicle_type||'') === typeF) &&
     (tonsF ==='all' || String(v.load_capacity == null ? '' : v.load_capacity) === tonsF) &&
@@ -10888,7 +10899,7 @@ function renderFleetTable(){
   trailerRefreshSizeFilter(_tPool);
   const _tSizeF = ((document.getElementById('trailer_size_filter') || {}).value) || 'all';
   const trailerRows = _tPool.filter(v =>
-    (trailerStatusFilter==='all' || v.status===trailerStatusFilter) &&
+    (trailerStatusFilter==='all' || v.status===trailerStatusFilter || (trailerStatusFilter==='停駛' && isSuspendedVehicle(v))) &&
     trailerSizeMatch(v, _tSizeF) &&
     (!trailerQ || (v.plate||'').includes(trailerQ) || (v.company_name||'').includes(trailerQ) || (v.base_location||'').includes(trailerQ))
   );
@@ -10955,12 +10966,12 @@ function renderFleetTable(){
   renderFleetTypeSummary();
 }
 // 各車型車輛數：車型 × 行號，跟人員管理的「各行號投保人數」同一種看法。
-// 用車輛清單同一個母體（在役＋停用、不含板架／待賣出／已退場），不受上面搜尋、篩選影響。
+// 用車輛清單同一個母體（在役＋停駛、不含板架／待賣出／已退場），不受上面搜尋、篩選影響。
 function renderFleetTypeSummary(){
   const head = document.getElementById('fleetTypeSumHead');
   const body = document.getElementById('fleetTypeSumBody');
   if(!head || !body) return;
-  // 車輛＋板架：跟車輛清單、板架清單同一個母體（在役＋停用，不含待賣出、已退場）
+  // 車輛＋板架：跟車輛清單、板架清單同一個母體（在役＋停駛，不含待賣出、已退場）
   const live = v => !isRetiredVehicle(v) && !isPendingSaleVehicle(v);
   const groups = [
     { key:'車輛', label:'車輛', pool:(STATE.vehicles || []).filter(v => v.vehicle_category === '車輛' && live(v)), link:true },
@@ -10977,7 +10988,7 @@ function renderFleetTypeSummary(){
       g.coTot[c] = (g.coTot[c] || 0) + 1;
       g.typeTot[t] = (g.typeTot[t] || 0) + 1;
       coAll[c] = (coAll[c] || 0) + 1;
-      if(v.status === '停用') g.stop[t] = (g.stop[t] || 0) + 1;
+      if(isSuspendedVehicle(v)) g.stop[t] = (g.stop[t] || 0) + 1;
     });
     g.types = Object.keys(g.typeTot).sort((a, b) => g.typeTot[b] - g.typeTot[a] || a.localeCompare(b, 'zh-Hant'));
     g.stopN = Object.values(g.stop).reduce((a, b) => a + b, 0);
@@ -10989,7 +11000,7 @@ function renderFleetTypeSummary(){
   const R = 'text-align:right;';
   const n = v => v ? v + ' 台' : '<span class="muted">—</span>';
   head.innerHTML = `<tr><th>車型</th>${cos.map(c => `<th style="${R}" title="${esc(c)}">${esc(shortCompany(c))}</th>`).join('')}`
-    + `<th style="${R}">合計</th><th style="${R}">其中停用</th></tr>`;
+    + `<th style="${R}">合計</th><th style="${R}">其中停駛</th></tr>`;
   const typeSel = (document.getElementById('fleet_type_filter') || {}).value || 'all';
   const cols = cos.length + 3;
   const html = groups.filter(g => g.pool.length).map(g =>
@@ -15137,7 +15148,14 @@ function pcBliReconcileHtml(key, byCompany, empLabor){
   const n = v => Number(v || 0).toLocaleString('en-US');
   const lines = Object.entries(byCompany).map(([co, list]) => {
     const adj = insAdjFor(key, co), bill = insBillFor(key, co);
-    if(!adj.length && !bill) return '';
+    // 勞退：月報雇主提繳合計＋勞退的更正 vs 勞退計算名冊應繳
+    const padj = insAdjFor(key, co, '勞退'), pbill = insBillFor(key, co, '勞退');
+    const pSum = list.reduce((s, r) => s + (Number(r.latest.employer_pension) || 0), 0)
+               + padj.reduce((s, a) => s + (Number(a.employer_amount) || 0), 0);
+    const pLine = pbill ? `<div>${esc(co)}：月報勞退 6% 合計${padj.length ? '（含更正）' : ''} <b>${n(pSum)}</b>　／ 勞退計算名冊 <b>${n(pbill.total_amount)}</b>`
+      + (Number(pbill.total_amount) === pSum ? '　<span style="color:#2e7d32;">✓ 相符</span>'
+                                              : `　<span style="color:#c0392b;">差 ${n(pSum - Number(pbill.total_amount))}</span>`) + `</div>` : '';
+    if(!adj.length && !bill) return pLine;
     const rows = list.reduce((s, r) => s + (empLabor(r) || 0) + (Number(r.latest.personal_labor) || 0), 0);
     const fund = adj.filter(a => a.adj_type === '墊償基金').reduce((s, a) => s + (Number(a.employer_amount) || 0), 0);
     const other = adj.filter(a => a.adj_type !== '墊償基金')
@@ -15151,9 +15169,9 @@ function pcBliReconcileHtml(key, byCompany, empLabor){
       + (bill ? `　／ 勞保局繳款單 <b>${n(bill.total_amount)}</b>`
         + (Number(bill.total_amount) === sum ? '　<span style="color:#2e7d32;">✓ 相符</span>'
                                              : `　<span style="color:#c0392b;">差 ${n(sum - Number(bill.total_amount))}</span>`) : '')
-      + (det ? `<br><span style="color:#888;">　調整：${esc(det)}</span>` : '') + `</div>`;
+      + (det ? `<br><span style="color:#888;">　調整：${esc(det)}</span>` : '') + `</div>` + pLine;
   }).filter(Boolean);
-  return lines.length ? `<div style="font-size:12px;margin-top:12px;line-height:1.8;"><b>勞保局繳款單對帳</b>${lines.join('')}</div>` : '';
+  return lines.length ? `<div style="font-size:12px;margin-top:12px;line-height:1.8;"><b>勞保局繳款單／勞退名冊對帳</b>${lines.join('')}</div>` : '';
 }
 // ===== 投保金額總表 =====
 // 資料來源跟「勞健保提撥計算表」同一份：勞健保月報 insurance_monthly_records。

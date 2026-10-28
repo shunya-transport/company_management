@@ -218,7 +218,8 @@ async function load(){
     const latestMileage={};
     mlogs.forEach(m=>{ if(!(m.vehicle_id in latestMileage)) latestMileage[m.vehicle_id]=m.mileage; });
     // 報廢、繳銷、賣出的車不列（跟儀表板一樣）
-    ROWS = sched.filter(s=>{ const v=vById[s.vehicle_id]; return !(v && (v.status==='報廢' || v.status==='繳銷' || v.status==='賣出')); }).map(s=>{
+    // 停駛（舊資料叫停用）也不列：停駛就不跑任何到期提醒（115/10/28）
+    ROWS = sched.filter(s=>{ const v=vById[s.vehicle_id]; return !(v && ['報廢','繳銷','賣出','停駛','停用'].includes(v.status)); }).map(s=>{
       const v=vById[s.vehicle_id]||{};
       return computeRow(s, v.plate_number||('車#'+s.vehicle_id), v.base_location||'—', latestMileage[s.vehicle_id] ?? v.current_mileage ?? null);
     });
