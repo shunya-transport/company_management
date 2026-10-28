@@ -8800,6 +8800,77 @@ function insCarryEstimate(amount, dep, rate, days, chargeHealth){
   x.selfTotal = x.selfLabor + x.selfHealth;
   return x;
 }
+function insCarryPenWage(srcRow, amount){
+  const w = Number(srcRow && srcRow.pension_insured_amount) || 0;
+  const a = Number(amount) || 0;
+  if(!w || !a) return null;
+  const sameLabor  = (Number(srcRow.labor_insured_amount) || 0) === Math.min(a, IB_LABOR_MAX);
+  const sameInjury = (Number(srcRow.injury_insured_amount) || 0) === Math.min(a, IB_INJURY_MAX);
+  const calc = Math.min(Math.max(a, IB_PENSION_MIN), IB_PENSION_MAX);
+  return (sameLabor && sameInjury && w !== calc) ? w : null;
+}
+function insCarryPenFix(x, penWage, days){
+  if(!x || !penWage) return x;
+  const d = Math.max(0, Math.min(Number(days) || 0, INS_DAY_BASE));
+  x.pension = penWage;
+  x.empPension = Math.round(penWage * IB_PENSION_RATE * d / INS_DAY_BASE);
+  x.empTotal = x.empLabor + x.empInjury + x.empHealth + x.empPension;
+  return x;
+}
+// 這一期已經有月報時：新算出來的 vs 現有的，逐人列差額（寫入前先看清楚會改掉什麼）
+function insCarryDstDiffHtml(d){
+  if(!d.exists) return '';
+  const nm = v => String(v || '').trim();
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const cur = new Map();
+  (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === d.dstKey).forEach(r => {
+    const k = nm(r.name), o = cur.get(k);
+    if(!o) cur.set(k, Object.assign({}, r));
+    else INS_CARRY_FIELDS.forEach(([f]) => { o[f] = (Number(o[f]) || 0) + (Number(r[f]) || 0); });
+  });
+  const out = [];
+  const tot = {}; INS_CARRY_FIELDS.forEach(([f]) => tot[f] = { a: 0, b: 0 });
+  const seen = new Set();
+  d.rows.filter(r => Number(r.amount) > 0).forEach(r => {
+    seen.add(r.name);
+    const o = cur.get(r.name);
+    INS_CARRY_FIELDS.forEach(([f, label]) => {
+      const a = o ? (Number(o[f]) || 0) : 0, b = Number(r.row[f]) || 0;
+      tot[f].a += a; tot[f].b += b;
+      if(a !== b) out.push({ name: r.name, company: r.company, field: label, a: a, b: b,
+        why: !o ? '現有月報沒有這個人' : (f === 'employer_pension' && r.penWage ? '沿用上一期勞退提繳工資 ' + n(r.penWage)
+             : (f.indexOf('health') >= 0 && !r.chargeHealth ? '月中離職，健保當月不收'
+             : (r.days < INS_DAY_BASE ? '按日折算 ' + r.days + ' 天' : ''))) });
+    });
+  });
+  cur.forEach((o, k) => {
+    if(seen.has(k)) return;
+    INS_CARRY_FIELDS.forEach(([f, label]) => {
+      const a = Number(o[f]) || 0;
+      tot[f].a += a;
+      if(a) out.push({ name: k, company: o.company_name || '', field: label, a: a, b: 0, why: '這次試算沒有這個人（離職或已退保）' });
+    });
+  });
+  const people = new Set(out.map(r => r.name)).size;
+  return `<details style="margin-top:10px;" open>
+    <summary style="cursor:pointer;font-size:13px;color:#b26a00;">⚠ ${esc(insKeyLabel(d.dstKey))} 已經有月報：
+      寫入後會改掉 <b>${people}</b> 人、${out.length} 個欄位（下表是「現有 → 這次試算」）</summary>
+    <table style="font-size:12.5px;margin-top:6px;border-collapse:collapse;">
+      <tr><th style="padding:3px 8px;">欄位</th><th style="padding:3px 8px;text-align:right;">現有合計</th>
+        <th style="padding:3px 8px;text-align:right;">試算合計</th><th style="padding:3px 8px;text-align:right;">差額</th></tr>
+      ${INS_CARRY_FIELDS.map(([f, label]) => `<tr><td style="padding:3px 8px;">${esc(label)}</td>
+        <td style="padding:3px 8px;text-align:right;">${n(tot[f].a)}</td><td style="padding:3px 8px;text-align:right;">${n(tot[f].b)}</td>
+        <td style="padding:3px 8px;text-align:right;">${tot[f].b - tot[f].a ? (tot[f].b > tot[f].a ? '＋' : '－') + n(Math.abs(tot[f].b - tot[f].a)) : '—'}</td></tr>`).join('')}
+    </table>
+    ${out.length ? `<div class="table-scroll" style="max-height:320px;margin-top:8px;"><table style="font-size:12.5px;">
+      <thead><tr><th>姓名</th><th>行號</th><th>欄位</th><th style="text-align:right;">現有</th><th style="text-align:right;">試算</th>
+        <th style="text-align:right;">差額</th><th>原因</th></tr></thead>
+      <tbody>${out.map(r => `<tr><td>${esc(r.name)}</td><td class="muted">${esc(shortCompany(r.company))}</td><td>${esc(r.field)}</td>
+        <td style="text-align:right;">${n(r.a)}</td><td style="text-align:right;">${n(r.b)}</td>
+        <td style="text-align:right;color:${r.b > r.a ? '#c0392b' : '#2e7d32'};">${r.b > r.a ? '＋' : '－'}${n(Math.abs(r.b - r.a))}</td>
+        <td class="muted">${esc(r.why)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+  </details>`;
+}
 function insCarryBuild(){
   const srcKey = Number((document.getElementById('ins_carry_src') || {}).value) || insLatestKey();
   const dstKey = insParseKey((document.getElementById('ins_carry_dst') || {}).value) || insNextKey(srcKey);
@@ -8847,15 +8918,20 @@ function insCarryBuild(){
     const depBilled = insCarryBilledDeps(s);
     const depUse = (depBilled == null) ? depRoster : depBilled;
     const depFrom = (depBilled == null) ? '人員主檔眷屬數' : '上一期對帳單';
-    const x = insCarryEstimate(amt.amount, depUse, rate, win.days, true)
+    // 這一期月中就離職（退保日早於月底）：健保月底不在保，當月不收（表上可以再勾回來）
+    const chargeH = !(p.left && win.to && win.to < R.last);
+    // 勞退月提繳工資是另外申報的，跟勞保不一定一樣（115/09 巫玉宏：勞保 45,800、勞退 1,500）。
+    // 投保金額沒變（勞保、職災跟上一期一樣）就沿用上一期勞退名冊的提繳工資，不要用人員主檔重算。
+    const penWage = insCarryPenWage(s, amt.amount);
+    const x = insCarryPenFix(insCarryEstimate(amt.amount, depUse, rate, win.days, chargeH), penWage, win.days)
            || insCarryZero(amt.amount, rate, win.days);
-    if(amt.amount && !insCarryEstimate(amt.amount, depUse, rate, win.days, true)){
+    if(amt.amount && !insCarryEstimate(amt.amount, depUse, rate, win.days, chargeH)){
       skipped.push({ name: name, company: company, why: '投保金額 ' + amt.amount + ' 查不到對應級距（級距表最高 120,900）' });
     }
     rows.push({
       name: name, company: company, isNew: !s, amountFrom: amt.from,
       emp: e, src: s, est: x, dep: dep, free: free, rate: rate,
-      amount: amt.amount, days: win.days, win: win, chargeHealth: true, left: !!p.left,
+      amount: amt.amount, days: win.days, win: win, chargeHealth: chargeH, left: !!p.left, penWage: penWage, amount0: amt.amount,
       depUse: depUse, depFrom: depFrom, depRoster: depRoster, depBilled: depBilled,
       row: {
         year_roc: Math.floor(dstKey / 100), month: dstKey % 100,
@@ -8894,7 +8970,9 @@ function insCarryBuild(){
 function insCarryApply(i){
   const r = INS_CARRY_CACHE && INS_CARRY_CACHE.rows[i];
   if(!r) return;
-  const x = insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth)
+  // 表上改了投保金額，就不再沿用上一期的勞退提繳工資
+  if(r.penWage && Number(r.amount) !== Number(r.amount0)) r.penWage = null;
+  const x = insCarryPenFix(insCarryEstimate(r.amount, r.depUse, r.rate, r.days, r.chargeHealth), r.penWage, r.days)
         || insCarryZero(r.amount, r.rate, r.days);
   r.est = x;
   r.needAmount = !(Number(r.amount) > 0);
@@ -9133,6 +9211,7 @@ function insCarryRender(){
           + '</span>' : ''}
     </div>
     ${insAdjHtml(d)}
+    ${insCarryDstDiffHtml(d)}
     ${insCarryHrHtml(d)}
     ${insCarryDiffHtml(d)}`;
   insCarryRefreshTotals();
