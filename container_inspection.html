@@ -324,6 +324,27 @@ async function sbSelect(table, qs){
   if(!r.ok) throw new Error(table + '　' + r.status + '　' + (await r.text()));
   return r.json();
 }
+// 分頁讀取：Supabase 一次最多回 1000 筆，超過的會被默默截掉。
+// 這裡用 Range 一頁一頁抓，並請伺服器回報「總共幾筆」（Content-Range 斜線後面），
+// 抓到 max 筆就停，回傳 { rows, total }，畫面才講得出「共幾筆、目前列出幾筆」。
+async function sbSelectAll(table, qs, max){
+  const PAGE = 1000;
+  let rows = [], total = null;
+  for(let from = 0; from < max; from += PAGE){
+    const to = Math.min(from + PAGE, max) - 1;
+    const r = await sb(table + '?' + (qs || 'select=*'), { method:'GET',
+      headers:{ 'Range-Unit':'items', 'Range': from + '-' + to, 'Prefer':'count=exact' } });
+    if(r.status === 416) break;
+    if(!r.ok) throw new Error(table + '　' + r.status + '　' + (await r.text()));
+    const m = /\/(\d+)\s*$/.exec(r.headers.get('Content-Range') || '');
+    if(m) total = parseInt(m[1], 10);
+    const part = await r.json();
+    rows = rows.concat(part);
+    if(part.length < (to - from + 1)) break;
+    if(total != null && rows.length >= total) break;
+  }
+  return { rows: rows, total: total == null ? rows.length : total };
+}
 async function sbInsert(table, row){
   const r = await sb(table, { method:'POST', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
   if(!r.ok) throw new Error(await r.text());
@@ -377,7 +398,10 @@ const ITEMS = [
 const ALL_KEYS = ITEMS.reduce((a,it) => a.concat(it.k ? [it.k] : it.subs.map(s => s[0])), []);
 
 const FORM = { kind:'', spec:'', docs:new Set(), res:{} };
-const DATA = { rows:[], sel:new Set() };
+const DATA = { rows:[], sel:new Set(), total:0, shown:200, capped:false, recent:true };
+const CI_RECENT = 300;     // 打開頁面先抓最新 300 筆（學下拉建議＋「查詢」分頁預設清單）
+const CI_QUERY_MAX = 5000; // 查詢最多抓 5,000 筆，再多請縮小日期
+const CI_PAGE_SHOW = 200;  // 畫面一次先畫 200 筆，手機才不會卡；按「再顯示」往下加
 
 // ---------- 畫檢查項目 ----------
 function vxn(key){
@@ -627,16 +651,18 @@ function resetForm(keepHeader){
 // ---------- 查詢 ----------
 async function loadRecent(){
   try{
-    const rows = await sbSelect('container_inspections',
-      'select=*&order=inspect_date.desc,inspection_id.desc&limit=300');
-    DATA.rows = rows; learnLists(rows); warnBox('');
+    const got = await sbSelectAll('container_inspections',
+      'select=*&order=inspect_date.desc,inspection_id.desc', CI_RECENT);
+    DATA.rows = got.rows; DATA.total = got.total; DATA.recent = true; DATA.capped = false;
+    DATA.shown = CI_PAGE_SHOW;
+    learnLists(got.rows); warnBox('');
   }catch(e){
     DATA.rows = [];
     warnBox('讀不到雲端的檢查表資料。' + esc(tidy(e)) + '<br>還是可以填寫送出，但下面的查詢會是空的。');
   }
 }
 async function runQuery(){
-  const qs = ['select=*', 'order=inspect_date.desc,inspection_id.desc', 'limit=500'];
+  const qs = ['select=*', 'order=inspect_date.desc,inspection_id.desc'];
   const like = (col, v) => { if(v) qs.push(col + '=ilike.*' + encodeURIComponent(v) + '*'); };
   like('plate',        $('q_plate').value.trim());
   like('container_no', $('q_cno').value.trim());
@@ -646,15 +672,26 @@ async function runQuery(){
   if($('q_to').value)   qs.push('inspect_date=lte.' + $('q_to').value);
   if($('q_bad').checked) qs.push('abnormal=is.true');
   try{
-    DATA.rows = await sbSelect('container_inspections', qs.join('&'));
+    const got = await sbSelectAll('container_inspections', qs.join('&'), CI_QUERY_MAX);
+    DATA.rows = got.rows; DATA.total = got.total; DATA.recent = false;
+    DATA.capped = got.total > got.rows.length; DATA.shown = CI_PAGE_SHOW;
     DATA.sel.clear(); renderResults(); warnBox('');
   }catch(e){ warnBox('查詢失敗：' + esc(tidy(e))); }
 }
+function ciCountText(){
+  const n = DATA.rows.length, show = Math.min(DATA.shown, n);
+  let t = '共 ' + (DATA.recent ? DATA.total : n) + ' 筆';
+  if(DATA.recent && DATA.total > n) t += '（先列最新 ' + n + ' 筆，較早的請用上面的條件查）';
+  else if(DATA.capped) t += '（符合的有 ' + DATA.total + ' 筆，只抓最新 ' + n + ' 筆，請縮小日期範圍）';
+  if(show < n) t += '，畫面先列 ' + show + ' 筆';
+  return t + '，已選 ' + DATA.sel.size + ' 筆';
+}
 function renderResults(){
   const el = $('results');
-  $('q_count').textContent = '共 ' + DATA.rows.length + ' 筆，已選 ' + DATA.sel.size + ' 筆';
+  $('q_count').textContent = ciCountText();
   if(!DATA.rows.length){ el.innerHTML = '<div class="muted">沒有符合的紀錄。</div>'; return; }
-  el.innerHTML = DATA.rows.map(r => {
+  const more = DATA.rows.length - Math.min(DATA.shown, DATA.rows.length);
+  el.innerHTML = DATA.rows.slice(0, DATA.shown).map(r => {
     const bad = r.abnormal;
     return '<div class="rec ' + (bad ? 'bad' : 'good') + '">'
       + '<input type="checkbox" data-id="' + r.inspection_id + '"' + (DATA.sel.has(r.inspection_id) ? ' checked' : '') + '>'
@@ -669,12 +706,19 @@ function renderResults(){
       + '</div>'
       + (r.other_note ? '<div class="l3">備註：' + esc(r.other_note) + '</div>' : '')
       + '</div></div>';
-  }).join('');
+  }).join('')
+    + (more > 0 ? '<button class="btn ghost" id="ciMore" style="width:100%;margin-top:8px;">再顯示 '
+        + Math.min(more, CI_PAGE_SHOW) + ' 筆（還有 ' + more + ' 筆）</button>' : '');
   el.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', () => {
     const id = Number(cb.getAttribute('data-id'));
     if(cb.checked) DATA.sel.add(id); else DATA.sel.delete(id);
-    $('q_count').textContent = '共 ' + DATA.rows.length + ' 筆，已選 ' + DATA.sel.size + ' 筆';
+    $('q_count').textContent = ciCountText();
   }));
+  const mb = $('ciMore');
+  if(mb) mb.addEventListener('click', () => {
+    const y = window.scrollY;
+    DATA.shown += CI_PAGE_SHOW; renderResults(); window.scrollTo({ top:y });
+  });
 }
 
 // ---------- 列印：照紙本 DGTT-P012-R05-03 ----------
