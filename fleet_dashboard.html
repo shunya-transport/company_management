@@ -1405,7 +1405,7 @@
     </div>
 
     <div class="card">
-      <h2>內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span></h2>
+      <h2 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:64px;">內部訓練歷程查詢<span class="count-badge" id="training_log_count"></span><span id="tl_next_code" class="count-badge" style="margin-left:auto;cursor:pointer;background:#e8f2ec;color:#2e6b45;" title="點一下會帶入上面「新增內訓紀錄」的編號欄">今年度新編號：—</span></h2>
       <div class="toolbar">
         <input id="log_search" placeholder="搜尋姓名、課程名稱或編號（例：115-008）">
         <select id="log_year_filter"><option value="all">全部年份</option></select>
@@ -1414,6 +1414,7 @@
           <option value="合格">合格</option>
           <option value="不合格">不合格</option>
         </select>
+        <button type="button" class="btn ghost" id="tl_csv" style="padding:8px 14px;font-size:13px;" title="匯出目前搜尋／篩選後的全部筆數（不只畫面上的 200 筆）">匯出 CSV</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -18583,6 +18584,61 @@ function renderExternalStatusTable(){
 
 
 let logYearsInit = false;
+// ===== 內訓：今年度下一個編號 ＋ 匯出 CSV =====
+// 編號格式「民國年-三位流水號」（115-012）。抓目前載入的內訓紀錄裡今年度最大的流水號 +1；
+// 跨年自動換成新年度、從 001 開始（116 年第一筆 116-001）。
+// 訓練紀錄預設只載入近兩年，今年度一定在範圍內，所以不會漏算。
+var TL_LAST_ROWS = null;
+function tlNextCode(){
+  const roc = new Date().getFullYear() - 1911;
+  let max = 0;
+  const scan = list => (list || []).forEach(t => {
+    const m = /^\s*(\d{3})-(\d{3})\s*$/.exec(String((t && t.course_code) || ''));
+    if(m && Number(m[1]) === roc) max = Math.max(max, Number(m[2]));
+  });
+  scan(STATE.trainingLog);
+  if(Array.isArray(STATE.internalTrainings)) scan(STATE.internalTrainings);
+  return roc + '-' + String(max + 1).padStart(3, '0');
+}
+function tlRenderNextCode(){
+  const code = tlNextCode();
+  const el = document.getElementById('tl_next_code');
+  if(el) el.innerHTML = '今年度新編號：<b>' + code + '</b>';
+  const il = document.getElementById('il_code');
+  if(il) il.placeholder = '今年度下一個：' + code;
+}
+function tlCsvText(head, rows){
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  return [head.map(q).join(',')].concat(rows.map(r => r.map(q).join(','))).join('\r\n');
+}
+function exportTrainingLogCsv(){
+  if(!TL_LAST_ROWS) renderTrainingLogTable();
+  const rows = TL_LAST_ROWS || [];
+  if(!rows.length){ alert('目前篩選條件下沒有資料可以匯出。'); return; }
+  const head = ['受訓日期','編號','姓名','部門','課程內容','時數','訓練單位','評核','結果','備註'];
+  const out = rows.map(t => [t.training_date || '', t.course_code || '', t.name || '', t.dept_name || '', t.course_name || '',
+                            t.hours ?? '', t.training_unit || '', t.eval_method || '', t.result || '', t.notes || '']);
+  const q = (document.getElementById('log_search') || {}).value || '';
+  const y = (document.getElementById('log_year_filter') || {}).value || 'all';
+  const name = '內部訓練歷程' + (y !== 'all' ? '_' + y : '') + (q.trim() ? '_' + q.trim().replace(/[\\/:*?"<>|]/g, '') : '')
+             + '_' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.csv';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + tlCsvText(head, out)], { type:'text/csv;charset=utf-8;' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+(function(){
+  const b = document.getElementById('tl_csv');
+  if(b) b.addEventListener('click', exportTrainingLogCsv);
+  const n = document.getElementById('tl_next_code');
+  if(n) n.addEventListener('click', () => {
+    const il = document.getElementById('il_code');
+    if(!il) return;
+    il.value = tlNextCode();
+    il.scrollIntoView({ behavior:'smooth', block:'center' }); il.focus();
+  });
+})();
 function renderTrainingLogTable(){
   if(!logYearsInit){
     const years = [...new Set(STATE.trainingLog.map(t => (t.training_date||'').slice(0,4)).filter(Boolean))].sort().reverse();
@@ -18601,6 +18657,8 @@ function renderTrainingLogTable(){
   if(yearF !== 'all') rows = rows.filter(t => (t.training_date||'').startsWith(yearF));
   if(resultF !== 'all') rows = rows.filter(t => t.result === resultF);
   document.getElementById('training_log_count').textContent = `共 ${rows.length} 筆` + (rows.length > 200 ? '（只列最新 200 筆，舊的請用搜尋或年份找）' : '');
+  TL_LAST_ROWS = rows;            // 匯出 CSV 用：搜尋／篩選後的全部，不只前 200 筆
+  tlRenderNextCode();
   const shown = rows.slice(0, 200);
   document.getElementById('trainingLogBody').innerHTML = shown.map(t => `
     <tr>
