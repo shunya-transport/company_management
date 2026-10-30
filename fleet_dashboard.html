@@ -896,6 +896,8 @@
           <input type="checkbox" id="vi_show_off" style="width:auto;"> 顯示已中止／已續保的舊保單
         </label>
         <button class="btn ghost" id="vi_export90" style="padding:8px 14px;font-size:13px;">匯出 90 天內到期</button>
+        <button class="btn ghost" id="vi_export_ics" style="padding:8px 14px;font-size:13px;"
+                title="每個月一筆待辦（那個月要續保的車列在內容裡），提前三個月提醒；Rainlendar2：檔案 → 匯入">匯出 Rainlendar 待辦（.ics）</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -10768,6 +10770,89 @@ function insPlusOneYear(d){
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? (Number(m[1]) + 1) + '-' + m[2] + '-' + m[3] : '';
 }
+// ===== 車輛保險 → Rainlendar2 待辦（iCalendar VTODO）=====
+// 每個「到期月份」一筆待辦：標題寫哪個月、幾台；內容逐台列車號／險種／保險公司／到期日。
+// 到期日（DUE）＝那個月最早到期的那一張；開始日與提醒（VALARM）＝到期日往前三個月，早上 9 點。
+// 母體跟保險清單預設一樣：中止的、已續保的舊保單、報廢／賣出／繳銷／停駛的車都不列。
+// UID 固定用月份，同一個檔案重新匯入時 Rainlendar 會更新那一筆，不會一直重複。
+const INS_ICS_LEAD_MONTHS = 3;
+function insIcsRows(){
+  const latest = insLatestByKey();
+  return (STATE.vehicleInsurance || []).filter(i => {
+    if(insIsOff(i) || !i.expiry_date) return false;
+    if(insRenewedTo(i, latest)) return false;
+    const v = STATE.vehicles.find(x => x.plate === i.plate);
+    return !(v && isNoReminderVehicle(v));
+  }).slice().sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date))
+                         || String(a.plate || '').localeCompare(String(b.plate || '')));
+}
+function icsEsc(s){ return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+// RFC 5545：一行最多 75 個位元組（UTF-8），超過要折行，續行開頭一個空白；中文字不能從中間切開
+function icsFold(line){
+  const enc = new TextEncoder();
+  const out = []; let cur = '', bytes = 0;
+  for(const ch of line){
+    const b = enc.encode(ch).length;
+    if(bytes + b > (out.length ? 74 : 75)){ out.push(cur); cur = ''; bytes = 0; }
+    cur += ch; bytes += b;
+  }
+  out.push(cur);
+  return out.join('\r\n ');
+}
+function icsDate(iso){ return String(iso).slice(0, 10).replace(/-/g, ''); }
+function exportInsuranceIcs(){
+  const rows = insIcsRows();
+  if(!rows.length){ alert('沒有可以匯出的保險到期資料。'); return; }
+  const groups = new Map();
+  rows.forEach(i => {
+    const k = String(i.expiry_date).slice(0, 7);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(i);
+  });
+  const roc = iso => { const s = String(iso).slice(0, 10); return (Number(s.slice(0, 4)) - 1911) + '/' + s.slice(5, 7) + '/' + s.slice(8, 10); };
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Shunya Transport//Fleet Dashboard//ZH-TW', 'CALSCALE:GREGORIAN',
+             'X-WR-CALNAME:車輛保險續保'];
+  [...groups.keys()].sort().forEach(k => {
+    const list = groups.get(k);
+    const due = String(list[0].expiry_date).slice(0, 10);
+    const remind = refAddMonths(due, -INS_ICS_LEAD_MONTHS);
+    const y = Number(k.slice(0, 4)) - 1911, m = Number(k.slice(5, 7));
+    const plates = new Set(list.map(i => i.plate));
+    const summary = `車輛保險續保：${y}年${m}月到期（${plates.size}台／${list.length}張）`;
+    const lines = list.map((i, n) => {
+      const v = STATE.vehicles.find(x => x.plate === i.plate);
+      const kind = v ? (v.vehicle_category === '板架' ? '板架' : (v.vehicle_type || '車輛')) : '';
+      return `${n + 1}. ${i.plate || ''}${kind ? '（' + kind + '）' : ''}　${i.insurance_type || ''}`
+        + `${i.insurance_company ? '／' + i.insurance_company : ''}　到期 ${roc(i.expiry_date)}`;
+    });
+    const desc = `${y}年${m}月要續保的車輛保險，共 ${plates.size} 台、${list.length} 張保單：\n` + lines.join('\n')
+      + `\n\n最早到期：${roc(due)}；本待辦提前 ${INS_ICS_LEAD_MONTHS} 個月（${roc(remind)}）提醒。`
+      + `\n資料來源：運輸行政管理資料庫 車輛保險清單（匯出日 ${roc(todayISO())}）`;
+    L.push('BEGIN:VTODO',
+      'UID:vehicle-insurance-' + k.replace('-', '') + '@shunya-fleet',
+      'DTSTAMP:' + stamp,
+      'DTSTART;VALUE=DATE:' + icsDate(remind),
+      'DUE;VALUE=DATE:' + icsDate(due),
+      'SUMMARY:' + icsEsc(summary),
+      'DESCRIPTION:' + icsEsc(desc),
+      'CATEGORIES:' + icsEsc('車輛保險'),
+      'PRIORITY:5',
+      'STATUS:NEEDS-ACTION',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(summary),
+      'TRIGGER;VALUE=DATE-TIME:' + icsDate(remind) + 'T090000',
+      'END:VALARM',
+      'END:VTODO');
+  });
+  L.push('END:VCALENDAR');
+  const text = L.map(icsFold).join('\r\n') + '\r\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type:'text/calendar;charset=utf-8' }));
+  a.download = '車輛保險續保待辦_' + todayISO().replace(/-/g, '') + '.ics';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 function exportInsuranceDue90(){
   const rows = insDue90Rows();
   if(!rows.length){ alert('目前沒有 90 天內到期的保險。'); return; }
@@ -20337,6 +20422,8 @@ document.getElementById('vi_insurer').addEventListener('change', (e) => {
 });
 { const _e90 = document.getElementById('vi_export90');
   if(_e90) _e90.addEventListener('click', exportInsuranceDue90); }
+{ const _ics = document.getElementById('vi_export_ics');
+  if(_ics) _ics.addEventListener('click', exportInsuranceIcs); }
 document.getElementById('vi_search').addEventListener('input', renderViTable);
 document.getElementById('vi_type_filter').addEventListener('change', renderViTable);
 document.getElementById('vi_status_filter').addEventListener('change', renderViTable);
