@@ -2497,6 +2497,60 @@
       </div>
     </div>
 
+    <div class="card" id="sdsCard">
+      <h2 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:64px;">SDS 文件管理<span class="count-badge" id="sds_count"></span>
+        <span class="count-badge" id="sds_due_badge" style="margin-left:auto;"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        各業主（貨主）提供的安全資料表（SDS）。<b>有效日期＝製表日期＋3 年</b>（危害性化學品標示及通識規則：SDS 至少每 3 年檢討更新一次），
+        90 天內到期標黃、過期標紅，到期前請向業主索取新版。<br>
+        PDF 原檔存在雲端（Supabase Storage，只有登入的人看得到）。按「批次上傳 PDF」一次選多個檔案，
+        檔名跟表上的「檔名」一樣的會自動對上；對不上的會列出來，可以再一筆一筆按「上傳」。
+      </div>
+      <div class="toolbar">
+        <input id="sds_search" placeholder="搜尋物質名稱／UN／CAS／化學式或型號">
+        <select id="sds_owner_filter"><option value="all">全部業主</option></select>
+        <select id="sds_due_filter">
+          <option value="all">全部</option>
+          <option value="valid">有效</option>
+          <option value="90">90 天內到期</option>
+          <option value="expired">已過期</option>
+          <option value="nofile">還沒上傳 PDF</option>
+        </select>
+        <button class="btn ghost" id="sds_new" style="padding:8px 14px;font-size:13px;">新增</button>
+        <button class="btn ghost" id="sds_bulk_btn" style="padding:8px 14px;font-size:13px;">批次上傳 PDF</button>
+        <input type="file" id="sds_bulk_file" accept="application/pdf,.pdf" multiple style="display:none;">
+        <input type="file" id="sds_one_file" accept="application/pdf,.pdf" style="display:none;">
+        <button class="btn ghost" id="sds_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+      </div>
+      <div id="sds_form" style="display:none;margin:8px 0 12px;padding:10px;border:1px solid var(--line,#ddd);border-radius:10px;">
+        <div class="form-grid">
+          <label>業主<input id="sds_f_owner" list="sdsOwnerList" placeholder="例：華立"></label>
+          <label>物質名稱<input id="sds_f_name" placeholder="例：三氟化氮"></label>
+          <label>UN 編號<input id="sds_f_un" placeholder="例：2451"></label>
+          <label>CAS No.<input id="sds_f_cas" placeholder="例：7783-54-2"></label>
+          <label>化學式／產品型號<input id="sds_f_code" placeholder="例：NF3、N-1601"></label>
+          <label>危險物品分類<input id="sds_f_class" placeholder="例：2.2、5.1"></label>
+          <label>製表日期<input id="sds_f_date" type="date"></label>
+          <label>有效日期（空白＝製表日期＋3 年）<input id="sds_f_valid" type="date"></label>
+          <label>供應商／製造商<input id="sds_f_supplier"></label>
+          <label>檔名<input id="sds_f_file" placeholder="上傳 PDF 時對檔名用"></label>
+          <label>備註<input id="sds_f_note"></label>
+        </div>
+        <datalist id="sdsOwnerList"></datalist>
+        <button class="btn" id="sds_save">儲存</button>
+        <button class="btn ghost" id="sds_cancel">取消</button>
+        <span id="sds_form_msg" class="muted" style="margin-left:8px;font-size:12.5px;"></span>
+      </div>
+      <div id="sds_msg" style="font-size:12.5px;margin-bottom:6px;"></div>
+      <div class="table-scroll" style="max-height:640px;">
+        <table>
+          <thead><tr><th>業主</th><th>物質名稱</th><th>UN 編號</th><th>CAS No.</th><th>化學式／型號</th><th>危險分類</th>
+            <th>製表日期</th><th>有效日期</th><th>剩餘</th><th>PDF</th><th></th></tr></thead>
+          <tbody id="sdsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card">
       <h2>依廠商／品項彙總<span class="count-badge" id="vpg_count"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
@@ -5263,6 +5317,9 @@ async function loadState(){
     STATE.referralRules = await _opt('referral_bonus_rules?select=*&order=effective_from.desc,months.asc');
     // 勞健保預估快照（SQL_228）：拿去扣薪資的那一版，多退少補表用
     STATE.insEstimates = await _opt('insurance_monthly_estimates?select=*&order=year_roc.desc,month.desc');
+    // SDS 文件管理（SQL_231）
+    STATE.sdsDocs = await _opt('sds_documents?select=*&order=owner.asc,sort_no.asc,id.asc');
+    STATE.sdsLoaded = true;
   }
   // 勞健保級距表（SQL_182 建的）。撈不到就用程式裡那份內建備援，畫面照樣能看。
   STATE.insBrackets = [];
@@ -20193,6 +20250,7 @@ function renderAll(){
   renderViTable();
   vpFillPlateSelect('vp_plate', (document.getElementById('vp_plate') || {}).value);
   renderVpTable();
+  if(typeof renderSds === 'function') renderSds();
   renderVtTable();
   renderHzTable();
   renderMaintenanceTables();
@@ -20959,6 +21017,200 @@ document.getElementById('viTableBody').addEventListener('click', async (e) => {
   }
 });
 
+// ===================== SDS 文件管理 =====================
+// sds_documents（SQL_231）＋ Supabase Storage 的 sds bucket（私有，只給登入的人）。
+// 有效日期沒填就用製表日期＋3 年（危害性化學品標示及通識規則第 15 條：SDS 每 3 年至少檢討一次）。
+const SDS_BUCKET = 'sds';
+let SDS_EDIT_ID = null, SDS_ONE_ID = null;
+function sdsValid(r){
+  if(r.valid_until) return String(r.valid_until).slice(0, 10);
+  return r.sds_date ? refAddMonths(String(r.sds_date).slice(0, 10), 36) : '';
+}
+function sdsDays(r){ const v = sdsValid(r); return v ? vpDaysLeft(v) : null; }
+function sdsRoc(d){ const s = String(d || '').slice(0, 10); return s ? (Number(s.slice(0, 4)) - 1911) + '/' + s.slice(5, 7) + '/' + s.slice(8, 10) : ''; }
+function sdsRows(){
+  const q = ((document.getElementById('sds_search') || {}).value || '').trim().toUpperCase();
+  const of = (document.getElementById('sds_owner_filter') || {}).value || 'all';
+  const df = (document.getElementById('sds_due_filter') || {}).value || 'all';
+  return (STATE.sdsDocs || []).filter(r => {
+    if(of !== 'all' && r.owner !== of) return false;
+    if(q && ![r.substance_name, r.un_no, r.cas_no, r.formula_code, r.hazard_class, r.supplier, r.file_name]
+              .some(v => String(v || '').toUpperCase().includes(q))) return false;
+    const d = sdsDays(r);
+    if(df === 'valid')   return d !== null && d >= 0;
+    if(df === '90')      return d !== null && d >= 0 && d <= 90;
+    if(df === 'expired') return d !== null && d < 0;
+    if(df === 'nofile')  return !r.file_path;
+    return true;
+  });
+}
+function sdsPill(r){
+  const d = sdsDays(r);
+  if(d === null) return '<span class="pill gray">無製表日期</span>';
+  if(d < 0) return `<span class="pill red">已過期 ${-d} 天</span>`;
+  if(d <= 90) return `<span class="pill amber">${d} 天</span>`;
+  return `<span class="pill green">${d} 天</span>`;
+}
+function renderSds(){
+  const body = document.getElementById('sdsBody');
+  if(!body) return;
+  const all = STATE.sdsDocs || [];
+  const sel = document.getElementById('sds_owner_filter');
+  if(sel){
+    const keep = sel.value;
+    const owners = [...new Set(all.map(r => r.owner).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    sel.innerHTML = '<option value="all">全部業主</option>' + owners.map(o => `<option value="${esc(o)}">${esc(o)}（${all.filter(r => r.owner === o).length}）</option>`).join('');
+    sel.value = owners.includes(keep) ? keep : 'all';
+    const dl = document.getElementById('sdsOwnerList');
+    if(dl) dl.innerHTML = owners.map(o => `<option value="${esc(o)}">`).join('');
+  }
+  const rows = sdsRows();
+  const c = document.getElementById('sds_count');
+  if(c) c.textContent = `共 ${rows.length} 份` + (rows.length !== all.length ? `（全部 ${all.length} 份）` : '');
+  const due = all.filter(r => { const d = sdsDays(r); return d !== null && d <= 90; });
+  const b = document.getElementById('sds_due_badge');
+  if(b) b.textContent = due.length ? `90 天內到期／已過期 ${due.length} 份` : '';
+  body.innerHTML = rows.map(r => `<tr>
+      <td>${esc(r.owner || '')}</td>
+      <td><b>${esc(r.substance_name || '')}</b>${r.notes ? `<div class="muted" style="font-size:11.5px;">${esc(r.notes)}</div>` : ''}</td>
+      <td>${esc(r.un_no || '')}</td><td style="font-size:12px;">${esc(r.cas_no || '')}</td>
+      <td>${esc(r.formula_code || '')}</td><td>${esc(r.hazard_class || '')}</td>
+      <td>${esc(sdsRoc(r.sds_date))}</td><td>${esc(sdsRoc(sdsValid(r)))}</td><td>${sdsPill(r)}</td>
+      <td>${r.file_path ? `<button class="name-link" data-sds-open="${r.id}">開啟</button>` : '<span class="muted">未上傳</span>'}
+        　<button class="name-link" data-sds-up="${r.id}">${r.file_path ? '換檔' : '上傳'}</button></td>
+      <td><button class="name-link" data-sds-edit="${r.id}">改</button>　<button class="del-btn" data-sds-del="${r.id}">刪除</button></td>
+    </tr>`).join('') || `<tr><td colspan="11" class="empty">${STATE.sdsLoaded && !all.length ? '還沒有資料（請先在 Supabase 執行 SQL_231）' : '沒有符合條件的 SDS'}</td></tr>`;
+}
+function sdsMsg(html, color){
+  const el = document.getElementById('sds_msg');
+  if(el){ el.style.color = color || ''; el.innerHTML = html; }
+}
+function sdsOpenForm(r){
+  SDS_EDIT_ID = r ? r.id : null;
+  const v = (id, x) => { const el = document.getElementById(id); if(el) el.value = x == null ? '' : x; };
+  v('sds_f_owner', r && r.owner); v('sds_f_name', r && r.substance_name); v('sds_f_un', r && r.un_no);
+  v('sds_f_cas', r && r.cas_no); v('sds_f_code', r && r.formula_code); v('sds_f_class', r && r.hazard_class);
+  v('sds_f_date', r && r.sds_date && String(r.sds_date).slice(0, 10)); v('sds_f_valid', r && r.valid_until && String(r.valid_until).slice(0, 10));
+  v('sds_f_supplier', r && r.supplier); v('sds_f_file', r && r.file_name); v('sds_f_note', r && r.notes);
+  document.getElementById('sds_form').style.display = '';
+  document.getElementById('sds_form_msg').textContent = r ? '修改：' + (r.substance_name || '') : '新增一份 SDS';
+  document.getElementById('sds_f_owner').focus();
+}
+async function sdsSave(){
+  const g = id => ((document.getElementById(id) || {}).value || '').trim();
+  const row = { owner: g('sds_f_owner'), substance_name: g('sds_f_name'), un_no: g('sds_f_un') || null, cas_no: g('sds_f_cas') || null,
+    formula_code: g('sds_f_code') || null, hazard_class: g('sds_f_class') || null, sds_date: g('sds_f_date') || null,
+    valid_until: g('sds_f_valid') || null, supplier: g('sds_f_supplier') || null, file_name: g('sds_f_file') || null, notes: g('sds_f_note') || null };
+  const msg = document.getElementById('sds_form_msg');
+  if(!row.owner || !row.substance_name){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '業主、物質名稱一定要填。'; return; }
+  try{
+    if(SDS_EDIT_ID){
+      const res = await supaFetch('sds_documents?id=eq.' + SDS_EDIT_ID, { method:'PATCH', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
+      const i = STATE.sdsDocs.findIndex(x => x.id === SDS_EDIT_ID);
+      if(i >= 0) STATE.sdsDocs[i] = (res && res[0]) || Object.assign(STATE.sdsDocs[i], row);
+    }else{
+      const res = await supaFetch('sds_documents', { method:'POST', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify([row]) });
+      (STATE.sdsDocs = STATE.sdsDocs || []).push(...(res || []));
+    }
+    document.getElementById('sds_form').style.display = 'none';
+    sdsMsg('已儲存。', 'var(--green,#2e7d32)');
+    renderSds();
+  }catch(e){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '儲存失敗：' + e.message; }
+}
+async function sdsDelete(id){
+  const r = (STATE.sdsDocs || []).find(x => x.id === id);
+  if(!r || !confirm('刪除「' + (r.owner || '') + '　' + (r.substance_name || '') + '」這份 SDS？' + (r.file_path ? '\n雲端的 PDF 也會一起刪掉。' : ''))) return;
+  try{
+    if(r.file_path) await authFetch(`${SUPABASE_URL}/storage/v1/object/${SDS_BUCKET}/${r.file_path}`, { method:'DELETE',
+      headers:{ apikey: SUPABASE_KEY, Authorization: `Bearer ${AUTH_TOKEN || SUPABASE_KEY}` } }).catch(() => {});
+    await supaFetch('sds_documents?id=eq.' + id, { method:'DELETE' });
+    STATE.sdsDocs = STATE.sdsDocs.filter(x => x.id !== id);
+    renderSds();
+  }catch(e){ alert('刪除失敗：' + e.message); }
+}
+// 上傳：雲端路徑一律用「編號.pdf」（中文檔名放進網址容易出問題），原始檔名記在 file_name
+async function sdsUpload(r, file){
+  const path = 'doc-' + r.id + '.pdf';
+  const res = await authFetch(`${SUPABASE_URL}/storage/v1/object/${SDS_BUCKET}/${path}`, { method:'POST',
+    headers:{ apikey: SUPABASE_KEY, Authorization: `Bearer ${AUTH_TOKEN || SUPABASE_KEY}`, 'Content-Type':'application/pdf', 'x-upsert':'true' },
+    body: file });
+  if(!res.ok) throw new Error('上傳失敗 ' + res.status + '：' + (await res.text().catch(() => '')).slice(0, 200));
+  const patch = { file_path: path, file_name: r.file_name || file.name, file_uploaded_at: new Date().toISOString() };
+  await supaFetch('sds_documents?id=eq.' + r.id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body: JSON.stringify(patch) });
+  Object.assign(r, patch);
+}
+async function sdsOpen(id){
+  const r = (STATE.sdsDocs || []).find(x => x.id === id);
+  if(!r || !r.file_path) return;
+  const w = window.open('', '_blank');
+  try{
+    const res = await authFetch(`${SUPABASE_URL}/storage/v1/object/sign/${SDS_BUCKET}/${r.file_path}`, { method:'POST',
+      headers:{ apikey: SUPABASE_KEY, Authorization: `Bearer ${AUTH_TOKEN || SUPABASE_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ expiresIn: 600 }) });
+    if(!res.ok) throw new Error(res.status + ' ' + (await res.text().catch(() => '')).slice(0, 200));
+    const j = await res.json();
+    const url = `${SUPABASE_URL}/storage/v1${j.signedURL || j.signedUrl}`;
+    if(w) w.location = url; else window.open(url, '_blank');
+  }catch(e){ if(w) w.close(); alert('開不了檔案：' + e.message); }
+}
+// 批次上傳：用檔名對表上的「檔名」，去掉前面的序號、空白、副檔名後再比一次
+function sdsNorm(n){ return String(n || '').normalize('NFC').replace(/\.pdf$/i, '').replace(/^\s*\d+\s*[.、．]\s*/, '').replace(/\s+/g, '').toUpperCase(); }
+async function sdsBulk(files){
+  const list = [...files];
+  if(!list.length) return;
+  const docs = STATE.sdsDocs || [];
+  const ok = [], miss = [], fail = [];
+  sdsMsg('上傳中… 0／' + list.length);
+  for(let i = 0; i < list.length; i++){
+    const f = list[i];
+    const exact = docs.filter(r => String(r.file_name || '').normalize('NFC') === f.name.normalize('NFC'));
+    const loose = exact.length ? exact : docs.filter(r => sdsNorm(r.file_name) && sdsNorm(r.file_name) === sdsNorm(f.name));
+    if(loose.length !== 1){ miss.push(f.name + (loose.length > 1 ? '（對到 ' + loose.length + ' 筆，請個別上傳）' : '')); continue; }
+    try{ await sdsUpload(loose[0], f); ok.push(f.name); }catch(e){ fail.push(f.name + '：' + e.message); }
+    sdsMsg('上傳中… ' + (i + 1) + '／' + list.length);
+  }
+  renderSds();
+  sdsMsg(`上傳完成 <b>${ok.length}</b> 份` + (miss.length ? `<br><span style="color:#b26a00;">對不上表上檔名的 ${miss.length} 份（請在表上那一列按「上傳」）：${esc(miss.join('、'))}</span>` : '')
+       + (fail.length ? `<br><span style="color:#c0392b;">失敗 ${fail.length} 份：${esc(fail.join('；'))}</span>` : ''), '');
+}
+function sdsCsv(){
+  const rows = sdsRows();
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const head = ['業主','物質名稱','UN編號','CAS No.','化學式/產品型號','危險物品分類','製表日期','SDS有效日期','剩餘天數','供應商/製造商','檔名','PDF已上傳','備註'];
+  const out = rows.map(r => [r.owner, r.substance_name, r.un_no, r.cas_no, r.formula_code, r.hazard_class,
+    String(r.sds_date || '').slice(0, 10), sdsValid(r), sdsDays(r) ?? '', r.supplier, r.file_name, r.file_path ? '是' : '否', r.notes]);
+  const text = [head.map(q).join(',')].concat(out.map(r => r.map(q).join(','))).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + text], { type:'text/csv;charset=utf-8;' }));
+  a.download = 'SDS總表_' + todayISO().replace(/-/g, '') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+(function(){
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  ['sds_search'].forEach(id => on(id, 'input', renderSds));
+  ['sds_owner_filter', 'sds_due_filter'].forEach(id => on(id, 'change', renderSds));
+  on('sds_new', 'click', () => sdsOpenForm(null));
+  on('sds_cancel', 'click', () => { document.getElementById('sds_form').style.display = 'none'; });
+  on('sds_save', 'click', sdsSave);
+  on('sds_csv', 'click', sdsCsv);
+  on('sds_bulk_btn', 'click', () => document.getElementById('sds_bulk_file').click());
+  on('sds_bulk_file', 'change', e => { sdsBulk(e.target.files); e.target.value = ''; });
+  on('sds_one_file', 'change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    const r = (STATE.sdsDocs || []).find(x => x.id === SDS_ONE_ID);
+    if(!f || !r) return;
+    try{ sdsMsg('上傳中…'); await sdsUpload(r, f); renderSds(); sdsMsg('已上傳：' + esc(f.name), 'var(--green,#2e7d32)'); }
+    catch(err){ sdsMsg(esc(err.message), 'var(--red,#c0392b)'); }
+  });
+  on('sdsBody', 'click', e => {
+    const t = e.target.closest('[data-sds-open],[data-sds-up],[data-sds-edit],[data-sds-del]');
+    if(!t) return;
+    if(t.dataset.sdsOpen) sdsOpen(Number(t.dataset.sdsOpen));
+    else if(t.dataset.sdsUp){ SDS_ONE_ID = Number(t.dataset.sdsUp); document.getElementById('sds_one_file').click(); }
+    else if(t.dataset.sdsEdit) sdsOpenForm((STATE.sdsDocs || []).find(x => x.id === Number(t.dataset.sdsEdit)));
+    else if(t.dataset.sdsDel) sdsDelete(Number(t.dataset.sdsDel));
+  });
+})();
 // ===================== 通行證查詢 =====================
 // 載運危險物品臨時通行證（vehicle_passes，SQL_192 建的）。
 // 一張證＝一台車 × 一個廠商 × 一個品項，到期要整批重新申請，所以舊的留著當紀錄，
