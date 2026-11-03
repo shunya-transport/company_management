@@ -532,6 +532,7 @@
       <label>帳本<select id="stm_book"></select></label>
       <label>起<input type="date" id="stm_from"></label>
       <label>迄<input type="date" id="stm_to"></label>
+      <label>記錄人<input type="text" id="stm_keeper" placeholder="依交接紀錄自動帶入" style="width:150px;"></label>
       <label class="inline"><input type="checkbox" id="stm_detail" checked> 附明細</label>
       <button class="btn primary" id="stm_go">產生</button>
       <button class="btn" id="stm_print">列印／存 PDF</button>
@@ -551,12 +552,14 @@
       <label>帳本名稱<input type="text" id="sb_name"></label>
       <label>公司全名<input type="text" id="sb_company"></label>
       <label>類型<select id="sb_type"><option>自有</option><option>代管</option></select></label>
-      <label>記錄人<input type="text" id="sb_keeper"></label>
+      <label>記錄人（保管人）<input type="text" id="sb_keeper" placeholder="換人就直接改名字"></label>
+      <label>交接日（新記錄人從這天起）<input type="date" id="sb_keeper_from"></label>
       <label>期初日<input type="date" id="sb_odate"></label>
       <label>期初餘額<input type="number" id="sb_obal" step="1"></label>
       <label>定額（撥補補到多少）<input type="number" id="sb_target" step="1" placeholder="可留空"></label>
       <label class="inline" style="align-self:end;"><input type="checkbox" id="sb_show"> 在會計系統顯示餘額</label>
       <label style="grid-column:span 2;">備註<input type="text" id="sb_notes"></label>
+      <div id="sb_keeper_hist" style="grid-column:1/-1;font-size:12.5px;color:#6b6357;"></div>
     </div>
     <div class="toolbar">
       <button class="btn primary" id="sb_save">儲存這本帳</button>
@@ -1696,11 +1699,14 @@ function buildStatement(){
   const inc = live.filter(e => e.direction === '收入').reduce((s,e) => s + num(e.amount), 0);
   const exp = live.filter(e => e.direction === '支出').reduce((s,e) => s + num(e.amount), 0);
   const end = open + inc - exp;
+  const autoKeeper = keeperLabel(bk, from, to);
+  if($('stm_keeper')) $('stm_keeper').placeholder = autoKeeper || '（未設定記錄人）';
+  const keeperText = (($('stm_keeper') || {}).value || '').trim() || autoKeeper;
   let h = '';
   h += '<div style="text-align:center;margin-bottom:18px;">' +
        '<div style="font-size:22px;font-weight:700;letter-spacing:.06em;">' + esc(bk.company_name) + ' 零用金對帳單</div>' +
        '<div style="font-size:13px;color:#6b6357;margin-top:6px;">保管單位：順亞運通股份有限公司　・　期間：' + toROC(from) + ' ～ ' + toROC(to) + '</div>' +
-       '<div style="font-size:12px;color:#6b6357;">列印日期：' + toROC(todayISO()) + '　記錄人：' + esc(bk.keeper || '') + '</div></div>';
+       '<div style="font-size:12px;color:#6b6357;">列印日期：' + toROC(todayISO()) + '　記錄人：' + esc(keeperText) + '</div></div>';
   h += '<table style="width:100%;margin-bottom:18px;"><tbody>' +
        '<tr><th style="text-align:left;width:180px;">期初餘額</th><td class="num">' + fmt2(open) + '</td></tr>' +
        '<tr><th style="text-align:left;">本期收入（入零用金）</th><td class="num">' + fmt2(inc) + '</td></tr>' +
@@ -1732,11 +1738,67 @@ function buildStatement(){
   h += '<div style="margin-top:34px;display:flex;gap:60px;font-size:13px;">' +
        '<div>製表：____________________</div><div>覆核：____________________</div><div>' + esc(bk.company_name) + ' 簽收：____________________</div></div>';
   $('stmOut').innerHTML = h;
-  return { bk:bk, from:from, to:to, rows:inRange, open:open, inc:inc, exp:exp, end:end };
+  return { bk:bk, from:from, to:to, rows:inRange, open:open, inc:inc, exp:exp, end:end, keeper:keeperText };
 }
 function prevDay(iso){
   const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() - 1);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// ---------- 記錄人交接 ----------
+// petty_books.keeper_history（SQL_235 加的欄位）：[{from:'YYYY-MM-DD', keeper:'姓名'}]
+// from 空白＝最早那一位。對帳單依期間找當時的記錄人，期間中間有交接就兩位都列。
+function keeperHist(bk){
+  let h = bk ? bk.keeper_history : null;
+  if(typeof h === 'string'){ try{ h = JSON.parse(h); }catch(_){ h = null; } }
+  h = Array.isArray(h) ? h.filter(x => x && String(x.keeper || '').trim())
+        .map(x => ({ from: String(x.from || '').slice(0, 10), keeper: String(x.keeper).trim() })) : [];
+  h.sort((a, b) => a.from.localeCompare(b.from));
+  // 歷程最後一位跟目前記錄人對不起來（例如歷程欄位還沒建）→ 以目前記錄人為準
+  const cur = bk ? String(bk.keeper || '').trim() : '';
+  if(cur && (!h.length || h[h.length - 1].keeper !== cur)) h = [{ from: '', keeper: cur }];
+  return h;
+}
+function keepersInRange(bk, from, to){
+  const h = keeperHist(bk), out = [];
+  h.forEach((x, i) => {
+    const st = x.from || '0000-01-01';
+    const ed = h[i + 1] && h[i + 1].from ? prevDay(h[i + 1].from) : '9999-12-31';
+    if(st <= to && ed >= from) out.push({ keeper: x.keeper, from: st, to: ed });
+  });
+  return out;
+}
+function keeperLabel(bk, from, to){
+  const ks = keepersInRange(bk, from, to);
+  if(!ks.length) return bk ? (bk.keeper || '') : '';
+  if(ks.length === 1) return ks[0].keeper;
+  return ks.map(k => k.keeper + '（' + (k.from > from ? toROC(k.from) : '') + '～' + (k.to < to ? toROC(k.to) : '') + '）').join('、');
+}
+function renderKeeperHist(){
+  const box = $('sb_keeper_hist'); if(!box) return;
+  const h = keeperHist(CUR_BOOK);
+  if(h.length <= 1 && !(h[0] && h[0].from)){
+    box.innerHTML = '換記錄人：把「記錄人」改成新的名字、填交接日（不填就是今天）再按「儲存這本帳」。交接日以前的對帳單仍會印舊的記錄人。';
+    return;
+  }
+  box.innerHTML = '<b>交接紀錄</b>　' + h.map((x, i) =>
+    esc(x.keeper) + '（' + (x.from ? toROC(x.from) + ' 起' : '最早') + '）' +
+    (i > 0 ? ' <button class="btn ghost tiny" data-khdel="' + i + '" title="刪掉這筆交接">×</button>' : '')
+  ).join('　→　');
+}
+async function keeperHistDelete(i){
+  const h = keeperHist(CUR_BOOK);
+  if(!h[i] || i === 0) return;
+  if(!confirm('刪掉「' + h[i].keeper + '」這筆交接紀錄？')) return;
+  h.splice(i, 1);
+  const msg = $('sb_msg');
+  try{
+    const saved = await sbUpdate('petty_books', 'book_id', CUR_BOOK.book_id,
+      { keeper_history: h, keeper: h.length ? h[h.length - 1].keeper : null });
+    const k = STATE.books.findIndex(b => b.book_id === CUR_BOOK.book_id);
+    if(k >= 0) STATE.books[k] = saved; CUR_BOOK = STATE.books[k];
+    renderAll(); msg.textContent = '已刪除交接紀錄';
+  }catch(e){ msg.textContent = '失敗：' + e.message; }
 }
 
 // ---------- 設定 ----------
@@ -1744,6 +1806,8 @@ function fillBookForm(){
   const b = CUR_BOOK; if(!b) return;
   $('sb_name').value = b.book_name || ''; $('sb_company').value = b.company_name || '';
   $('sb_type').value = b.book_type || '自有'; $('sb_keeper').value = b.keeper || '';
+  if($('sb_keeper_from')) $('sb_keeper_from').value = '';
+  renderKeeperHist();
   $('sb_odate').value = (b.opening_date || '').slice(0,10);
   $('sb_obal').value = b.opening_balance == null ? '' : b.opening_balance;
   $('sb_target').value = b.target_balance == null ? '' : b.target_balance;
@@ -2335,10 +2399,15 @@ function wire(){
     rows.push(['', '本期收入', '', '', '', '', r.inc, '', '']);
     rows.push(['', '本期支出', '', '', '', '', r.exp, '', '']);
     rows.push(['', '期末餘額', '', '', '', '', r.end, '', '']);
+    rows.push(['', '記錄人', r.keeper || '', '', '', '', '', '', '']);
     download('零用金對帳單_' + r.bk.book_name + '_' + r.from + '_' + r.to + '.csv',
       csvLines(['#','日期','科目','摘要','收入','支出','餘額','領款人','狀態'], rows));
   };
 
+  if($('sb_keeper_hist')) $('sb_keeper_hist').onclick = ev => {
+    const b = ev.target.closest('[data-khdel]'); if(b) keeperHistDelete(parseInt(b.dataset.khdel, 10));
+  };
+  if($('stm_keeper')) $('stm_keeper').onchange = () => { if($('stmOut').innerHTML.indexOf('對帳單') >= 0) buildStatement(); };
   $('sb_save').onclick = async () => {
     const msg = $('sb_msg');
     try{
@@ -2352,7 +2421,27 @@ function wire(){
         show_in_accounting: $('sb_show').checked, notes: $('sb_notes').value || null
       };
       if(!patch.book_name || !patch.company_name) throw new Error('帳本名稱與公司全名不能空白');
-      const saved = await sbUpdate('petty_books', 'book_id', CUR_BOOK.book_id, patch);
+      // 記錄人換人 → 記一筆交接（交接日不填就是今天）
+      const oldK = String(CUR_BOOK.keeper || '').trim(), newK = String(patch.keeper || '').trim();
+      let keeperNote = '';
+      if(newK && newK !== oldK){
+        const hf = ($('sb_keeper_from') || {}).value || todayISO();
+        let h = keeperHist(CUR_BOOK);
+        if(!oldK) h = [];
+        h = h.filter(x => !x.from || x.from < hf);
+        h.push({ from: oldK ? hf : '', keeper: newK });
+        patch.keeper_history = h;
+        keeperNote = oldK ? '，記錄人 ' + oldK + ' → ' + newK + '（' + toROC(hf) + ' 起）' : '';
+      }
+      let saved;
+      try{
+        saved = await sbUpdate('petty_books', 'book_id', CUR_BOOK.book_id, patch);
+      }catch(e1){
+        if(!patch.keeper_history || !/keeper_history/.test(e1.message)) throw e1;
+        delete patch.keeper_history;   // 還沒跑 SQL_235：先只改記錄人
+        saved = await sbUpdate('petty_books', 'book_id', CUR_BOOK.book_id, patch);
+        keeperNote += '（還沒跑 SQL_235，交接日沒有記下來，舊期間的對帳單也會印新的記錄人）';
+      }
       // 期初改了，current_balance 要一起改（觸發器只在明細異動時算）
       const i = STATE.books.findIndex(b => b.book_id === CUR_BOOK.book_id);
       if(i >= 0) STATE.books[i] = saved;
@@ -2361,7 +2450,7 @@ function wire(){
       const s2 = await sbUpdate('petty_books', 'book_id', CUR_BOOK.book_id, { current_balance: nb });
       if(i >= 0) STATE.books[i] = s2; CUR_BOOK = STATE.books[i];
       renderAll();
-      msg.textContent = '已儲存，目前餘額 NT$ ' + fmt(nb);
+      msg.textContent = '已儲存，目前餘額 NT$ ' + fmt(nb) + keeperNote;
     }catch(e){ msg.textContent = '失敗：' + e.message; }
   };
   $('sb_new').onclick = async () => {
