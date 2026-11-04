@@ -621,7 +621,22 @@ async function supaFetch(path, options={}){
 }
 
 // Supabase/PostgREST 預設一次最多回傳1000筆，超過的表格（例如訓練歷程）需要分批抓取才能拿到完整資料
+// 分頁讀取時，若剛好有人（或同一頁的另一次存檔）在兩頁之間新增／刪除資料，
+// 「總筆數」和「實際讀到的筆數」會差一兩筆。這種是一瞬間的落差，自動重讀，最多 3 次；
+// 重讀後還是對不起來才當成讀取失敗（照樣擋住存檔，保護雲端資料）。
 async function supaFetchAll(path){
+  let lastErr = null;
+  for(let attempt = 0; attempt < 3; attempt++){
+    try{ return await supaFetchAllOnce(path); }
+    catch(e){
+      lastErr = e;
+      if(!/資料沒有載完整/.test(String(e && e.message))) throw e;
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+async function supaFetchAllOnce(path){
   const PAGE_SIZE = 1000;
   const _key = String(path).split('?')[0];
   let allRows = [];
