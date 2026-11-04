@@ -1939,6 +1939,7 @@
         <label>獎懲項目
           <select id="ar_reward_type"></select>
         </label>
+        <label id="ar_other_wrap" style="display:none;">其他原由<input id="ar_other" maxlength="16" placeholder="例：特別獎金、全勤獎勵"></label>
         <label>數量<input id="ar_qty" type="number" step="0.5" placeholder="例：1"></label>
         <label>事實說明<input id="ar_desc" placeholder="例：115/6/3 在國一北上大甲地磅，發生超載事實"></label>
       </div>
@@ -17155,7 +17156,18 @@ function renderRewardSelects(){
   document.getElementById('ar_emp').innerHTML = STATE.employees.map(e => `<option value="${e.id}">${esc(e.name)}（${esc(e.employee_no)}）</option>`).join('');
   const rewardTypes = STATE.refRewardTypes && STATE.refRewardTypes.length ? STATE.refRewardTypes
     : [...new Set(STATE.adminRewards.map(r=>r.reward_type).filter(Boolean))];
-  document.getElementById('ar_reward_type').innerHTML = rewardTypes.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  // 「其他-○○」一律收成一個「其他」，選了再填原由（115/11 使用者要求拿掉「其他-特別獎金」）
+  const opts = [...new Set(rewardTypes.map(t => /^其他/.test(String(t)) ? '其他' : t))];
+  if(!opts.includes('其他')) opts.push('其他');
+  const sel = document.getElementById('ar_reward_type');
+  const keep = sel.value;
+  sel.innerHTML = opts.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  if(keep && opts.includes(keep)) sel.value = keep;
+  arOtherToggle();
+}
+function arOtherToggle(){
+  const w = document.getElementById('ar_other_wrap');
+  if(w) w.style.display = document.getElementById('ar_reward_type').value === '其他' ? '' : 'none';
 }
 
 function openRewardModal(id){
@@ -21331,20 +21343,27 @@ document.getElementById('tfTableBody').addEventListener('click', async (e) => {
   }
 });
 
+document.getElementById('ar_reward_type').addEventListener('change', arOtherToggle);
 document.getElementById('ar_add').addEventListener('click', async () => {
   const empId = parseInt(document.getElementById('ar_emp').value);
   const emp = STATE.employees.find(e => e.id === empId);
   const date = document.getElementById('ar_date').value;
   if(!emp || !date){ alert('請選擇人員並填寫日期'); return; }
+  let rewardType = document.getElementById('ar_reward_type').value;
+  if(rewardType === '其他'){
+    const why = document.getElementById('ar_other').value.trim();
+    if(!why){ alert('選「其他」請在「其他原由」寫原因，例如：特別獎金'); document.getElementById('ar_other').focus(); return; }
+    rewardType = '其他-' + why;   // 跟舊資料「其他-特別獎金」同一個格式，篩選與統計照舊
+  }
   STATE.adminRewards.unshift({
     id: nextId(STATE.adminRewards), employee_id: empId, name: emp.name,
     region: emp.region, company_name: emp.company_name, position_name: emp.position_name,
-    reward_date: date, reward_type: document.getElementById('ar_reward_type').value,
+    reward_date: date, reward_type: rewardType,
     quantity: document.getElementById('ar_qty').value ? parseFloat(document.getElementById('ar_qty').value) : null,
     description: document.getElementById('ar_desc').value.trim()
   });
   await saveState('admin_rewards', STATE.adminRewards, true);
-  ['ar_date','ar_qty','ar_desc'].forEach(id=>document.getElementById(id).value='');
+  ['ar_date','ar_qty','ar_desc','ar_other'].forEach(id=>document.getElementById(id).value='');
   renderAll();
 });
 
