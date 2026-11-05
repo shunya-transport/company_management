@@ -276,6 +276,16 @@
      容器直接掛在 <body> 底下，不放在任何分頁面板裡。
      面板 display:none 的時候裡面的東西不會被排版，只切 visibility 蓋不掉，印出來是白紙。 */
   #mrPrintRoot{display:none;}
+  /* 獎懲登錄：固定欄寬，姓名、區域、日期不再被擠成兩行；事實吃剩下的寬度 */
+  table.ar-table{table-layout:fixed;min-width:1060px;}
+  table.ar-table td:nth-child(-n+4){white-space:nowrap;}
+  table.ar-table td:nth-child(8){white-space:normal;word-break:break-all;}
+  /* 獎懲單（表單編號 管021-A1）：沿用維修單的列印框架與字體 */
+  .mr-sheet.rp-sheet td{font-size:17px!important;}
+  .mr-sheet.rp-sheet td.rp-lb{text-align:center!important;font-weight:400!important;letter-spacing:2px!important;}
+  .mr-sheet.rp-sheet .rp-box{display:grid;grid-template-columns:1fr auto;column-gap:10px;row-gap:2px;font-size:17px;}
+  .mr-sheet.rp-sheet .rp-txt{font-size:18px;line-height:1.7;word-break:break-all;padding:6px 2px;}
+
   @media print{
     html.mr-printing body{background:#fff!important;background-image:none!important;}
     html.mr-printing body > *{display:none!important;}
@@ -1951,8 +1961,10 @@
         <select id="ar_type_filter"><option value="all">全部類別</option></select>
       </div>
       <div class="table-scroll">
-        <table>
-          <thead><tr><th>編號</th><th>日期</th><th>姓名</th><th>區域</th><th>公司</th><th>職稱</th><th>獎懲項目</th><th>事實</th><th>數量</th></tr></thead>
+        <table class="ar-table">
+          <colgroup><col style="width:64px"><col style="width:96px"><col style="width:84px"><col style="width:58px">
+            <col style="width:170px"><col style="width:110px"><col style="width:160px"><col><col style="width:56px"><col style="width:52px"></colgroup>
+          <thead><tr><th>編號</th><th>日期</th><th>姓名</th><th>區域</th><th>公司</th><th>職稱</th><th>獎懲項目</th><th>事實</th><th>數量</th><th>列印</th></tr></thead>
           <tbody id="adminRewardsBody"></tbody>
         </table>
       </div>
@@ -17193,10 +17205,69 @@ function openRewardModal(id){
       <div>${esc(r.description||'—')}</div>
     </div>
     <div class="detail-section no-print">
+      <button class="btn" data-print-reward="${r.id}" style="margin-right:10px;">列印獎懲單</button>
       <button class="del-btn" data-del-reward="${r.id}">刪除這筆紀錄</button>
     </div>
   `;
   document.getElementById('rewardModal').classList.add('show');
+}
+// ===== 運輸服務管理獎懲單（表單編號 管021-A1）=====
+// 版面照紙本：姓名／日期、事實敘述、獎懲種類（勾選＋次數）、獎懲條例、備註、四格簽名。
+// 只帶系統裡有的：姓名、日期、事實、獎懲種類與數量；「提報人員」列印前自己輸入，其餘留白給人手寫。
+const RP_LEFT  = ['嘉獎','小功','大功'];
+const RP_RIGHT = ['申誡','小過','大過'];
+function rpSheetHtml(r, reporter){
+  const t = String(r.reward_type || '').trim();
+  const qty = (r.quantity == null || r.quantity === '') ? '' : String(r.quantity);
+  const other = /^其他/.test(t) ? t.replace(/^其他[-－:：\s]*/, '') : '';
+  const box = on => on ? '■' : '□';
+  const cnt = k => (t === k && qty) ? `<b>${esc(qty)}</b>` : '　';
+  const d = mrRoc(r.reward_date);
+  const line = (label, k) => `<div>${box(t === k)}記${label}</div><div>${cnt(k)}　次</div>`;
+  return `
+<div class="mr-sheet rp-sheet">
+  <div class="mr-head"><img src="${SLIP_LOGO}" alt="DGTT"><div class="ttl" style="font-size:26px;letter-spacing:4px;">運輸服務管理獎懲單</div>
+    <div style="position:absolute;right:4px;top:6px;font-size:20px;">#${esc(r.id)}</div></div>
+  <table style="margin-top:8px!important;">
+    <colgroup><col style="width:14%"><col style="width:42%"><col style="width:14%"><col style="width:30%"></colgroup>
+    <tr style="height:52px;"><td class="rp-lb">姓名</td><td><span class="fill" style="font-size:19px;">${esc(r.name || '')}</span></td>
+        <td class="rp-lb">日期</td><td style="text-align:center!important;">${esc(d.y)} 年 ${esc(d.mo)} 月 ${esc(d.d)} 日</td></tr>
+    <tr><td colspan="4" style="height:200px;vertical-align:top!important;">事實敘述:<div class="rp-txt">${esc(r.description || '')}</div></td></tr>
+    <tr><td class="rp-lb" style="line-height:1.9!important;">獎<br>懲<br>種<br>類</td>
+        <td style="vertical-align:top!important;"><div class="rp-box">${line('嘉獎','嘉獎')}${line('小功','小功')}${line('大功','大功')}
+          <div>${box(!!other)}其他 <b>${esc(other)}</b></div><div></div></div></td>
+        <td colspan="2" style="vertical-align:top!important;"><div class="rp-box">${line('申誡','申誡')}${line('小過','小過')}${line('大過','大過')}
+          <div>${box(t === '解僱')}解僱</div><div></div>
+          <div>□轉調職務:＿＿＿＿＿＿＿</div><div></div></div></td></tr>
+    <tr><td colspan="4" style="height:190px;vertical-align:top!important;">獎懲條例:</td></tr>
+    <tr><td colspan="4" style="height:110px;vertical-align:top!important;">備註：</td></tr>
+  </table>
+  <table style="margin-top:-1px!important;">
+    <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+    <tr style="height:100px;"><td>總經理：</td><td>主　　管：</td></tr>
+    <tr style="height:100px;"><td>獎懲人員：</td><td>提報人員：<span class="fill" style="font-size:20px;">${esc(reporter || '')}</span></td></tr>
+  </table>
+  <div class="mr-foot" style="text-align:right;margin-top:40px;font-size:15px;">表單編號：管 021-A1</div>
+</div>`;
+}
+function rpPrint(id){
+  const r = (STATE.adminRewards || []).find(x => String(x.id) === String(id));
+  if(!r){ alert('找不到這一筆獎懲紀錄。'); return; }
+  let last = '';
+  try{ last = localStorage.getItem('rp_reporter') || ''; }catch(_){}
+  const reporter = prompt('提報人員（會印在獎懲單「提報人員」那一格；留白就空著給人手寫）：', last);
+  if(reporter === null) return;           // 按取消就不印
+  try{ localStorage.setItem('rp_reporter', reporter.trim()); }catch(_){}
+  let area = document.getElementById('mrPrintRoot');
+  if(!area){ area = document.createElement('div'); area.id = 'mrPrintRoot'; document.body.appendChild(area); }
+  area.innerHTML = '<style>@media print{ @page{ size:A4 portrait; margin:12mm 12mm 10mm 14mm; } }</style>'
+                 + rpSheetHtml(r, reporter.trim());
+  area.style.cssText = 'display:block;position:fixed;left:-20000px;top:0;width:240mm;background:#fff;';
+  mrFit(area);
+  area.style.cssText = '';
+  document.documentElement.classList.add('mr-printing');
+  const fin = () => { document.documentElement.classList.remove('mr-printing'); area.style.cssText = ''; area.innerHTML = ''; };
+  setTimeout(() => { window.print(); setTimeout(fin, 1200); }, 150);
 }
 function closeRewardModal(){ document.getElementById('rewardModal').classList.remove('show'); }
 
@@ -17217,8 +17288,9 @@ function renderAdminRewards(){
     <tr><td><button class="name-link" data-view-reward="${r.id}">#${esc(r.id)}</button></td>
     <td>${esc((r.reward_date||'').slice(0,10))}</td><td>${esc(r.name)}</td><td>${esc(r.region||'')}</td>
     <td>${esc(r.company_name||'')}</td><td>${esc(r.position_name||'')}</td><td>${esc(r.reward_type||'')}</td>
-    <td class="muted">${esc(r.description||'')}</td><td>${r.quantity??''}</td></tr>`).join('')
-    || `<tr><td colspan="9" class="empty">沒有符合條件的紀錄</td></tr>`;
+    <td class="muted">${esc(r.description||'')}</td><td>${r.quantity??''}</td>
+    <td><button class="name-link" data-print-reward="${r.id}" title="照紙本「運輸服務管理獎懲單」格式列印／存 PDF">印</button></td></tr>`).join('')
+    || `<tr><td colspan="10" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
 function renderFuelTollSelects(){
@@ -21372,6 +21444,8 @@ document.getElementById('ar_add').addEventListener('click', async () => {
 });
 
 document.getElementById('adminRewardsBody').addEventListener('click', (e) => {
+  const pr = e.target.getAttribute('data-print-reward');
+  if(pr){ rpPrint(pr); return; }
   const id = e.target.getAttribute('data-view-reward');
   if(id) openRewardModal(id);
 });
@@ -21380,6 +21454,8 @@ document.getElementById('rewardModal').addEventListener('click', (e) => {
   if(e.target.id === 'rewardModal') closeRewardModal();
 });
 document.getElementById('rewardModalContent').addEventListener('click', async (e) => {
+  const _rpId = e.target.getAttribute('data-print-reward');
+  if(_rpId){ rpPrint(_rpId); return; }
   const id = e.target.getAttribute('data-del-reward');
   if(id){
     if(!confirm('確定要刪除這筆獎懲紀錄嗎？')) return;
