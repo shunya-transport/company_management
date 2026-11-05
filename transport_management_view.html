@@ -14533,7 +14533,8 @@ function pcNoticeHead(c, e, word){
 function pnIn(v, w, extra){
   return `<input class="pn-in" value="${esc(v == null ? '' : String(v))}" style="width:${w || '100%'};${extra || ''}">`;
 }
-function pnBox(on, grp){ return `<span class="pn-box" data-pn-box="${grp || ''}">${on ? '■' : '□'}</span>`; }
+// 方框連同後面的字整段都可以點：點一下勾、再點一下取消（同一組只能勾一個）
+function pnBox(on, grp, label){ return `<span class="pn-chk" data-pn-box="${grp || ''}"><span class="pn-box">${on ? '■' : '□'}</span>${label || ''}</span>`; }
 function pnRoc(d){
   const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? (Number(m[1]) - 1911) + '年' + Number(m[2]) + '月' + Number(m[3]) + '日' : '';
@@ -14566,7 +14567,10 @@ function buildPayNoticeA1(e){
   .pn-a4 table{width:100%;border-collapse:collapse;table-layout:fixed;}
   .pn-a4 .pn-in{border:0;border-bottom:1px dashed #9ab;background:#f4f9ff;font:inherit;color:#000;padding:1px 2px;box-sizing:border-box;}
   .pn-a4 .pn-in:focus{outline:2px solid #6aa0e0;background:#fff;}
-  .pn-a4 .pn-box{cursor:pointer;font-size:17px;user-select:none;}
+  .pn-a4 .pn-chk{cursor:pointer;user-select:none;border-radius:4px;padding:1px 2px;}
+  .pn-a4 .pn-chk:hover{background:#eaf3ff;}
+  .pn-a4 .pn-box{font-size:18px;}
+  @media print{ .pn-a4 .pn-chk:hover{background:none;} }
   @media print{ .pn-a4 .pn-in{background:none!important;border-bottom:0!important;} @page{size:A4 portrait;margin:12mm;} }
 </style>
 <div class="pn-a4">
@@ -14581,11 +14585,11 @@ function buildPayNoticeA1(e){
     <tr><td colspan="2" style="${lab}">職　　稱</td><td style="${L}">${pnIn(e && e.position_name)}</td>
         <td style="${lab}">區　域</td><td style="${L}">${pnIn(e && e.region)}</td></tr>
     <tr><td style="${lab}">薪資扣款項目</td><td colspan="6" style="${L}line-height:2;">
-        ${pnBox(isMin, 'reason')}最低服務年限獎金-初訓證照補助。最低服務年限至：${pnIn('', '52px', 'text-align:center;')}年${pnIn('', '34px', 'text-align:center;')}月${pnIn('', '34px', 'text-align:center;')}日<br>
-        ${pnBox(!!otherTxt, 'reason')}其他：${pnIn(otherTxt, '62%')}</td></tr>
+        ${pnBox(isMin, 'reason', '最低服務年限獎金-初訓證照補助')}。最低服務年限至：${pnIn('', '52px', 'text-align:center;')}年${pnIn('', '34px', 'text-align:center;')}月${pnIn('', '34px', 'text-align:center;')}日<br>
+        ${pnBox(!!otherTxt, 'reason', '其他')}：${pnIn(otherTxt, '62%')}</td></tr>
     <tr><td style="${lab}">薪資發款總額</td><td colspan="6" style="${L}">${pnIn(c ? (Number(c.total_amount) || '') : '', '40%', '')} 元</td></tr>
     <tr><td style="${lab}">薪資發款條件</td><td colspan="6" style="${L}white-space:nowrap;font-size:14px;">
-        ${pnBox(c && !split, 'mode')}一次發款　${pnBox(split, 'mode')}分期發款，分${pnIn(split ? c.installments : '', '38px', 'text-align:center;')}期，每期${pnIn(split ? (Number(c.per_amount) || '') : '', '64px', 'text-align:right;')}元，第${pnIn('', '30px', 'text-align:center;')}期扣除${pnIn('', '56px', 'text-align:right;')}元。</td></tr>
+        ${pnBox(c && !split, 'mode', '一次發款')}　${pnBox(split, 'mode', '分期發款')}，分${pnIn(split ? c.installments : '', '38px', 'text-align:center;')}期，每期${pnIn(split ? (Number(c.per_amount) || '') : '', '64px', 'text-align:right;')}元。</td></tr>
     <tr><td style="${lab}">第一次發款日</td><td colspan="6" style="${L}">${pnIn(c ? pnRoc(c.first_date) : '', '40%')}</td></tr>
   </table>
   <table style="margin-top:-1px;text-align:center;"><tr>${['總經理','財務部主管','會計','行政管理部主管','人事'].map(n => `<td style="${L}">${n}</td>`).join('')}</tr>
@@ -14598,7 +14602,7 @@ function buildPayNoticeA1(e){
       ※已辦理離職手續者，服務未達議定之期限者，需依同意書議定的內容扣回。<br>※結案簽核完成，此表由財務管理部歸檔備查</div>
     <table style="font-size:12px;"><colgroup>${lcol}${lcol}</colgroup><tr>${lh}${lh}</tr>
       ${Array.from({length: 10}).map((_, i) => `<tr style="height:30px;">${cell(i)}${cell(i + 10)}</tr>`).join('')}</table>
-    <div style="padding:4px 6px;font-size:13px;">${pnBox(false, '')}結案（已核對，發款明細總額與本案薪資當發款總計相符）<br>確認者簽名：</div>
+    <div style="padding:4px 6px;font-size:13px;">${pnBox(false, '', '結案')}（已核對，發款明細總額與本案薪資當發款總計相符）<br>確認者簽名：</div>
   </div>
   <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;padding:0 40px 0 20px;"><span>總經理：</span><span>財務部主管：</span></div>
   <div style="text-align:right;font-size:14px;margin-top:10px;">表單編號：管044-A1</div>
@@ -26418,10 +26422,11 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
   if(_pa){
     _pa.addEventListener('click', ev => {
       const b = ev.target.closest('[data-pn-box]'); if(!b) return;
-      const on = b.textContent !== '■';
+      const box = b.querySelector('.pn-box') || b;
+      const on = box.textContent !== '■';
       const g = b.getAttribute('data-pn-box');
-      if(on && g) _pa.querySelectorAll('[data-pn-box="' + g + '"]').forEach(x => { x.textContent = '□'; });
-      b.textContent = on ? '■' : '□';
+      if(on && g) _pa.querySelectorAll('[data-pn-box="' + g + '"] .pn-box').forEach(x => { x.textContent = '□'; });
+      box.textContent = on ? '■' : '□';
     });
   }
 }
