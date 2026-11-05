@@ -48,7 +48,7 @@ function build(n, r, acts, site, recNo) {
   }
   if (ev === 'submitted_admin' || ev === 'advanced_admin') {
     const why = st.name === '行政確認' ? '這張假單的簽核路線上沒有其他人（例如總經理本人請假），需要行政代登核准。'
-      : `這一關（${st.name || ''}）的簽核人沒有登記通知信箱，請轉告或由行政代登。`;
+      : `這一關（${st.name || ''}）的簽核人沒有登記通知信箱，請轉告本人到請假網頁簽${(st.approver_names || []).length ? '（' + (st.approver_names || []).join('、') + '）' : ''}。`;
     return { subject: `【請假待確認】${head}`,
       html: `<h3 style="font-family:sans-serif;">${esc(why)}</h3>${detail}<p style="font-family:sans-serif;">請到運輸行政管理資料庫「請假管理 → 請假簽核設定」處理。</p>${foot}` };
   }
@@ -63,6 +63,13 @@ function build(n, r, acts, site, recNo) {
   if (ev === 'rejected') {
     return { subject: `【請假駁回】${r.leave_type} ${hrs(r)}（${dates(r)}）`,
       html: `<h3 style="font-family:sans-serif;">您的假單被駁回</h3><p style="font-family:sans-serif;">原因：${esc(last.comment || '')}</p>${detail}${link}${foot}` };
+  }
+  if (ev === 'proxied_ok' || ev === 'proxied_no') {
+    const what = ev === 'proxied_ok' ? '核准' : '駁回';
+    const mine = acts.filter((a) => a.request_id === r.request_id && a.by_staff).slice(-1)[0] || {};
+    return { subject: `【行政代登${what}】${head}`,
+      html: `<h3 style="font-family:sans-serif;">行政已代您${what}這張假單（${esc(mine.stage_name || '')}）</h3>`
+        + `<p style="font-family:sans-serif;">如果不是您同意的，請直接聯絡行政。</p>${detail}${link}${foot}` };
   }
   if (ev === 'cancelled' || ev === 'cancelled_admin') {
     return { subject: `【假單已撤回】${head}`,

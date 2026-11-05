@@ -1724,7 +1724,7 @@
     <div class="card" id="lvaCard">
       <h2>請假簽核設定（線上請假 leave.html）<span class="count-badge" id="lva_badge"></span></h2>
       <div class="muted" style="margin-bottom:8px;">員工用手機開 leave.html 送假單，依路線逐關簽核，最後一關核准後自動寫進下面的請假紀錄。
-        這裡設定路線與簽核人、幫員工產生開通碼，也可以替任何一關「代登」核准或駁回（例如總經理口頭同意、總經理本人請假）。需要先跑 SQL_241。</div>
+        這裡設定路線與簽核人、幫員工產生開通碼。行政帳號是共用的，只能「代登」路線設定裡打勾「行政可代登」的關卡（預設只有總經理）；調度、副總要本人用員編帳號簽。需要先跑 SQL_241～245。</div>
       <div class="toolbar" id="lva_tabs">
         <button class="btn" data-lva="req">假單</button>
         <button class="btn ghost" data-lva="route">路線與簽核人</button>
@@ -17350,6 +17350,13 @@ async function lvaLoad(force){
     LVA.atts = ids.length ? (await supaFetch('leave_attachments?select=*&request_id=in.(' + ids.join(',') + ')')) || [] : [];
     try{ LVA.staff = (await lvaRpc('lv_staff_list')) || []; }catch(e){ LVA.staff = []; }
     LVA.loaded = true;
+    // 線上核准寫進 leave_records 的（主管在手機上簽完、或剛剛代登的），這個分頁開啟時還沒有 → 重讀請假紀錄，
+    // 請假總表、請假紀錄才看得到，不用整頁重新整理
+    const have = new Set((STATE.leaveRecords || []).map(x => String(x.id)));
+    if(!LOAD_FAILED.has('leave_records') && LVA.reqs.some(r => r.leave_record_id && !have.has(String(r.leave_record_id)))){
+      STATE.leaveRecords = await safeGet('leave_records', STATE.leaveRecords, true);
+      try{ renderAll(); }catch(e){ console.error(e); }
+    }
     if(msg) msg.textContent = '';
   }catch(e){
     if(msg) msg.textContent = '';
@@ -17364,6 +17371,12 @@ function lvaRender(){
   const pend = LVA.reqs.filter(r => r.status === '待簽核').length;
   const bd = document.getElementById('lva_badge'); if(bd) bd.textContent = pend ? pend + ' 張待簽' : '';
   b.innerHTML = LVA.tab === 'req' ? lvaReqHtml() : LVA.tab === 'route' ? lvaRouteHtml() : LVA.tab === 'acct' ? lvaAcctHtml() : lvaSetHtml();
+}
+// 這一關行政能不能代登：「行政確認」關、沒有簽核人的關，或路線設定裡打勾「行政可代登」的關（SQL_245）
+function lvaProxyOk(st){
+  st = st || {};
+  if(st.name === '行政確認' || !(st.approvers || []).length) return true;
+  return LVA.stages.some(s => s.stage_name === st.name && s.staff_proxy);
 }
 // ---- 假單 ----
 function lvaReqHtml(){
@@ -17384,21 +17397,24 @@ function lvaReqHtml(){
         <td>${Number(r.hours)}h</td><td class="muted" style="max-width:220px;">${esc(r.reason || '')}</td>
         <td style="font-size:12.5px;">${trail}${r.status === '待簽核' ? `<br><b>目前：${esc(st.name || '')}</b> <span class="muted">${esc((st.approver_names || []).join('、'))}</span>` : ''}</td>
         <td>${pill(r.status)}${r.leave_record_id ? '<br><span class="muted">已寫入請假紀錄</span>' : ''}</td><td>${att}</td>
-        <td style="white-space:nowrap;">${r.status === '待簽核' ? `<button class="name-link" data-lva-act="核准" data-id="${r.request_id}">代登核准</button><br><button class="del-btn" data-lva-act="駁回" data-id="${r.request_id}">代登駁回</button>` : ''}</td></tr>`;
+        <td style="white-space:nowrap;">${r.status !== '待簽核' ? '' : lvaProxyOk(st)
+          ? `<button class="name-link" data-lva-act="核准" data-id="${r.request_id}">代登核准</button><br><button class="del-btn" data-lva-act="駁回" data-id="${r.request_id}">代登駁回</button>`
+          : `<span class="muted" style="font-size:12px;white-space:normal;display:inline-block;max-width:150px;">要由 ${esc((st.approver_names || []).join('、') || '簽核人')} 用自己的員編帳號在請假網頁簽（行政不能代登）</span>`}</td></tr>`;
     }).join('') || '<tr><td colspan="10" class="empty">沒有符合條件的假單</td></tr>'}</tbody></table></div>`;
 }
 // ---- 路線 ----
 function lvaRouteHtml(){
   const regions = ['', '台中', '新竹', '台南'];
-  let h = '<div class="muted" style="margin-bottom:8px;">每一關可以選好幾位，任一位簽就過；按住 Ctrl（Mac 按 ⌘）可以多選。「適用車場」留「全部」就是全公司；某個車場要有自己的調度，就新增一列同一關、選那個車場。申請人剛好是那一關的簽核人，那一關自動跳過；整條路線都跳過的（例如總經理本人請假）會變成「行政確認」，在「假單」那頁代登。</div>';
+  let h = '<div class="muted" style="margin-bottom:8px;">每一關可以選好幾位，任一位簽就過；按住 Ctrl（Mac 按 ⌘）可以多選。「適用車場」留「全部」就是全公司；某個車場要有自己的調度，就新增一列同一關、選那個車場。申請人剛好是那一關的簽核人，那一關自動跳過；整條路線都跳過的（例如總經理本人請假）會變成「行政確認」，在「假單」那頁代登。<br><b>行政可代登</b>：行政帳號是共用的，只有打勾的關卡才能在「假單」那頁代登（預設只有總經理）；沒打勾的關卡一定要簽核人本人用員編帳號在請假網頁簽，系統會留下是誰簽的。</div>';
   Object.keys(LVA_ROUTES).forEach(rk => {
     const st = LVA.stages.filter(s => s.route_key === rk);
-    h += `<h3 style="margin:14px 0 6px;">${esc(LVA_ROUTES[rk])}</h3><div class="table-scroll"><table><thead><tr><th style="width:60px;">第幾關</th><th style="width:140px;">關卡名稱</th><th style="width:110px;">適用車場</th><th>簽核人</th><th style="width:120px;"></th></tr></thead><tbody>`
+    h += `<h3 style="margin:14px 0 6px;">${esc(LVA_ROUTES[rk])}</h3><div class="table-scroll"><table><thead><tr><th style="width:60px;">第幾關</th><th style="width:140px;">關卡名稱</th><th style="width:110px;">適用車場</th><th>簽核人</th><th style="width:80px;">行政可代登</th><th style="width:120px;"></th></tr></thead><tbody>`
       + st.map(s => `<tr><td><input type="number" min="1" id="lva_sn_${s.stage_id}" value="${s.stage_no}" style="width:56px;"></td>
           <td><input id="lva_sname_${s.stage_id}" value="${esc(s.stage_name)}"></td>
           <td><select id="lva_sreg_${s.stage_id}">${regions.map(r => `<option value="${r}"${r === (s.region || '') ? ' selected' : ''}>${r || '全部'}</option>`).join('')}</select></td>
           <td><select multiple size="4" id="lva_sapp_${s.stage_id}" style="min-width:260px;">${lvaEmpOpts(s.approver_ids)}</select>
               <div class="muted" style="font-size:12px;">目前：${esc((s.approver_ids || []).map(lvaEmpName).join('、') || '（還沒選）')}</div></td>
+          <td style="text-align:center;"><input type="checkbox" id="lva_sproxy_${s.stage_id}"${s.staff_proxy ? ' checked' : ''}></td>
           <td><button class="btn" data-lva-ssave="${s.stage_id}">儲存</button> <button class="del-btn" data-lva-sdel="${s.stage_id}">刪除</button></td></tr>`).join('')
       + `</tbody></table></div><button class="btn ghost" data-lva-sadd="${rk}" style="margin-top:6px;">＋ 新增一關</button>`;
   });
@@ -17450,7 +17466,7 @@ function lvaSetHtml(){
 }
 async function lvaDo(fn, okMsg){
   const msg = document.getElementById('lva_msg');
-  try{ if(msg) msg.textContent = '處理中…'; await fn(); await lvaLoad(true); if(msg) msg.textContent = okMsg || '已儲存'; }
+  try{ if(msg) msg.textContent = '處理中…'; await fn(); await lvaLoad(true); if(msg) msg.textContent = (typeof okMsg === 'function' ? okMsg() : okMsg) || '已儲存'; }
   catch(e){ if(msg) msg.textContent = ''; alert('失敗：' + e.message); }
 }
 function lvaWire(){
@@ -17475,8 +17491,11 @@ function lvaWire(){
       const cm = prompt(act === '駁回' ? '駁回原因（必填）：' : '代登說明（選填，例：總經理口頭同意）：', '');
       if(cm === null) return;
       if(act === '駁回' && !cm.trim()){ alert('駁回要寫原因'); return; }
-      await lvaDo(async () => { const r = await lvaRpc('lv_act', { p_id:id, p_action:act, p_comment:cm }); if(r && r.ok === false) throw new Error(r.msg);
-      }, act === '核准' ? '已代登核准（最後一關核准的，重新整理頁面後會出現在下面的請假紀錄）' : '已代登駁回');
+      let res = null;
+      await lvaDo(async () => { res = await lvaRpc('lv_act', { p_id:id, p_action:act, p_comment:cm }); if(res && res.ok === false) throw new Error(res.msg);
+      }, () => act === '駁回' ? '已代登駁回'
+        : (res && res.status === '已核准') ? '已核准，已寫入請假紀錄 ' + (res.reg_no || '')
+        : '已核准這一關，接下來等「' + ((res && res.next) || '') + '」' + ((res && res.next_names && res.next_names.length) ? '（' + res.next_names.join('、') + '）' : '') + '簽');
       return;
     }
     if(g('data-lva-att')){
@@ -17489,7 +17508,8 @@ function lvaWire(){
       const id = g('data-lva-ssave'), v = k => document.getElementById(k + id);
       const ids = Array.from(v('lva_sapp_').selectedOptions).map(o => Number(o.value));
       return lvaDo(() => supaFetch('leave_route_stages?stage_id=eq.' + id, { method:'PATCH', body: JSON.stringify({
-        stage_no: Number(v('lva_sn_').value) || 1, stage_name: v('lva_sname_').value.trim() || '簽核', region: v('lva_sreg_').value, approver_ids: ids }) }));
+        stage_no: Number(v('lva_sn_').value) || 1, stage_name: v('lva_sname_').value.trim() || '簽核', region: v('lva_sreg_').value, approver_ids: ids,
+        staff_proxy: !!(v('lva_sproxy_') && v('lva_sproxy_').checked) }) }));
     }
     if(g('data-lva-sdel')){ if(!confirm('刪掉這一關？')) return; return lvaDo(() => supaFetch('leave_route_stages?stage_id=eq.' + g('data-lva-sdel'), { method:'DELETE' })); }
     if(g('data-lva-sadd')){
