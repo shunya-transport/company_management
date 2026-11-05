@@ -120,8 +120,8 @@
           <div><label>開始日期</label><input id="f_sd" type="date"></div>
           <div><label>結束日期</label><input id="f_ed" type="date"></div>
         </div>
-        <label>請假時數（以小時計，整數）</label>
-        <input id="f_hr" type="number" min="1" step="1" inputmode="numeric" placeholder="例：8">
+        <label>請假時數（以小時計，最小 0.5 小時）</label>
+        <input id="f_hr" type="number" min="0.5" step="0.5" inputmode="decimal" placeholder="例：8、2.5">
         <div class="muted" id="f_hint"></div>
         <label>事由</label><textarea id="f_reason" placeholder="例：家中有事、看診（時段可寫在這裡，例：08:00～12:00）"></textarea>
         <div id="f_sick" class="hidden">
@@ -451,7 +451,7 @@ $('f_go').onclick = async () => {
   const t = $('f_type').value, sd = $('f_sd').value, ed = $('f_ed').value, h = $('f_hr').value;
   if(!sd || !ed){ msg.textContent = '請選日期'; return; }
   if(ed < sd){ msg.textContent = '結束日期不能早於開始日期'; return; }
-  if(!(num(h) >= 1) || num(h) !== Math.round(num(h))){ msg.textContent = '時數最少 1 小時，只能填整數'; return; }
+  if(!(num(h) >= 0.5) || num(h) * 2 !== Math.round(num(h) * 2)){ msg.textContent = '時數最少 0.5 小時，以 0.5 小時為單位（例：0.5、1、2.5）'; return; }
   if(!applyCheck()){ msg.textContent = '請先看上面黃色的提醒'; return; }
   if(t === '病假' && !PH.rcpt.length){ msg.textContent = '病假要附收據照片'; return; }
   if(t === '病假' && num(h) >= ((ME && ME.sick_cert_hours) || 16) && !PH.cert.length){ msg.textContent = '病假 2 日以上要附醫院或診所的證明'; return; }
