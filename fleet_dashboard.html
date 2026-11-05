@@ -17421,12 +17421,12 @@ function lvaAcctHtml(){
     : a.user_id ? '<span class="pill green">已開通</span>'
     : (a.code_expires && a.code_expires > new Date().toISOString()) ? `<span class="pill amber">開通碼有效到 ${esc(String(a.code_expires).slice(0, 10))}</span>` : '<span class="pill gray">開通碼已過期</span>';
   return `<div class="muted" style="margin-bottom:6px;">按「產生開通碼」把 8 碼開通碼交給員工（7 天有效），員工到 leave.html 用「第一次開通」設密碼。忘記密碼也是產生新的開通碼讓他重設。
-      通知信箱：主管一定要填（才收得到待簽通知）；司機有就填，員工也能自己在手機上改。</div>
+      通知信箱：空白就自動用人員資料的 Email（灰字顯示的那個）；要寄到別的信箱才在這裡填。主管一定要有信箱才收得到待簽通知。員工也能自己在手機上改。</div>
     <div class="toolbar"><input id="lva_aq" placeholder="搜尋姓名或員編" value="${esc(q)}"></div>
     <div class="table-scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>區域</th><th>狀態</th><th>通知信箱</th><th></th></tr></thead><tbody>
     ${list.map(e => { const a = LVA.accts.find(x => String(x.employee_id) === String(e.id));
       return `<tr><td>${esc(e.employee_no || '')}</td><td>${esc(e.name)}</td><td>${esc(e.region || '')}</td><td>${st(a)}<div id="lva_code_${e.id}" style="font-weight:700;"></div></td>
-        <td><input id="lva_mail_${e.id}" value="${esc((a && a.notify_email) || '')}" placeholder="email" style="min-width:200px;"> <button class="name-link" data-lva-mail="${e.id}">存</button></td>
+        <td><input id="lva_mail_${e.id}" value="${esc((a && a.notify_email) || '')}" placeholder="${esc(e.email ? '預設：' + e.email : 'email（人員資料沒有）')}" style="min-width:220px;"> <button class="name-link" data-lva-mail="${e.id}">存</button></td>
         <td><button class="btn" data-lva-code="${e.id}">${a && a.user_id ? '產生重設碼' : '產生開通碼'}</button></td></tr>`; }).join('')}
     </tbody></table></div>`;
 }

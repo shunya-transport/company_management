@@ -164,7 +164,7 @@
     <section id="p_set" class="hidden">
       <div class="card"><h2>我的資料</h2><div class="kv" id="me_kv"></div></div>
       <div class="card"><h2>通知信箱</h2>
-        <div class="muted">假單核准、駁回，以及有假單要您簽核時，會寄信到這個信箱。沒填就不寄，請上這個網頁看。</div>
+        <div class="muted">假單核准、駁回，以及有假單要您簽核時，會寄信到這個信箱。預設帶入人員資料登記的 Email，可以改成別的。</div>
         <label>Email</label><input id="s_mail" type="email" placeholder="例：name@gmail.com">
         <button class="btn block ghost" id="s_mail_go">儲存信箱</button><div class="msg" id="s_mail_msg"></div>
       </div>
@@ -308,6 +308,8 @@ async function enter(){
   $('who').innerHTML = esc(e.name) + '<br>' + esc(e.employee_no) + '　' + esc(e.region || '');
   $('nav_inbox').classList.toggle('hidden', !ME.approver);
   $('s_mail').value = ME.notify_email || '';
+  $('s_mail_msg').className = 'msg';
+  $('s_mail_msg').textContent = ME.notify_email ? (ME.notify_from_profile ? '目前用的是人員資料登記的 Email；要改成別的信箱直接改掉再按儲存。' : '') : '人員資料沒有登記 Email，請填一個收得到的信箱。';
   $('me_kv').innerHTML = [['姓名', e.name], ['員編', e.employee_no], ['區域', e.region], ['部門', e.dept_name], ['職稱', e.position_name],
     ['到職日', roc(e.hire_date)], ['簽核路線', routeText(ME.route)]].map(x => `<div>${x[0]}</div><div>${esc(x[1] || '—')}</div>`).join('');
   $('f_route').innerHTML = '送出後依序給：' + esc(routeText(ME.route));
