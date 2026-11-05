@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7a5a2f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="請假">
+<title>順亞運通 線上請假</title>
+<style>
+  :root{
+    --bg:#f6f2ec; --card:#fff; --ink:#2b2622; --muted:#7c7368; --line:#e6ddd1;
+    --brand:#7a5a2f; --brand2:#9d6d2f; --brand-bg:#f2ece5;
+    --green:#2f7d4a; --green-bg:#e5f4e4; --amber:#9a6a00; --amber-bg:#fbf0d6;
+    --red:#b3261e; --red-bg:#fbebeb; --gray-bg:#efece7;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;font-size:16px;}
+  header{position:sticky;top:0;z-index:5;background:var(--brand);color:#fff;padding:12px 16px calc(10px) 16px;
+    padding-top:calc(12px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;}
+  header .t{font-weight:700;font-size:17px;flex:1;}
+  header .who{font-size:13px;opacity:.9;text-align:right;line-height:1.3;}
+  nav{display:flex;gap:4px;overflow-x:auto;background:#fff;border-bottom:1px solid var(--line);padding:6px 8px;position:sticky;top:52px;z-index:4;}
+  nav button{flex:0 0 auto;border:0;background:none;padding:8px 12px;border-radius:18px;font-size:15px;color:var(--muted);}
+  nav button.on{background:var(--brand-bg);color:var(--brand);font-weight:700;}
+  nav .dot{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--red);color:#fff;font-size:12px;margin-left:4px;}
+  main{max-width:680px;margin:0 auto;padding:12px 12px 80px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;}
+  h2{font-size:17px;margin:0 0 10px;}
+  label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px;}
+  input,select,textarea{width:100%;font-size:16px;padding:10px 11px;border:1px solid #d8cdbf;border-radius:10px;background:#fff;color:var(--ink);font-family:inherit;}
+  textarea{min-height:72px;resize:vertical;}
+  .row{display:flex;gap:10px;} .row > div{flex:1;min-width:0;}
+  .btn{display:inline-block;border:0;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;background:var(--brand);color:#fff;cursor:pointer;}
+  .btn.block{width:100%;margin-top:14px;}
+  .btn.ghost{background:var(--brand-bg);color:var(--brand);}
+  .btn.red{background:var(--red);} .btn.green{background:var(--green);}
+  .btn:disabled{opacity:.5;}
+  .muted{color:var(--muted);font-size:14px;}
+  .msg{font-size:14px;margin-top:8px;min-height:1em;}
+  .msg.err{color:var(--red);} .msg.ok{color:var(--green);}
+  .pill{display:inline-block;font-size:12.5px;padding:2px 9px;border-radius:12px;font-weight:700;white-space:nowrap;}
+  .pill.green{background:var(--green-bg);color:var(--green);} .pill.amber{background:var(--amber-bg);color:var(--amber);}
+  .pill.red{background:var(--red-bg);color:var(--red);} .pill.gray{background:var(--gray-bg);color:var(--muted);}
+  .req .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;}
+  .req .big{font-weight:700;font-size:16px;}
+  .steps{margin:10px 0 0;padding:0;list-style:none;border-left:2px solid var(--line);}
+  .steps li{position:relative;padding:2px 0 8px 14px;font-size:14px;}
+  .steps li::before{content:'';position:absolute;left:-6px;top:7px;width:10px;height:10px;border-radius:50%;background:#cbbfae;}
+  .steps li.ok::before{background:var(--green);} .steps li.no::before{background:var(--red);} .steps li.now::before{background:var(--amber);}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14.5px;}
+  .kv div:nth-child(odd){color:var(--muted);}
+  .stat{display:flex;gap:10px;}
+  .stat > div{flex:1;background:var(--brand-bg);border-radius:12px;padding:10px;text-align:center;}
+  .stat b{display:block;font-size:22px;}
+  .stat span{font-size:13px;color:var(--muted);}
+  table.t{width:100%;border-collapse:collapse;font-size:14px;}
+  table.t td,table.t th{border-bottom:1px solid var(--line);padding:7px 4px;text-align:left;}
+  table.t td.n,table.t th.n{text-align:right;}
+  .photos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .photos .ph{position:relative;width:76px;height:76px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee;}
+  .photos .ph img{width:100%;height:100%;object-fit:cover;}
+  .photos .ph button{position:absolute;right:2px;top:2px;border:0;border-radius:50%;width:22px;height:22px;background:rgba(0,0,0,.6);color:#fff;font-size:13px;}
+  .linkbtn{border:0;background:none;color:var(--brand2);text-decoration:underline;font-size:14px;padding:0;cursor:pointer;}
+  .route{background:var(--brand-bg);border-radius:10px;padding:8px 10px;font-size:14px;margin-top:10px;}
+  .hidden{display:none!important;}
+  #login{max-width:420px;margin:0 auto;padding:24px 16px;}
+  #login .logo{text-align:center;font-size:22px;font-weight:800;color:var(--brand);margin:24px 0 6px;}
+  .tabs2{display:flex;background:var(--gray-bg);border-radius:10px;padding:3px;margin:14px 0 4px;}
+  .tabs2 button{flex:1;border:0;background:none;padding:9px;border-radius:8px;font-size:15px;color:var(--muted);}
+  .tabs2 button.on{background:#fff;color:var(--ink);font-weight:700;}
+  .warn{background:var(--amber-bg);color:#6b4e00;border-radius:10px;padding:8px 10px;font-size:14px;margin-top:10px;}
+  #viewer{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;display:flex;align-items:center;justify-content:center;}
+  #viewer img{max-width:96vw;max-height:88vh;}
+  #viewer button{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;}
+</style>
+</head>
+<body>
+
+<!-- ============ 登入／開通 ============ -->
+<div id="login">
+  <div class="logo">順亞運通　線上請假</div>
+  <div class="muted" style="text-align:center;">用員編登入。第一次使用請先「開通」。</div>
+  <div class="tabs2"><button id="tab_in" class="on">登入</button><button id="tab_act">第一次開通／忘記密碼</button></div>
+  <div class="card" id="box_in">
+    <label>員編</label><input id="in_no" autocomplete="username" placeholder="例：D0163" autocapitalize="characters">
+    <label>密碼</label><input id="in_pw" type="password" autocomplete="current-password">
+    <button class="btn block" id="in_go">登入</button>
+    <div class="msg" id="in_msg"></div>
+  </div>
+  <div class="card hidden" id="box_act">
+    <div class="muted">開通碼請找行政拿（8 碼，7 天內有效）。已經開通過、忘記密碼的，也是用新的開通碼在這裡重設。</div>
+    <label>員編</label><input id="ac_no" placeholder="例：D0163" autocapitalize="characters">
+    <label>開通碼</label><input id="ac_code" placeholder="8 碼英數字" autocapitalize="characters">
+    <label>設定密碼（至少 8 碼）</label><input id="ac_pw" type="password" autocomplete="new-password">
+    <label>再輸入一次密碼</label><input id="ac_pw2" type="password" autocomplete="new-password">
+    <button class="btn block" id="ac_go">開通／重設密碼</button>
+    <div class="msg" id="ac_msg"></div>
+  </div>
+</div>
+
+<!-- ============ 主畫面 ============ -->
+<div id="app" class="hidden">
+  <header><div class="t">線上請假</div><div class="who" id="who"></div></header>
+  <nav id="nav">
+    <button data-p="apply" class="on">我要請假</button>
+    <button data-p="mine">我的假單</button>
+    <button data-p="stat">我的假勤</button>
+    <button data-p="inbox" id="nav_inbox" class="hidden">待我簽核<span class="dot hidden" id="inbox_dot"></span></button>
+    <button data-p="set">設定</button>
+  </nav>
+  <main>
+    <!-- 我要請假 -->
+    <section id="p_apply">
+      <div class="card">
+        <h2>我要請假</h2>
+        <label>假別</label><select id="f_type"></select>
+        <div class="row">
+          <div><label>開始日期</label><input id="f_sd" type="date"></div>
+          <div><label>結束日期</label><input id="f_ed" type="date"></div>
+        </div>
+        <label>請假時數（以小時計，整數）</label>
+        <input id="f_hr" type="number" min="1" step="1" inputmode="numeric" placeholder="例：8">
+        <div class="muted" id="f_hint"></div>
+        <label>事由</label><textarea id="f_reason" placeholder="例：家中有事、看診（時段可寫在這裡，例：08:00～12:00）"></textarea>
+        <div id="f_sick" class="hidden">
+          <label>收據照片（必附）</label>
+          <input id="f_rcpt" type="file" accept="image/*" multiple>
+          <div class="photos" id="ph_rcpt"></div>
+          <div id="f_cert_wrap">
+            <label>醫院或診所開的證明（病假 2 日以上必附）</label>
+            <input id="f_cert" type="file" accept="image/*" multiple>
+            <div class="photos" id="ph_cert"></div>
+          </div>
+        </div>
+        <div class="route" id="f_route"></div>
+        <div class="warn hidden" id="f_warn"></div>
+        <button class="btn block" id="f_go">送出假單</button>
+        <div class="msg" id="f_msg"></div>
+      </div>
+    </section>
+
+    <!-- 我的假單 -->
+    <section id="p_mine" class="hidden"><div id="mine_list"></div></section>
+
+    <!-- 我的假勤 -->
+    <section id="p_stat" class="hidden">
+      <div class="card"><h2 id="st_title">今年特休／補休</h2>
+        <div class="stat" id="st_box"></div>
+        <div class="muted" id="st_note" style="margin-top:8px;"></div>
+      </div>
+      <div class="card"><h2>今年請假合計</h2><table class="t" id="st_sum"></table></div>
+      <div class="card"><h2>請假紀錄</h2><table class="t" id="st_rec"></table></div>
+    </section>
+
+    <!-- 待我簽核 -->
+    <section id="p_inbox" class="hidden">
+      <div id="ib_list"></div>
+      <div class="card"><h2>最近 60 天我簽過的</h2><div id="ib_done"></div></div>
+    </section>
+
+    <!-- 設定 -->
+    <section id="p_set" class="hidden">
+      <div class="card"><h2>我的資料</h2><div class="kv" id="me_kv"></div></div>
+      <div class="card"><h2>通知信箱</h2>
+        <div class="muted">假單核准、駁回，以及有假單要您簽核時，會寄信到這個信箱。沒填就不寄，請上這個網頁看。</div>
+        <label>Email</label><input id="s_mail" type="email" placeholder="例：name@gmail.com">
+        <button class="btn block ghost" id="s_mail_go">儲存信箱</button><div class="msg" id="s_mail_msg"></div>
+      </div>
+      <div class="card"><h2>修改密碼</h2>
+        <label>新密碼（至少 8 碼）</label><input id="s_pw" type="password" autocomplete="new-password">
+        <label>再輸入一次</label><input id="s_pw2" type="password" autocomplete="new-password">
+        <button class="btn block ghost" id="s_pw_go">修改密碼</button><div class="msg" id="s_pw_msg"></div>
+      </div>
+      <button class="btn block red" id="s_out">登出</button>
+      <div class="muted" style="margin-top:14px;">小技巧：手機瀏覽器選「加入主畫面」，以後就像 App 一樣點開。</div>
+    </section>
+  </main>
+</div>
+
+<div id="viewer" class="hidden"><img id="viewer_img" alt=""><button class="btn ghost" id="viewer_x">關閉</button></div>
+
+<script>
+// ======================================================================
+// 順亞運通 線上請假（leave.html）
+// 員工用員編登入（系統內部換成 員編@staff.dgtt.com.tw 這種不收信的帳號），
+// 只能透過資料庫函式（lv_*，SQL_241）讀寫自己的資料；看不到任何其他資料表。
+// 本頁只放 publishable key，沒有任何管理金鑰。
+// ======================================================================
+const SUPABASE_URL = 'https://eyosrowbkstcdbjwokep.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8UQSBrE9ZnyQSTL8GZCJcw_5nGDPKjO';
+const LV_DOMAIN = 'staff.dgtt.com.tw';
+const LEAVE_TYPES = ['事假','病假','特休','補休','公假','婚假','喪假-父母配偶','喪假-祖父母子女','喪假-曾祖父母兄弟姊妹',
+  '產假','陪產假','產檢假','生理假','家庭照顧假','公傷假','特別事假','謀職假','生日假','接種特休假','疫苗接種假','防疫隔離假','無薪假','其他'];
+// 特休級距（勞基法第 38 條，跟儀表板的特休天數清冊同一份）
+const AL_TIERS = [[0,0],[0.5,3],[1,7],[2,10],[3,14],[5,15],[10,16],[11,17],[12,18],[13,19],[14,20],[15,21],[16,22],[17,23],[18,24],[19,25],[20,26],[21,27],[22,28],[23,29],[24,30]];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const roc = iso => { const m = String(iso || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? (m[1] - 1911) + '/' + m[2] + '/' + m[3] : ''; };
+const rocDT = ts => { if(!ts) return ''; const d = new Date(ts); const p = n => String(n).padStart(2, '0');
+  return (d.getFullYear() - 1911) + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const r2 = n => Math.round(n * 100) / 100;
+const lsGet = k => { try{ return localStorage.getItem(k); }catch(_){ return null; } };
+const lsSet = (k, v) => { try{ if(v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(_){} };
+
+// ---------------- 登入狀態 ----------------
+let TOKEN = null, REFRESH = null, UID = null, ME = null, DATA = null, INBOX = null;
+function setSession(d){
+  TOKEN = d.access_token; REFRESH = d.refresh_token || REFRESH;
+  try{ UID = JSON.parse(atob(TOKEN.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub; }catch(_){ UID = null; }
+  lsSet('lv_rt', REFRESH);
+}
+async function authPost(path, body){
+  const r = await fetch(SUPABASE_URL + '/auth/v1/' + path, { method:'POST',
+    headers:{ apikey:SUPABASE_KEY, 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+  let d = {}; try{ d = await r.json(); }catch(_){}
+  return { ok:r.ok, d };
+}
+async function refresh(){
+  if(!REFRESH) return false;
+  const { ok, d } = await authPost('token?grant_type=refresh_token', { refresh_token:REFRESH });
+  if(ok && d.access_token){ setSession(d); return true; }
+  return false;
+}
+setInterval(() => { if(TOKEN) refresh(); }, 25 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if(!document.hidden && TOKEN) refresh(); });
+
+async function rpc(fn, args, anon){
+  const call = () => fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method:'POST',
+    headers:{ apikey:SUPABASE_KEY, Authorization:'Bearer ' + ((!anon && TOKEN) || SUPABASE_KEY), 'Content-Type':'application/json' },
+    body:JSON.stringify(args || {}) });
+  let r = await call();
+  if((r.status === 401 || r.status === 403) && !anon && await refresh()) r = await call();
+  const t = await r.text();
+  let d = null; try{ d = t ? JSON.parse(t) : null; }catch(_){ d = t; }
+  if(!r.ok) throw new Error((d && (d.message || d.hint)) || ('連線錯誤 ' + r.status));
+  return d;
+}
+function emailOf(no){ return String(no || '').trim().toLowerCase() + '@' + LV_DOMAIN; }
+
+// ---------------- 登入／開通畫面 ----------------
+$('tab_in').onclick = () => { $('tab_in').classList.add('on'); $('tab_act').classList.remove('on'); $('box_in').classList.remove('hidden'); $('box_act').classList.add('hidden'); };
+$('tab_act').onclick = () => { $('tab_act').classList.add('on'); $('tab_in').classList.remove('on'); $('box_act').classList.remove('hidden'); $('box_in').classList.add('hidden'); };
+$('in_no').value = lsGet('lv_no') || '';
+$('in_pw').onkeydown = e => { if(e.key === 'Enter') $('in_go').click(); };
+
+$('in_go').onclick = async () => {
+  const no = $('in_no').value.trim(), pw = $('in_pw').value, msg = $('in_msg');
+  msg.className = 'msg'; if(!no || !pw){ msg.textContent = '請輸入員編和密碼'; return; }
+  msg.textContent = '登入中…';
+  const { ok, d } = await authPost('token?grant_type=password', { email:emailOf(no), password:pw });
+  if(!ok || !d.access_token){ msg.className = 'msg err'; msg.textContent = '員編或密碼不對。還沒開通的請按上面「第一次開通」。'; return; }
+  setSession(d); lsSet('lv_no', no.toUpperCase());
+  await enter();
+};
+
+$('ac_go').onclick = async () => {
+  const no = $('ac_no').value.trim().toUpperCase(), code = $('ac_code').value.trim().toUpperCase();
+  const pw = $('ac_pw').value, pw2 = $('ac_pw2').value, msg = $('ac_msg');
+  msg.className = 'msg err';
+  if(!no || !code){ msg.textContent = '請輸入員編和開通碼'; return; }
+  if(pw.length < 8){ msg.textContent = '密碼至少 8 碼'; return; }
+  if(pw !== pw2){ msg.textContent = '兩次密碼不一樣'; return; }
+  msg.className = 'msg'; msg.textContent = '檢查開通碼…';
+  try{
+    const chk = await rpc('lv_check_code', { p_emp_no:no, p_code:code }, true);
+    if(!chk || !chk.ok){ msg.className = 'msg err'; msg.textContent = (chk && chk.msg) || '開通碼不對'; return; }
+    if(chk.has_account){
+      // 已經開通過：重設密碼
+      const rs = await rpc('lv_reset_password', { p_emp_no:no, p_code:code, p_new:pw }, true);
+      if(!rs || !rs.ok){ msg.className = 'msg err'; msg.textContent = (rs && rs.msg) || '重設失敗'; return; }
+    }else{
+      let s = await authPost('signup', { email:chk.email, password:pw });
+      if(!s.ok){
+        // 帳號已註冊但沒綁成功（例如上次開到一半）：用這組密碼試著登入再綁
+        s = await authPost('token?grant_type=password', { email:chk.email, password:pw });
+        if(!s.ok || !s.d.access_token){ msg.className = 'msg err';
+          msg.textContent = '這個員編的帳號之前開到一半，請行政到 Supabase → Authentication 刪掉 ' + chk.email + ' 後再開通一次'; return; }
+      }
+      if(!s.d.access_token){ msg.className = 'msg err';
+        msg.textContent = '帳號建好了但還不能登入：請行政到 Supabase → Authentication → 關閉「Confirm email」，再重新開通'; return; }
+      setSession(s.d);
+      const cl = await rpc('lv_claim', { p_emp_no:no, p_code:code });
+      if(!cl || !cl.ok){ msg.className = 'msg err'; msg.textContent = (cl && cl.msg) || '綁定失敗'; return; }
+    }
+    const { ok, d } = await authPost('token?grant_type=password', { email:chk.email, password:pw });
+    if(!ok || !d.access_token){ msg.className = 'msg err'; msg.textContent = '開通好了，但登入失敗，請回「登入」試試看'; return; }
+    setSession(d); lsSet('lv_no', no);
+    msg.className = 'msg ok'; msg.textContent = '完成！';
+    await enter();
+  }catch(e){ msg.className = 'msg err'; msg.textContent = e.message; }
+};
+
+async function enter(){
+  try{
+    ME = await rpc('lv_me');
+  }catch(e){ $('in_msg').className = 'msg err'; $('in_msg').textContent = e.message; return; }
+  if(!ME || !ME.ok){
+    $('in_msg').className = 'msg err'; $('in_msg').textContent = (ME && ME.msg) || '這個帳號不能使用';
+    TOKEN = null; lsSet('lv_rt', null); return;
+  }
+  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  const e = ME.emp;
+  $('who').innerHTML = esc(e.name) + '<br>' + esc(e.employee_no) + '　' + esc(e.region || '');
+  $('nav_inbox').classList.toggle('hidden', !ME.approver);
+  $('s_mail').value = ME.notify_email || '';
+  $('me_kv').innerHTML = [['姓名', e.name], ['員編', e.employee_no], ['區域', e.region], ['部門', e.dept_name], ['職稱', e.position_name],
+    ['到職日', roc(e.hire_date)], ['簽核路線', routeText(ME.route)]].map(x => `<div>${x[0]}</div><div>${esc(x[1] || '—')}</div>`).join('');
+  $('f_route').innerHTML = '送出後依序給：' + esc(routeText(ME.route));
+  await reloadAll();
+  if(!$('f_sd').value){ $('f_sd').value = todayISO(); $('f_ed').value = todayISO(); }
+  suggestHours();
+}
+function routeText(st){
+  return (st || []).map(s => s.name + ((s.approver_names || []).length ? '（' + s.approver_names.join('、') + '）' : '')).join(' → ') || '—';
+}
+async function reloadAll(){
+  try{ DATA = await rpc('lv_my_data'); }catch(e){ DATA = null; }
+  if(ME && ME.approver){ try{ INBOX = await rpc('lv_inbox'); }catch(e){ INBOX = null; } }
+  renderMine(); renderStat(); renderInbox(); applyCheck();
+}
+
+// ---------------- 分頁 ----------------
+document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
+  ['apply','mine','stat','inbox','set'].forEach(p => $('p_' + p).classList.toggle('hidden', p !== b.dataset.p));
+  window.scrollTo(0, 0);
+  if(b.dataset.p !== 'apply') reloadAll();
+});
+
+// ---------------- 特休／補休 ----------------
+function tenureYears(hire, at){ if(!hire) return null; const a = new Date(hire + 'T00:00:00'), b = new Date(at + 'T00:00:00');
+  return b < a ? 0 : (b - a) / (365.25 * 86400000); }
+function alDaysAt(hire, at){ const y = tenureYears(hire, at); if(y == null) return null; let d = 0; AL_TIERS.forEach(t => { if(y >= t[0]) d = t[1]; }); return d; }
+function alYearRange(hire){ const y = new Date().getFullYear();
+  return (hire && Number(hire.slice(0, 4)) === y) ? { s:hire, e:y + '-12-31' } : { s:y + '-01-01', e:y + '-12-31' }; }
+function balances(){
+  if(!DATA || !DATA.ok) return null;
+  const e = DATA.emp, hire = e.hire_date, yr = new Date().getFullYear(), rocY = yr - 1911;
+  const appr = (DATA.annual_approved || []).find(a => Number(a.year_roc) === rocY);
+  const total = appr ? num(appr.leave_days) : alDaysAt(hire, todayISO());
+  const rg = alYearRange(hire);
+  const recs = DATA.records || [];
+  const hrs = r => r.hours != null ? num(r.hours) : num(r.days) * 8;
+  const alUsedH = recs.filter(r => r.leave_type === '特休' && r.start_date >= rg.s && r.start_date <= rg.e).reduce((s, r) => s + hrs(r), 0);
+  const pend = (DATA.requests || []).filter(r => r.status === '待簽核');
+  const alPendH = pend.filter(r => r.leave_type === '特休').reduce((s, r) => s + num(r.hours), 0);
+  const compEarn = num(DATA.comp_earned_hours);
+  const compUsed = recs.filter(r => r.leave_type === '補休').reduce((s, r) => s + hrs(r), 0);
+  const compPend = pend.filter(r => r.leave_type === '補休').reduce((s, r) => s + num(r.hours), 0);
+  return { total, approved:!!appr, alUsedH, alPendH, alLeftH: total == null ? null : total * 8 - alUsedH - alPendH,
+           compEarn, compUsed, compPend, compLeft: compEarn - compUsed - compPend, range:rg };
+}
+function renderStat(){
+  const b = balances(); if(!b) return;
+  const yr = new Date().getFullYear() - 1911;
+  $('st_title').textContent = yr + ' 年特休／補休';
+  $('st_box').innerHTML =
+    `<div><b>${b.total == null ? '—' : b.total}</b><span>特休天數</span></div>
+     <div><b>${b.alLeftH == null ? '—' : r2(b.alLeftH / 8)}</b><span>特休剩餘（天）</span></div>
+     <div><b>${r2(b.compLeft)}</b><span>補休剩餘（時）</span></div>`;
+  $('st_note').innerHTML = `特休：已休 ${r2(b.alUsedH)} 小時、簽核中 ${r2(b.alPendH)} 小時（${roc(b.range.s)}～${roc(b.range.e)}）`
+    + (b.approved ? '，天數為公司核定' : '，天數依年資估算') + `。<br>補休：加班換補休 ${r2(b.compEarn)} 小時、已休 ${r2(b.compUsed)}、簽核中 ${r2(b.compPend)}。`
+    + '<br>數字有疑問請以行政的特休天數清冊為準。';
+  const y0 = new Date().getFullYear() + '-01-01';
+  const sum = {};
+  (DATA.records || []).filter(r => r.start_date >= y0).forEach(r => { sum[r.leave_type] = (sum[r.leave_type] || 0) + (r.hours != null ? num(r.hours) : num(r.days) * 8); });
+  const ks = Object.keys(sum);
+  $('st_sum').innerHTML = ks.length ? '<tr><th>假別</th><th class="n">時數</th><th class="n">天數</th></tr>'
+    + ks.map(k => `<tr><td>${esc(k)}</td><td class="n">${r2(sum[k])}</td><td class="n">${r2(sum[k] / 8)}</td></tr>`).join('')
+    : '<tr><td class="muted">今年還沒有請假紀錄</td></tr>';
+  const recs = (DATA.records || []).slice(0, 60);
+  $('st_rec').innerHTML = recs.length ? '<tr><th>日期</th><th>假別</th><th class="n">時數</th></tr>'
+    + recs.map(r => `<tr><td>${roc(r.start_date)}${r.end_date && r.end_date !== r.start_date ? '～' + roc(r.end_date) : ''}</td><td>${esc(r.leave_type)}</td><td class="n">${r2(r.hours != null ? num(r.hours) : num(r.days) * 8)}</td></tr>`).join('')
+    : '<tr><td class="muted">沒有紀錄</td></tr>';
+}
+
+// ---------------- 我要請假 ----------------
+$('f_type').innerHTML = LEAVE_TYPES.map(t => `<option>${t}</option>`).join('');
+const PH = { rcpt:[], cert:[] };   // 待上傳的照片 {file, url}
+function daysSpan(){ const s = $('f_sd').value, e = $('f_ed').value; if(!s || !e || e < s) return 0;
+  return Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1; }
+let hrTouched = false;
+function suggestHours(){ if(hrTouched) return; const d = daysSpan(); if(d) $('f_hr').value = d * 8; applyCheck(); }
+$('f_sd').onchange = () => { if($('f_ed').value < $('f_sd').value) $('f_ed').value = $('f_sd').value; suggestHours(); };
+$('f_ed').onchange = suggestHours;
+$('f_hr').oninput = () => { hrTouched = true; applyCheck(); };
+$('f_type').onchange = applyCheck;
+function applyCheck(){
+  const t = $('f_type').value, h = num($('f_hr').value);
+  $('f_sick').classList.toggle('hidden', t !== '病假');
+  const certNeed = h >= ((ME && ME.sick_cert_hours) || 16);
+  $('f_cert_wrap').querySelector('label').textContent = '醫院或診所開的證明' + (certNeed ? '（這次 2 日以上，必附）' : '（2 日以上才需要，這次可不附）');
+  const warn = [], b = balances();
+  if(b && t === '特休' && b.alLeftH != null && h > b.alLeftH + 1e-9) warn.push(`特休剩 ${r2(b.alLeftH)} 小時，不夠請 ${h} 小時，請改別的假別。`);
+  if(b && t === '補休' && h > b.compLeft + 1e-9) warn.push(`補休剩 ${r2(b.compLeft)} 小時，不夠請 ${h} 小時，請改別的假別。`);
+  const back = (ME && ME.backfill_days) || 7, ed = $('f_ed').value;
+  if(ed && (new Date(todayISO()) - new Date(ed)) / 86400000 > back) warn.push(`事後補請要在請假結束日的 ${back} 天內送出，這張已超過，請找行政補登。`);
+  const d = daysSpan();
+  $('f_hint').textContent = d ? `${d} 天，換算 ${r2(h / 8)} 天（8 小時＝1 天）` : '';
+  $('f_warn').innerHTML = warn.map(esc).join('<br>');
+  $('f_warn').classList.toggle('hidden', !warn.length);
+  return warn.length === 0;
+}
+// 手機照片動輒 5MB 以上：先縮到長邊 1600、JPEG 0.8 再上傳
+function shrink(file){
+  return new Promise(res => {
+    if(!/^image\//.test(file.type)) return res(file);
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => { URL.revokeObjectURL(url); res(b || file); }, 'image/jpeg', 0.8);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(file); };
+    img.src = url;
+  });
+}
+function bindPhotos(inputId, key, boxId){
+  $(inputId).onchange = async ev => {
+    for(const f of ev.target.files){ const b = await shrink(f); PH[key].push({ blob:b, url:URL.createObjectURL(b) }); }
+    ev.target.value = ''; drawPhotos(key, boxId);
+  };
+}
+function drawPhotos(key, boxId){
+  $(boxId).innerHTML = PH[key].map((p, i) => `<div class="ph"><img src="${p.url}"><button data-del="${key}:${i}">✕</button></div>`).join('');
+}
+bindPhotos('f_rcpt', 'rcpt', 'ph_rcpt'); bindPhotos('f_cert', 'cert', 'ph_cert');
+document.addEventListener('click', e => {
+  const d = e.target.getAttribute && e.target.getAttribute('data-del'); if(!d) return;
+  const [k, i] = d.split(':'); PH[k].splice(Number(i), 1); drawPhotos(k, k === 'rcpt' ? 'ph_rcpt' : 'ph_cert');
+});
+async function upload(blob){
+  const path = UID + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.jpg';
+  const put = () => fetch(SUPABASE_URL + '/storage/v1/object/leave-proofs/' + path, { method:'POST',
+    headers:{ apikey:SUPABASE_KEY, Authorization:'Bearer ' + TOKEN, 'Content-Type':blob.type || 'image/jpeg' }, body:blob });
+  let r = await put();
+  if((r.status === 401 || r.status === 403) && await refresh()) r = await put();
+  if(!r.ok) throw new Error('照片上傳失敗（' + r.status + '）');
+  return path;
+}
+$('f_go').onclick = async () => {
+  const msg = $('f_msg'); msg.className = 'msg err';
+  const t = $('f_type').value, sd = $('f_sd').value, ed = $('f_ed').value, h = $('f_hr').value;
+  if(!sd || !ed){ msg.textContent = '請選日期'; return; }
+  if(ed < sd){ msg.textContent = '結束日期不能早於開始日期'; return; }
+  if(!(num(h) >= 1) || num(h) !== Math.round(num(h))){ msg.textContent = '時數最少 1 小時，只能填整數'; return; }
+  if(!applyCheck()){ msg.textContent = '請先看上面黃色的提醒'; return; }
+  if(t === '病假' && !PH.rcpt.length){ msg.textContent = '病假要附收據照片'; return; }
+  if(t === '病假' && num(h) >= ((ME && ME.sick_cert_hours) || 16) && !PH.cert.length){ msg.textContent = '病假 2 日以上要附醫院或診所的證明'; return; }
+  $('f_go').disabled = true; msg.className = 'msg'; msg.textContent = '送出中…';
+  try{
+    const att = [];
+    if(t === '病假'){
+      for(const p of PH.rcpt) att.push({ kind:'收據', path:await upload(p.blob) });
+      for(const p of PH.cert) att.push({ kind:'醫療證明', path:await upload(p.blob) });
+    }
+    const r = await rpc('lv_submit', { p:{ leave_type:t, start_date:sd, end_date:ed, hours:Number(h), reason:$('f_reason').value.trim(), attachments:att } });
+    if(!r || !r.ok){ msg.className = 'msg err'; msg.textContent = (r && r.msg) || '送出失敗'; return; }
+    msg.className = 'msg ok'; msg.textContent = '已送出（假單 #' + r.request_id + '），可以到「我的假單」看進度。';
+    $('f_reason').value = ''; PH.rcpt = []; PH.cert = []; drawPhotos('rcpt', 'ph_rcpt'); drawPhotos('cert', 'ph_cert'); hrTouched = false;
+    await reloadAll();
+  }catch(e){ msg.className = 'msg err'; msg.textContent = e.message; }
+  finally{ $('f_go').disabled = false; }
+};
+
+// ---------------- 假單卡片（我的假單、待簽共用）----------------
+function statusPill(s){ const c = { '待簽核':'amber', '已核准':'green', '已駁回':'red', '已撤回':'gray' }[s] || 'gray'; return `<span class="pill ${c}">${esc(s)}</span>`; }
+function reqDates(r){ return roc(r.start_date) + (r.end_date !== r.start_date ? '～' + roc(r.end_date) : ''); }
+function stepsHtml(r){
+  const acts = r.actions || [];
+  const li = acts.map(a => `<li class="${a.action === '核准' || a.action === '送出' ? 'ok' : (a.action === '駁回' ? 'no' : '')}">
+      <b>${esc(a.stage_name || '')}</b>　${esc(a.action)}　${esc(a.actor_name || '')}<span class="muted">　${rocDT(a.acted_at)}</span>
+      ${a.comment ? '<br><span class="muted">意見：' + esc(a.comment) + '</span>' : ''}</li>`);
+  if(r.status === '待簽核'){
+    (r.stages || []).forEach(s => { if(s.no >= r.current_stage)
+      li.push(`<li class="${s.no === r.current_stage ? 'now' : ''}"><b>${esc(s.name)}</b>　${s.no === r.current_stage ? '等待簽核' : '尚未輪到'}<span class="muted">　${esc((s.approver_names || []).join('、'))}</span></li>`); });
+  }
+  return `<ul class="steps">${li.join('')}</ul>`;
+}
+function attHtml(r){
+  const a = r.attachments || []; if(!a.length) return '';
+  return '<div style="margin-top:6px;">附件：' + a.map(x => `<button class="linkbtn" data-view="${esc(x.path)}">${esc(x.kind)}</button>`).join('　') + '</div>';
+}
+function renderMine(){
+  const list = (DATA && DATA.requests) || [];
+  $('mine_list').innerHTML = list.length ? list.map(r => `
+    <div class="card req">
+      <div class="top"><div><div class="big">${esc(r.leave_type)}　${r2(num(r.hours))} 小時</div><div class="muted">${reqDates(r)}　#${r.request_id}</div></div>${statusPill(r.status)}</div>
+      ${r.reason ? `<div style="margin-top:6px;">${esc(r.reason)}</div>` : ''}
+      ${attHtml(r)}${stepsHtml(r)}
+      ${r.status === '待簽核' ? `<button class="btn ghost" data-cancel="${r.request_id}">撤回這張假單</button>` : ''}
+    </div>`).join('') : '<div class="card muted">還沒有假單。</div>';
+}
+document.addEventListener('click', async e => {
+  const c = e.target.getAttribute && e.target.getAttribute('data-cancel');
+  if(c){ if(!confirm('確定要撤回這張假單嗎？')) return;
+    try{ const r = await rpc('lv_cancel', { p_id:Number(c) }); if(!r.ok) alert(r.msg); await reloadAll(); }catch(err){ alert(err.message); } }
+  const v = e.target.getAttribute && e.target.getAttribute('data-view');
+  if(v){ try{
+      const r = await fetch(SUPABASE_URL + '/storage/v1/object/sign/leave-proofs/' + v, { method:'POST',
+        headers:{ apikey:SUPABASE_KEY, Authorization:'Bearer ' + TOKEN, 'Content-Type':'application/json' }, body:JSON.stringify({ expiresIn:600 }) });
+      const d = await r.json(); if(!r.ok) throw new Error(d.message || '打不開');
+      const u = d.signedURL || d.signedUrl; $('viewer_img').src = (u.startsWith('http') ? '' : SUPABASE_URL + '/storage/v1') + u;
+      $('viewer').classList.remove('hidden');
+    }catch(err){ alert('照片打不開：' + err.message); } }
+});
+$('viewer_x').onclick = () => { $('viewer').classList.add('hidden'); $('viewer_img').src = ''; };
+
+// ---------------- 待我簽核 ----------------
+function renderInbox(){
+  if(!ME || !ME.approver) return;
+  const p = (INBOX && INBOX.pending) || [], d = (INBOX && INBOX.done) || [];
+  $('inbox_dot').textContent = p.length; $('inbox_dot').classList.toggle('hidden', !p.length);
+  $('ib_list').innerHTML = p.length ? p.map(r => {
+    const a = r.applicant || {}, used = r.year_used || {};
+    const usedTxt = Object.keys(used).map(k => k + ' ' + r2(num(used[k])) + 'h').join('、') || '無';
+    return `<div class="card req">
+      <div class="top"><div><div class="big">${esc(a.name || r.name)}　${esc(r.leave_type)}　${r2(num(r.hours))} 小時</div>
+        <div class="muted">${reqDates(r)}　${esc(a.region || '')}　${esc(a.position_name || '')}　#${r.request_id}</div></div>${statusPill(r.status)}</div>
+      ${r.reason ? `<div style="margin-top:6px;">事由：${esc(r.reason)}</div>` : ''}
+      <div class="muted" style="margin-top:4px;">今年已請：${esc(usedTxt)}</div>
+      ${attHtml(r)}${stepsHtml(r)}
+      <label>意見（駁回一定要寫）</label><textarea id="cm_${r.request_id}" style="min-height:52px;"></textarea>
+      <div class="row" style="margin-top:8px;"><div><button class="btn green block" style="margin:0;" data-act="核准" data-id="${r.request_id}">核准</button></div>
+        <div><button class="btn red block" style="margin:0;" data-act="駁回" data-id="${r.request_id}">駁回</button></div></div>
+    </div>`; }).join('') : '<div class="card muted">目前沒有要您簽核的假單。</div>';
+  $('ib_done').innerHTML = d.length ? d.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--line);">
+      <b>${esc(r.name)}</b>　${esc(r.leave_type)} ${r2(num(r.hours))}h　${reqDates(r)}　${statusPill(r.status)}</div>`).join('')
+    : '<div class="muted">沒有</div>';
+}
+document.addEventListener('click', async e => {
+  const act = e.target.getAttribute && e.target.getAttribute('data-act'); if(!act) return;
+  const id = Number(e.target.getAttribute('data-id')), cm = ($('cm_' + id) || {}).value || '';
+  if(act === '駁回' && !cm.trim()){ alert('駁回請在「意見」寫原因'); return; }
+  if(!confirm('確定要「' + act + '」這張假單嗎？')) return;
+  e.target.disabled = true;
+  try{ const r = await rpc('lv_act', { p_id:id, p_action:act, p_comment:cm });
+       if(!r.ok) alert(r.msg); else if(r.next) alert('已核准，送到下一關：' + r.next); else alert('已' + (r.status || act));
+       await reloadAll(); }
+  catch(err){ alert(err.message); e.target.disabled = false; }
+});
+
+// ---------------- 設定 ----------------
+$('s_mail_go').onclick = async () => {
+  const m = $('s_mail_msg'); m.className = 'msg';
+  try{ const r = await rpc('lv_set_notify_email', { p_email:$('s_mail').value.trim() });
+       m.className = 'msg ' + (r.ok ? 'ok' : 'err'); m.textContent = r.ok ? '已儲存' : r.msg; }
+  catch(e){ m.className = 'msg err'; m.textContent = e.message; }
+};
+$('s_pw_go').onclick = async () => {
+  const m = $('s_pw_msg'), a = $('s_pw').value, b = $('s_pw2').value; m.className = 'msg err';
+  if(a.length < 8){ m.textContent = '密碼至少 8 碼'; return; } if(a !== b){ m.textContent = '兩次不一樣'; return; }
+  const r = await fetch(SUPABASE_URL + '/auth/v1/user', { method:'PUT',
+    headers:{ apikey:SUPABASE_KEY, Authorization:'Bearer ' + TOKEN, 'Content-Type':'application/json' }, body:JSON.stringify({ password:a }) });
+  m.className = 'msg ' + (r.ok ? 'ok' : 'err'); m.textContent = r.ok ? '密碼已修改' : '修改失敗，請重新登入再試';
+  if(r.ok){ $('s_pw').value = ''; $('s_pw2').value = ''; }
+};
+$('s_out').onclick = () => { lsSet('lv_rt', null); TOKEN = REFRESH = UID = null; location.reload(); };
+
+// ---------------- 啟動：記住登入 ----------------
+(async () => {
+  REFRESH = lsGet('lv_rt');
+  if(REFRESH && await refresh()) await enter();
+})();
+</script>
+</body>
+</html>

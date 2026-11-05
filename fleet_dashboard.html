@@ -1721,6 +1721,20 @@
   </div>
 
   <div id="ledgers" class="panel">
+    <div class="card" id="lvaCard">
+      <h2>請假簽核設定（線上請假 leave.html）<span class="count-badge" id="lva_badge"></span></h2>
+      <div class="muted" style="margin-bottom:8px;">員工用手機開 leave.html 送假單，依路線逐關簽核，最後一關核准後自動寫進下面的請假紀錄。
+        這裡設定路線與簽核人、幫員工產生開通碼，也可以替任何一關「代登」核准或駁回（例如總經理口頭同意、總經理本人請假）。需要先跑 SQL_241。</div>
+      <div class="toolbar" id="lva_tabs">
+        <button class="btn" data-lva="req">假單</button>
+        <button class="btn ghost" data-lva="route">路線與簽核人</button>
+        <button class="btn ghost" data-lva="acct">員工帳號與開通碼</button>
+        <button class="btn ghost" data-lva="set">通知與管理員</button>
+        <button class="btn ghost" id="lva_reload">重新整理</button>
+        <span id="lva_msg" class="muted"></span>
+      </div>
+      <div id="lva_body"><div class="muted">切到這個分頁就會自動載入。</div></div>
+    </div>
     <div class="card">
       <h2>新增請假登錄</h2>
       <div class="form-grid">
@@ -17299,6 +17313,226 @@ function openRewardModal(id){
   `;
   document.getElementById('rewardModal').classList.add('show');
 }
+// ===== 請假簽核設定（SQL_241 / leave.html）=====
+// 資料直接讀寫 leave_* 這幾張表（行政帳號才有權限）；簽核一律走 lv_act，跟主管在手機上按的是同一支，
+// 代登的紀錄會寫「行政 ○○ 代登」。開通碼只顯示這一次，資料庫只存加密後的值。
+const LVA = { loaded:false, tab:'req', reqs:[], acts:[], atts:[], stages:[], ovr:[], dels:[], accts:[], sets:{}, staff:[] };
+const LVA_ROUTES = { driver:'司機（直接人員）', indirect:'間接人員（含調度、總經理特助）', manager:'主管（總經理、副總）' };
+const LVA_STATUS = ['待簽核','已核准','已駁回','已撤回'];
+function lvaEmpName(id){ const e = (STATE.employees || []).concat(STATE.employeesHistory || []).find(x => String(x.id) === String(id)); return e ? e.name : ('#' + id); }
+function lvaEmpOpts(sel, multi){
+  const ids = (sel || []).map(String);
+  return (STATE.employees || []).slice().sort((a, b) => String(a.region || '').localeCompare(String(b.region || '')) || String(a.name).localeCompare(String(b.name)))
+    .map(e => `<option value="${e.id}"${ids.includes(String(e.id)) ? ' selected' : ''}>${esc(e.name)}（${esc(e.region || '')} ${esc(e.position_name || '')}）</option>`).join('');
+}
+async function lvaRpc(fn, args){
+  return supaFetch('rpc/' + fn, { method:'POST', body: JSON.stringify(args || {}) });
+}
+async function lvaLoad(force){
+  if(LVA.loaded && !force){ lvaRender(); return; }
+  const msg = document.getElementById('lva_msg'); if(msg) msg.textContent = '載入中…';
+  try{
+    const [reqs, stages, ovr, dels, accts, sets] = await Promise.all([
+      supaFetch('leave_requests?select=*&order=created_at.desc&limit=400'),
+      supaFetch('leave_route_stages?select=*&order=route_key.asc,stage_no.asc,region.asc'),
+      supaFetch('leave_route_overrides?select=*'),
+      supaFetch('leave_delegates?select=*&order=start_date.desc'),
+      supaFetch('leave_accounts?select=account_id,employee_id,emp_no,user_id,code_expires,notify_email,activated_at'),
+      supaFetch('leave_settings?select=*')]);
+    LVA.reqs = reqs || []; LVA.stages = stages || []; LVA.ovr = ovr || []; LVA.dels = dels || []; LVA.accts = accts || [];
+    LVA.sets = {}; (sets || []).forEach(s => { LVA.sets[s.key] = s.value; });
+    const ids = LVA.reqs.map(r => r.request_id);
+    LVA.acts = ids.length ? (await supaFetch('leave_request_actions?select=*&order=acted_at.asc&request_id=in.(' + ids.join(',') + ')')) || [] : [];
+    LVA.atts = ids.length ? (await supaFetch('leave_attachments?select=*&request_id=in.(' + ids.join(',') + ')')) || [] : [];
+    try{ LVA.staff = (await lvaRpc('lv_staff_list')) || []; }catch(e){ LVA.staff = []; }
+    LVA.loaded = true;
+    if(msg) msg.textContent = '';
+  }catch(e){
+    if(msg) msg.textContent = '';
+    document.getElementById('lva_body').innerHTML = '<div class="muted" style="color:var(--red);">讀不到請假簽核的資料表：' + esc(e.message) + '<br>請先在 Supabase 執行 SQL_241。</div>';
+    return;
+  }
+  lvaRender();
+}
+function lvaRender(){
+  const b = document.getElementById('lva_body'); if(!b) return;
+  document.querySelectorAll('#lva_tabs [data-lva]').forEach(x => x.className = 'btn' + (x.dataset.lva === LVA.tab ? '' : ' ghost'));
+  const pend = LVA.reqs.filter(r => r.status === '待簽核').length;
+  const bd = document.getElementById('lva_badge'); if(bd) bd.textContent = pend ? pend + ' 張待簽' : '';
+  b.innerHTML = LVA.tab === 'req' ? lvaReqHtml() : LVA.tab === 'route' ? lvaRouteHtml() : LVA.tab === 'acct' ? lvaAcctHtml() : lvaSetHtml();
+}
+// ---- 假單 ----
+function lvaReqHtml(){
+  const f = LVA.reqFilter || '待簽核', q = (LVA.reqQ || '').trim();
+  const rows = LVA.reqs.filter(r => (f === '全部' || r.status === f) && (!q || String(r.name || '').includes(q)));
+  const pill = s => `<span class="pill ${({'待簽核':'amber','已核准':'green','已駁回':'red'})[s] || 'gray'}">${esc(s)}</span>`;
+  const roc = d => toROCDate ? toROCDate(String(d || '').slice(0, 10)) : String(d || '');
+  return `<div class="toolbar"><select id="lva_rf">${['待簽核','全部'].concat(LVA_STATUS.slice(1)).map(s => `<option${s === f ? ' selected' : ''}>${s}</option>`).join('')}</select>
+      <input id="lva_rq" placeholder="搜尋姓名" value="${esc(q)}"></div>
+    <div class="table-scroll"><table><thead><tr><th>#</th><th>申請人</th><th>假別</th><th>日期</th><th>時數</th><th>事由</th><th>簽核進度</th><th>狀態</th><th>附件</th><th></th></tr></thead><tbody>
+    ${rows.map(r => {
+      const st = (r.stages || [])[r.current_stage - 1] || {};
+      const acts = LVA.acts.filter(a => a.request_id === r.request_id);
+      const trail = acts.map(a => `${esc(a.stage_name || '')}${esc(a.action)}${a.actor_name ? '（' + esc(a.actor_name) + '）' : ''}${a.comment ? '：' + esc(a.comment) : ''}`).join('<br>');
+      const att = LVA.atts.filter(a => a.request_id === r.request_id).map(a => `<button class="name-link" data-lva-att="${esc(a.path)}">${esc(a.kind)}</button>`).join(' ');
+      return `<tr><td>${r.request_id}</td><td>${esc(r.name || '')}<br><span class="muted">${esc(r.emp_no || '')} ${esc(r.region || '')}</span></td>
+        <td>${esc(r.leave_type)}</td><td>${esc(roc(r.start_date))}${r.end_date !== r.start_date ? '～' + esc(roc(r.end_date)) : ''}</td>
+        <td>${Number(r.hours)}h</td><td class="muted" style="max-width:220px;">${esc(r.reason || '')}</td>
+        <td style="font-size:12.5px;">${trail}${r.status === '待簽核' ? `<br><b>目前：${esc(st.name || '')}</b> <span class="muted">${esc((st.approver_names || []).join('、'))}</span>` : ''}</td>
+        <td>${pill(r.status)}${r.leave_record_id ? '<br><span class="muted">已寫入請假紀錄</span>' : ''}</td><td>${att}</td>
+        <td style="white-space:nowrap;">${r.status === '待簽核' ? `<button class="name-link" data-lva-act="核准" data-id="${r.request_id}">代登核准</button><br><button class="del-btn" data-lva-act="駁回" data-id="${r.request_id}">代登駁回</button>` : ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="10" class="empty">沒有符合條件的假單</td></tr>'}</tbody></table></div>`;
+}
+// ---- 路線 ----
+function lvaRouteHtml(){
+  const regions = ['', '台中', '新竹', '台南'];
+  let h = '<div class="muted" style="margin-bottom:8px;">每一關可以選好幾位，任一位簽就過；按住 Ctrl（Mac 按 ⌘）可以多選。「適用車場」留「全部」就是全公司；某個車場要有自己的調度，就新增一列同一關、選那個車場。申請人剛好是那一關的簽核人，那一關自動跳過；整條路線都跳過的（例如總經理本人請假）會變成「行政確認」，在「假單」那頁代登。</div>';
+  Object.keys(LVA_ROUTES).forEach(rk => {
+    const st = LVA.stages.filter(s => s.route_key === rk);
+    h += `<h3 style="margin:14px 0 6px;">${esc(LVA_ROUTES[rk])}</h3><div class="table-scroll"><table><thead><tr><th style="width:60px;">第幾關</th><th style="width:140px;">關卡名稱</th><th style="width:110px;">適用車場</th><th>簽核人</th><th style="width:120px;"></th></tr></thead><tbody>`
+      + st.map(s => `<tr><td><input type="number" min="1" id="lva_sn_${s.stage_id}" value="${s.stage_no}" style="width:56px;"></td>
+          <td><input id="lva_sname_${s.stage_id}" value="${esc(s.stage_name)}"></td>
+          <td><select id="lva_sreg_${s.stage_id}">${regions.map(r => `<option value="${r}"${r === (s.region || '') ? ' selected' : ''}>${r || '全部'}</option>`).join('')}</select></td>
+          <td><select multiple size="4" id="lva_sapp_${s.stage_id}" style="min-width:260px;">${lvaEmpOpts(s.approver_ids)}</select>
+              <div class="muted" style="font-size:12px;">目前：${esc((s.approver_ids || []).map(lvaEmpName).join('、') || '（還沒選）')}</div></td>
+          <td><button class="btn" data-lva-ssave="${s.stage_id}">儲存</button> <button class="del-btn" data-lva-sdel="${s.stage_id}">刪除</button></td></tr>`).join('')
+      + `</tbody></table></div><button class="btn ghost" data-lva-sadd="${rk}" style="margin-top:6px;">＋ 新增一關</button>`;
+  });
+  h += `<h3 style="margin:18px 0 6px;">個別人員指定路線</h3><div class="muted">預設：直接人員走司機、職稱含「特助」走間接、總經理／副總走主管、其他走間接。要例外的人在這裡指定。</div>
+    <div class="toolbar"><select id="lva_oemp">${lvaEmpOpts([])}</select><select id="lva_ork">${Object.keys(LVA_ROUTES).map(k => `<option value="${k}">${esc(LVA_ROUTES[k])}</option>`).join('')}</select>
+      <button class="btn" id="lva_oadd">指定</button></div>
+    <table><tbody>${LVA.ovr.map(o => `<tr><td>${esc(lvaEmpName(o.employee_id))}</td><td>${esc(LVA_ROUTES[o.route_key] || o.route_key)}</td><td><button class="del-btn" data-lva-odel="${o.employee_id}">取消指定</button></td></tr>`).join('') || '<tr><td class="muted">沒有例外</td></tr>'}</tbody></table>
+    <h3 style="margin:18px 0 6px;">代簽人（簽核人請假或出差時）</h3>
+    <div class="toolbar"><label>簽核人<select id="lva_dapp">${lvaEmpOpts([])}</select></label><label>代簽人<select id="lva_ddel">${lvaEmpOpts([])}</select></label>
+      <label>起<input type="date" id="lva_ds"></label><label>迄<input type="date" id="lva_de"></label><button class="btn" id="lva_dadd">新增代簽</button></div>
+    <table><tbody>${LVA.dels.map(d => `<tr><td>${esc(lvaEmpName(d.approver_id))} → ${esc(lvaEmpName(d.delegate_id))}</td><td>${esc(d.start_date)}～${esc(d.end_date)}</td><td><button class="del-btn" data-lva-ddel="${d.delegate_row_id}">刪除</button></td></tr>`).join('') || '<tr><td class="muted">沒有代簽</td></tr>'}</tbody></table>`;
+  return h;
+}
+// ---- 帳號 ----
+function lvaAcctHtml(){
+  const q = (LVA.acctQ || '').trim();
+  const list = (STATE.employees || []).filter(e => !q || String(e.name).includes(q) || String(e.employee_no || '').toUpperCase().includes(q.toUpperCase()))
+    .slice().sort((a, b) => String(a.employee_no || '').localeCompare(String(b.employee_no || '')));
+  const st = a => !a ? '<span class="pill gray">未開通</span>'
+    : a.user_id ? '<span class="pill green">已開通</span>'
+    : (a.code_expires && a.code_expires > new Date().toISOString()) ? `<span class="pill amber">開通碼有效到 ${esc(String(a.code_expires).slice(0, 10))}</span>` : '<span class="pill gray">開通碼已過期</span>';
+  return `<div class="muted" style="margin-bottom:6px;">按「產生開通碼」把 8 碼開通碼交給員工（7 天有效），員工到 leave.html 用「第一次開通」設密碼。忘記密碼也是產生新的開通碼讓他重設。
+      通知信箱：主管一定要填（才收得到待簽通知）；司機有就填，員工也能自己在手機上改。</div>
+    <div class="toolbar"><input id="lva_aq" placeholder="搜尋姓名或員編" value="${esc(q)}"></div>
+    <div class="table-scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>區域</th><th>狀態</th><th>通知信箱</th><th></th></tr></thead><tbody>
+    ${list.map(e => { const a = LVA.accts.find(x => String(x.employee_id) === String(e.id));
+      return `<tr><td>${esc(e.employee_no || '')}</td><td>${esc(e.name)}</td><td>${esc(e.region || '')}</td><td>${st(a)}<div id="lva_code_${e.id}" style="font-weight:700;"></div></td>
+        <td><input id="lva_mail_${e.id}" value="${esc((a && a.notify_email) || '')}" placeholder="email" style="min-width:200px;"> <button class="name-link" data-lva-mail="${e.id}">存</button></td>
+        <td><button class="btn" data-lva-code="${e.id}">${a && a.user_id ? '產生重設碼' : '產生開通碼'}</button></td></tr>`; }).join('')}
+    </tbody></table></div>`;
+}
+// ---- 通知與管理員 ----
+function lvaSetHtml(){
+  const s = LVA.sets;
+  return `<div class="form-grid">
+      <label>核准後通知行政的信箱（多個用逗號分隔）<input id="lva_set_admin" value="${esc(s.admin_emails || '')}" placeholder="例：hr@dgtt.com.tw"></label>
+      <label>請假網頁網址（信裡的連結用）<input id="lva_set_url" value="${esc(s.site_url || '')}" placeholder="例：https://shunya-transport.github.io/company_management/leave.html"></label>
+      <label>事後補請期限（天）<input id="lva_set_back" type="number" min="0" value="${esc(s.backfill_days || '7')}"></label>
+      <label>病假要附醫療證明的時數（≧）<input id="lva_set_cert" type="number" min="1" value="${esc(s.sick_cert_hours || '16')}"></label>
+    </div><button class="btn" id="lva_set_save">儲存設定</button>
+    <h3 style="margin:18px 0 6px;">管理員名單（可以進這個儀表板的帳號）</h3>
+    <div class="muted">在 Supabase → Authentication → Users 新增帳號（勾 Auto Confirm User）之後，一定要在這裡加進來，不然他登入儀表板會是空的。勾「收通知」的人，核准後也會收到信。</div>
+    <div class="toolbar"><input id="lva_st_mail" placeholder="email"><input id="lva_st_name" placeholder="姓名（選填）"><button class="btn" id="lva_st_add">加入管理員</button></div>
+    <table><thead><tr><th>Email</th><th>姓名</th><th>收通知</th><th></th></tr></thead><tbody>
+    ${LVA.staff.map(u => `<tr><td>${esc(u.email || '')}${u.me ? ' <span class="pill green">我</span>' : ''}</td><td><input id="lva_stn_${u.user_id}" value="${esc(u.name || '')}" style="width:120px;"></td>
+      <td><input type="checkbox" data-lva-stnotify="${u.user_id}"${u.notify ? ' checked' : ''}></td>
+      <td><button class="name-link" data-lva-stsave="${u.user_id}">存</button>${u.me ? '' : ` <button class="del-btn" data-lva-stdel="${u.user_id}">移除</button>`}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+async function lvaDo(fn, okMsg){
+  const msg = document.getElementById('lva_msg');
+  try{ if(msg) msg.textContent = '處理中…'; await fn(); await lvaLoad(true); if(msg) msg.textContent = okMsg || '已儲存'; }
+  catch(e){ if(msg) msg.textContent = ''; alert('失敗：' + e.message); }
+}
+function lvaWire(){
+  const card = document.getElementById('lvaCard'); if(!card || card._wired) return; card._wired = true;
+  const tabBtn = document.querySelector('button[data-tab="ledgers"]');
+  if(tabBtn) tabBtn.addEventListener('click', () => lvaLoad(false));
+  document.getElementById('lva_reload').onclick = () => lvaLoad(true);
+  card.addEventListener('input', e => {
+    if(e.target.id === 'lva_rq'){ LVA.reqQ = e.target.value; clearTimeout(LVA._t); LVA._t = setTimeout(() => { lvaRender(); const x = document.getElementById('lva_rq'); if(x){ x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 300); }
+    if(e.target.id === 'lva_aq'){ LVA.acctQ = e.target.value; clearTimeout(LVA._t); LVA._t = setTimeout(() => { lvaRender(); const x = document.getElementById('lva_aq'); if(x){ x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 300); }
+  });
+  card.addEventListener('change', e => {
+    if(e.target.id === 'lva_rf'){ LVA.reqFilter = e.target.value; lvaRender(); }
+    const nt = e.target.getAttribute('data-lva-stnotify');
+    if(nt) lvaDo(() => supaFetch('app_staff?user_id=eq.' + nt, { method:'PATCH', body: JSON.stringify({ notify: e.target.checked }) }));
+  });
+  card.addEventListener('click', async e => {
+    const t = e.target, g = k => t.getAttribute(k);
+    if(g('data-lva')){ LVA.tab = g('data-lva'); lvaLoad(false); return; }
+    if(g('data-lva-act')){
+      const act = g('data-lva-act'), id = Number(g('data-id'));
+      const cm = prompt(act === '駁回' ? '駁回原因（必填）：' : '代登說明（選填，例：總經理口頭同意）：', '');
+      if(cm === null) return;
+      if(act === '駁回' && !cm.trim()){ alert('駁回要寫原因'); return; }
+      await lvaDo(async () => { const r = await lvaRpc('lv_act', { p_id:id, p_action:act, p_comment:cm }); if(r && r.ok === false) throw new Error(r.msg);
+      }, act === '核准' ? '已代登核准（最後一關核准的，重新整理頁面後會出現在下面的請假紀錄）' : '已代登駁回');
+      return;
+    }
+    if(g('data-lva-att')){
+      try{ const d = await supaFetch('../../storage/v1/object/sign/leave-proofs/' + g('data-lva-att'), { method:'POST', body: JSON.stringify({ expiresIn:600 }) });
+        const u = d.signedURL || d.signedUrl; window.open((u.startsWith('http') ? '' : SUPABASE_URL + '/storage/v1') + u, '_blank'); }
+      catch(err){ alert('照片打不開：' + err.message); }
+      return;
+    }
+    if(g('data-lva-ssave')){
+      const id = g('data-lva-ssave'), v = k => document.getElementById(k + id);
+      const ids = Array.from(v('lva_sapp_').selectedOptions).map(o => Number(o.value));
+      return lvaDo(() => supaFetch('leave_route_stages?stage_id=eq.' + id, { method:'PATCH', body: JSON.stringify({
+        stage_no: Number(v('lva_sn_').value) || 1, stage_name: v('lva_sname_').value.trim() || '簽核', region: v('lva_sreg_').value, approver_ids: ids }) }));
+    }
+    if(g('data-lva-sdel')){ if(!confirm('刪掉這一關？')) return; return lvaDo(() => supaFetch('leave_route_stages?stage_id=eq.' + g('data-lva-sdel'), { method:'DELETE' })); }
+    if(g('data-lva-sadd')){
+      const rk = g('data-lva-sadd'); const mx = Math.max(0, ...LVA.stages.filter(s => s.route_key === rk && !s.region).map(s => s.stage_no));
+      return lvaDo(() => supaFetch('leave_route_stages', { method:'POST', body: JSON.stringify({ route_key: rk, stage_no: mx + 1, stage_name: '新的一關', region: '', approver_ids: [] }) }));
+    }
+    if(t.id === 'lva_oadd') return lvaDo(() => supaFetch('leave_route_overrides?on_conflict=employee_id', { method:'POST',
+        headers:{ Prefer:'resolution=merge-duplicates' }, body: JSON.stringify({ employee_id: Number(document.getElementById('lva_oemp').value), route_key: document.getElementById('lva_ork').value }) }));
+    if(g('data-lva-odel')) return lvaDo(() => supaFetch('leave_route_overrides?employee_id=eq.' + g('data-lva-odel'), { method:'DELETE' }));
+    if(t.id === 'lva_dadd'){
+      const s = document.getElementById('lva_ds').value, en = document.getElementById('lva_de').value;
+      if(!s || !en || en < s){ alert('請填正確的起迄日'); return; }
+      return lvaDo(() => supaFetch('leave_delegates', { method:'POST', body: JSON.stringify({ approver_id: Number(document.getElementById('lva_dapp').value),
+        delegate_id: Number(document.getElementById('lva_ddel').value), start_date: s, end_date: en }) }));
+    }
+    if(g('data-lva-ddel')) return lvaDo(() => supaFetch('leave_delegates?delegate_row_id=eq.' + g('data-lva-ddel'), { method:'DELETE' }));
+    if(g('data-lva-code')){
+      const id = Number(g('data-lva-code'));
+      try{ const r = await lvaRpc('lv_admin_make_code', { p_employee_id:id });
+        await lvaLoad(true);
+        const box = document.getElementById('lva_code_' + id);
+        if(box) box.textContent = '開通碼：' + r.code + '（' + r.expires + ' 前有效）';
+        alert(r.name + '（' + r.emp_no + '）的開通碼：' + r.code + '\n\n7 天內有效，只會顯示這一次，請直接交給本人。\n員工到 leave.html →「第一次開通／忘記密碼」輸入員編與開通碼，再自己設密碼。');
+      }catch(err){ alert('產生失敗：' + err.message); }
+      return;
+    }
+    if(g('data-lva-mail')){
+      const id = g('data-lva-mail'), v = document.getElementById('lva_mail_' + id).value.trim();
+      const a = LVA.accts.find(x => String(x.employee_id) === String(id));
+      const e2 = (STATE.employees || []).find(x => String(x.id) === String(id));
+      return lvaDo(() => a ? supaFetch('leave_accounts?account_id=eq.' + a.account_id, { method:'PATCH', body: JSON.stringify({ notify_email: v || null }) })
+        : supaFetch('leave_accounts', { method:'POST', body: JSON.stringify({ employee_id: Number(id), emp_no: e2 ? e2.employee_no : null, notify_email: v || null }) }));
+    }
+    if(t.id === 'lva_set_save'){
+      const pairs = [['admin_emails', 'lva_set_admin'], ['site_url', 'lva_set_url'], ['backfill_days', 'lva_set_back'], ['sick_cert_hours', 'lva_set_cert']];
+      return lvaDo(() => supaFetch('leave_settings?on_conflict=key', { method:'POST', headers:{ Prefer:'resolution=merge-duplicates' },
+        body: JSON.stringify(pairs.map(p => ({ key:p[0], value: document.getElementById(p[1]).value.trim() }))) }));
+    }
+    if(t.id === 'lva_st_add') return lvaDo(async () => { const r = await lvaRpc('lv_staff_add', { p_email: document.getElementById('lva_st_mail').value, p_name: document.getElementById('lva_st_name').value });
+      if(r && r.ok === false) throw new Error(r.msg); }, '已加入管理員');
+    if(g('data-lva-stsave')) return lvaDo(() => supaFetch('app_staff?user_id=eq.' + g('data-lva-stsave'), { method:'PATCH',
+        body: JSON.stringify({ name: document.getElementById('lva_stn_' + g('data-lva-stsave')).value.trim() || null }) }));
+    if(g('data-lva-stdel')){ if(!confirm('移除這個管理員？他之後登入儀表板會看不到任何資料。')) return;
+      return lvaDo(() => supaFetch('app_staff?user_id=eq.' + g('data-lva-stdel'), { method:'DELETE' })); }
+  });
+}
+lvaWire();
 // ===== 運輸服務管理獎懲單（表單編號 管021-A1）=====
 // 版面照紙本：姓名／日期、事實敘述、獎懲種類（勾選＋次數）、獎懲條例、備註、四格簽名。
 // 只帶系統裡有的：姓名、日期、事實、獎懲種類與數量；「提報人員」列印前自己輸入，其餘留白給人手寫。
