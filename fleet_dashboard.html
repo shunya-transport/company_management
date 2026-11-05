@@ -2879,6 +2879,7 @@
             <option value="payroll_deduct_consent2">薪資扣發同意書（二）（利福運輸集團）</option>
             <option value="payroll_auth">授權書（本票，搭配薪資扣發同意書）</option>
             <option value="payroll_pay_notice">薪資其他項目發款通知單</option>
+            <option value="pay_notice_a1">員工薪資其他項目發款通知單暨發款明細（管044-A1，可直接填寫）</option>
             <option value="min_service_bonus">最低服務年限獎金－生活補助預支</option>
             <option value="payroll_case_list">薪資扣發／發款　進行中案件一覽</option>
           </select>
@@ -12768,6 +12769,7 @@ const EXTRA_FIELDS = {
   payroll_pay_notice: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
   min_service_bonus: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
   payroll_case_list: [],
+  pay_notice_a1: [],
   transport_onduty_end: [],
   ppe_matrix: [],
   referral_bonus: [
@@ -13719,6 +13721,85 @@ function buildPayrollNotice(kind){
        </div>`
     + pcLedger(c, word)
     + (c ? `<div style="margin-top:8px;font-weight:700;">目前餘額：${fmt2(pcBalance(c))} 元</div>` : ''));
+}
+// ===== 員工薪資其他項目發款通知單暨發款明細（表單編號 管044-A1，可直接在畫面上填）=====
+// 115/11 使用者要求：版面照紙本；上半部每一格都能直接點進去打字、方框點一下就勾，
+// 人員資料（工號、姓名、部門、職稱、到職日、區域）選了人就自動帶入，帶進來的也能改。
+// 這個人在「薪資扣發／發款案件」有發款案件的話，金額、期數、日期也先帶最新那一件，一樣可以改。
+// 下半部「發款登錄明細」照紙本 10 列 × 左右兩欄（第 1～10 期、第 11～20 期），已登錄的期數印上去，其餘留白手寫。
+function pnIn(v, w, extra){
+  return `<input class="pn-in" value="${esc(v == null ? '' : String(v))}" style="width:${w || '100%'};${extra || ''}">`;
+}
+function pnBox(on, grp){ return `<span class="pn-box" data-pn-box="${grp || ''}">${on ? '■' : '□'}</span>`; }
+function pnRoc(d){
+  const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? (Number(m[1]) - 1911) + '年' + Number(m[2]) + '月' + Number(m[3]) + '日' : '';
+}
+function pnRocSlash(d){
+  const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? (Number(m[1]) - 1911) + '/' + Number(m[2]) + '/' + Number(m[3]) : '';
+}
+function buildPayNoticeA1(e){
+  const c = (STATE.payrollCases || [])
+    .filter(x => String(x.case_kind || '') === '發款' && e && String(x.employee_id) === String(e.id))
+    .sort((a, b) => String(b.agreed_date || b.first_date || '').localeCompare(String(a.agreed_date || a.first_date || '')))[0] || null;
+  const reason = c ? String(c.reason_type || '') : '';
+  const isMin = /最低服務/.test(reason);
+  const otherTxt = c && !isMin ? (reason === '其他' ? String(c.reason_note || '') : [reason, c.reason_note].filter(Boolean).join('：')) : '';
+  const split = c && c.pay_mode === '分期';
+  const lines = c ? pcLinesOf(c.case_id) : [];
+  let bal = c ? (Number(c.total_amount) || 0) : 0;
+  const filled = lines.map(l => { bal -= (Number(l.amount) || 0); return {m: l.pay_month || '', a: fmt2(l.amount), b: fmt2(bal)}; });
+  const td = 'border:1px solid #000;padding:2px 4px;';
+  const cell = i => { const f = filled[i];
+    return `<td style="${td}text-align:center;white-space:nowrap;">第${i + 1}期</td><td style="${td}">${f ? esc(f.m) : ''}</td>`
+      + `<td style="${td}text-align:right;">${f ? f.a : ''}</td><td style="${td}text-align:right;">${f ? f.b : ''}</td><td style="${td}"></td><td style="${td}"></td>`; };
+  const lh = `<th style="${td}">期數</th><th style="${td}">發薪月份</th><th style="${td}">發款金額</th><th style="${td}">未發餘額</th><th style="${td}font-size:10px;">會計<br>(簽名)</th><th style="${td}font-size:10px;">部門主管<br>(簽名)</th>`;
+  const lcol = '<col style="width:7%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:9%">';
+  const L = 'border:1px solid #000;padding:6px 8px;';
+  const lab = `${L}text-align:center;white-space:nowrap;`;
+  return `<style>
+  .pn-a4{width:680px;margin:0 auto;font-family:'標楷體','DFKai-SB','BiauKai',serif;color:#000;background:#fff;font-size:15px;}
+  .pn-a4 table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .pn-a4 .pn-in{border:0;border-bottom:1px dashed #9ab;background:#f4f9ff;font:inherit;color:#000;padding:1px 2px;box-sizing:border-box;}
+  .pn-a4 .pn-in:focus{outline:2px solid #6aa0e0;background:#fff;}
+  .pn-a4 .pn-box{cursor:pointer;font-size:17px;user-select:none;}
+  @media print{ .pn-a4 .pn-in{background:none!important;border-bottom:0!important;} @page{size:A4 portrait;margin:12mm;} }
+</style>
+<div class="pn-a4">
+  <div style="text-align:center;font-size:20px;letter-spacing:3px;margin:6px 0 12px;">員工薪資其他項目發款通知單暨發款明細</div>
+  <table><colgroup><col style="width:16%"><col style="width:34%"><col style="width:24%"><col style="width:26%"></colgroup>
+    <tr><td style="padding:4px 2px;">工號：</td><td>${pnIn(e && e.employee_no, '60%')}</td>
+        <td style="text-align:right;padding-right:6px;">薪資發款同意書日期：</td><td>${pnIn(c ? pnRoc(c.agreed_date) : '', '100%')}</td></tr></table>
+  <table style="margin-top:4px;"><colgroup><col style="width:16%"><col style="width:16%"><col style="width:11%"><col style="width:5%"><col style="width:20%"><col style="width:11%"><col style="width:21%"></colgroup>
+    <tr><td rowspan="2" style="${lab}">姓　　名</td><td rowspan="2" style="${L}">${pnIn(e && e.name)}</td>
+        <td colspan="2" style="${lab}">部　　門</td><td style="${L}">${pnIn(e && e.dept_name)}</td>
+        <td style="${lab}">到職日</td><td style="${L}">${pnIn(e ? pnRocSlash(e.hire_date) : '')}</td></tr>
+    <tr><td colspan="2" style="${lab}">職　　稱</td><td style="${L}">${pnIn(e && e.position_name)}</td>
+        <td style="${lab}">區　域</td><td style="${L}">${pnIn(e && e.region)}</td></tr>
+    <tr><td style="${lab}">薪資扣款項目</td><td colspan="6" style="${L}line-height:2;">
+        ${pnBox(isMin, 'reason')}最低服務年限獎金-初訓證照補助。最低服務年限至：${pnIn('', '52px', 'text-align:center;')}年${pnIn('', '34px', 'text-align:center;')}月${pnIn('', '34px', 'text-align:center;')}日<br>
+        ${pnBox(!!otherTxt, 'reason')}其他：${pnIn(otherTxt, '62%')}</td></tr>
+    <tr><td style="${lab}">薪資發款總額</td><td colspan="6" style="${L}">${pnIn(c ? (Number(c.total_amount) || '') : '', '40%', '')} 元</td></tr>
+    <tr><td style="${lab}">薪資發款條件</td><td colspan="6" style="${L}white-space:nowrap;font-size:14px;">
+        ${pnBox(c && !split, 'mode')}一次發款　${pnBox(split, 'mode')}分期發款，分${pnIn(split ? c.installments : '', '38px', 'text-align:center;')}期，每期${pnIn(split ? (Number(c.per_amount) || '') : '', '64px', 'text-align:right;')}元，第${pnIn('', '30px', 'text-align:center;')}期扣除${pnIn('', '56px', 'text-align:right;')}元。</td></tr>
+    <tr><td style="${lab}">第一次發款日</td><td colspan="6" style="${L}">${pnIn(c ? pnRoc(c.first_date) : '', '40%')}</td></tr>
+  </table>
+  <table style="margin-top:-1px;text-align:center;"><tr>${['總經理','財務部主管','會計','行政管理部主管','人事'].map(n => `<td style="${L}">${n}</td>`).join('')}</tr>
+    <tr>${[0,1,2,3,4].map(() => `<td style="${L}height:52px;"></td>`).join('')}</tr></table>
+  <div style="font-size:12px;margin-top:3px;">人事單位：同意書正本歸檔備查，副本裝訂於本通知單後面</div>
+  <div style="border:1px solid #000;margin-top:22px;">
+    <div style="text-align:center;font-size:17px;font-weight:700;padding:4px;">薪資其他項目發款登錄明細</div>
+    <div style="font-size:12px;line-height:1.6;padding:0 6px 4px;">
+      ※此區由財務管理部薪資發款時，逐筆登錄。<br>※以上簽核完成，依第一次發款日開始進行薪資發款。<br>
+      ※已辦理離職手續者，服務未達議定之期限者，需依同意書議定的內容扣回。<br>※結案簽核完成，此表由財務管理部歸檔備查</div>
+    <table style="font-size:12px;"><colgroup>${lcol}${lcol}</colgroup><tr>${lh}${lh}</tr>
+      ${Array.from({length: 10}).map((_, i) => `<tr style="height:30px;">${cell(i)}${cell(i + 10)}</tr>`).join('')}</table>
+    <div style="padding:4px 6px;font-size:13px;">${pnBox(false, '')}結案（已核對，發款明細總額與本案薪資當發款總計相符）<br>確認者簽名：</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;padding:0 40px 0 20px;"><span>總經理：</span><span>財務部主管：</span></div>
+  <div style="text-align:right;font-size:14px;margin-top:10px;">表單編號：管044-A1</div>
+</div>`;
 }
 function buildPayrollConsent(){
   const c = pcFormCase();
@@ -15285,6 +15366,13 @@ function generateForm(){
             || CERT_WIDE.includes(type);
   // 血壓／酒測是 A4 橫式 15 欄，壓到 900px 會擠成一團，畫面上直接照原寬顯示
   const maxW = MS_TYPES.includes(type) ? '1180px' : (wide ? '900px' : '640px');
+  if(type === 'pay_notice_a1'){
+    document.getElementById('printArea').innerHTML = `<div style="overflow-x:auto;padding:12px 0;">${buildPayNoticeA1(e)}</div>`;
+    document.getElementById('form_print').style.display = 'inline-block';
+    const _p3 = document.getElementById('form_png'); if(_p3) _p3.style.display = 'inline-block';
+    document.getElementById('form_export_csv').style.display = 'none';
+    return;
+  }
   if(OS_TYPES.includes(type)){
     document.getElementById('printArea').innerHTML = `<div style="overflow-x:auto;padding:12px 0;">${bodyHtml}</div>`;
     document.getElementById('form_print').style.display = 'inline-block';
@@ -24359,7 +24447,27 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(a.href);
 });
+// 發款通知單（管044-A1）：方框點一下勾／取消；同一組（一次／分期）只能勾一個；
+// 填了總額和期數、「每期」還空著就自動算好帶進去（還是可以改）
+{
+  const _pa = document.getElementById('printArea');
+  if(_pa){
+    _pa.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-pn-box]'); if(!b) return;
+      const on = b.textContent !== '■';
+      const g = b.getAttribute('data-pn-box');
+      if(on && g) _pa.querySelectorAll('[data-pn-box="' + g + '"]').forEach(x => { x.textContent = '□'; });
+      b.textContent = on ? '■' : '□';
+    });
+  }
+}
 document.getElementById('form_print').addEventListener('click', () => {
+  // 畫面上直接打的字只存在 input.value，innerHTML 抄不到；先寫回屬性，列印視窗才看得到
+  document.querySelectorAll('#printArea input').forEach(i => {
+    if(i.type === 'checkbox' || i.type === 'radio'){ if(i.checked) i.setAttribute('checked', ''); else i.removeAttribute('checked'); }
+    else i.setAttribute('value', i.value);
+  });
+  document.querySelectorAll('#printArea textarea').forEach(t => { t.textContent = t.value; });
   const content = document.getElementById('printArea').innerHTML;
   const printWin = window.open('', '_blank');
   if(!printWin){
