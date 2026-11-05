@@ -767,7 +767,7 @@
 
     <div class="card">
       <h2>車輛證件效期<span class="count-badge" id="vd_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">驗車、行照、行車記錄器、自主管理標章、汽車強制卡、保稅車檢驗都在這裡登錄與查詢。<b>「汽車強制卡」不用在這裡手動改</b>——到「車輛管理 → 保險」登錄強制險時，這邊的到期日會自動跟著更新（沒有的話會自動建一筆）。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
+      <div class="muted" style="margin-bottom:10px;">驗車、行車記錄器、自主管理標章、汽車強制卡、保稅車檢驗都在這裡登錄與查詢（行照不另外管，到期時跟最後一次驗車一起換）。<b>「汽車強制卡」不用在這裡手動改</b>——到「車輛管理 → 保險」登錄強制險時，這邊的到期日會自動跟著更新（沒有的話會自動建一筆）。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
       <div class="form-grid">
         <label>車號
           <select id="vd_plate"></select>
@@ -775,7 +775,6 @@
         <label>證件類別
           <select id="vd_type">
             <option value="驗車">驗車</option>
-            <option value="行照">行照</option>
             <option value="行車記錄器">行車記錄器</option>
             <option value="自主管理標章">自主管理標章</option>
             <option value="汽車強制卡">汽車強制卡</option>
@@ -792,7 +791,6 @@
         <select id="vd_type_filter">
           <option value="all">全部類別</option>
           <option value="驗車">驗車</option>
-          <option value="行照">行照</option>
           <option value="行車記錄器">行車記錄器</option>
           <option value="自主管理標章">自主管理標章</option>
           <option value="汽車強制卡">汽車強制卡</option>
@@ -9754,7 +9752,7 @@ function renderContainerWhere(){
 }
 
 function renderVehicleModalView(v){
-  const docTypes = ['驗車','行照','行車記錄器','自主管理標章'];
+  const docTypes = ['驗車','行車記錄器','自主管理標章'];
   const schedules = STATE.maintSchedules.filter(s => s.plate === v.plate);
   const lastMileage = STATE.mileageLogs.filter(m => m.plate === v.plate).sort((a,b)=>(b.log_date||'').localeCompare(a.log_date||''))[0];
   const lastFuel = STATE.fuelLogs.filter(f => f.plate === v.plate).sort((a,b)=>(b.fuel_date||'').localeCompare(a.fuel_date||''))[0];
@@ -10959,7 +10957,8 @@ function renderViTable(){
 // 車輛明細與到期總表都讀得到 vehicle_documents，可是整個系統只有滅火器、濾毒罐
 // 有獨立的輸入視窗，其餘證件沒有任何地方可以新增或改到期日。這一區把入口補上。
 // 滅火器／濾毒罐刻意不放進來，同一台車可能掛好幾支，仍走車輛清單那兩顆按鈕。
-const VD_TYPES = ['驗車','行照','行車記錄器','自主管理標章','汽車強制卡','保稅車檢驗'];
+// 115/11/05 起不管行照效期：行照到期時最後一次驗車會一起換，跟著驗車就好（使用者要求）
+const VD_TYPES = ['驗車','行車記錄器','自主管理標章','汽車強制卡','保稅車檢驗'];
 
 // 強制險 →「汽車強制卡」：這兩個講的是同一件事，只是分別存在
 // vehicle_insurance 與 vehicle_documents 兩張表。以前各記各的，

@@ -21,7 +21,7 @@ async function main() {
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage,status'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
-    // 驗車和其他證件（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）都在這張表，一次撈回來後再分開
+    // 驗車和其他證件（滅火器／濾毒罐／自主管理標章／行車記錄器）都在這張表，一次撈回來後再分開
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'maintenance_schedules?select=*'),
     supaFetchAll(SUPABASE_URL, SUPABASE_KEY, 'vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
@@ -84,7 +84,8 @@ async function main() {
       return { ...d, plate: v.plate_number || '', vehicle_type: v.vehicle_type || '', is_trailer: isTrailer(v) };
     });
   const inspectionItems = allDocItems.filter(d => d.doc_type === '驗車');
-  const otherDocItems = allDocItems.filter(d => d.doc_type !== '驗車');
+  // 行照不另外提醒（115/11/05 起：行照到期時跟最後一次驗車一起換）
+  const otherDocItems = allDocItems.filter(d => d.doc_type !== '驗車' && d.doc_type !== '行照');
 
   const vehicleInspectionHtml = bucketByDate(inspectionItems.filter(d => !d.is_trailer), 'expiry_date', d => `<tr>
     <td><b>${d.plate}</b></td><td>${d.vehicle_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>
@@ -292,7 +293,7 @@ async function main() {
   if (vehicleInspectionHtml || vehicleDocHtml || vehicleMaintHtml || vehicleGreaseHtml || vehicleAxleHtml) {
     html += `<h2 ${groupBar}>🚛 車輛</h2>`;
     if (vehicleInspectionHtml) html += `<h3 ${bar}>🚛 車輛驗車到期</h3>${vehicleInspectionHtml}`;
-    if (vehicleDocHtml) html += `<h3 ${bar}>📄 車輛文件到期（行照／滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${vehicleDocHtml}`;
+    if (vehicleDocHtml) html += `<h3 ${bar}>📄 車輛文件到期（滅火器／濾毒罐／自主管理標章／行車記錄器）</h3>${vehicleDocHtml}`;
     if (vehicleMaintHtml) html += `<h3 ${bar}>🔧 車輛保養</h3>${vehicleMaintHtml}`;
     if (vehicleGreaseHtml) html += `<h3 ${bar}>🛢 車輛打油</h3>${vehicleGreaseHtml}`;
     if (vehicleAxleHtml) html += `<h3 ${bar}>⚙️ 車輛輪軸保養</h3>${vehicleAxleHtml}`;
@@ -305,7 +306,7 @@ async function main() {
         　黃底的列＝這台板架目前<b>出租中</b>，要安排進場檢驗或維修前，請先跟承租廠商聯絡。
       </p>`;
     if (trailerInspectionHtml) html += `<h3 ${bar}>🚚 板架驗車到期</h3>${trailerInspectionHtml}`;
-    if (trailerDocHtml) html += `<h3 ${bar}>📄 板架文件到期（行照等）</h3>${trailerDocHtml}`;
+    if (trailerDocHtml) html += `<h3 ${bar}>📄 板架文件到期（滅火器等）</h3>${trailerDocHtml}`;
     if (trailerMaintHtml) html += `<h3 ${bar}>🔧 板架保養</h3>${trailerMaintHtml}`;
     if (trailerGreaseHtml) html += `<h3 ${bar}>🛢 板架打油</h3>${trailerGreaseHtml}`;
     if (trailerAxleHtml) html += `<h3 ${bar}>⚙️ 板架輪軸保養</h3>${trailerAxleHtml}`;
