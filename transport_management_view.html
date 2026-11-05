@@ -12262,8 +12262,13 @@ function computeMaintenanceDue(vehicle){
     if(!km) return;
     const sched = STATE.maintSchedules.find(s => s.plate === vehicle.plate && s.maintenance_type === label);
     const lastMileage = sched ? sched.last_service_mileage : null;
-    if(currentMileage == null || lastMileage == null){
-      results.push({label, status:'gray', text:'尚無足夠里程資料估算'});
+    // 115/11：分清楚是「沒有里程」還是「沒有上次保養里程」，畫面才看得出要補什麼
+    if(currentMileage == null){
+      results.push({label, status:'gray', text:'尚無足夠里程資料估算（還沒有里程登錄）'});
+      return;
+    }
+    if(lastMileage == null){
+      results.push({label, status:'gray', text:'尚無足夠里程資料估算（沒有上次' + label + '的里程；新車請登錄 0 km 起算，舊車請到「車輛維護」登錄最近一次' + label + '）'});
       return;
     }
     const nextDue = lastMileage + km;
