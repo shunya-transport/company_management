@@ -386,8 +386,15 @@ $('f_type').innerHTML = LEAVE_TYPES.map(t => `<option>${t}</option>`).join('');
 const PH = { rcpt:[], cert:[] };   // 待上傳的照片 {file, url}
 function daysSpan(){ const s = $('f_sd').value, e = $('f_ed').value; if(!s || !e || e < s) return 0;
   return Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1; }
+// 間接人員（含總經理特助）週休二日：跨到週六日不算假；司機排班制，每天都算。國定假日不會自動扣。
+function isOffice(){ const e = (ME && ME.emp) || {};
+  return !(String(e.employee_type || '').trim() === '直接' && !/特助/.test(String(e.position_name || ''))); }
+function workDays(){ const s = $('f_sd').value, e = $('f_ed').value; if(!s || !e || e < s) return 0;
+  if(!isOffice()) return daysSpan();
+  let n = 0; for(const d = new Date(s + 'T00:00:00'); d <= new Date(e + 'T00:00:00'); d.setDate(d.getDate() + 1)){ if(d.getDay() !== 0 && d.getDay() !== 6) n++; }
+  return n; }
 let hrTouched = false;
-function suggestHours(){ if(hrTouched) return; const d = daysSpan(); if(d) $('f_hr').value = d * 8; applyCheck(); }
+function suggestHours(){ if(hrTouched) return; const d = daysSpan(); if(d) $('f_hr').value = workDays() * 8; applyCheck(); }
 $('f_sd').onchange = () => { if($('f_ed').value < $('f_sd').value) $('f_ed').value = $('f_sd').value; suggestHours(); };
 $('f_ed').onchange = suggestHours;
 $('f_hr').oninput = () => { hrTouched = true; applyCheck(); };
@@ -402,8 +409,12 @@ function applyCheck(){
   if(b && t === '補休' && h > b.compLeft + 1e-9) warn.push(`補休剩 ${r2(b.compLeft)} 小時，不夠請 ${h} 小時，請改別的假別。`);
   const back = (ME && ME.backfill_days) || 7, ed = $('f_ed').value;
   if(ed && (new Date(todayISO()) - new Date(ed)) / 86400000 > back) warn.push(`事後補請要在請假結束日的 ${back} 天內送出，這張已超過，請找行政補登。`);
-  const d = daysSpan();
-  $('f_hint').textContent = d ? `${d} 天，換算 ${r2(h / 8)} 天（8 小時＝1 天）` : '';
+  const d = daysSpan(), w = workDays();
+  $('f_hint').textContent = !d ? '' : (w < d
+    ? `${d} 天，扣掉週六日 ${d - w} 天，上班日 ${w} 天（${w * 8} 小時）；這次 ${h} 小時＝${r2(h / 8)} 天`
+    : `${d} 天，換算 ${r2(h / 8)} 天（8 小時＝1 天）`);
+  if(d && isOffice() && w === 0) warn.push('選的日期都是週六日，不用請假。');
+  else if(d && isOffice() && h > w * 8 + 1e-9) warn.push(`這段日期上班日只有 ${w} 天（${w * 8} 小時），時數填多了，週六日不用請。`);
   $('f_warn').innerHTML = warn.map(esc).join('<br>');
   $('f_warn').classList.toggle('hidden', !warn.length);
   return warn.length === 0;

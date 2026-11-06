@@ -19837,7 +19837,7 @@ async function saveLeaveEdit(){
     rec.employee_name_raw = emp.name;
   }
   // 結束日期月份打錯防呆
-  if(!leaveSpanConfirm(start, end, hours)) return;
+  if(!leaveSpanConfirm(start, end, hours, leaveIsOffice(rec.employee_id))) return;
   // 法定上限防呆（改的這一筆要排除自己，不然會重複計算）
   if(!leaveQuotaConfirm(keep ? rec.employee_id : parseInt(sel.value),
                         document.getElementById('lve_type').value, start, hours, rec.id)) return;
@@ -20120,6 +20120,7 @@ function renderLeaveGrid(){
   const activeEmployees = STATE.employees.slice().sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
   document.getElementById('leaveGridBody').innerHTML = activeEmployees.map(e => {
     const empLeaves = STATE.leaveRecords.filter(r => String(r.employee_id) === String(e.id));
+    const office = leaveIsOffice(e.id);   // 間接人員：週六日不打點
     const cells = [];
     for(let d=1; d<=daysInMonth; d++){
       const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -20129,8 +20130,8 @@ function renderLeaveGrid(){
         return s && en && dateStr >= s && dateStr <= en;
       });
       // 起訖跨度跟時數對不起來的（多半是結束日期月份打錯），這一整排標紅提醒
-      const odd = match && leaveSpanLooksWrong((match.start_date||'').slice(0,10), (match.end_date||'').slice(0,10), match.hours);
-      cells.push(match
+      const odd = match && leaveSpanLooksWrong((match.start_date||'').slice(0,10), (match.end_date||'').slice(0,10), match.hours, office);
+      cells.push(match && !(office && leaveIsWeekend(dateStr))
         ? `<td style="text-align:center;color:${odd ? '#c0392b' : 'var(--accent-dark)'};font-weight:700;font-size:16px;line-height:1;padding:2px 0;" title="${esc(match.leave_type)}${match.notes?'：'+esc(match.notes):''}${odd ? `　⚠ 起 ${esc((match.start_date||'').slice(0,10))} 迄 ${esc((match.end_date||'').slice(0,10))}、只有 ${esc(match.hours)} 小時，結束日期可能打錯` : ''}">${odd ? '✖' : '●'}</td>`
         : `<td style="padding:2px 0;"></td>`);
     }
@@ -21824,20 +21825,41 @@ document.getElementById('leave_search').addEventListener('input', renderLeaveLed
 // 所以 9 月又查不到人，兩張表對不起來。
 // 判斷方式：起訖跨度（天）比「時數÷8」推估出來的天數大很多就算可疑。
 // 員工庚 8/01~8/31、168 小時（21 天）那種真的長假不會被誤判。
+// 間接人員（含總經理特助）週休二日：請假跨到週六日不算；司機（直接人員）是排班制，每天都算。
+// 國定假日目前沒有行事曆，不會自動扣。
+function leaveIsOffice(empId){
+  const e = (STATE.employees || []).concat(STATE.employeesHistory || []).find(x => String(x.id) === String(empId));
+  if(!e) return false;
+  return !(String(e.employee_type || '').trim() === '直接' && !/特助/.test(String(e.position_name || '')));
+}
+function leaveIsWeekend(iso){ const d = new Date(String(iso).slice(0, 10) + 'T00:00:00').getDay(); return d === 0 || d === 6; }
+// 起訖日之間要算假的天數：間接人員扣掉週六日
+function leaveWorkDays(start, end, office){
+  if(!start) return 0;
+  end = end || start;
+  const d1 = new Date(start + 'T00:00:00'), d2 = new Date(end + 'T00:00:00');
+  if(isNaN(d1) || isNaN(d2) || d2 < d1) return 0;
+  let n = 0;
+  for(const d = new Date(d1); d <= d2; d.setDate(d.getDate() + 1)){
+    if(office && (d.getDay() === 0 || d.getDay() === 6)) continue;
+    n++;
+  }
+  return n;
+}
 function leaveSpanDays(start, end){
   if(!start || !end) return 1;
   const d1 = new Date(start + 'T00:00:00'), d2 = new Date(end + 'T00:00:00');
   if(isNaN(d1) || isNaN(d2)) return 1;
   return Math.round((d2 - d1) / 86400000) + 1;
 }
-function leaveSpanLooksWrong(start, end, hours){
-  const span = leaveSpanDays(start, end);
+function leaveSpanLooksWrong(start, end, hours, office){
+  const span = office ? leaveWorkDays(start, end, true) : leaveSpanDays(start, end);
   const est  = Math.ceil((Number(hours) || 0) / LEAVE_HOURS_PER_DAY);
   return span >= 3 && span > est * 2 && (span - est) >= 5;
 }
 // 存檔前問一次。回傳 false 代表使用者選擇不要存。
-function leaveSpanConfirm(start, end, hours){
-  if(!leaveSpanLooksWrong(start, end, hours)) return true;
+function leaveSpanConfirm(start, end, hours, office){
+  if(!leaveSpanLooksWrong(start, end, hours, office)) return true;
   const span = leaveSpanDays(start, end);
   const est  = Math.ceil((Number(hours) || 0) / LEAVE_HOURS_PER_DAY);
   return confirm('起始日 ' + start + '、結束日 ' + end + ' 相差 ' + span + ' 天，\n'
@@ -21857,8 +21879,7 @@ document.getElementById('lv_add').addEventListener('click', async () => {
   const _hRaw = document.getElementById('lv_hours').value;
   let hours = _hRaw === '' ? null : parseFloat(_hRaw);
   if(hours === null || isNaN(hours)){
-    const d1 = new Date(start+'T00:00:00'), d2 = new Date(end+'T00:00:00');
-    hours = (Math.round((d2-d1)/86400000) + 1) * LEAVE_HOURS_PER_DAY;
+    hours = leaveWorkDays(start, end, leaveIsOffice(empId)) * LEAVE_HOURS_PER_DAY;   // 間接人員扣掉週六日
   }
   if(hours <= 0){ alert('時數要大於 0。'); return; }
   if(end < start){ alert('結束日期不能早於起始日期。'); return; }
@@ -21869,7 +21890,7 @@ document.getElementById('lv_add').addEventListener('click', async () => {
       + '如果你想填的是「天」，1 天請填 8、半天請填 4、1 小時請填 1。\n\n確定要用 '
       + hours + ' 小時存檔嗎？')) return;
   // 結束日期月份打錯防呆
-  if(!leaveSpanConfirm(start, end, hours)) return;
+  if(!leaveSpanConfirm(start, end, hours, leaveIsOffice(empId))) return;
   // 法定上限防呆：超過才問，這是警告不是硬擋
   if(!leaveQuotaConfirm(empId, document.getElementById('lv_type').value, start, hours)) return;
   STATE.leaveRecords.push({
@@ -22062,8 +22083,7 @@ function updateLeaveDaysHint(){
     const s1 = (document.getElementById('lv_start') || {}).value;
     const s2 = (document.getElementById('lv_end') || {}).value || s1;
     if(s1){
-      const d1 = new Date(s1 + 'T00:00:00'), d2 = new Date(s2 + 'T00:00:00');
-      _h = (Math.round((d2 - d1) / 86400000) + 1) * LEAVE_HOURS_PER_DAY;
+      _h = leaveWorkDays(s1, s2, leaveIsOffice((document.getElementById('lv_emp') || {}).value)) * LEAVE_HOURS_PER_DAY;
     }else _h = 0;
   }
   const _hid = document.getElementById('lv_hours_shadow');
