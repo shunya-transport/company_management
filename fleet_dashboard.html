@@ -17412,16 +17412,17 @@ function lvaReqHtml(){
 // ---- 路線 ----
 function lvaRouteHtml(){
   const regions = ['', '台中', '新竹', '台南'];
-  let h = '<div class="muted" style="margin-bottom:8px;">每一關可以選好幾位，任一位簽就過；按住 Ctrl（Mac 按 ⌘）可以多選。「適用車場」留「全部」就是全公司；某個車場要有自己的調度，就新增一列同一關、選那個車場。申請人剛好是那一關的簽核人，那一關自動跳過；整條路線都跳過的（例如總經理本人請假）會變成「行政確認」，在「假單」那頁代登。<br><b>行政可代登</b>：行政帳號是共用的，只有打勾的關卡才能在「假單」那頁代登（預設只有總經理）；沒打勾的關卡一定要簽核人本人用員編帳號在請假網頁簽，系統會留下是誰簽的。</div>';
+  let h = '<div class="muted" style="margin-bottom:8px;">每一關可以選好幾位，任一位簽就過；按住 Ctrl（Mac 按 ⌘）可以多選。「適用車場」留「全部」就是全公司；某個車場要有自己的調度，就新增一列同一關、選那個車場。申請人剛好是那一關的簽核人，那一關自動跳過；整條路線都跳過的（例如總經理本人請假）會變成「行政確認」，在「假單」那頁代登。<br><b>幾天以上才要簽</b>：空白＝不管請幾天都要簽；填 3 ＝請 3 天（24 小時）以上才要這一關，未滿就跳過（目前司機的總經理那一關設 3 天）。<br><b>行政可代登</b>：行政帳號是共用的，只有打勾的關卡才能在「假單」那頁代登（預設只有總經理）；沒打勾的關卡一定要簽核人本人用員編帳號在請假網頁簽，系統會留下是誰簽的。</div>';
   Object.keys(LVA_ROUTES).forEach(rk => {
     const st = LVA.stages.filter(s => s.route_key === rk);
-    h += `<h3 style="margin:14px 0 6px;">${esc(LVA_ROUTES[rk])}</h3><div class="table-scroll"><table><thead><tr><th style="width:60px;">第幾關</th><th style="width:140px;">關卡名稱</th><th style="width:110px;">適用車場</th><th>簽核人</th><th style="width:80px;">行政可代登</th><th style="width:120px;"></th></tr></thead><tbody>`
+    h += `<h3 style="margin:14px 0 6px;">${esc(LVA_ROUTES[rk])}</h3><div class="table-scroll"><table><thead><tr><th style="width:60px;">第幾關</th><th style="width:140px;">關卡名稱</th><th style="width:110px;">適用車場</th><th>簽核人</th><th style="width:80px;">行政可代登</th><th style="width:110px;">幾天以上才要簽</th><th style="width:120px;"></th></tr></thead><tbody>`
       + st.map(s => `<tr><td><input type="number" min="1" id="lva_sn_${s.stage_id}" value="${s.stage_no}" style="width:56px;"></td>
           <td><input id="lva_sname_${s.stage_id}" value="${esc(s.stage_name)}"></td>
           <td><select id="lva_sreg_${s.stage_id}">${regions.map(r => `<option value="${r}"${r === (s.region || '') ? ' selected' : ''}>${r || '全部'}</option>`).join('')}</select></td>
           <td><select multiple size="4" id="lva_sapp_${s.stage_id}" style="min-width:260px;">${lvaEmpOpts(s.approver_ids)}</select>
               <div class="muted" style="font-size:12px;">目前：${esc((s.approver_ids || []).map(lvaEmpName).join('、') || '（還沒選）')}</div></td>
           <td style="text-align:center;"><input type="checkbox" id="lva_sproxy_${s.stage_id}"${s.staff_proxy ? ' checked' : ''}></td>
+          <td><input type="number" min="0" step="0.5" id="lva_smin_${s.stage_id}" value="${s.min_hours == null ? '' : Number(s.min_hours) / 8}" placeholder="都要簽" style="width:80px;"> 天</td>
           <td><button class="btn" data-lva-ssave="${s.stage_id}">儲存</button> <button class="del-btn" data-lva-sdel="${s.stage_id}">刪除</button></td></tr>`).join('')
       + `</tbody></table></div><button class="btn ghost" data-lva-sadd="${rk}" style="margin-top:6px;">＋ 新增一關</button>`;
   });
@@ -17520,7 +17521,8 @@ function lvaWire(){
       const ids = Array.from(v('lva_sapp_').selectedOptions).map(o => Number(o.value));
       return lvaDo(() => supaFetch('leave_route_stages?stage_id=eq.' + id, { method:'PATCH', body: JSON.stringify({
         stage_no: Number(v('lva_sn_').value) || 1, stage_name: v('lva_sname_').value.trim() || '簽核', region: v('lva_sreg_').value, approver_ids: ids,
-        staff_proxy: !!(v('lva_sproxy_') && v('lva_sproxy_').checked) }) }));
+        staff_proxy: !!(v('lva_sproxy_') && v('lva_sproxy_').checked),
+        min_hours: (v('lva_smin_') && v('lva_smin_').value.trim() !== '') ? Number(v('lva_smin_').value) * 8 : null }) }));
     }
     if(g('data-lva-sdel')){ if(!confirm('刪掉這一關？')) return; return lvaDo(() => supaFetch('leave_route_stages?stage_id=eq.' + g('data-lva-sdel'), { method:'DELETE' })); }
     if(g('data-lva-sadd')){

@@ -318,7 +318,14 @@ async function enter(){
   suggestHours();
 }
 function routeText(st){
-  return (st || []).map(s => s.name + ((s.approver_names || []).length ? '（' + s.approver_names.join('、') + '）' : '')).join(' → ') || '—';
+  return (st || []).map(s => s.name + ((s.approver_names || []).length ? '（' + s.approver_names.join('、') + '）' : '')
+    + (s.min_hours != null ? `〔${r2(Number(s.min_hours) / 8)} 天以上才要〕` : '')).join(' → ') || '—';
+}
+// 依這次的時數，算出實際會經過哪幾關（某一關設了「幾小時以上才要簽」，沒達到就跳過）
+function routeFor(h){
+  const st = (ME && ME.route || []).filter(s => s.min_hours == null || !(h > 0) || h >= Number(s.min_hours))
+    .map(s => Object.assign({}, s, { min_hours: null }));
+  return st.length ? st : [{ name:'行政確認' }];
 }
 async function reloadAll(){
   try{ DATA = await rpc('lv_my_data'); }catch(e){ DATA = null; }
@@ -409,6 +416,7 @@ function applyCheck(){
   if(b && t === '補休' && h > b.compLeft + 1e-9) warn.push(`補休剩 ${r2(b.compLeft)} 小時，不夠請 ${h} 小時，請改別的假別。`);
   const back = (ME && ME.backfill_days) || 7, ed = $('f_ed').value;
   if(ed && (new Date(todayISO()) - new Date(ed)) / 86400000 > back) warn.push(`事後補請要在請假結束日的 ${back} 天內送出，這張已超過，請找行政補登。`);
+  if(ME && ME.route) $('f_route').innerHTML = '送出後依序給：' + esc(routeText(routeFor(h)));
   const d = daysSpan(), w = workDays();
   $('f_hint').textContent = !d ? '' : (w < d
     ? `${d} 天，扣掉週六日 ${d - w} 天，上班日 ${w} 天（${w * 8} 小時）；這次 ${h} 小時＝${r2(h / 8)} 天`
