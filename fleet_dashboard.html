@@ -17348,7 +17348,7 @@ async function lvaLoad(force){
       supaFetch('leave_route_stages?select=*&order=route_key.asc,stage_no.asc,region.asc'),
       supaFetch('leave_route_overrides?select=*'),
       supaFetch('leave_delegates?select=*&order=start_date.desc'),
-      supaFetch('leave_accounts?select=account_id,employee_id,emp_no,user_id,code_expires,notify_email,activated_at'),
+      supaFetch('leave_accounts?select=*'),
       supaFetch('leave_settings?select=*')]);
     LVA.reqs = reqs || []; LVA.stages = stages || []; LVA.ovr = ovr || []; LVA.dels = dels || []; LVA.accts = accts || [];
     LVA.sets = {}; (sets || []).forEach(s => { LVA.sets[s.key] = s.value; });
@@ -17441,9 +17441,13 @@ function lvaAcctHtml(){
   const list = (STATE.employees || []).filter(e => !q || String(e.name).includes(q) || String(e.employee_no || '').toUpperCase().includes(q.toUpperCase()))
     .slice().sort((a, b) => String(a.employee_no || '').localeCompare(String(b.employee_no || '')));
   const st = a => !a ? '<span class="pill gray">未開通</span>'
-    : a.user_id ? '<span class="pill green">已開通</span>'
-    : (a.code_expires && a.code_expires > new Date().toISOString()) ? `<span class="pill amber">開通碼有效到 ${esc(String(a.code_expires).slice(0, 10))}</span>` : '<span class="pill gray">開通碼已過期</span>';
-  return `<div class="muted" style="margin-bottom:6px;">按「產生開通碼」把 8 碼開通碼交給員工（7 天有效），員工到 leave.html 用「第一次開通」設密碼。忘記密碼也是產生新的開通碼讓他重設。
+    : (a.user_id && !(a.code_plain && a.code_expires > new Date().toISOString())) ? '<span class="pill green">已開通</span>'
+    : a.user_id ? `<span class="pill green">已開通</span><div style="font-weight:700;margin-top:4px;letter-spacing:1px;">重設碼：${esc(a.code_plain)}</div><div class="muted" style="font-size:12px;">有效到 ${esc(toROCDate(String(a.code_expires).slice(0, 10)))}</div>`
+    : (a.code_expires && a.code_expires > new Date().toISOString())
+      ? `<span class="pill amber">開通碼有效到 ${esc(toROCDate(String(a.code_expires).slice(0, 10)))}</span>`
+        + (a.code_plain ? `<div style="font-weight:700;margin-top:4px;letter-spacing:1px;">開通碼：${esc(a.code_plain)}</div>` : '<div class="muted" style="font-size:12px;">（舊的開通碼看不到，要的話重新產生）</div>')
+      : '<span class="pill gray">開通碼已過期</span>';
+  return `<div class="muted" style="margin-bottom:6px;">按「產生開通碼」把 8 碼開通碼交給員工（7 天有效，開通前一直顯示在「狀態」欄），員工到 leave.html 用「第一次開通」設密碼；用掉就不再顯示。忘記密碼也是產生新的開通碼讓他重設。
       通知信箱：空白就自動用人員資料的 Email（灰字顯示的那個）；要寄到別的信箱才在這裡填。主管一定要有信箱才收得到待簽通知。員工也能自己在手機上改。</div>
     <div class="toolbar"><input id="lva_aq" placeholder="搜尋姓名或員編" value="${esc(q)}"></div>
     <div class="table-scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>區域</th><th>狀態</th><th>通知信箱</th><th></th></tr></thead><tbody>
@@ -17537,9 +17541,7 @@ function lvaWire(){
       const id = Number(g('data-lva-code'));
       try{ const r = await lvaRpc('lv_admin_make_code', { p_employee_id:id });
         await lvaLoad(true);
-        const box = document.getElementById('lva_code_' + id);
-        if(box) box.textContent = '開通碼：' + r.code + '（' + r.expires + ' 前有效）';
-        alert(r.name + '（' + r.emp_no + '）的開通碼：' + r.code + '\n\n7 天內有效，只會顯示這一次，請直接交給本人。\n員工到 leave.html →「第一次開通／忘記密碼」輸入員編與開通碼，再自己設密碼。');
+        alert(r.name + '（' + r.emp_no + '）的開通碼：' + r.code + '\n\n7 天內有效；開通前在這一頁都看得到，請直接交給本人。\n員工到 leave.html →「第一次開通／忘記密碼」輸入員編與開通碼，再自己設密碼。');
       }catch(err){ alert('產生失敗：' + err.message); }
       return;
     }
