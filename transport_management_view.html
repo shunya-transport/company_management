@@ -13435,12 +13435,19 @@ function renderStaffModalView(e){
       <dt>到職日</dt><dd>${esc(e.hire_date||'—')}</dd>
       ${_left ? `<dt>服務年資</dt><dd>${esc(tenureText(e.hire_date, e.resign_date) || '—（無到職日資料）')}
         <div class="muted" style="font-size:11px;">到職 ${esc(e.hire_date||'—')} ～ 離職 ${esc(e.resign_date||'—')}；未來復職要合併年資時用這個數字。</div></dd>` : `
+      <dt>年資</dt><dd>${(() => {
+        const L = leaveLedgerInfo(e);
+        if(L.years === null) return '—（無到職日資料）';
+        const pr = parseFloat(L.approved && L.approved.prior);
+        return pr > 0
+          ? `${L.years.toFixed(1)} 年<span class="muted">（含追溯 ${esc(L.approved.prior)} 年，合計約 ${(L.years + pr).toFixed(1)} 年）</span>`
+          : `${L.years.toFixed(1)} 年`;
+      })()}</dd>
       <dt>特休天數</dt><dd>${(() => {
-        const d = currentPeriodLeaveDays(e.hire_date);
-        if(d===null) return '—（無到職日資料）';
-        const used = annualLeaveUsed(e.id, e.hire_date);
-        const remaining = fmt2(d - used);
-        return `共 ${d} 天（年資約 ${tenureYears(e.hire_date).toFixed(1)} 年）已用 ${used} 天，<b>剩 ${remaining} 天（約 ${(remaining*8).toFixed(2)} 小時）</b>`;
+        const L = leaveLedgerInfo(e);
+        if(L.days === null) return '—（無到職日資料）';
+        if(L.notYet) return `0 天<span class="muted">（未滿半年，${esc(toROCDate(L.eligDate))} 起才有）</span>`;
+        return `共 ${L.days} 天<span class="muted">（${L.approved ? L.approved.year + ' 年度核定' : '依年資估算'}）</span>　已用 ${L.used} 天，<b>剩 ${L.remaining} 天（約 ${(L.remaining*8).toFixed(2)} 小時）</b>`;
       })()}</dd>`}
       <dt>復職日期</dt><dd>${esc(e.rehire_date||'—')}</dd>
       <dt>手機</dt><dd>${esc(e.phone||'—')}</dd>
@@ -19353,6 +19360,19 @@ function annualLeaveApprovedFor(emp, yearRoc){
            yard: hit.yard, dept: hit.dept_name, position: hit.position_name };
 }
 function rocYearOf(dateISO){ return Number(String(dateISO || todayISO()).slice(0, 4)) - 1911; }
+// 勞基法要滿 6 個月（183 天）才有特休（跟運輸行政管理資料庫同一套）
+function leaveEligibleDate(hireISO){
+  if(!hireISO) return null;
+  const d = new Date(String(hireISO) + 'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + 183);
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function leaveNotYetEligible(hireISO){
+  const e = leaveEligibleDate(hireISO);
+  return !!(e && todayISO() < e);
+}
 function annualLeaveApproved(emp){ return annualLeaveApprovedFor(emp, rocYearOf(todayISO())); }
 // ===== 曆年特休統計（對應 Excel「特別假統計」那張表）=====
 // 資料庫的 annual_leave_yearly 是 115/08/05 從請假登錄系統 xlsm 匯進去的，
@@ -19730,6 +19750,18 @@ function alyExport(){
   if(_alyExM) _alyExM.addEventListener('click', alyExportByMonth);
 }
 
+// 特休天數清冊和人員卡片共用同一套算法：優先用當年度核定天數（含年資追溯），沒有才依年資估算；未滿半年一律 0 天
+function leaveLedgerInfo(e){
+  const approved = annualLeaveApproved(e);
+  const eligDate = leaveEligibleDate(e.hire_date);
+  const notYet = leaveNotYetEligible(e.hire_date);
+  let days = approved ? approved.days : currentPeriodLeaveDays(e.hire_date);
+  if(notYet && days !== null) days = 0;
+  const years = tenureYears(e.hire_date);
+  const used = days === null ? null : annualLeaveUsed(e.id, e.hire_date);
+  const remaining = days === null ? null : fmt2(days - used);
+  return { approved, eligDate, notYet, days, years, used, remaining };
+}
 function renderLeaveLedger(){
   const q = document.getElementById('leave_search').value.trim();
   let rows = STATE.employees;
