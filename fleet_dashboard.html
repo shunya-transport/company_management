@@ -17328,7 +17328,7 @@ function openRewardModal(id){
 // 資料直接讀寫 leave_* 這幾張表（行政帳號才有權限）；簽核一律走 lv_act，跟主管在手機上按的是同一支，
 // 代登的紀錄會寫「行政 ○○ 代登」。開通碼只顯示這一次，資料庫只存加密後的值。
 const LVA = { loaded:false, tab:'req', reqs:[], acts:[], atts:[], stages:[], ovr:[], dels:[], accts:[], sets:{}, staff:[] };
-const LVA_ROUTES = { driver:'司機（直接人員）', indirect:'間接人員（含調度、總經理特助）', manager:'主管（總經理、副總）' };
+const LVA_ROUTES = { driver:'司機（直接人員）', dispatch:'調度（職稱含「調度」）', indirect:'間接人員（含總經理特助）', manager:'主管（總經理、副總）' };
 const LVA_STATUS = ['待簽核','已核准','已駁回','已撤回'];
 function lvaEmpName(id){ const e = (STATE.employees || []).concat(STATE.employeesHistory || []).find(x => String(x.id) === String(id)); return e ? e.name : ('#' + id); }
 function lvaEmpOpts(sel, multi){
@@ -17425,7 +17425,7 @@ function lvaRouteHtml(){
           <td><button class="btn" data-lva-ssave="${s.stage_id}">儲存</button> <button class="del-btn" data-lva-sdel="${s.stage_id}">刪除</button></td></tr>`).join('')
       + `</tbody></table></div><button class="btn ghost" data-lva-sadd="${rk}" style="margin-top:6px;">＋ 新增一關</button>`;
   });
-  h += `<h3 style="margin:18px 0 6px;">個別人員指定路線</h3><div class="muted">預設：直接人員走司機、職稱含「特助」走間接、總經理／副總走主管、其他走間接。要例外的人在這裡指定。</div>
+  h += `<h3 style="margin:18px 0 6px;">個別人員指定路線</h3><div class="muted">預設：職稱含「特助」走間接、總經理／副總走主管、職稱含「調度」走調度、其他直接人員走司機、其他間接人員走間接。要例外的人在這裡指定。</div>
     <div class="toolbar"><select id="lva_oemp">${lvaEmpOpts([])}</select><select id="lva_ork">${Object.keys(LVA_ROUTES).map(k => `<option value="${k}">${esc(LVA_ROUTES[k])}</option>`).join('')}</select>
       <button class="btn" id="lva_oadd">指定</button></div>
     <table><tbody>${LVA.ovr.map(o => `<tr><td>${esc(lvaEmpName(o.employee_id))}</td><td>${esc(LVA_ROUTES[o.route_key] || o.route_key)}</td><td><button class="del-btn" data-lva-odel="${o.employee_id}">取消指定</button></td></tr>`).join('') || '<tr><td class="muted">沒有例外</td></tr>'}</tbody></table>
