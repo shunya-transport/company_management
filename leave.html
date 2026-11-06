@@ -65,6 +65,13 @@
   .linkbtn{border:0;background:none;color:var(--brand2);text-decoration:underline;font-size:14px;padding:0;cursor:pointer;}
   .route{background:var(--brand-bg);border-radius:10px;padding:8px 10px;font-size:14px;margin-top:10px;}
   .hidden{display:none!important;}
+  .help h3{font-size:16px;margin:16px 0 6px;color:var(--brand);}
+  .help h3:first-child{margin-top:0;}
+  .help ol,.help ul{margin:4px 0 6px;padding-left:22px;line-height:1.7;font-size:15px;}
+  .help p{margin:4px 0;font-size:15px;line-height:1.6;}
+  .help .route-t{width:100%;border-collapse:collapse;font-size:14px;margin:4px 0;}
+  .help .route-t td{border-bottom:1px solid var(--line);padding:7px 4px;vertical-align:top;}
+  .help .route-t td:first-child{white-space:nowrap;color:var(--muted);padding-right:10px;}
   #login{max-width:420px;margin:0 auto;padding:24px 16px;}
   #login .logo{text-align:center;font-size:22px;font-weight:800;color:var(--brand);margin:24px 0 6px;}
   .tabs2{display:flex;background:var(--gray-bg);border-radius:10px;padding:3px;margin:14px 0 4px;}
@@ -81,7 +88,8 @@
 <!-- ============ 登入／開通 ============ -->
 <div id="login">
   <div class="logo">順亞運通　線上請假</div>
-  <div class="muted" style="text-align:center;">用員編登入。第一次使用請先「開通」。</div>
+  <div class="muted" style="text-align:center;">用員編登入。第一次使用請先「開通」。<button class="linkbtn" id="login_help_btn">看使用說明</button></div>
+  <div class="card help hidden" id="login_help"></div>
   <div class="tabs2"><button id="tab_in" class="on">登入</button><button id="tab_act">第一次開通／忘記密碼</button></div>
   <div class="card" id="box_in">
     <label>員編</label><input id="in_no" autocomplete="username" placeholder="例：D0163" autocapitalize="characters">
@@ -109,6 +117,7 @@
     <button data-p="stat">我的假勤</button>
     <button data-p="inbox" id="nav_inbox" class="hidden">待我簽核<span class="dot hidden" id="inbox_dot"></span></button>
     <button data-p="set">設定</button>
+    <button data-p="help">使用說明</button>
   </nav>
   <main>
     <!-- 我要請假 -->
@@ -176,6 +185,9 @@
       <button class="btn block red" id="s_out">登出</button>
       <div class="muted" style="margin-top:14px;">小技巧：手機瀏覽器選「加入主畫面」，以後就像 App 一樣點開。</div>
     </section>
+
+    <!-- 使用說明 -->
+    <section id="p_help" class="hidden"><div class="card help" id="help_body"></div></section>
   </main>
 </div>
 
@@ -197,6 +209,51 @@ const LEAVE_TYPES = ['事假','病假','特休','補休','公假','婚假','喪�
 const AL_TIERS = [[0,0],[0.5,3],[1,7],[2,10],[3,14],[5,15],[10,16],[11,17],[12,18],[13,19],[14,20],[15,21],[16,22],[17,23],[18,24],[19,25],[20,26],[21,27],[22,28],[23,29],[24,30]];
 
 const $ = id => document.getElementById(id);
+// 使用說明（登入前、登入後都看得到；內容跟「線上請假系統簡易說明」PDF 一樣）
+const HELP_HTML = `
+  <h3>第一次使用</h3>
+  <ol><li>跟行政拿「開通碼」（7 天內要用）。</li>
+      <li>點「第一次開通／忘記密碼」。</li>
+      <li>輸入員編、開通碼，再自己設密碼（至少 8 碼）。</li>
+      <li>以後用「員編＋密碼」登入。</li></ol>
+  <p>忘記密碼：找行政拿新的開通碼，照上面再做一次。</p>
+  <h3>怎麼請假</h3>
+  <ol><li>點「我要請假」。</li>
+      <li>選假別、開始日、結束日。</li>
+      <li>確認時數（會自動帶出來，1 天＝8 小時）。</li>
+      <li>寫事由，按「送出」。</li></ol>
+  <p>要注意：</p>
+  <ul><li>最少請 0.5 小時。</li>
+      <li>病假要拍收據；請 2 天以上，還要拍醫院或診所的證明。</li>
+      <li>忘了先請，7 天內可以補。</li>
+      <li>間接人員週六日不用請，系統會自動扣掉；國定假日要自己扣。</li>
+      <li>特休要到職滿半年才能請。</li>
+      <li>依勞基法有上限的假會自動檢查，例如事假一年 14 天、病假一年 30 天、生理假每月 1 天；超過會送不出去，請改請其他假別或找行政。</li></ul>
+  <h3>誰會簽我的假單</h3>
+  <table class="route-t">
+    <tr><td>司機</td><td>調度 → 執行副總；請滿 3 天再給總經理</td></tr>
+    <tr><td>亞東車隊司機</td><td>執行副總；請滿 3 天再給總經理</td></tr>
+    <tr><td>調度</td><td>執行副總 → 總經理</td></tr>
+    <tr><td>其他間接人員、副總</td><td>總經理</td></tr></table>
+  <p>送出前，「我要請假」下面會寫這張假單要給誰簽，以畫面為準。任一關駁回，假單就退回給你，會附上原因。</p>
+  <h3>查詢與撤回</h3>
+  <ul><li><b>我的假單</b>：看簽到哪一關。還沒簽完可以按「撤回」；已核准要改請找行政。</li>
+      <li><b>我的假勤</b>：看特休、補休還剩多少。</li>
+      <li><b>設定</b>：改收信的 Email、改密碼。</li></ul>
+  <h3>主管簽核</h3>
+  <p>輪到你簽時會收到 Email，打開這個網頁的「待我簽核」，按「核准」或「駁回」（駁回要寫原因）就好。</p>
+  <h3>Email 通知</h3>
+  <p>假單核准或被駁回，都會寄信給你，大約 10 分鐘內到。沒收到先看垃圾信件匣，再到「設定」確認 Email 有沒有寫對。</p>
+  <h3>有問題找行政</h3>
+  <ul><li>開通碼過期、忘記密碼</li><li>已核准的假要改</li><li>超過 7 天才要補請</li></ul>`;
+document.addEventListener('DOMContentLoaded', () => {
+  if($('help_body')) $('help_body').innerHTML = HELP_HTML;
+  if($('login_help')) $('login_help').innerHTML = HELP_HTML;
+  if($('login_help_btn')) $('login_help_btn').onclick = () => {
+    const h = $('login_help'); h.classList.toggle('hidden');
+    $('login_help_btn').textContent = h.classList.contains('hidden') ? '看使用說明' : '收起說明';
+  };
+});
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const roc = iso => { const m = String(iso || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? (m[1] - 1911) + '/' + m[2] + '/' + m[3] : ''; };
@@ -336,7 +393,7 @@ async function reloadAll(){
 // ---------------- 分頁 ----------------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
-  ['apply','mine','stat','inbox','set'].forEach(p => $('p_' + p).classList.toggle('hidden', p !== b.dataset.p));
+  ['apply','mine','stat','inbox','set','help'].forEach(p => $('p_' + p).classList.toggle('hidden', p !== b.dataset.p));
   window.scrollTo(0, 0);
   if(b.dataset.p !== 'apply') reloadAll();
 });
@@ -406,6 +463,56 @@ $('f_sd').onchange = () => { if($('f_ed').value < $('f_sd').value) $('f_ed').val
 $('f_ed').onchange = suggestHours;
 $('f_hr').oninput = () => { hrTouched = true; applyCheck(); };
 $('f_type').onchange = applyCheck;
+// ===== 法定上限防呆（跟資料庫 SQL_253 的 lv_quota_check 同一套規則；送出時資料庫會再擋一次）=====
+// 「已請」＝請假紀錄＋還在簽核中的假單；以請假起始日所在年度（曆年）計。單位：小時（8 小時＝1 天）
+const LV_QUOTA = {
+  '事假':       { h:112, types:['事假','家庭照顧假'], label:'事假（含家庭照顧假）一年最多 14 天', law:'勞工請假規則第 7 條' },
+  '家庭照顧假': { h:56,  types:['家庭照顧假'], label:'家庭照顧假一年最多 7 天', law:'性別平等工作法第 20 條',
+                  also:{ h:112, types:['事假','家庭照顧假'], label:'家庭照顧假併入事假，一年合計最多 14 天' } },
+  '病假':       { h:240, types:['病假'], men:true, label:'病假（未住院）一年最多 30 天，生理假超過 3 天的部分也算進來', law:'勞工請假規則第 4 條' },
+  '生理假':     { h:8,   types:['生理假'], scope:'month', label:'生理假每個月 1 天', law:'性別平等工作法第 14 條' },
+  '婚假':       { h:64,  types:['婚假'], label:'婚假 8 天', law:'勞工請假規則第 2 條' },
+  '產檢假':     { h:56,  types:['產檢假'], label:'產檢假 7 天', law:'性別平等工作法第 15 條' },
+  '陪產假':     { h:56,  types:['陪產假'], label:'陪產檢及陪產假合計 7 天', law:'性別平等工作法第 15 條' },
+  '產假':       { h:448, types:['產假'], label:'產假 8 星期', law:'勞動基準法第 50 條' },
+  '喪假-父母配偶':         { h:64, types:['喪假-父母配偶'], scope:'event', label:'喪假（父母、配偶）8 天，100 天內請完', law:'勞工請假規則第 3 條' },
+  '喪假-祖父母子女':       { h:48, types:['喪假-祖父母子女'], scope:'event', label:'喪假（祖父母、子女、配偶父母）6 天，100 天內請完', law:'勞工請假規則第 3 條' },
+  '喪假-曾祖父母兄弟姊妹': { h:24, types:['喪假-曾祖父母兄弟姊妹'], scope:'event', label:'喪假（曾祖父母、兄弟姊妹、配偶祖父母）3 天，100 天內請完', law:'勞工請假規則第 3 條' },
+  '謀職假':     { h:16,  types:['謀職假'], scope:'week', label:'謀職假每星期 2 天', law:'勞動基準法第 16 條' }
+};
+function lvFmtH(x){ return `${r2(x / 8)} 天` + (Math.abs(x % 8) > 1e-9 ? `（${r2(x)} 小時）` : ''); }
+function lvIso(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function lvAddDays(iso, n){ const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return lvIso(d); }
+function lvUsedHours(types, d0, d1){
+  let s = 0;
+  ((DATA && DATA.records) || []).forEach(r => { const d = String(r.start_date || '').slice(0, 10);
+    if(types.includes(String(r.leave_type || '').trim()) && d >= d0 && d < d1) s += r.hours != null ? num(r.hours) : num(r.days) * 8; });
+  ((DATA && DATA.requests) || []).forEach(r => { const d = String(r.start_date || '').slice(0, 10);
+    if(r.status === '待簽核' && types.includes(r.leave_type) && d >= d0 && d < d1) s += num(r.hours); });
+  return s;
+}
+// 回傳 { warn: 擋下的原因 或 '', info: 用量提示 或 '' }
+function lvQuotaCheck(t, sd, h){
+  const out = { warn:'', info:'' };
+  if(!sd || !(h > 0)) return out;
+  if(t === '特休'){
+    const hire = String((ME && ME.emp && ME.emp.hire_date) || '').slice(0, 10);
+    if(hire){ const elig = lvAddDays(hire, 183);
+      if(sd < elig) out.warn = `特休要到職滿半年才能休（勞動基準法第 38 條），你從 ${roc(elig)} 起才能請特休。這次請改請事假或其他假別。`; }
+    return out;
+  }
+  let q = LV_QUOTA[t]; if(!q) return out;
+  let d0 = sd.slice(0, 4) + '-01-01', d1 = (Number(sd.slice(0, 4)) + 1) + '-01-01', scope = '今年';
+  if(q.scope === 'month'){ d0 = sd.slice(0, 7) + '-01'; const m = new Date(d0 + 'T00:00:00'); m.setMonth(m.getMonth() + 1); d1 = lvIso(m); scope = '這個月'; }
+  if(q.scope === 'event'){ d0 = lvAddDays(sd, -100); d1 = lvAddDays(sd, 101); scope = '這次喪事'; }
+  if(q.scope === 'week'){ const wd = (new Date(sd + 'T00:00:00').getDay() + 6) % 7; d0 = lvAddDays(sd, -wd); d1 = lvAddDays(d0, 7); scope = '這個星期'; }
+  let used = lvUsedHours(q.types, d0, d1);
+  if(q.men) used += Math.max(lvUsedHours(['生理假'], d0, d1) - 24, 0);
+  if(q.also && used + h <= q.h){ q = Object.assign({ law:q.law }, q.also); used = lvUsedHours(q.types, d0, d1); }
+  out.info = `${t}${scope}已請 ${lvFmtH(used)}（含簽核中），上限 ${r2(q.h / 8)} 天`;
+  if(used + h > q.h + 1e-9) out.warn = `${q.label}（${q.law}）。${scope}已請 ${lvFmtH(used)}（含簽核中），這次 ${lvFmtH(h)}，會超過 ${lvFmtH(used + h - q.h)}。超過的部分請改請其他假別（例如無薪假），或找行政。`;
+  return out;
+}
 function applyCheck(){
   const t = $('f_type').value, h = num($('f_hr').value);
   $('f_sick').classList.toggle('hidden', t !== '病假');
@@ -421,6 +528,9 @@ function applyCheck(){
   $('f_hint').textContent = !d ? '' : (w < d
     ? `${d} 天，扣掉週六日 ${d - w} 天，上班日 ${w} 天（${w * 8} 小時）；這次 ${h} 小時＝${r2(h / 8)} 天`
     : `${d} 天，換算 ${r2(h / 8)} 天（8 小時＝1 天）`);
+  const qc = lvQuotaCheck(t, $('f_sd').value, h);
+  if(qc.warn) warn.push(qc.warn);
+  if(qc.info) $('f_hint').textContent += (d ? '｜' : '') + qc.info;
   if(d && isOffice() && w === 0) warn.push('選的日期都是週六日，不用請假。');
   else if(d && isOffice() && h > w * 8 + 1e-9) warn.push(`這段日期上班日只有 ${w} 天（${w * 8} 小時），時數填多了，週六日不用請。`);
   $('f_warn').innerHTML = warn.map(esc).join('<br>');
