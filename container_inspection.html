@@ -393,8 +393,15 @@ const ITEMS = [
   {no:'8',  k:'r8',  t:'貨櫃置於板架後確認固定插銷.活動角座是否確實固定'},
   {no:'9',  k:'r9',  t:'吊櫃前確認固定插銷.活動角座是否移除'},
   {no:'10', k:'r10', t:'貨櫃(槽罐體)異常部份，是否回報公司並註記於E.I.R上請櫃場簽章'},
-  {no:'11', k:'r11', t:'板架外觀結構是否完整，曳引車頭與板架脫離是否平穩放置地面。'}
+  {no:'11', k:'r11', t:'板架外觀結構是否完整，曳引車頭與板架脫離支撐架是否安全下放平穩放置地面', red:'支撐架是否安全下放平穩放置地面'}
 ];
+// 項目文字：有 red 的那一段印紅字（第 11 項「支撐架是否安全下放平穩放置地面」）
+function ciItemText(it){
+  const t = String(it.t || '');
+  if(!it.red || t.indexOf(it.red) < 0) return esc(t);
+  const i = t.indexOf(it.red);
+  return esc(t.slice(0, i)) + '<span style="color:#d40000 !important;">' + esc(it.red) + '</span>' + esc(t.slice(i + it.red.length));
+}
 const ALL_KEYS = ITEMS.reduce((a,it) => a.concat(it.k ? [it.k] : it.subs.map(s => s[0])), []);
 
 const FORM = { kind:'', spec:'', docs:new Set(), res:{} };
@@ -411,8 +418,8 @@ function vxn(key){
 }
 function renderItems(){
   $('items').innerHTML = ITEMS.map(it => {
-    if(it.k) return '<div class="item"><div class="t"><b>' + it.no + '.</b>' + esc(it.t) + '</div>' + vxn(it.k) + '</div>';
-    return '<div class="item"><div class="t"><b>' + it.no + '.</b>' + esc(it.t) + '</div>'
+    if(it.k) return '<div class="item"><div class="t"><b>' + it.no + '.</b>' + ciItemText(it) + '</div>' + vxn(it.k) + '</div>';
+    return '<div class="item"><div class="t"><b>' + it.no + '.</b>' + ciItemText(it) + '</div>'
       + it.subs.map(s => '<div class="subrow"><div class="lbl">' + esc(s[1]) + '</div>' + vxn(s[0]) + '</div>').join('')
       + '</div>';
   }).join('');
@@ -841,12 +848,12 @@ function sheetHtml(recs, cols){
   let body = '';
   ITEMS.forEach(it => {
     if(it.k){
-      body += '<tr><td class="lft"' + span2 + '>' + it.no + '.' + esc(it.t) + '</td>'
+      body += '<tr><td class="lft"' + span2 + '>' + it.no + '.' + ciItemText(it) + '</td>'
             + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, it.k) + '</td>').join('') + '</tr>';
     }else{
       it.subs.forEach((s, idx) => {
         body += '<tr>'
-          + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + esc(it.t) + '</td>' : '')
+          + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + ciItemText(it) + '</td>' : '')
           + '<td class="lab" style="font-size:12px;">' + esc(s[1]) + '</td>'
           + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, s[0]) + '</td>').join('')
           + '</tr>';

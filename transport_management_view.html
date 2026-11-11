@@ -2495,6 +2495,7 @@
           <option value="all">全部</option>
         </select>
         <button class="btn ghost" id="vp_export" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+        <button class="btn" id="vp_book" style="padding:8px 14px;font-size:13px;">列印出車本頁籤</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -3303,6 +3304,25 @@
     </div>
   </div>
 
+<div class="modal-backdrop no-print" id="vbModal">
+  <div class="modal-box" style="max-width:720px;">
+    <button class="modal-close" type="button" data-vb-close>✕</button>
+    <h3>列印出車本頁籤（一台車一本）</h3>
+    <div class="muted" style="margin-bottom:10px;">勾選要印的車，每台車印一張目錄頁＋每個廠商一張分隔頁（A4）。分隔頁右側有彩色頁籤，同一個廠商在每台車都是同一個顏色；
+      頁籤上下錯開，放進透明內頁就看得到。想做成凸出的頁籤：用厚一點的紙印，沿虛線把右邊剪掉、只留頁籤那一段。</div>
+    <div class="toolbar" style="margin-bottom:8px;">
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="vb_valid" checked style="width:auto;"> 只放有效的通行證（今天以後到期）</label>
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="vb_cover" checked style="width:auto;"> 每台車加印目錄頁</label>
+      <input id="vb_q" placeholder="搜尋車號" style="max-width:160px;">
+      <button class="btn ghost" type="button" id="vb_all" style="padding:6px 12px;font-size:13px;">全選／全不選</button>
+    </div>
+    <div id="vb_list" style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px 10px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px;flex-wrap:wrap;">
+      <span class="muted" id="vb_sum"></span>
+      <button class="btn" type="button" id="vb_print">列印</button>
+    </div>
+  </div>
+</div>
 <div class="modal-backdrop no-print" id="ciEditModal">
   <div class="modal-box">
     <button class="modal-close" id="ciEditClose">✕</button>
@@ -10587,8 +10607,15 @@ const CI_ITEMS = [
   {no:'8',  k:'r8',  t:'貨櫃置於板架後確認固定插銷.活動角座是否確實固定'},
   {no:'9',  k:'r9',  t:'吊櫃前確認固定插銷.活動角座是否移除'},
   {no:'10', k:'r10', t:'貨櫃(槽罐體)異常部份，是否回報公司並註記於E.I.R上請櫃場簽章'},
-  {no:'11', k:'r11', t:'板架外觀結構是否完整，曳引車頭與板架脫離是否平穩放置地面。'}
+  {no:'11', k:'r11', t:'板架外觀結構是否完整，曳引車頭與板架脫離支撐架是否安全下放平穩放置地面', red:'支撐架是否安全下放平穩放置地面'}
 ];
+// 項目文字：有 red 的那一段印紅字（第 11 項「支撐架是否安全下放平穩放置地面」）
+function ciItemText(it){
+  const t = String(it.t || '');
+  if(!it.red || t.indexOf(it.red) < 0) return esc(t);
+  const i = t.indexOf(it.red);
+  return esc(t.slice(0, i)) + '<span style="color:#d40000 !important;">' + esc(it.red) + '</span>' + esc(t.slice(i + it.red.length));
+}
 
 function ciCell(v){ return esc(v == null ? '' : v); }
 // 印之前先量一次：內容比一張 A4 高就整張等比縮，保證不會被切成兩頁。
@@ -10709,12 +10736,12 @@ function ciSheetHtml(recs, cols){
   let body = '';
   CI_ITEMS.forEach(it => {
     if(it.k){
-      body += '<tr><td class="lft"' + span2 + '>' + it.no + '.' + esc(it.t) + '</td>'
+      body += '<tr><td class="lft"' + span2 + '>' + it.no + '.' + ciItemText(it) + '</td>'
             + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, it.k) + '</td>').join('') + '</tr>';
     }else{
       it.subs.forEach((s, idx) => {
         body += '<tr>'
-          + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + esc(it.t) + '</td>' : '')
+          + (idx === 0 ? '<td class="lft" rowspan="' + it.subs.length + '">' + it.no + '.' + ciItemText(it) + '</td>' : '')
           + '<td class="lab" style="font-size:12px;">' + esc(s[1]) + '</td>'
           + Array.from({length: cols}, (_, i) => '<td class="val">' + r(i, s[0]) + '</td>').join('')
           + '</tr>';
@@ -10911,10 +10938,10 @@ function ciOpenEdit(id){
   const itemsHtml = CI_ITEMS.map(it => {
     if(it.k){
       return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);">
-        <div style="flex:1;font-size:13px;">${it.no}. ${esc(it.t)}</div>${ciVxnSelect(it.k, r[it.k])}</div>`;
+        <div style="flex:1;font-size:13px;">${it.no}. ${ciItemText(it)}</div>${ciVxnSelect(it.k, r[it.k])}</div>`;
     }
     return `<div style="padding:4px 0;border-bottom:1px solid var(--border);">
-      <div style="font-size:13px;margin-bottom:4px;">${it.no}. ${esc(it.t)}</div>
+      <div style="font-size:13px;margin-bottom:4px;">${it.no}. ${ciItemText(it)}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 14px;">`
       + it.subs.map(x => `<span style="font-size:12.5px;">${esc(x[1])} ${ciVxnSelect(x[0], r[x[0]])}</span>`).join('')
       + `</div></div>`;
@@ -21457,6 +21484,124 @@ function vpPill(d){
   if(n <= 60) return `<span class="pill amber">${n} 天</span>`;
   return `<span class="pill green">${n} 天</span>`;
 }
+// ===== 出車本頁籤（一台車一本，每個廠商一張分隔頁＋右側彩色頁籤）=====
+// 顏色依「全部廠商」排序固定，同一個廠商在每台車的出車本都是同一個顏色；
+// 頁籤位置依這台車的廠商順序上下錯開（一頁放得下 8 格，超過從頭再排）。
+const VB_COLORS = ['#1f5fa8','#c0392b','#2e8b57','#d68910','#7d3c98','#117a8b','#a04000','#34495e','#b03a6e','#6b8e23'];
+function vbPasses(){
+  const onlyValid = !document.getElementById('vb_valid') || document.getElementById('vb_valid').checked;
+  return (STATE.vehiclePasses || []).filter(p => p.plate && p.vendor && (!onlyValid || (vpDaysLeft(p.expiry_date) ?? 0) >= 0));
+}
+function vbVendorColor(v){
+  const all = [...new Set((STATE.vehiclePasses || []).map(p => String(p.vendor || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  const i = all.indexOf(String(v || '').trim());
+  return VB_COLORS[(i < 0 ? 0 : i) % VB_COLORS.length];
+}
+function vbRenderList(){
+  const box = document.getElementById('vb_list'); if(!box) return;
+  const q = (document.getElementById('vb_q').value || '').trim().toUpperCase();
+  const by = {};
+  vbPasses().forEach(p => { const k = String(p.plate).trim(); (by[k] = by[k] || []).push(p); });
+  const plates = Object.keys(by).sort().filter(k => !q || k.toUpperCase().includes(q));
+  const was = new Set([...box.querySelectorAll('input[data-vb-plate]:checked')].map(x => x.dataset.vbPlate));
+  box.innerHTML = plates.map(k => {
+    const vs = [...new Set(by[k].map(p => String(p.vendor).trim()))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    return `<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px dashed var(--border);">
+      <input type="checkbox" data-vb-plate="${esc(k)}"${was.has(k) ? ' checked' : ''} style="width:auto;margin-top:3px;">
+      <span><b>${esc(k)}</b>　<span class="muted">${by[k].length} 張／${vs.length} 個廠商</span><br>
+      ${vs.map(v => `<span style="display:inline-block;margin:2px 4px 0 0;padding:1px 7px;border-radius:9px;color:#fff;font-size:12px;background:${vbVendorColor(v)};">${esc(v)}</span>`).join('')}</span></label>`;
+  }).join('') || '<div class="muted" style="padding:10px;">沒有符合的車（只放有效通行證時，已過期的車不會出現）。</div>';
+  vbSum();
+}
+function vbSum(){
+  const n = document.querySelectorAll('#vb_list input[data-vb-plate]:checked').length;
+  const s = document.getElementById('vb_sum'); if(s) s.textContent = n ? `已選 ${n} 台車` : '請勾選要印的車';
+}
+function vbOpen(){ vbRenderList(); document.getElementById('vbModal').classList.add('show'); }
+function vbPagesHtml(plate, passes, withCover){
+  const roc = d => { const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? (m[1] - 1911) + '/' + m[2] + '/' + m[3] : '—'; };
+  const shortName = v => String(v).replace(/(股份)?有限公司$/, '').replace(/公司$/, '') || String(v);
+  const vendors = [...new Set(passes.map(p => String(p.vendor).trim()))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  const company = (passes.find(p => p.company_name) || {}).company_name || '';
+  const SLOT_H = 30, GAP = 1.5, TOP = 10, SLOTS = 8;
+  const tabTop = k => TOP + (k % SLOTS) * (SLOT_H + GAP);
+  // 直書（一個字一行，不用 writing-mode，各家瀏覽器、印表機都一樣）：字數 × 字級要塞得進頁籤高度（扣掉上面的序號），單位 mm
+  const tabFs = v => Math.max(2.4, Math.min(6, (SLOT_H - 9) / 1.08 / Math.max(1, [...shortName(v)].length)));
+  let h = '';
+  if(withCover){
+    h += `<div class="vb-page"><div class="vb-h1">出車本</div><div class="vb-plate">${esc(plate)}</div>
+      <div class="vb-sub">${esc(company)}　通行證 ${passes.length} 張／${vendors.length} 個廠商　列印日期 ${esc(todayROC ? todayROC() : todayISO())}</div>
+      <table class="vb-t"><thead><tr><th style="width:16mm;">頁籤</th><th>廠商</th><th>品項</th><th style="width:14mm;">張數</th><th style="width:28mm;">最早到期</th></tr></thead><tbody>
+      ${vendors.map((v, k) => { const ps = passes.filter(p => String(p.vendor).trim() === v);
+        const first = ps.map(p => p.expiry_date).filter(Boolean).sort()[0];
+        return `<tr><td><span class="vb-sw" style="background:${vbVendorColor(v)};">${k + 1}</span></td><td><b>${esc(v)}</b></td>
+          <td>${esc([...new Set(ps.map(p => p.category).filter(Boolean))].join('、'))}</td><td style="text-align:center;">${ps.length}</td><td>${esc(roc(first))}</td></tr>`; }).join('')}
+      </tbody></table>
+      <div class="vb-note">通行證依上表順序放在各廠商分隔頁後面。到期前請向行政換新，過期的證請抽出交回。</div></div>`;
+  }
+  vendors.forEach((v, k) => {
+    const ps = passes.filter(p => String(p.vendor).trim() === v)
+      .sort((a, b) => String(a.category || '').localeCompare(String(b.category || ''), 'zh-Hant') || String(a.expiry_date || '').localeCompare(String(b.expiry_date || '')));
+    const col = vbVendorColor(v), t = tabTop(k);
+    h += `<div class="vb-page">
+      <div class="vb-tab" style="top:${t}mm;height:${SLOT_H}mm;background:${col};"><span class="vb-no">${k + 1}</span><span class="vb-tn" style="font-size:${tabFs(v).toFixed(2)}mm;">${[...shortName(v)].map(c => `<i>${esc(c)}</i>`).join('')}</span></div>
+      <div class="vb-cut" style="top:0;height:${t}mm;"></div><div class="vb-cut" style="top:${t + SLOT_H}mm;bottom:0;"></div>
+      <div class="vb-cuth" style="top:${t}mm;"></div><div class="vb-cuth" style="top:${t + SLOT_H}mm;"></div>
+      <div class="vb-band" style="background:${col};"></div>
+      <div class="vb-plate-s">${esc(plate)}</div>
+      <div class="vb-vendor" style="color:${col};">${esc(v)}</div>
+      <div class="vb-sub">${esc([...new Set(ps.map(p => p.category).filter(Boolean))].join('、'))}　共 ${ps.length} 張</div>
+      <table class="vb-t"><thead><tr><th>品項</th><th>通行證號碼</th><th>有效期間</th><th>到期日</th><th>指定檢驗日</th></tr></thead><tbody>
+      ${ps.map(p => `<tr><td>${esc(p.category || '')}</td><td><b>${esc(p.pass_no || '')}</b>${p.batch_no ? `<div class="vb-small">批號 ${esc(p.batch_no)}</div>` : ''}</td>
+        <td>${esc(roc(p.start_date))}～${esc(roc(p.expiry_date))}</td><td><b>${esc(roc(p.expiry_date))}</b></td><td>${esc(roc(p.inspect_date))}</td></tr>
+        ${(p.goods_text || p.trailer_plates) ? `<tr class="vb-sub2"><td colspan="5">${p.goods_text ? `危險物品：${esc(p.goods_text)}` : ''}${p.trailer_plates ? `${p.goods_text ? '<br>' : ''}板架：${esc(p.trailer_plates)}` : ''}</td></tr>` : ''}`).join('')}
+      </tbody></table>
+      <div class="vb-note">本廠商的通行證放在這一頁後面。</div>
+      <div class="vb-foot">出車本 ${esc(plate)}　第 ${k + 1} 個廠商／共 ${vendors.length} 個</div></div>`;
+  });
+  return h;
+}
+function vbPrint(){
+  const plates = [...document.querySelectorAll('#vb_list input[data-vb-plate]:checked')].map(x => x.dataset.vbPlate);
+  if(!plates.length){ alert('請先勾選要印的車。'); return; }
+  const withCover = document.getElementById('vb_cover').checked;
+  const all = vbPasses();
+  let area = document.getElementById('mrPrintRoot');
+  if(!area){ area = document.createElement('div'); area.id = 'mrPrintRoot'; document.body.appendChild(area); }
+  area.innerHTML = `<style>
+    @media print{ @page{ size:A4 portrait; margin:0; } }
+    .vb-page{width:210mm;height:296.5mm;position:relative;box-sizing:border-box;padding:16mm 30mm 14mm 16mm;overflow:hidden;
+      page-break-after:always;break-after:page;font-family:'Microsoft JhengHei','PingFang TC','Noto Sans TC',sans-serif;color:#111;background:#fff;}
+    .vb-page:last-child{page-break-after:auto;break-after:auto;}
+    .vb-h1{font-size:20pt;letter-spacing:6px;color:#555;margin-top:18mm;}
+    .vb-plate{font-size:54pt;font-weight:800;letter-spacing:4px;margin:4mm 0 2mm;}
+    .vb-plate-s{font-size:13pt;color:#555;letter-spacing:2px;margin-top:6mm;}
+    .vb-vendor{font-size:40pt;font-weight:800;line-height:1.15;margin:2mm 0 2mm;word-break:break-all;}
+    .vb-sub{font-size:11pt;color:#444;margin-bottom:6mm;}
+    .vb-t{width:100%;border-collapse:collapse;font-size:10.5pt;}
+    .vb-t th{background:#f0f0f0;border:0.3mm solid #bbb;padding:2mm;text-align:left;font-weight:700;}
+    .vb-t td{border:0.3mm solid #bbb;padding:2mm;vertical-align:top;}
+    .vb-t tr.vb-sub2 td{font-size:8.5pt;color:#444;border-top:none;padding-top:0;}
+    .vb-small{font-size:8pt;color:#666;}
+    .vb-sw{display:inline-block;min-width:9mm;text-align:center;color:#fff;font-weight:700;border-radius:1.5mm;padding:0.6mm 0;}
+    .vb-note{font-size:9.5pt;color:#555;margin-top:5mm;}
+    .vb-foot{position:absolute;left:16mm;bottom:8mm;font-size:8.5pt;color:#888;}
+    .vb-band{position:absolute;left:0;top:0;width:6mm;height:100%;}
+    .vb-tab{position:absolute;right:0;width:20mm;border-radius:3mm 0 0 3mm;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:2mm;box-sizing:border-box;overflow:hidden;}
+    .vb-tab .vb-no{font-size:3.6mm;font-weight:700;line-height:1;margin-bottom:1.5mm;}
+    .vb-tab .vb-tn{display:flex;flex-direction:column;align-items:center;font-weight:800;line-height:1.08;}
+    .vb-tab .vb-tn i{font-style:normal;display:block;}
+    .vb-cut{position:absolute;right:20mm;border-left:0.25mm dashed #aaa;}
+    .vb-cuth{position:absolute;right:0;width:20mm;border-top:0.25mm dashed #aaa;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  </style>`
+    + plates.map(pl => vbPagesHtml(pl, all.filter(p => String(p.plate).trim() === pl), withCover)).join('');
+  document.getElementById('vbModal').classList.remove('show');
+  document.documentElement.classList.add('mr-printing');
+  const fin = () => { document.documentElement.classList.remove('mr-printing'); area.innerHTML = ''; };
+  setTimeout(() => { window.print(); setTimeout(fin, 1200); }, 200);
+}
 // ===== 危險物品：把通行證上那一行原文拆成一項一項 =====
 // 原文長這樣：「第2.2、5.1類:氧化亞氮（一氧化二氮）(1070)第2.3、5.1、8類:氟（20%V/V）與氮之混和氣(3306)」
 // 規則：名稱後面緊跟著半形括號的四位數字＝聯合國編號；名稱前面可能有「第X類:」的分類標頭。
@@ -22852,6 +22997,18 @@ function closeVpEdit(){
   });
   const ex = document.getElementById('vp_export');
   if(ex) ex.addEventListener('click', vpExportCsv);
+  const vb = document.getElementById('vp_book');
+  if(vb) vb.addEventListener('click', vbOpen);
+  const vbm = document.getElementById('vbModal');
+  if(vbm){
+    vbm.addEventListener('click', e => {
+      if(e.target === vbm || e.target.hasAttribute('data-vb-close')) vbm.classList.remove('show');
+      if(e.target.id === 'vb_all'){ const bs = [...vbm.querySelectorAll('input[data-vb-plate]')]; const on = bs.some(b => !b.checked); bs.forEach(b => b.checked = on); vbSum(); }
+      if(e.target.id === 'vb_print') vbPrint();
+    });
+    vbm.addEventListener('change', e => { if(e.target.id === 'vb_valid') vbRenderList(); else vbSum(); });
+    vbm.addEventListener('input', e => { if(e.target.id === 'vb_q') vbRenderList(); });
+  }
   const ps = document.getElementById('vp_plate');
   if(ps) ps.addEventListener('change', vpSyncCompany);
 }
