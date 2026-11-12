@@ -12672,8 +12672,9 @@ function renderStaffModalEdit(e){
 function closeStaffModal(){ document.getElementById('staffModal').classList.remove('show'); }
 
 // 離職證明那幾張要選離職的人，切結書與收據兩邊都可能用到
-const FORM_HISTORY_TYPES = ['resign', 'involuntary_resign', 'severance_consent'];
-const FORM_BOTH_TYPES = ['undertaking', 'consent_receipt'];
+const FORM_HISTORY_TYPES = ['resign', 'severance_consent'];
+// 非自願離職證明書常在離職前就要開（在職的人），所以在職、離職都列
+const FORM_BOTH_TYPES = ['undertaking', 'consent_receipt', 'involuntary_resign'];
 function formEmpList(type){
   if(FORM_HISTORY_TYPES.indexOf(type) >= 0) return visibleHistory();
   if(FORM_BOTH_TYPES.indexOf(type) >= 0) return (STATE.employees || []).concat(visibleHistory());
@@ -12700,11 +12701,7 @@ const EXTRA_FIELDS = {
     {id:'ex_subsidy', label:'第三條「餘額由＿＿補貼」', type:'text', placeholder:'可空白'}
   ],
   payroll_auth: [{id:'ex_case', label:'案件', type:'select', opts:[]}],
-  involuntary_resign: [
-    {id:'ex_gender', label:'性別', type:'select', opts:['男','女']},
-    {id:'ex_salary', label:'離職當月工資', type:'number'},
-    {id:'ex_reason', label:'離職原因（勞基法條款）', type:'text', placeholder:'例：勞基法第11條第5款'}
-  ],
+  involuntary_resign: [],   // 工資、離職日、離職原因改成直接在表上填（buildInvoluntaryResignA4）
   resign_application: [
     {id:'ex_apply_reason', label:'離職原因', type:'select', opts:['','工作不適應','轉換工作跑道','家中有事','自行創業','解僱','資遣','其他（寫在下一格）']},
     {id:'ex_apply_other', label:'其他原因（選「其他」才填）', type:'text'},
@@ -14590,6 +14587,69 @@ function buildResignCert(e, purpose){
 
 // ---------- 非自願離職證明書 ----------
 // 離職當月工資、勞基法條款系統沒有，留手填／自己輸入。
+// ===== 非自願離職證明書（照勞動部格式的表格版，可直接在畫面上填）=====
+// 115/11 使用者要求：上半部（姓名、出生日期、性別、身分證、住址、職稱、電話）選了人就自動帶入，帶進來的也能改；
+// 「離職當月工資」「離職日」直接在表上打；離職原因方框點一下就勾（只能勾一個）；投保單位資料依這個人的行號帶入。
+function buildInvoluntaryResignA4(e){
+  e = e || {};
+  const co = fmCoOf(e);
+  const L = 'border:1px solid #000;padding:5px 8px;';
+  const lab = `${L}text-align:center;white-space:nowrap;letter-spacing:2px;`;
+  const ln = (w) => pnIn('', w, 'text-align:center;');
+  return `<style>
+  .pn-a4.ir{width:700px;font-size:14.5px;}
+  .pn-a4.ir td{vertical-align:middle;}
+  .pn-a4.ir .note{font-size:12.5px;line-height:1.6;margin-top:6px;}
+</style>
+<div class="pn-a4 ir">
+  <style>
+  .pn-a4{margin:0 auto;font-family:'標楷體','DFKai-SB','BiauKai',serif;color:#000;background:#fff;}
+  .pn-a4 table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .pn-a4 .pn-in{border:0;border-bottom:1px dashed #9ab;background:#f4f9ff;font:inherit;color:#000;padding:1px 2px;box-sizing:border-box;}
+  .pn-a4 .pn-in:focus{outline:2px solid #6aa0e0;background:#fff;}
+  .pn-a4 .pn-chk{cursor:pointer;user-select:none;border-radius:4px;padding:1px 2px;white-space:nowrap;}
+  .pn-a4 .pn-chk:hover{background:#eaf3ff;}
+  .pn-a4 .pn-box{font-size:16px;}
+  @media print{ .pn-a4 .pn-chk:hover{background:none;} .pn-a4 .pn-in{background:none!important;border-bottom:0!important;} @page{size:A4 portrait;margin:10mm;} }
+  </style>
+  <div style="text-align:center;font-size:21px;font-weight:700;letter-spacing:12px;margin:4px 0 8px;">非自願離職證明書</div>
+  <div style="text-align:right;margin-bottom:4px;">填表日期：${pnIn(pnRoc(todayISO()), '150px', 'text-align:center;')}</div>
+  <table><colgroup><col style="width:15%"><col style="width:20%"><col style="width:19%"><col style="width:14%"><col style="width:32%"></colgroup>
+    <tr><td style="${lab}">申請人姓名</td><td colspan="2" style="${L}">${pnIn(e.name)}</td>
+        <td style="${lab}">出生日期</td><td style="${L}">${pnIn(pnRoc(e.birth_date), '100%', 'text-align:center;')}</td></tr>
+    <tr><td style="${lab}">性　　別</td><td style="${L}">${pnIn(fmSex(e), '100%', 'text-align:center;')}</td>
+        <td style="${lab}">身分證統一編號</td><td colspan="2" style="${L}">${pnIn(e.id_number, '100%', 'text-align:center;')}</td></tr>
+    <tr><td style="${lab}">住　　址</td><td colspan="4" style="${L}">${pnIn(e.address)}</td></tr>
+    <tr><td style="${lab}">職　　稱</td><td colspan="2" style="${L}">${pnIn(e.position_name, '100%', 'text-align:center;')}</td>
+        <td style="${lab}">電　　話</td><td style="${L}">${pnIn(e.phone, '100%', 'text-align:center;')}</td></tr>
+    <tr><td colspan="3" style="${L}">離職當月工資：${pnIn('', '130px', 'text-align:right;')} 元</td>
+        <td colspan="2" style="${L}">離　　職：${pnIn(pnRoc(e.resign_date), '150px', 'text-align:center;')}
+          <div style="font-size:11.5px;text-align:right;">（★離職日期為在職最後一日）</div></td></tr>
+    <tr><td style="${lab}">離職原因</td><td colspan="4" style="${L}line-height:2;font-size:13.5px;">
+        ${['關廠','遷廠','休業','解散','破產'].map(t => pnBox(false, 'ir', t)).join('　')}<br>
+        勞動基準法第11條　${[1,2,3,4,5].map(n => pnBox(false, 'ir', '第' + n + '款')).join(' ')}<br>
+        勞動基準法第14條第1項　${[1,2,3,4,5,6].map(n => pnBox(false, 'ir', '第' + n + '款')).join('')}<br>
+        ${pnBox(false, 'ir', '勞動基準法第13條但書')}　${pnBox(false, 'ir', '勞動基準法第20條')}<br>
+        ${pnBox(false, 'ir', '定期契約工作期滿')}（契約期間自${ln('34px')}年${ln('26px')}月${ln('26px')}日至${ln('34px')}年${ln('26px')}月${ln('26px')}日）</td></tr>
+    <tr><td colspan="2" style="${L}height:150px;text-align:center;vertical-align:bottom;padding-bottom:16px;">身分證影印本黏貼欄（浮貼）</td>
+        <td colspan="3" style="${L}height:150px;text-align:center;vertical-align:bottom;padding-bottom:16px;">身分證影印本黏貼欄（浮貼）</td></tr>
+    <tr><td colspan="2" style="${L}font-size:13.5px;">投保單位證明欄（★離職證明由投保單位出具者請填本欄）</td>
+        <td colspan="3" style="${L}line-height:2;">投保單位名稱：（請蓋印信或章戳）　${pnIn(co.name, '48%')}<br>
+          保險證號：${pnIn(co.ins_no, '50%', 'text-align:center;')}<br>
+          投保單位地址：${pnIn(co.reg_addr || co.addr, '72%')}<br>
+          投保單位電話：${pnIn(co.phone, '40%')}</td></tr>
+    <tr><td colspan="2" style="${L}font-size:13.5px;">主管機關證明欄（★離職證明由地方主管機關出具者請填本欄）</td>
+        <td colspan="3" style="${L}height:70px;">主管機關名稱：（請蓋印信或章戳）</td></tr>
+    <tr><td colspan="2" style="${L}font-size:13.5px;">申請人自行釋明欄（＊離職證明向投保單位及勞工行政機關申請無法取得者請填本欄）</td>
+        <td colspan="3" style="${L}line-height:2.2;">
+          <div style="border-bottom:1px solid #000;height:22px;"></div>
+          <div style="display:flex;align-items:flex-end;"><div style="flex:1;border-bottom:1px solid #000;height:22px;"></div>，如有不實願負一切法律責任。</div>
+          <div>申請人<span style="display:inline-block;width:180px;border-bottom:1px solid #000;"></span>（簽章）</div></td></tr>
+  </table>
+  <div class="note">● 就業保險法第36條規定：以詐欺或其他不正當行為領取保險給付………，除按其領取之保險給付處以2倍罰鍰外，並應依民法請求損害賠償；其涉及刑責者，移送司法機關辦理。</div>
+  <div class="note">● 因定期契約屆滿離職，逾1個月未能就業，且離職前1年內，契約期間合計滿6個月以上者，視為非自願離職，此離職原因者，需檢附契約證明文件，另契約期間合計滿6個月以上者，若是由不同時期契約滿離職者，須分別檢附不同時期離職證明文件及契約證明，且須以最後離職事實申請失業給付【契約工如要申請失業給付須以離職日起算1個月後】</div>
+</div>`;
+}
 function buildInvoluntaryResign(e){
   const co = fmCoOf(e);
   const salary = extraVal('ex_salary');
@@ -15391,6 +15451,13 @@ function generateForm(){
             || CERT_WIDE.includes(type);
   // 血壓／酒測是 A4 橫式 15 欄，壓到 900px 會擠成一團，畫面上直接照原寬顯示
   const maxW = MS_TYPES.includes(type) ? '1180px' : (wide ? '900px' : '640px');
+  if(type === 'involuntary_resign'){
+    document.getElementById('printArea').innerHTML = `<div style="overflow-x:auto;padding:12px 0;">${buildInvoluntaryResignA4(e)}</div>`;
+    document.getElementById('form_print').style.display = 'inline-block';
+    const _p4 = document.getElementById('form_png'); if(_p4) _p4.style.display = 'inline-block';
+    document.getElementById('form_export_csv').style.display = 'none';
+    return;
+  }
   if(type === 'pay_notice_a1'){
     document.getElementById('printArea').innerHTML = `<div style="overflow-x:auto;padding:12px 0;">${buildPayNoticeA1(e)}</div>`;
     document.getElementById('form_print').style.display = 'inline-block';
