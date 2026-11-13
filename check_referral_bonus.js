@@ -1,7 +1,6 @@
 // 每月1號執行：推薦人（介紹人）獎金提醒
 // 規則讀 referral_bonus_rules（SQL_225），讀不到就用下面這組（107.11.1 起）：
-//   被推薦人到職滿 6 個月 6,000、滿 12 個月 10,000、滿 18 個月 10,000，發給推薦人；
-//   115/11/01 起到職的改成：滿 6 個月 10,000、滿 12 個月 10,000、滿 24 個月 20,000（SQL_265）；
+//   被推薦人到職滿 6 個月 10,000、滿 12 個月 10,000、滿 24 個月 20,000，發給推薦人（SQL_265 更正）；
 //   回鍋司機離職未滿 2 年不適用；某階段到期前就離職，那個階段起不發。
 // 信裡列三段：本月到期、已到期但還沒登記發放、下個月到期（預告）。三段都沒有就不寄。
 // 發放後請到儀表板「人員管理 → 編輯人員」填已發放日，下個月就不會再列。
@@ -19,12 +18,9 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !RESEND_API_KEY || !NOTIFY_EMAIL) {
 }
 
 const DEFAULT_RULES = [
-  { effective_from: '2018-11-01', months: 6, amount: 6000, rehire_gap_days: 730 },
+  { effective_from: '2018-11-01', months: 6, amount: 10000, rehire_gap_days: 730 },
   { effective_from: '2018-11-01', months: 12, amount: 10000, rehire_gap_days: 730 },
-  { effective_from: '2018-11-01', months: 18, amount: 10000, rehire_gap_days: 730 },
-  { effective_from: '2026-11-01', months: 6, amount: 10000, rehire_gap_days: 730 },
-  { effective_from: '2026-11-01', months: 12, amount: 10000, rehire_gap_days: 730 },
-  { effective_from: '2026-11-01', months: 24, amount: 20000, rehire_gap_days: 730 },
+  { effective_from: '2018-11-01', months: 24, amount: 20000, rehire_gap_days: 730 },
 ];
 
 const esc = (v) => String(v == null ? '' : v)
