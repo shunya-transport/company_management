@@ -1,6 +1,7 @@
 // 每月1號執行：推薦人（介紹人）獎金提醒
 // 規則讀 referral_bonus_rules（SQL_225），讀不到就用下面這組（107.11.1 起）：
 //   被推薦人到職滿 6 個月 6,000、滿 12 個月 10,000、滿 18 個月 10,000，發給推薦人；
+//   115/11/01 起到職的改成：滿 6 個月 10,000、滿 12 個月 10,000、滿 24 個月 20,000（SQL_265）；
 //   回鍋司機離職未滿 2 年不適用；某階段到期前就離職，那個階段起不發。
 // 信裡列三段：本月到期、已到期但還沒登記發放、下個月到期（預告）。三段都沒有就不寄。
 // 發放後請到儀表板「人員管理 → 編輯人員」填已發放日，下個月就不會再列。
@@ -21,6 +22,9 @@ const DEFAULT_RULES = [
   { effective_from: '2018-11-01', months: 6, amount: 6000, rehire_gap_days: 730 },
   { effective_from: '2018-11-01', months: 12, amount: 10000, rehire_gap_days: 730 },
   { effective_from: '2018-11-01', months: 18, amount: 10000, rehire_gap_days: 730 },
+  { effective_from: '2026-11-01', months: 6, amount: 10000, rehire_gap_days: 730 },
+  { effective_from: '2026-11-01', months: 12, amount: 10000, rehire_gap_days: 730 },
+  { effective_from: '2026-11-01', months: 24, amount: 20000, rehire_gap_days: 730 },
 ];
 
 const esc = (v) => String(v == null ? '' : v)
@@ -60,6 +64,13 @@ async function main() {
     console.warn('referral_bonus_rules 讀不到，用內建規則', e.message);
   }
   if (!rules.length) rules = DEFAULT_RULES;
+  // 信末的規則說明照資料庫的版本列（新舊規則各一句）
+  const ruleText = [...new Set(rules.map((r) => String(r.effective_from).slice(0, 10)))].sort().map((d) => {
+    const y = Number(d.slice(0, 4)) - 1911;
+    const list = rules.filter((r) => String(r.effective_from).slice(0, 10) === d).sort((a, b) => a.months - b.months)
+      .map((r) => `滿 ${r.months} 個月 ${money(r.amount)}`).join('、');
+    return `${y}/${d.slice(5, 7)}/${d.slice(8, 10)} 起到職：${list}`;
+  }).join('；');
 
   const [employees, history] = await Promise.all([
     supaFetchAll(SUPABASE_URL, SUPABASE_KEY, 'employees?select=*,companies(company_name)&referrer_name=not.is.null'),
@@ -135,7 +146,7 @@ async function main() {
       <p style="font-family:sans-serif;font-size:12.5px;color:#666;margin:4px 0;">可能是以前已經發過、只是系統沒登記，請核對後到「人員管理 → 編輯人員」補填已發放日。</p>${table(over)}`;
   }
   if (next.length) html += `<h3 ${bar}>🟢 下個月到期（預告，共 ${next.length} 筆）</h3>${table(next)}`;
-  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號寄送。規則：被推薦人到職滿 6 個月 6,000、12 個月 10,000、18 個月 10,000（以 referral_bonus_rules 為準）；回鍋司機離職未滿 2 年不適用；到期前離職不發。完整清單：儀表板「表單生成 → 推薦人（介紹人）獎金表」。</p>`;
+  html += `<p style="font-family:sans-serif;color:#888;font-size:12px;">此信由系統自動於每月1號寄送。規則：${ruleText}（以 referral_bonus_rules 為準）；回鍋司機離職未滿 2 年不適用；到期前離職不發。完整清單：儀表板「表單生成 → 推薦人（介紹人）獎金表」。</p>`;
 
   const recipients = NOTIFY_EMAIL.split(',').map((s) => s.trim()).filter(Boolean);
   const subject = `【推薦獎金提醒】${rocLabel}　本月到期 ${month.length} 筆` + (over.length ? `、待發 ${over.length} 筆` : '');

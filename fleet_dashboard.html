@@ -12931,7 +12931,8 @@ const EXTRA_FIELDS = {
   resign_application: [
     {id:'ex_apply_reason', label:'離職原因', type:'select', opts:['','工作不適應','轉換工作跑道','家中有事','自行創業','解僱','資遣','其他（寫在下一格）']},
     {id:'ex_apply_other', label:'其他原因（選「其他」才填）', type:'text'},
-    {id:'ex_apply_date', label:'申請日期（空白＝留白手寫）', type:'date'}
+    {id:'ex_apply_date', label:'申請日期（空白＝留白手寫）', type:'date'},
+    {id:'ex_resign_date', label:'離職日（空白＝人員資料的離職日；表上也可以直接打）', type:'date'}
   ],
   undertaking: [
     {id:'ex_owed', label:'積欠金額(元)', type:'number'},
@@ -14213,7 +14214,11 @@ const OS_STYLE = `<style>
   .os-a4 > span, .os-a4 > div{position:absolute;white-space:nowrap;line-height:1;}
   .os-a4 span, .os-a4 div{color:#000 !important;margin:0;padding:0;border:0;background:none;letter-spacing:0;}
   .os-a4 > div.os-p{white-space:normal;word-break:normal;overflow-wrap:anywhere;}
-  @media print{ .os-a4{box-shadow:none;margin:0;page-break-after:always;} .os-a4:last-child{page-break-after:auto;} }
+  .os-a4 > input.os-in{position:absolute;border:0;border-bottom:1px dashed #9ab;background:#f4f9ff;color:#000;padding:0 2px;margin:0;box-sizing:border-box;line-height:1.2;}
+  .os-a4 > input.os-in:focus{outline:2px solid #6aa0e0;background:#fff;}
+  .os-a4 [data-pn-box]:hover, .os-a4 [data-pn-lbl]:hover{background:#eaf3ff !important;}
+  @media print{ .os-a4{box-shadow:none;margin:0;page-break-after:always;} .os-a4:last-child{page-break-after:auto;}
+    .os-a4 > input.os-in{background:none!important;border-bottom:0!important;} .os-a4 > input.os-in::placeholder{color:transparent;} }
   @page{ size:A4 portrait; margin:0; }
 </style>`;
 function osE(s){ return esc(s == null ? '' : String(s)); }
@@ -14261,10 +14266,21 @@ function osVRot(xc, yc, txt, s, f){
   if(!txt) return '';
   return `<span style="left:${xc}pt;top:${yc}pt;font-size:${s}pt;font-family:${OS_FF[f || 0]};transform:translate(-50%,-50%) rotate(90deg);">${osE(txt)}</span>`;
 }
-function osPage(key, pi, marks, add){
+// click（選用）：{grp, keys}——方框變成可以點的（同一組 keys 只能勾一個，其他方框各自獨立），後面的字也能點
+function osPage(key, pi, marks, add, click){
   const pg = OS_TPL[key].pages[pi];
-  const h = pg.t.map(it => osSpan(it[0], it[1], it[2],
-      it.length > 5 ? ((marks && marks[it[5]]) ? '■' : '□') : osE(it[3]), it[4])).join('');
+  const h = pg.t.map((it, idx) => {
+    if(!click) return osSpan(it[0], it[1], it[2], it.length > 5 ? ((marks && marks[it[5]]) ? '■' : '□') : osE(it[3]), it[4]);
+    if(it.length > 5){
+      const g = (click.keys || []).indexOf(it[5]) >= 0 ? click.grp : '';
+      return osSpan(it[0], it[1], it[2], `<span class="pn-box">${(marks && marks[it[5]]) ? '■' : '□'}</span>`, it[4], 'cursor:pointer;')
+        .replace('<span style=', `<span data-pn-box="${osE(g)}" data-pn-key="${osE(it[5])}" style=`);
+    }
+    const prev = pg.t[idx - 1];
+    const s = osSpan(it[0], it[1], it[2], osE(it[3]), it[4]);
+    return (prev && prev.length > 5 && prev[1] === it[1])
+      ? s.replace('<span style="', `<span data-pn-lbl="${osE(prev[5])}" style="cursor:pointer;`) : s;
+  }).join('');
   return `<div class="os-a4"><svg viewBox="0 0 595.2 841.68" preserveAspectRatio="none">${pg.svg}</svg>${h}${add || ''}</div>`;
 }
 // ---------- 日期／數字 ----------
@@ -14554,6 +14570,21 @@ function osSeverance(e){
   return osPage('severance', 0, null, add);
 }
 // ---------- 員工離職申請書（第 1 頁）＋離職同意書（第 2 頁）----------
+// 115/11 使用者要求：申請日期、離職日、離職原因的方框都可以直接在表上填／點選；
+// 第 2 頁離職同意書「雙方勞動契約自＿＿終止」自動帶第 1 頁的離職日（改第 1 頁就跟著改，也可以單獨改）。
+// 上面的「離職日」「申請日期」「離職原因」下拉選了也會先帶進表裡。
+const OS_RS_KEYS = ['工作不適', '轉換工作', '家中有事', '自行創業', '解僱', '資遣', '其他'];
+function osIn(x, y, w, s, val, f, attrs, align){
+  return `<input class="os-in" ${attrs || ''} value="${osE(val == null ? '' : val)}" style="left:${x}pt;top:${(y - s * 0.22).toFixed(1)}pt;`
+    + `width:${w}pt;height:${(s * 1.4).toFixed(1)}pt;font-size:${s}pt;font-family:${OS_FF[f || 0]};text-align:${align || 'center'};">`;
+}
+// 「115/11/30」「115.11.30」「115年11月30日」「2026-11-30」都認得，轉成同意書用的「115年11月30日」
+function osRocText(v){
+  const m = String(v || '').trim().match(/^(\d{2,4})\s*[\/\.\-年]\s*(\d{1,2})\s*[\/\.\-月]\s*(\d{1,2})\s*日?$/);
+  if(!m) return String(v || '').trim();
+  let y = +m[1]; if(y > 1911) y -= 1911;
+  return `${y}年${+m[2]}月${+m[3]}日`;
+}
 function osResignApp(e){
   const co = fmCoOf(e);
   let why = extraVal('ex_apply_reason');
@@ -14564,21 +14595,23 @@ function osResignApp(e){
   let other = '';
   if(why){
     const hit = keys.find(k => why.indexOf(k[0]) >= 0 || k[1].indexOf(why) >= 0);
-    if(hit) marks[hit[0]] = 1; else { marks['其他'] = 1; other = why; }
+    if(hit) marks[hit[0]] = 1; else { marks['其他'] = 1; other = why.trim(); }
   }
   const ad = osParts(extraVal('ex_apply_date'));
+  const rdIso = extraVal('ex_resign_date') || String(e.resign_date || '').slice(0, 10);
   const p1 = osTC(130.4, 80.2, 12.6, e.name, OS_KAI)
     + osTC(278.9, 71.3, 12.6, e.dept_name, OS_KAI) + osTC(278.9, 89.2, 12.6, e.position_name, OS_KAI)
     + osTC(501.8, 69.5, 14, osRocSlash(e.hire_date, true), OS_ARIAL)
-    + osTC(501.8, 89.2, 14, osRocSlash(e.resign_date, true), OS_ARIAL)
-    + (ad ? osTC(470, 54.9, 8.8, String(ad.y), OS_KAI) + osTC(506, 54.9, 8.8, String(ad.m), OS_KAI)
-          + osTC(541, 54.9, 8.8, String(ad.d), OS_KAI) : '')
-    + osT(353, 122.6, 8.8, other, OS_KAI);
+    + osIn(501.8 - 60, 89.2, 120, 14, osRocSlash(rdIso, true), OS_ARIAL, 'data-os-rd="1" placeholder="例：115/11/30" title="離職日：直接打，第 2 頁同意書會跟著帶"')
+    + osIn(470 - 12, 54.9, 24, 8.8, ad ? ad.y : '', OS_KAI, 'title="申請日期－年（民國）"')
+    + osIn(506 - 10, 54.9, 20, 8.8, ad ? ad.m : '', OS_KAI, 'title="申請日期－月"')
+    + osIn(541 - 10, 54.9, 20, 8.8, ad ? ad.d : '', OS_KAI, 'title="申請日期－日"')
+    + osIn(352, 122.6, 200, 8.8, other, OS_KAI, 'data-os-other="rs" title="其他原因：打字會自動勾「其他」"', 'left');
   const p2 = osT(169.0, 418.9, 19, co.name, OS_KAI)
     + osT(261.6, 475.7, 16.9, e.id_number, OS_ARIAL)
     + osT(222.3, 500.1, 15.1, e.address, OS_KAI)
-    + osTC(284.7, 233.6, 15.1, osRoc(e.resign_date), OS_KAI);
-  return osPage('resignapp', 0, marks, p1) + osPage('resignapp', 1, null, p2);
+    + osIn(284.7 - 82, 233.6, 164, 15.1, osRoc(rdIso), OS_KAI, 'data-os-rd-to="1" placeholder="離職日" title="自動帶第 1 頁的離職日，也可以直接改"');
+  return osPage('resignapp', 0, marks, p1, {grp:'rs', keys:OS_RS_KEYS}) + osPage('resignapp', 1, null, p2);
 }
 
 
@@ -16141,12 +16174,16 @@ function ppeMatrixCsv(){
 // ===== 推薦人（介紹人）獎金 =====
 // 規則存在 referral_bonus_rules（SQL_225），讀不到就用這組（人事資料 xlsm「介紹人」欄的說明，107.11.1 起）：
 //   被推薦人到職滿 6 個月 6,000、滿 12 個月 10,000、滿 18 個月 10,000，發給推薦人；
+//   115/11/01 起到職的改成：滿 6 個月 10,000、滿 12 個月 10,000、滿 24 個月 20,000（SQL_265，115/11 使用者要求）；
 //   回鍋司機離職未滿 2 年不適用。被推薦人在某個階段之前就離職，那個階段（含之後）不發。
 // 每月 1 號另有 check_referral_bonus.js 寄信提醒主管（本月到期、已到期還沒登記發放、下個月預告）。
 const REFERRAL_DEFAULT_RULES = [
   { effective_from:'2018-11-01', months:6,  amount:6000,  rehire_gap_days:730 },
   { effective_from:'2018-11-01', months:12, amount:10000, rehire_gap_days:730 },
-  { effective_from:'2018-11-01', months:18, amount:10000, rehire_gap_days:730 }
+  { effective_from:'2018-11-01', months:18, amount:10000, rehire_gap_days:730 },
+  { effective_from:'2026-11-01', months:6,  amount:10000, rehire_gap_days:730 },
+  { effective_from:'2026-11-01', months:12, amount:10000, rehire_gap_days:730 },
+  { effective_from:'2026-11-01', months:24, amount:20000, rehire_gap_days:730 }
 ];
 function referralRulesFor(startISO){
   const all = (STATE.referralRules && STATE.referralRules.length) ? STATE.referralRules : REFERRAL_DEFAULT_RULES;
@@ -16315,7 +16352,9 @@ function referralBonusHtml(){
 function referralBonusCsv(){
   const all = (extraVal('ex_ref_scope') || '').indexOf('全部') === 0;
   const rows = referralBonusRows(all);
-  const ms = referralRulesFor('').map(r => r.months);
+  // 新舊規則的月數不一樣（舊的有 18 個月、新的有 24 個月），欄位要兩種都列
+  const _ms = [...new Set(rows.flatMap(r => r.s.items.map(it => it.months)))].sort((a, b) => a - b);
+  const ms = _ms.length ? _ms : referralRulesFor('').map(r => r.months);
   const head = ['序號','被推薦人','是否離職','行號','到職日','推薦人'].concat(...ms.map(m => [`滿${m}個月到期日`, `滿${m}個月金額`, `滿${m}個月狀態`]), ['本月應發+已到期待發']);
   const out = rows.map((r, i) => [String(i + 1), r.e.name || '', r.left ? '已離職' : '', r.e.company_name || '', r.s.start || '', r.e.referrer_name || '']
     .concat(...ms.map(m => { const it = r.s.items.find(x => x.months === m); return it ? [it.due, String(it.amount), it.status] : ['', '', '']; }),
@@ -25786,12 +25825,32 @@ document.getElementById('form_export_csv').addEventListener('click', () => {
   const _pa = document.getElementById('printArea');
   if(_pa){
     _pa.addEventListener('click', ev => {
-      const b = ev.target.closest('[data-pn-box]'); if(!b) return;
+      let b = ev.target.closest('[data-pn-box]');
+      // 方框後面的字（離職申請書的離職原因）點了也算點方框
+      if(!b){
+        const lb = ev.target.closest('[data-pn-lbl]');
+        if(lb && lb.parentElement) b = [...lb.parentElement.querySelectorAll('[data-pn-key]')].find(x => x.getAttribute('data-pn-key') === lb.getAttribute('data-pn-lbl')) || null;
+      }
+      if(!b) return;
       const box = b.querySelector('.pn-box') || b;
       const on = box.textContent !== '■';
       const g = b.getAttribute('data-pn-box');
       if(on && g) _pa.querySelectorAll('[data-pn-box="' + g + '"] .pn-box').forEach(x => { x.textContent = '□'; });
       box.textContent = on ? '■' : '□';
+    });
+    // 離職申請書：第 1 頁離職日改了，第 2 頁同意書的終止日跟著改；「其他」原因打了字就自動勾「其他」
+    _pa.addEventListener('input', ev => {
+      const t = ev.target;
+      if(t.hasAttribute && t.hasAttribute('data-os-rd')){
+        _pa.querySelectorAll('[data-os-rd-to]').forEach(x => { x.value = osRocText(t.value); });
+      }
+      const og = t.getAttribute && t.getAttribute('data-os-other');
+      if(og && t.value.trim()){
+        _pa.querySelectorAll('[data-pn-box="' + og + '"]').forEach(x => {
+          const bx = x.querySelector('.pn-box') || x;
+          bx.textContent = x.getAttribute('data-pn-key') === '其他' ? '■' : '□';
+        });
+      }
     });
   }
 }
