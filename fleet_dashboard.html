@@ -20127,6 +20127,9 @@ function cardHolderInfo(r){
   // 手動改成「已遺失／已停用」的（115/11 使用者要求狀態可以改），跟已繳回一樣算不在用
   const _cs = String((r && r.card_status) || '').trim();
   if(_cs === '已遺失' || _cs === '已停用') return {key:'void', cls:'red', text:_cs};
+  // 手動指定「非員工/廠商」的（例如別的車隊的司機，工號剛好對到我們的離職人員），不再自動比對人員資料
+  const _ht = String((r && r.holder_type) || '').trim();
+  if(_ht === '非員工/廠商') return {key:'outsider', cls:'gray', text:'非員工/廠商'};
   const cur = cardMatchEmp(r, STATE.employees || []);
   if(cur) return {key:'current', cls:'green', text:'現職'};
   const gone = cardMatchEmp(r, STATE.employeesHistory || []);
@@ -20134,6 +20137,7 @@ function cardHolderInfo(r){
     const d = String(gone.resign_date || '').slice(0, 10);
     return {key:'left', cls:'amber', text:'已離職' + (d ? '　' + d : '')};
   }
+  if(_ht === '員工') return {key:'current', cls:'green', text:'員工'};
   return {key:'outsider', cls:'gray', text:'非員工/廠商'};
 }
 function renderAccessCardLedger(){
@@ -20178,7 +20182,14 @@ function cardStatusCell(r, info){
     const d = String(r.returned_date || '').slice(0, 10);
     tag = d ? ` <span class="muted" style="font-size:12px;">${esc(d)}</span>` : '';
   }else if(info.key !== 'void'){
-    tag = ` <span class="pill ${info.cls}">${esc(info.text)}</span>`;
+    // 員工／非員工可以手動改（115/11 使用者要求：別的車隊的司機要能標成非員工/廠商）
+    const _isOut = info.key === 'outsider';
+    const _id = esc(String(r.card_id != null ? r.card_id : r.id));
+    tag = ` <select data-card-holder="${_id}" title="員工＝依工號、姓名自動對人員資料（現職／已離職）；非員工/廠商＝不對人員資料"`
+        + ` style="width:auto;padding:3px 6px;font-size:12px;">`
+        + ['員工', '非員工/廠商'].map(o => `<option${(o === '非員工/廠商') === _isOut ? ' selected' : ''}>${o}</option>`).join('')
+        + `</select>`
+        + (_isOut ? '' : ` <span class="pill ${info.cls}">${esc(info.text)}</span>`);
   }
   return sel + tag;
 }
@@ -20199,7 +20210,17 @@ async function cardLedgerSetStatus(id, val, selEl){
   await saveState('access_card_roster', STATE.accessCardRoster, true);
   renderAccessCardLedger();
 }
-document.getElementById('cardLedgerBody').addEventListener('change', (e) => {
+document.getElementById('cardLedgerBody').addEventListener('change', async (e) => {
+  const hid = e.target.getAttribute && e.target.getAttribute('data-card-holder');
+  if(hid !== null && hid !== undefined){
+    const r = (STATE.accessCardRoster || []).find(x => String(x.card_id != null ? x.card_id : x.id) === String(hid));
+    if(!r){ renderAccessCardLedger(); return; }
+    r.holder_type = e.target.value;
+    e.target.disabled = true;
+    await saveState('access_card_roster', STATE.accessCardRoster, true);
+    renderAccessCardLedger();
+    return;
+  }
   const id = e.target.getAttribute && e.target.getAttribute('data-card-st');
   if(id === null || id === undefined) return;
   cardLedgerSetStatus(id, e.target.value, e.target);
