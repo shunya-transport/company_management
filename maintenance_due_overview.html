@@ -74,6 +74,7 @@
         <option value="amber">即將到期</option>
         <option value="green">正常</option>
         <option value="gray">資料不足</option>
+        <option value="jx">租建興，由建興處理</option>
       </select>
       <span class="count" id="count"></span>
     </div>
@@ -209,11 +210,20 @@ async function sgetAll(path){
 }
 async function load(){
   try{
-    const [sched, vehicles, mlogs] = await Promise.all([
+    const [sched, vehicles, mlogs, leases, lessees] = await Promise.all([
       sgetAll('maintenance_schedules?select=*'),
       sget('vehicles?select=vehicle_id,plate_number,base_location,status,current_mileage'),
-      sgetAll('vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc')
+      sgetAll('vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
+      sgetAll('trailer_leases?select=*').catch(()=>[]),
+      sgetAll('lessees?select=lessee_id,lessee_name').catch(()=>[])
     ]);
+    // 租給建興的板架：打油由建興處理，日期顯示「--」；建興歸還後，歸還前的打油不算（跟儀表板一致）
+    const lsName={}; lessees.forEach(l=>lsName[l.lessee_id]=l.lessee_name||'');
+    const isJx=l=>/建興/.test(String(lsName[l.lessee_id]||''));
+    const jxActive=new Set(leases.filter(l=>l.status==='租賃中' && isJx(l)).map(l=>l.vehicle_id));
+    const jxBack={};
+    leases.filter(l=>l.status==='已歸還' && isJx(l) && l.return_date).forEach(l=>{
+      const d=String(l.return_date).slice(0,10); if(!jxBack[l.vehicle_id] || d>jxBack[l.vehicle_id]) jxBack[l.vehicle_id]=d; });
     const vById={}; vehicles.forEach(v=>vById[v.vehicle_id]=v);
     const latestMileage={};
     mlogs.forEach(m=>{ if(!(m.vehicle_id in latestMileage)) latestMileage[m.vehicle_id]=m.mileage; });
@@ -221,6 +231,11 @@ async function load(){
     // 停駛（舊資料叫停用）也不列：停駛就不跑任何到期提醒（115/10/28）
     ROWS = sched.filter(s=>{ const v=vById[s.vehicle_id]; return !(v && ['報廢','繳銷','賣出','停駛','停用'].includes(v.status)); }).map(s=>{
       const v=vById[s.vehicle_id]||{};
+      if(s.maintenance_type==='打油' && jxActive.has(s.vehicle_id))
+        return {plate:v.plate_number||('車#'+s.vehicle_id), yard:v.base_location||'—', type:s.maintenance_type, kind:'時間',
+                last:'--', next:'--', remain:'--', status:'jx', sortKey:2e12};
+      if(s.maintenance_type==='打油' && jxBack[s.vehicle_id] && String(s.last_service_date||'').slice(0,10) < jxBack[s.vehicle_id])
+        s = Object.assign({}, s, {last_service_date:null});
       return computeRow(s, v.plate_number||('車#'+s.vehicle_id), v.base_location||'—', latestMileage[s.vehicle_id] ?? v.current_mileage ?? null);
     });
     // 填車場、項目下拉
@@ -245,7 +260,7 @@ function render(){
     return true;
   }).sort((a,b)=>a.sortKey-b.sortKey);
   // 統計
-  const c={red:0,amber:0,green:0,gray:0}; ROWS.forEach(r=>c[r.status]++);
+  const c={red:0,amber:0,green:0,gray:0,jx:0}; ROWS.forEach(r=>c[r.status]++);
   document.getElementById('tiles').innerHTML=`
     <div class="tile red"><div class="n">${c.red}</div><div class="l">已逾期</div></div>
     <div class="tile amber"><div class="n">${c.amber}</div><div class="l">即將到期</div></div>
@@ -253,14 +268,14 @@ function render(){
     <div class="tile gray"><div class="n">${c.gray}</div><div class="l">資料不足</div></div>
     <div class="tile"><div class="n">${ROWS.length}</div><div class="l">追蹤項目總數</div></div>`;
   document.getElementById('count').textContent=`共 ${rows.length} 項`;
-  const label={red:'已逾期',amber:'即將到期',green:'正常',gray:'資料不足'};
+  const label={red:'已逾期',amber:'即將到期',green:'正常',gray:'資料不足',jx:'租建興，由建興處理'};
   document.getElementById('body').innerHTML = rows.length ? rows.map(r=>`
     <tr>
       <td><b>${esc(r.plate)}</b></td><td>${esc(r.yard)}</td>
       <td>${esc(r.type)}</td><td class="kind">${r.kind}</td>
       <td class="muted">${esc(r.last)}</td><td>${esc(r.next)}</td>
       <td>${esc(r.remain)}</td>
-      <td><span class="pill ${r.status}">${label[r.status]}</span></td>
+      <td><span class="pill ${r.status==='jx'?'gray':r.status}">${label[r.status]}</span></td>
     </tr>`).join('') : '<tr><td colspan="8" class="loading">沒有符合條件的項目</td></tr>';
 }
 ['q','f_yard','f_type','f_status'].forEach(id=>{

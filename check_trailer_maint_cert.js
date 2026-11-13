@@ -17,8 +17,8 @@ const MAINTENANCE_STANDARDS = require('./maintenance_standards.json');
 async function main() {
   console.log('開始檢查車輛／板架／保養／證照到期狀況...', todayISO());
 
-  const [leases, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes, licences] = await Promise.all([
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?status=eq.租賃中&select=*'),
+  const [allLeaseRows, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes, licences] = await Promise.all([
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?select=*'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage,status'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
     // 驗車和其他證件（滅火器／濾毒罐／自主管理標章／行車記錄器）都在這張表，一次撈回來後再分開
@@ -56,6 +56,17 @@ async function main() {
 
   // 目前出租中的板架：整列上底色，管理人員一眼就知道這台在客戶手上，
   // 要約時間進場檢驗或換件得先跟承租廠商喬
+  // 租給建興的板架：打油由建興處理，不寄打油提醒；建興歸還後，歸還前的打油不算（跟儀表板一致）。
+  // 這裡改成全部租約都撈，已歸還的只拿來找「建興歸還日」，其他地方還是只看租賃中。
+  const allLeases = allLeaseRows || [];
+  const leases = allLeases.filter(l => l.status === '租賃中');
+  const isJx = (l) => /建興/.test(String(lesseeById[l.lessee_id] || ''));
+  const jxActive = new Set(leases.filter(isJx).map(l => l.vehicle_id));
+  const jxBack = {};
+  allLeases.filter(l => l.status === '已歸還' && isJx(l) && l.return_date).forEach(l => {
+    const d = String(l.return_date).slice(0, 10);
+    if (!jxBack[l.vehicle_id] || d > jxBack[l.vehicle_id]) jxBack[l.vehicle_id] = d;
+  });
   const leasedLesseeByVehicle = {};
   leases.forEach(l => {
     if (l.vehicle_id != null && !(l.vehicle_id in leasedLesseeByVehicle)) {
@@ -238,6 +249,8 @@ async function main() {
     schedules.filter(s => s.maintenance_type === type).forEach(s => {
       const v = vehicleById[s.vehicle_id];
       if (!v || retired.has(s.vehicle_id)) return;
+      if (type === '打油' && jxActive.has(s.vehicle_id)) return;   // 租建興，由建興處理
+      if (type === '打油' && jxBack[s.vehicle_id] && String(s.last_service_date || '').slice(0, 10) < jxBack[s.vehicle_id]) return;
       const d = scheduleDue(s, v);
       if (!d) return;
       out[isTrailer(v) ? 'trailer' : 'vehicle'].push({ plate: v.plate_number, vehicle_id: s.vehicle_id, trailer: isTrailer(v), ...d });

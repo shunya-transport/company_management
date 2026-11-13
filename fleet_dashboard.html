@@ -92,6 +92,14 @@
   .stat-card .n{font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.5px;}
   .stat-card .l{font-size:12px;color:var(--text-2);margin-top:6px;font-weight:500;}
   .stat-card.red .n{color:var(--red);} .stat-card.amber .n{color:var(--amber);} .stat-card.green .n{color:var(--green);}
+  /* 總覽分「人員相關」「車輛相關」兩大區（115/11 使用者要求），卡片兩欄排 */
+  .ov-sec{margin:0 0 22px;}
+  .ov-sec-title{display:flex;align-items:baseline;gap:10px;margin:4px 2px 12px;font-size:17px;font-weight:800;color:var(--navy-900);
+    letter-spacing:.06em;padding-left:12px;border-left:4px solid var(--accent);}
+  .ov-sec-title span{font-size:12px;font-weight:500;color:var(--text-3);letter-spacing:0;}
+  .ov-grid{display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:16px;align-items:start;}
+  .ov-grid > .card{margin-bottom:0;}
+  @media (max-width: 1100px){ .ov-grid{grid-template-columns:minmax(0, 1fr);} }
   .card{
     position:relative;background:linear-gradient(160deg, rgba(255,255,255,.98), rgba(252,252,252,.94));
     border:1px solid rgba(255,255,255,.82);border-radius:20px;padding:22px 24px;
@@ -390,42 +398,57 @@
     <div class="content">
 
   <div id="overview" class="panel active">
-    <div class="card">
-      <h2>近期複訓上課<span class="count-badge" id="ov_rt_count"></span></h2>
-      <div id="ovRetrain"></div>
-    </div>
-    <div class="card">
-      <h2>人員證照到期提醒（90天內，含未記錄效期者）</h2>
-      <div id="trainingAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>駕照審驗／到期提醒<span class="count-badge" id="ov_dl_count"></span></h2>
-      <div id="dlAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>車輛保養到期提醒<span class="count-badge" id="overview_maint_count"></span></h2>
-      <div id="overviewMaintAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>板架打油到期提醒<span class="count-badge" id="overview_grease_count"></span></h2>
-      <div id="overviewGreaseAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>輪軸保養到期提醒<span class="count-badge" id="overview_axle_count"></span></h2>
-      <div id="overviewAxleAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>車輛保險到期提醒<span class="count-badge" id="overview_insurance_count"></span></h2>
-      <div id="overviewInsuranceAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>滅火器/濾毒罐/醫藥箱效期提醒<span class="count-badge" id="overview_safety_count"></span></h2>
-      <div id="overviewSafetyAlerts"></div>
-    </div>
-    <div class="card">
-      <h2>依承租方彙總</h2>
-      <div id="lesseeBars"></div>
-    </div>
+    <section class="ov-sec">
+      <h3 class="ov-sec-title">人員相關<span>複訓、證照、駕照</span></h3>
+      <div class="ov-grid">
+      <div class="card">
+        <h2>近期複訓上課<span class="count-badge" id="ov_rt_count"></span></h2>
+        <div id="ovRetrain"></div>
+      </div>
+      <div class="card">
+        <h2>人員證照到期提醒（90天內，含未記錄效期者）</h2>
+        <div id="trainingAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>駕照審驗／到期提醒<span class="count-badge" id="ov_dl_count"></span></h2>
+        <div id="dlAlerts"></div>
+      </div>
+      </div>
+    </section>
+    <section class="ov-sec">
+      <h3 class="ov-sec-title">車輛相關<span>驗車檢驗、保養、保險、打油、輪軸、安全配備、出租</span></h3>
+      <div class="ov-grid">
+      <div class="card">
+        <h2>車輛驗車／檢驗期限提醒<span class="count-badge" id="overview_vdoc_count"></span></h2>
+        <div class="muted" style="margin:-6px 0 10px;font-size:12px;">驗車（含 1 個月寬限）、行車記錄器、自主管理標章、保稅車檢驗；逾期或 30 天內到期的才列，同一台同一項只看最新一次。</div>
+        <div id="overviewVehDocAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>車輛保養到期提醒<span class="count-badge" id="overview_maint_count"></span></h2>
+        <div id="overviewMaintAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>車輛保險到期提醒<span class="count-badge" id="overview_insurance_count"></span></h2>
+        <div id="overviewInsuranceAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>板架打油到期提醒<span class="count-badge" id="overview_grease_count"></span></h2>
+        <div id="overviewGreaseAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>輪軸保養到期提醒<span class="count-badge" id="overview_axle_count"></span></h2>
+        <div id="overviewAxleAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>滅火器/濾毒罐/醫藥箱效期提醒<span class="count-badge" id="overview_safety_count"></span></h2>
+        <div id="overviewSafetyAlerts"></div>
+      </div>
+      <div class="card">
+        <h2>依承租方彙總</h2>
+        <div id="lesseeBars"></div>
+      </div>
+      </div>
+    </section>
   </div>
 
   <div id="staff" class="panel">
@@ -464,6 +487,15 @@
         <label>地址<input id="sf_address" placeholder="必填"></label>
         <label>緊急聯絡人<input id="sf_emergency_contact" placeholder="必填"></label>
         <label>緊急聯絡電話<input id="sf_emergency_phone" placeholder="必填"></label>
+        <label>血型<select id="sf_blood" style="max-width:110px;"><option value="">（未填）</option><option>A</option><option>B</option><option>O</option><option>AB</option></select></label>
+        <label>身高（cm）<input id="sf_height" type="number" step="0.1" min="0" placeholder="例：170" style="max-width:110px;"></label>
+        <label>體重（kg）<input id="sf_weight" type="number" step="0.1" min="0" placeholder="例：70" style="max-width:110px;"></label>
+        <label>到職前年資（年）<input id="sf_prior_years" type="number" step="0.5" min="0" placeholder="例：5" style="max-width:110px;"
+               title="到職前運送（危險品）累計年資，行政系統巨集「運送年資」那一欄"></label>
+        <label>最近工作經歷－服務單位<input id="sf_job_company" placeholder="例：○○貨運"></label>
+        <label>職位<input id="sf_job_title" placeholder="例：司機" style="max-width:150px;"></label>
+        <label>任職時間<input id="sf_job_period" placeholder="例：100.7-110.3" style="max-width:150px;"></label>
+        <label>離職原因<input id="sf_job_reason" placeholder="選填" style="max-width:150px;"></label>
       </div>
       <div class="detail-section">
         <h4>必繳文件（新進人員報到時登記，未繳交項目後續可在人員清單補登）</h4>
@@ -632,7 +664,7 @@
           <option value="current">僅現職人員</option>
           <option value="left">僅已離職（卡還沒繳回）</option>
           <option value="outsider">僅非員工/廠商</option>
-          <option value="returned">僅已繳回</option>
+          <option value="returned">僅已繳回／遺失／停用</option>
           <option value="all">全部（含已繳回）</option>
         </select>
       </div>
@@ -1196,6 +1228,7 @@
           <option value="soon60">60天內到期</option>
           <option value="normal">正常</option>
           <option value="unset">尚未登錄</option>
+          <option value="jx">租建興，由建興處理</option>
         </select>
         <button class="btn" id="grease_status_export_due"
                 title="一次匯出已逾期、30天內到期、60天內到期，每一列都標分類">匯出到期清單</button>
@@ -5418,6 +5451,39 @@ async function ebkAdd(){
   }catch(err){ ebkMsg('新增失敗：' + err.message); }
 }
 
+// ===== 總覽：車輛驗車／檢驗期限提醒（115/11 使用者要求）=====
+// 跟「車輛管理 → 車輛證件」同一份 vehicle_documents；同一台車同一項只看到期日最晚的那一筆
+// （舊的驗車紀錄還留著，不看最新的話已經驗過的會一直被提醒）。
+// 汽車強制卡不列：保險那張卡已經在提醒強制險了。停駛、報廢等不提醒的車照樣排除。
+const OV_VDOC_TYPES = ['驗車', '行車記錄器', '自主管理標章', '保稅車檢驗'];
+function renderOverviewVehDocs(){
+  const box = document.getElementById('overviewVehDocAlerts');
+  if(!box) return;
+  const latest = {};
+  (STATE.vehicleDocuments || []).forEach(d => {
+    if(OV_VDOC_TYPES.indexOf(d.doc_type) < 0 || !d.expiry_date) return;
+    const k = d.vehicle_id + '|' + d.doc_type;
+    if(!latest[k] || String(d.expiry_date) > String(latest[k].expiry_date)) latest[k] = d;
+  });
+  const rows = Object.values(latest).map(d => {
+    const v = (STATE.vehicles || []).find(x => x.id === d.vehicle_id);
+    if(!v || isNoReminderVehicle(v)) return null;
+    const exp = String(d.expiry_date).slice(0, 10);
+    const grace = d.doc_type === '驗車' ? addOneMonth(exp) : exp;
+    const st = statusOf(grace, 30);
+    if(st !== 'red' && st !== 'amber') return null;
+    return {plate: v.plate, type: d.doc_type, exp: exp, grace: grace, st: st, dd: daysUntil(grace)};
+  }).filter(Boolean).sort((a, b) => String(a.grace).localeCompare(String(b.grace)));
+  const c = document.getElementById('overview_vdoc_count'); if(c) c.textContent = `${rows.length} 項`;
+  box.innerHTML = rows.length
+    ? `<div class="table-scroll" style="max-height:280px;"><table><thead><tr><th>車號</th><th>項目</th><th>到期日</th><th>最後期限</th><th>狀態</th></tr></thead><tbody>` +
+      rows.map(r => `<tr><td>${esc(r.plate)}</td><td>${esc(r.type)}</td><td>${esc(r.exp)}</td>` +
+        `<td class="muted">${r.type === '驗車' ? esc(r.grace) + '（含寬限）' : esc(r.grace)}</td>` +
+        `<td><span class="pill ${r.st}">${r.dd != null && r.dd < 0 ? '逾期 ' + (-r.dd) + ' 天' : '剩 ' + r.dd + ' 天'}</span></td></tr>`).join('') +
+      `</tbody></table></div>`
+    : '<div class="empty">目前沒有逾期或 30 天內到期的驗車、檢驗項目</div>';
+}
+
 function renderOverview(){
   const active = STATE.leases.filter(l => l.status === '租賃中');
   let overdue=0, soon=0, normal=0, missing=0;
@@ -5463,6 +5529,7 @@ function renderOverview(){
   }
 
   renderDlAlerts();
+  renderOverviewVehDocs();
   const maintAlerts = [];
   STATE.vehicles.forEach(v => {
     if(!v.maintenance_model || isNoReminderVehicle(v)) return;
@@ -5694,8 +5761,33 @@ function renderTypeSelect(){
   if(current && Array.from(sel.options).some(o => o.value === current)) sel.value = current;
   renderTfHint();
 }
+// ===== 必繳文件「體檢表」＝體檢日期（115/11 使用者要求）=====
+// 新增人員、必繳文件補登時，體檢表不再選「已繳交」，直接填體檢日期；空白＝未繳交。
+// 填了日期就同步到「體檢」紀錄（人員清單最後那一欄），員工主檔的體檢日期也跟著更新。
+function medDocItem(){ return (STATE.docItems || []).find(i => /體檢/.test(String(i.name || ''))) || null; }
+function medEnsureRecord(empId, date){
+  if(!empId || !date) return false;
+  const has = (STATE.medicalExamRecords || []).some(r => String(r.employee_id) === String(empId) && String(r.exam_date || '').slice(0, 10) === date);
+  if(has) return false;
+  STATE.medicalExamRecords.push({ id: nextId(STATE.medicalExamRecords), employee_id: empId, exam_date: date,
+    hospital: '', result: null, next_due_date: null, notes: '必繳文件「體檢表」登錄' });
+  return true;
+}
+function medLatestDate(empId){
+  const ds = (STATE.medicalExamRecords || []).filter(r => String(r.employee_id) === String(empId) && r.exam_date)
+    .map(r => String(r.exam_date).slice(0, 10)).sort();
+  return ds.length ? ds[ds.length - 1] : '';
+}
+function medDocInputHtml(item, val, cls, attr){
+  return `<label>${esc(item.name)}
+      <input type="date" class="${cls}" ${attr}="${item.id}" value="${esc(val || '')}"
+             title="填體檢日期＝已繳交，會同步到體檢紀錄；空白＝未繳交">
+      <span style="font-size:11px;font-weight:400;color:var(--text-3);">填體檢日期；空白＝未繳交</span>
+    </label>`;
+}
 function renderNewStaffChecklist(){
-  document.getElementById('sf_checklist').innerHTML = STATE.docItems.map(item => `
+  const _med = medDocItem();
+  document.getElementById('sf_checklist').innerHTML = STATE.docItems.map(item => (_med && item.id === _med.id) ? medDocInputHtml(item, '', 'new-cl-med', 'data-new-item-id') : `
     <label>${esc(item.name)}
       <select data-new-item-id="${item.id}" class="new-cl-status">
         <option value="未繳交" selected>未繳交</option>
@@ -7426,9 +7518,11 @@ function renderTrainingTable(){
   });
   // 沒填到期日的用 '9999' 墊底，永遠排最後，不會擋在最快到期的那幾筆前面
   const byExpiry = (a,b) => String(a.expiry_date||'9999').localeCompare(String(b.expiry_date||'9999'));
-  rows.sort(sortBy==='person'
+  // 暫不外訓的一律排到最下面（115/11 使用者要求），上面先看要處理的
+  const _base = sortBy==='person'
     ? (a,b) => String(a.employee_name||'').localeCompare(String(b.employee_name||''), 'zh-Hant') || byExpiry(a,b)
-    : byExpiry);
+    : byExpiry;
+  rows.sort((a,b) => ((a.on_hold ? 1 : 0) - (b.on_hold ? 1 : 0)) || _base(a,b));
   const cnt = document.getElementById('training_count');
   if(cnt) cnt.textContent = `共 ${rows.length} 筆`;
   if(rows.length===0){
@@ -11409,8 +11503,14 @@ function openChecklistModal(empId){
   if(!e) return;
   currentChecklistEmpId = empId;
   document.getElementById('checklistModalTitle').textContent = `必繳文件 — ${e.name}`;
+  const _med = medDocItem();
   document.getElementById('checklistModalGrid').innerHTML = STATE.docItems.map(item => {
     const status = getChecklistStatus(empId,item.id);
+    if(_med && item.id === _med.id){
+      // 體檢表：顯示已登錄的日期；沒有就拿體檢紀錄最新那一次
+      const _d = (status === '已繳交' ? String(getChecklistDate(empId, item.id) || '').slice(0, 10) : '') || medLatestDate(empId);
+      return medDocInputHtml(item, _d, 'cl-med', 'data-item-id');
+    }
     return `
     <label>${esc(item.name)}
       <select data-item-id="${item.id}" class="cl-status">
@@ -11436,7 +11536,23 @@ async function saveChecklist(){
     if(rec){ rec.status = status; }
     else{ STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: currentChecklistEmpId, item_id: itemId, status}); }
   });
+  // 體檢表：有日期＝已繳交（同步體檢紀錄）；清空＝未繳交（原本是「不需要」的維持不需要）
+  let _medTouched = false;
+  document.querySelectorAll('#checklistModalGrid .cl-med').forEach(inp => {
+    const itemId = parseInt(inp.getAttribute('data-item-id'));
+    const d = (inp.value || '').slice(0, 10);
+    let rec = STATE.docChecklist.find(c =>
+      String(c.employee_id) === String(currentChecklistEmpId) && String(c.item_id) === String(itemId));
+    const st = d ? '已繳交' : ((rec && rec.status === '不需要') ? '不需要' : '未繳交');
+    if(rec){ rec.status = st; rec.submitted_date = d || null; }
+    else STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: currentChecklistEmpId, item_id: itemId, status: st, submitted_date: d || null});
+    if(d && medEnsureRecord(currentChecklistEmpId, d)) _medTouched = true;
+  });
   await saveState('doc_checklist', STATE.docChecklist, true);
+  if(_medTouched){
+    await saveState('medical_exam_records', STATE.medicalExamRecords, true);
+    if(syncMedicalExamDate(currentChecklistEmpId)) await saveState('roster_employees', STATE.employees, true);
+  }
   closeChecklistModal();
   renderAll();
 }
@@ -12475,6 +12591,9 @@ function renderStaffModalView(e){
       <dt>地址</dt><dd>${esc(e.address||'—')}</dd>
       <dt>緊急聯絡人</dt><dd>${esc(e.emergency_contact||'—')} ${esc(e.emergency_phone||'')}</dd>
       <dt>體檢日期</dt><dd>${esc(e.medical_exam_date||'—')}</dd>
+      <dt>血型／身高／體重</dt><dd>${[e.blood_type ? esc(e.blood_type) + ' 型' : '', e.height_cm != null && e.height_cm !== '' ? esc(e.height_cm) + ' cm' : '', e.weight_kg != null && e.weight_kg !== '' ? esc(e.weight_kg) + ' kg' : ''].filter(Boolean).join('　') || '—'}</dd>
+      <dt>到職前年資</dt><dd>${e.prior_transport_years != null && e.prior_transport_years !== '' ? esc(e.prior_transport_years) + ' 年' : '—'}</dd>
+      <dt>最近工作經歷</dt><dd>${[e.last_job_company, e.last_job_title, e.last_job_period].filter(x => String(x || '').trim()).map(x => esc(x)).join('　') || '—'}${e.last_job_leave_reason ? '<span class="muted">（離職原因：' + esc(e.last_job_leave_reason) + '）</span>' : ''}</dd>
       <dt>司機上線日期</dt><dd>${esc(e.online_date||'—')}</dd>
       <dt>門禁卡號</dt><dd>${esc(e.access_card_no||'—')}</dd>
       <dt>合作金庫分行</dt><dd>${e.bank_branch ? esc(e.bank_branch) + (e.bank_code ? `<span class="muted">（${esc(e.bank_code)}）</span>` : '') : '—'}</dd>
@@ -12637,6 +12756,16 @@ function renderStaffModalEdit(e){
       <label>緊急聯絡人<input id="se_emergency_contact" value="${esc(e.emergency_contact||'')}"></label>
       <label>緊急聯絡電話<input id="se_emergency_phone" value="${esc(e.emergency_phone||'')}"></label>
       <label>體檢日期<input id="se_medical" type="date" value="${esc(e.medical_exam_date||'')}"></label>
+      <label>血型<select id="se_blood" style="max-width:110px;">${['', 'A', 'B', 'O', 'AB'].concat(e.blood_type && !['A','B','O','AB'].includes(e.blood_type) ? [e.blood_type] : [])
+        .map(v => `<option value="${esc(v)}"${(e.blood_type || '') === v ? ' selected' : ''}>${v ? esc(v) : '（未填）'}</option>`).join('')}</select></label>
+      <label>身高（cm）<input id="se_height" type="number" step="0.1" min="0" value="${esc(e.height_cm ?? '')}" style="max-width:110px;"></label>
+      <label>體重（kg）<input id="se_weight" type="number" step="0.1" min="0" value="${esc(e.weight_kg ?? '')}" style="max-width:110px;"></label>
+      <label>到職前年資（年）<input id="se_prior_years" type="number" step="0.5" min="0" value="${esc(e.prior_transport_years ?? '')}" style="max-width:110px;"
+             title="到職前運送（危險品）累計年資"></label>
+      <label>最近工作經歷－服務單位<input id="se_job_company" value="${esc(e.last_job_company||'')}"></label>
+      <label>職位<input id="se_job_title" value="${esc(e.last_job_title||'')}" style="max-width:150px;"></label>
+      <label>任職時間<input id="se_job_period" value="${esc(e.last_job_period||'')}" style="max-width:150px;"></label>
+      <label>離職原因<input id="se_job_reason" value="${esc(e.last_job_leave_reason||'')}" style="max-width:150px;"></label>
       <label>司機上線日期<input id="se_online" type="date" value="${esc(e.online_date||'')}"></label>
       <label>門禁卡號<input id="se_card" value="${esc(e.access_card_no||'')}"></label>
       <label>合作金庫分行<select id="se_bank_branch" style="max-width:230px;">${tcbBranchOptions(e.bank_branch)}</select></label>
@@ -12698,6 +12827,16 @@ function renderStaffModalEdit(e){
     e.emergency_contact = document.getElementById('se_emergency_contact').value.trim();
     e.emergency_phone = document.getElementById('se_emergency_phone').value.trim();
     e.medical_exam_date = document.getElementById('se_medical').value || null;
+    if(document.getElementById('se_blood')){
+      e.blood_type = (((document.getElementById('se_blood') || {}).value || '').trim() || null);
+      e.height_cm = (document.getElementById('se_height') && document.getElementById('se_height').value !== '' ? Number(document.getElementById('se_height').value) : null);
+      e.weight_kg = (document.getElementById('se_weight') && document.getElementById('se_weight').value !== '' ? Number(document.getElementById('se_weight').value) : null);
+      e.prior_transport_years = (document.getElementById('se_prior_years') && document.getElementById('se_prior_years').value !== '' ? Number(document.getElementById('se_prior_years').value) : null);
+      e.last_job_company = (((document.getElementById('se_job_company') || {}).value || '').trim() || null);
+      e.last_job_title = (((document.getElementById('se_job_title') || {}).value || '').trim() || null);
+      e.last_job_period = (((document.getElementById('se_job_period') || {}).value || '').trim() || null);
+      e.last_job_leave_reason = (((document.getElementById('se_job_reason') || {}).value || '').trim() || null);
+    }
     e.online_date = document.getElementById('se_online').value || null;
     e.access_card_no = document.getElementById('se_card').value.trim();
     e.bank_account = document.getElementById('se_bank').value.trim() || null;
@@ -19042,11 +19181,37 @@ function greaseScheduleFor(v){
   if(!v) return null;
   return STATE.maintSchedules.find(s => s.maintenance_type === '打油' && (s.vehicle_id === v.id || s.plate === v.plate)) || null;
 }
+// ---- 租給建興的板架：打油由建興處理（115/11 使用者要求）----
+// 租賃中、承租方名稱有「建興」的板架，打油不算我們的：日期一律顯示「--」，不進到期提醒。
+// 建興還回來（板架租賃按「歸還」）之後，從【歸還後第一次打油】重新起算；
+// 歸還前的打油紀錄不算，還沒打過就顯示「尚未登錄」。
+const GREASE_JX_TEXT = '租建興，由建興處理';
+function greaseLeaseMatch(l, v){
+  return (l.vehicle_id != null && v.id != null && String(l.vehicle_id) === String(v.id)) || (l.plate && l.plate === v.plate);
+}
+function greaseJxLease(v){
+  if(!v) return null;
+  return (STATE.leases || []).find(l => l.status !== '已歸還' && /建興/.test(String(l.lessee_name || '')) && greaseLeaseMatch(l, v)) || null;
+}
+function greaseJxReturnDate(v){
+  if(!v) return null;
+  const ds = (STATE.leases || []).filter(l => l.status === '已歸還' && /建興/.test(String(l.lessee_name || '')) && greaseLeaseMatch(l, v))
+    .map(l => String(l.return_date || '').slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  return ds.length ? ds[ds.length - 1] : null;
+}
 function greaseRowFor(v){
   const sched = greaseScheduleFor(v);
   const freq = (sched && sched.frequency_months) || greaseMonthsForModel(v.maintenance_model);
-  const d = scheduleDueStatus({plate: v.plate, frequency_months: freq, last_service_date: sched ? sched.last_service_date : null});
-  return {plate: v.plate, vtype: v.vehicle_type || '', model: v.maintenance_model || '', months: freq, d: d, hasSched: !!sched};
+  const base = {plate: v.plate, vtype: v.vehicle_type || '', model: v.maintenance_model || '', months: freq, hasSched: !!sched};
+  if(greaseJxLease(v)){
+    return Object.assign(base, {jx: true, d: {status:'jx', last:'--', next:'--', remain:'--', dd:null, sortKey:2e12}});
+  }
+  let last = sched ? sched.last_service_date : null;
+  const back = greaseJxReturnDate(v);
+  if(back && last && String(last).slice(0, 10) < back) last = null;   // 建興租用期間的打油不算
+  const d = scheduleDueStatus({plate: v.plate, frequency_months: freq, last_service_date: last});
+  if(back && !last) d.remain = '建興 ' + back + ' 歸還，等第一次打油';
+  return Object.assign(base, {d: d});
 }
 function renderGreasePlateOptions(){
   const el = document.getElementById('greasePlateList');
@@ -19068,6 +19233,10 @@ function updateGreasePreview(){
     el.textContent = v.plate + '（' + (v.maintenance_model || '未設定保養標準') + '）依保養標準不需定期打油，仍可登錄，但不會產生到期提醒。';
     return;
   }
+  if(greaseJxLease(v)){
+    el.textContent = v.plate + '｜' + GREASE_JX_TEXT + '：這台目前租給建興，打油由建興處理，不列到期提醒（仍可登錄）。';
+    return;
+  }
   const sched = greaseScheduleFor(v);
   const last = (sched && sched.last_service_date) ? String(sched.last_service_date).slice(0,10) : '尚未登錄';
   const base = date || ((sched && sched.last_service_date) ? String(sched.last_service_date).slice(0,10) : '');
@@ -19078,6 +19247,7 @@ function updateGreasePreview(){
 }
 function greaseStatusPassFilter(r, filter){
   if(filter === 'unset') return r.d.status === 'gray';
+  if(filter === 'jx') return r.d.status === 'jx';
   if(filter === 'overdue') return r.d.status === 'red';
   if(filter === 'normal') return r.d.status === 'green';
   if(filter === 'soon30' || filter === 'soon60'){
@@ -19143,20 +19313,20 @@ function exportGreaseDue(){
 function exportGreaseCurrent(){
   const rows = greaseStatusVisibleRows();
   if(!rows.length){ alert('目前清單沒有資料可以匯出。'); return; }
-  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄'};
+  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄', jx:GREASE_JX_TEXT};
   greaseCsvDownload('板架打油狀態',
     rows.map(r => greaseCsvRow(r, greaseDueCategory(r.d) || label[r.d.status] || '')));
 }
 function renderGreaseStatusTable(){
   const body = document.getElementById('greaseStatusBody');
   if(!body) return;
-  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄'};
+  const label = {red:'已逾期', amber:'即將到期', green:'正常', gray:'尚未登錄', jx:GREASE_JX_TEXT};
   const rows = greaseStatusVisibleRows();
   const cEl = document.getElementById('grease_status_count'); if(cEl) cEl.textContent = `${rows.length} 台`;
   body.innerHTML = rows.length ? rows.map(r => `<tr>`+
       `<td>${esc(r.plate)}</td><td class="muted">${esc(r.vtype)}</td><td class="muted">${esc(r.model)}</td>`+
       `<td>${r.months ? r.months + ' 個月' : '—'}</td><td>${esc(r.d.last)}</td><td>${esc(r.d.next)}</td>`+
-      `<td>${esc(r.d.remain)}</td><td><span class="pill ${r.d.status}">${label[r.d.status]}</span></td>`+
+      `<td>${esc(r.d.remain)}</td><td><span class="pill ${r.d.status === 'jx' ? 'hold' : r.d.status}">${label[r.d.status]}</span></td>`+
     `</tr>`).join('') : '<tr><td colspan="8" class="muted">目前沒有符合條件的板架</td></tr>';
 }
 // ---- 司機先行回報／費用後補：狀態只有「待補資料」與「已完結」兩種 ----
@@ -19954,6 +20124,9 @@ function cardHolderInfo(r){
   // 已繳回優先：卡片實體已經收回來了，人在哪裡都一樣
   const back = String((r && r.returned_date) || '').slice(0, 10);
   if(back) return {key:'returned', cls:'gray', text:'已繳回　' + back};
+  // 手動改成「已遺失／已停用」的（115/11 使用者要求狀態可以改），跟已繳回一樣算不在用
+  const _cs = String((r && r.card_status) || '').trim();
+  if(_cs === '已遺失' || _cs === '已停用') return {key:'void', cls:'red', text:_cs};
   const cur = cardMatchEmp(r, STATE.employees || []);
   if(cur) return {key:'current', cls:'green', text:'現職'};
   const gone = cardMatchEmp(r, STATE.employeesHistory || []);
@@ -19971,15 +20144,15 @@ function renderAccessCardLedger(){
   // 已繳回的卡片預設不列出來（使用者 115/09/07 要求）。
   // ★ 不是刪資料 —— 「誰用過這張卡、什麼時候繳回」還要查得到，
   //   所以只是不列，下拉選「僅已繳回」或「全部」隨時看得到。
-  const _returned = rows.filter(x => x.info.key === 'returned').length;
-  if(scopeF === 'inuse' || !scopeF) rows = rows.filter(x => x.info.key !== 'returned');
-  if(scopeF === 'returned') rows = rows.filter(x => x.info.key === 'returned');
+  const _returned = rows.filter(x => x.info.key === 'returned' || x.info.key === 'void').length;
+  if(scopeF === 'inuse' || !scopeF) rows = rows.filter(x => x.info.key !== 'returned' && x.info.key !== 'void');
+  if(scopeF === 'returned') rows = rows.filter(x => x.info.key === 'returned' || x.info.key === 'void');
   if(scopeF === 'current')  rows = rows.filter(x => x.info.key === 'current');
   if(scopeF === 'left')     rows = rows.filter(x => x.info.key === 'left');
   if(scopeF === 'outsider') rows = rows.filter(x => x.info.key === 'outsider');
   const _hidden = (scopeF === 'all' || scopeF === 'returned') ? 0 : _returned;
   document.getElementById('card_ledger_count').textContent =
-    `共 ${rows.length} 筆` + (_hidden ? `　（另有 ${_hidden} 張已繳回沒有列出）` : '');
+    `共 ${rows.length} 筆` + (_hidden ? `　（另有 ${_hidden} 張已繳回／遺失／停用沒有列出）` : '');
   document.getElementById('cardLedgerBody').innerHTML = rows.map(({r, info}) => `
     <tr>
       <td>${esc(r.name||'')}</td>
@@ -19988,10 +20161,49 @@ function renderAccessCardLedger(){
       <td>${esc(r.card_no||'')}</td>
       <td>${esc(r.employee_no||'')}</td>
       <td class="muted">${esc(r.gates||'—')}</td>
-      <td><span class="pill ${info.cls}">${esc(info.text)}</span></td>
+      <td style="white-space:nowrap;">${cardStatusCell(r, info)}</td>
       <td><button class="del-btn" data-del-card="${esc(r.card_no || '')}" data-del-card-name="${esc(r.name || '')}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
+
+// 門禁卡狀態可以直接改（115/11 使用者要求）：使用中／已繳回／已遺失／已停用。
+// 「現職／已離職／非員工」是對人員資料自動判斷的，改不了也不用改，放在下拉旁邊當參考。
+const CARD_STATUS_OPTS = ['使用中', '已繳回', '已遺失', '已停用'];
+function cardStatusCell(r, info){
+  const cur = info.key === 'returned' ? '已繳回' : (info.key === 'void' ? info.text : '使用中');
+  const sel = `<select data-card-st="${esc(String(r.card_id != null ? r.card_id : r.id))}" style="width:auto;padding:3px 6px;font-size:12px;">`
+    + CARD_STATUS_OPTS.map(o => `<option${o === cur ? ' selected' : ''}>${o}</option>`).join('') + `</select>`;
+  let tag = '';
+  if(info.key === 'returned'){
+    const d = String(r.returned_date || '').slice(0, 10);
+    tag = d ? ` <span class="muted" style="font-size:12px;">${esc(d)}</span>` : '';
+  }else if(info.key !== 'void'){
+    tag = ` <span class="pill ${info.cls}">${esc(info.text)}</span>`;
+  }
+  return sel + tag;
+}
+async function cardLedgerSetStatus(id, val, selEl){
+  const r = (STATE.accessCardRoster || []).find(x => String(x.card_id != null ? x.card_id : x.id) === String(id));
+  if(!r){ alert('找不到這一列，畫面可能不是最新的，請重新整理。'); renderAccessCardLedger(); return; }
+  if(val === '已繳回'){
+    const d = prompt('繳回日期（YYYY-MM-DD）', String(r.returned_date || '').slice(0, 10) || todayISO());
+    if(d === null){ renderAccessCardLedger(); return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ alert('日期格式要像 2026-11-13'); renderAccessCardLedger(); return; }
+    r.returned_date = d.trim(); r.card_status = '已繳回';
+  }else if(val === '使用中'){
+    r.returned_date = null; r.card_status = null;
+  }else{
+    r.returned_date = null; r.card_status = val;
+  }
+  if(selEl) selEl.disabled = true;
+  await saveState('access_card_roster', STATE.accessCardRoster, true);
+  renderAccessCardLedger();
+}
+document.getElementById('cardLedgerBody').addEventListener('change', (e) => {
+  const id = e.target.getAttribute && e.target.getAttribute('data-card-st');
+  if(id === null || id === undefined) return;
+  cardLedgerSetStatus(id, e.target.value, e.target);
+});
 
 // 門禁卡清冊：整列刪除。
 // 115/09/08 使用者決定「我們公司的人離職就刪除」，所以這張表不再是永久保存的清冊。
@@ -20899,7 +21111,21 @@ function renderLeaveGrid(){
   for(let d=1; d<=daysInMonth; d++){ headCells.push(`<th style="text-align:center;min-width:11px;padding:4px 1px;font-size:10px;">${d}</th>`); }
   document.getElementById('leaveGridHead').innerHTML = headCells.join('');
 
-  const activeEmployees = STATE.employees.slice().sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
+  // ★ 離職的人也要列：10 月請過假、10 月底離職的人，11 月算 10 月薪水時還要看得到
+  //   （115/11 使用者回報：曾渝芬 10 月離職，請假總表 10 月拉不到她）。
+  //   只列「這個月有假單」的離職人員，不然幾千筆離職歷史全部都會跑出來。
+  const _mS = `${year}-${String(month).padStart(2,'0')}-01`;
+  const _mE = `${year}-${String(month).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+  const _activeIds = new Set((STATE.employees || []).map(e => String(e.id)));
+  const _leftIds = new Set((STATE.leaveRecords || []).filter(r => {
+      const s = (r.start_date||'').slice(0,10), en = ((r.end_date||r.start_date)||'').slice(0,10);
+      return s && s <= _mE && en >= _mS && !_activeIds.has(String(r.employee_id));
+    }).map(r => String(r.employee_id)));
+  const _leftEmps = (STATE.employeesHistory || []).filter(e => e.id != null && _leftIds.has(String(e.id)))
+    .filter((e, i, a) => a.findIndex(x => String(x.id) === String(e.id)) === i)
+    .map(e => Object.assign({}, e, {_left: true}));
+  const activeEmployees = STATE.employees.slice().concat(_leftEmps)
+    .sort((a,b) => (a.employee_no||'').localeCompare(b.employee_no||''));
   document.getElementById('leaveGridBody').innerHTML = activeEmployees.map(e => {
     const empLeaves = STATE.leaveRecords.filter(r => String(r.employee_id) === String(e.id));
     const office = leaveIsOffice(e.id);   // 間接人員：週六日不打點
@@ -20917,7 +21143,8 @@ function renderLeaveGrid(){
         ? `<td style="text-align:center;color:${odd ? '#c0392b' : 'var(--accent-dark)'};font-weight:700;font-size:16px;line-height:1;padding:2px 0;" title="${esc(match.leave_type)}${match.notes?'：'+esc(match.notes):''}${odd ? `　⚠ 起 ${esc((match.start_date||'').slice(0,10))} 迄 ${esc((match.end_date||'').slice(0,10))}、只有 ${esc(match.hours)} 小時，結束日期可能打錯` : ''}">${odd ? '✖' : '●'}</td>`
         : `<td style="padding:2px 0;"></td>`);
     }
-    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;white-space:nowrap;padding:2px 8px;width:1%;">${esc(e.name)}</td>${cells.join('')}</tr>`;
+    const _lt = e._left ? ` <span class="pill gray" style="font-size:10px;padding:0 5px;" title="離職日 ${esc(e.resign_date||'')}">已離職</span>` : '';
+    return `<tr><td style="position:sticky;left:0;background:var(--card);font-weight:600;white-space:nowrap;padding:2px 8px;width:1%;">${esc(e.name)}${_lt}</td>${cells.join('')}</tr>`;
   }).join('') || `<tr><td class="empty">目前沒有在職人員</td></tr>`;
 }
 
@@ -23173,7 +23400,8 @@ document.getElementById('leaseTableBody').addEventListener('click', async (e) =>
 
   if(returnId){
     const l = STATE.leases.find(x => String(x.id) === returnId);
-    if(l){ l.status = '已歸還'; }
+    // 記下歸還日：租給建興的板架還回來後，打油從這天之後的第一次打油重新起算
+    if(l){ l.status = '已歸還'; l.return_date = todayISO(); }
     await saveState('trailer_leases', STATE.leases, true);
     renderAll();
   }else if(editLocId){
@@ -23553,6 +23781,15 @@ document.getElementById('sf_add').addEventListener('click', async () => {
     education_school: document.getElementById('sf_edu_school').value.trim() || null,
     education_major: document.getElementById('sf_edu_major').value.trim() || null,
     education_status: document.getElementById('sf_edu_status').value || null,
+    blood_type: (((document.getElementById('sf_blood') || {}).value || '').trim() || null),
+    height_cm: (document.getElementById('sf_height') && document.getElementById('sf_height').value !== '' ? Number(document.getElementById('sf_height').value) : null),
+    weight_kg: (document.getElementById('sf_weight') && document.getElementById('sf_weight').value !== '' ? Number(document.getElementById('sf_weight').value) : null),
+    prior_transport_years: (document.getElementById('sf_prior_years') && document.getElementById('sf_prior_years').value !== '' ? Number(document.getElementById('sf_prior_years').value) : null),
+    last_job_company: (((document.getElementById('sf_job_company') || {}).value || '').trim() || null),
+    last_job_title: (((document.getElementById('sf_job_title') || {}).value || '').trim() || null),
+    last_job_period: (((document.getElementById('sf_job_period') || {}).value || '').trim() || null),
+    last_job_leave_reason: (((document.getElementById('sf_job_reason') || {}).value || '').trim() || null),
+    medical_exam_date: ((document.querySelector('#sf_checklist .new-cl-med') || {}).value || null),
     insured_salary: document.getElementById('sf_insured').value ? parseInt(document.getElementById('sf_insured').value, 10) : null,
     dependents_count: parseInt(document.getElementById('sf_dep').value, 10) || 0,
     dependents_detail: depRead('sf'),
@@ -23574,6 +23811,18 @@ document.getElementById('sf_add').addEventListener('click', async () => {
       String(c.employee_id) === String(newEmpId) && String(c.item_id) === String(itemId));
     if(_old){ _old.status = sel.value; _old.submitted_date = _date; }
     else STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: newEmpId, item_id: itemId, status: sel.value, submitted_date: _date});
+  });
+  // 體檢表：填了日期＝已繳交，順便建一筆體檢紀錄；空白＝未繳交
+  let _medNew = false;
+  document.querySelectorAll('#sf_checklist .new-cl-med').forEach(inp => {
+    const itemId = parseInt(inp.getAttribute('data-new-item-id'));
+    const d = (inp.value || '').slice(0, 10);
+    const st = d ? '已繳交' : '未繳交';
+    const _old = (STATE.docChecklist || []).find(c =>
+      String(c.employee_id) === String(newEmpId) && String(c.item_id) === String(itemId));
+    if(_old){ _old.status = st; _old.submitted_date = d || null; }
+    else STATE.docChecklist.push({id: nextId(STATE.docChecklist), employee_id: newEmpId, item_id: itemId, status: st, submitted_date: d || null});
+    if(d && medEnsureRecord(newEmpId, d)) _medNew = true;
   });
   // 入職發卡：個人通行點 + 門禁卡完整清冊，兩邊一起寫，才不會清冊漏人
   if(cardNo){
@@ -23599,6 +23848,9 @@ document.getElementById('sf_add').addEventListener('click', async () => {
   try{
     await saveState('doc_checklist', STATE.docChecklist, true);
   }catch(e){ _halfDone.push('必繳文件'); }
+  if(_medNew){
+    try{ await saveState('medical_exam_records', STATE.medicalExamRecords, true); }catch(e){ _halfDone.push('體檢紀錄'); }
+  }
   if(cardNo){
     try{
       await saveState('access_cards', STATE.accessCards, true);
@@ -23610,7 +23862,7 @@ document.getElementById('sf_add').addEventListener('click', async () => {
         + '」沒有存進去（上面那個錯誤訊息就是原因）。\n\n'
         + '請到「人員管理 → 在職人員清單」點他的名字，把這幾項補登一次。');
   }
-  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_referrer','sf_edu','sf_edu_school','sf_edu_major','sf_edu_status'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
+  ['sf_name','sf_dept','sf_position','sf_company','sf_region','sf_fleet','sf_idnumber','sf_birth','sf_hire','sf_phone','sf_email','sf_address','sf_emergency_contact','sf_emergency_phone','sf_bank','sf_card','sf_bank_branch','sf_referrer','sf_edu','sf_edu_school','sf_edu_major','sf_edu_status','sf_blood','sf_height','sf_weight','sf_prior_years','sf_job_company','sf_job_title','sf_job_period','sf_job_reason'].forEach(id=>{ const _el = document.getElementById(id); if(_el) _el.value=''; });
   document.getElementById('sf_empins_status').checked = false;
   applyStaffTypeDefaults();
   renderStaffNoBox();
