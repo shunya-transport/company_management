@@ -3213,6 +3213,7 @@
       <div class="muted">移過去之後，這個人不會再出現於「在職人員清單」，需要的話可以到「離職歷史」用「復職」按鈕移回來。</div>
     </div>
     <div id="rs_impact" style="margin-bottom:16px;"></div>
+    <div id="rs_leave" style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--line, #e5e0d6);border-radius:8px;font-size:12.5px;line-height:1.7;"></div>
     <div class="form-grid">
       <label>離職日期<input id="rs_date" type="date"></label>
       <label>離職原因（選填）<input id="rs_reason" placeholder="選填"></label>
@@ -12682,7 +12683,8 @@ function renderStaffModalView(e){
       <dt>出生日期</dt><dd>${esc(e.birth_date||'—')}</dd>
       <dt>到職日</dt><dd>${esc(e.hire_date||'—')}</dd>
       ${_left ? `<dt>服務年資</dt><dd>${esc(tenureText(e.hire_date, e.resign_date) || '—（無到職日資料）')}
-        <div class="muted" style="font-size:11px;">到職 ${esc(e.hire_date||'—')} ～ 離職 ${esc(e.resign_date||'—')}；未來復職要合併年資時用這個數字。</div></dd>` : `
+        <div class="muted" style="font-size:11px;">到職 ${esc(e.hire_date||'—')} ～ 離職 ${esc(e.resign_date||'—')}；未來復職要合併年資時用這個數字。</div></dd>
+      <dt>離職特休結算</dt><dd>${leaveResignSettleHtml(leaveResignSettle(e, e.resign_date))}</dd>` : `
       <dt>年資</dt><dd>${(() => {
         const L = leaveLedgerInfo(e);
         if(L.years === null) return '—（無到職日資料）';
@@ -12696,7 +12698,10 @@ function renderStaffModalView(e){
         if(L.days === null) return '—（無到職日資料）';
         if(L.notYet) return `0 天<span class="muted">（未滿半年，${esc(toROCDate(L.eligDate))} 起才有）</span>`;
         return `共 ${L.days} 天<span class="muted">（${L.approved ? L.approved.year + ' 年度核定' : '依年資估算'}）</span>　已用 ${L.used} 天，<b>剩 ${L.remaining} 天（約 ${(L.remaining*8).toFixed(2)} 小時）</b>`;
-      })()}</dd>`}
+      })()}</dd>
+      <dt>離職特休試算</dt><dd><div style="font-size:12.5px;">預計離職日 <input type="date" id="lv_settle_date" data-settle-emp="${esc(String(e.id))}" value="${esc(todayISO())}" style="width:auto;padding:2px 6px;font-size:12.5px;">
+        <span class="muted">（合意資遣、離職前先試算；離職時年資算到離職日，特休要追溯）</span></div>
+        <div id="lv_settle_out" style="font-size:12.5px;margin-top:4px;">${leaveResignSettleHtml(leaveResignSettle(e, todayISO()))}</div></dd>`}
       <dt>復職日期</dt><dd>${esc(e.rehire_date||'—')}</dd>
       <dt>手機</dt><dd>${esc(e.phone||'—')}</dd>
       <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
@@ -20825,6 +20830,51 @@ function alyExport(){
   if(_alyExM) _alyExM.addEventListener('click', alyExportByMonth);
 }
 
+// ===== 離職特休結算（115/11 使用者要求，照舊請假系統「特休天數設定」的「離職特休可休天數」那一欄）=====
+// 平常的特休用曆年制：年資算到「上一年 12/31」查級距（未滿 1 年按比例）。
+// 離職時要「追溯」：年資改算到離職日，用離職那一欄查（未滿半年 0、半年～1 年 3 天、之後同勞基法級距，不按比例）。
+// 例：巫玉宏 113/10/22 到職，115 年平常核定 7 天；115/10/22 滿 2 年，10/22 以後離職就追溯成 10 天。
+// 已休＝離職那一年 1/1（當年到職就從到職日）到離職日之間的特休；未休的依勞基法第 38 條折發工資。
+const LEAVE_TIER_FALLBACK = [[0,0],[0.5,3],[1,7],[2,10],[3,14],[5,15],[10,16],[11,17],[12,18],[13,19],[14,20],[15,21],
+  [16,22],[17,23],[18,24],[19,25],[20,26],[21,27],[22,28],[23,29],[24,30]].map(a => ({min_years:a[0], leave_days:a[1]}));
+function leaveCalMonths(fromISO, toISO){
+  const a = String(fromISO || '').slice(0, 10), b = String(toISO || '').slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || b < a) return 0;
+  return (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7)) - (+b.slice(8, 10) < +a.slice(8, 10) ? 1 : 0);
+}
+function leaveResignSettle(e, refDate){
+  if(!e) return null;
+  const hire = String(e.hire_date || '').slice(0, 10);
+  const ref = String(refDate || todayISO()).slice(0, 10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(hire) || !/^\d{4}-\d{2}-\d{2}$/.test(ref)) return null;
+  const yr = +ref.slice(0, 4);
+  const appr = annualLeaveApprovedFor(e, yr - 1911);
+  const prior = parseFloat(appr && appr.prior) || 0;               // 復職前累計年資（巨集核定裡有才算）
+  const months = leaveCalMonths(hire, ref) + Math.round(prior * 12);
+  const tiers = ((STATE.annualLeaveTiers || []).length ? STATE.annualLeaveTiers : LEAVE_TIER_FALLBACK)
+    .slice().sort((x, y) => Number(x.min_years) - Number(y.min_years));
+  let days = 0;
+  tiers.forEach(t => { if(months >= Math.round(Number(t.min_years) * 12)) days = Number(t.leave_days) || 0; });
+  const yStart = hire > `${yr}-01-01` ? hire : `${yr}-01-01`;
+  const usedH = fmt2((STATE.leaveRecords || []).filter(r => String(r.employee_id) === String(e.id)
+      && (r.leave_type || '').trim() === '特休'
+      && String(r.start_date || '').slice(0, 10) >= yStart && String(r.start_date || '').slice(0, 10) <= ref)
+    .reduce((s, r) => s + leaveHours(r), 0));
+  const usedD = fmt2(usedH / LEAVE_HOURS_PER_DAY);
+  return { ref, yr, months, prior, days, normal: appr ? Number(appr.days) : null, usedH, usedD, remain: fmt2(days - usedD) };
+}
+function leaveResignSettleHtml(s){
+  if(!s) return '—（沒有到職日，算不出來）';
+  const y = Math.floor(s.months / 12), m = s.months % 12;
+  const diff = (s.normal != null && s.normal !== s.days)
+    ? `<span class="muted">（${s.yr - 1911} 年度平常核定 ${s.normal} 天，離職追溯${s.days > s.normal ? '補成' : '改為'} ${s.days} 天）</span>` : '';
+  const tail = s.remain >= 0
+    ? `<b>未休 ${s.remain} 天（${fmt2(s.remain * LEAVE_HOURS_PER_DAY)} 小時）</b><span class="muted">，依勞基法第 38 條折發工資</span>`
+    : `<b style="color:var(--red);">多休 ${-s.remain} 天</b><span class="muted">（追溯後的天數比已休的少，要不要扣回依公司規定）</span>`;
+  return `年資算到 ${esc(toROCDate(s.ref))}：${y} 年 ${m} 個月${s.prior ? `（含復職前 ${s.prior} 年）` : ''} → 離職特休 <b>${s.days} 天</b>${diff}<br>`
+    + `${s.yr - 1911} 年已休 ${s.usedD} 天（${s.usedH} 小時）→ ${tail}`;
+}
+
 // 特休天數清冊和人員卡片共用同一套算法：優先用當年度核定天數（含年資追溯），沒有才依年資估算；未滿半年一律 0 天
 function leaveLedgerInfo(e){
   const approved = annualLeaveApproved(e);
@@ -24081,7 +24131,27 @@ document.getElementById('staffTableBody').addEventListener('click', async (e) =>
   document.getElementById('rs_date').value = todayISO();
   document.getElementById('rs_reason').value = '';
   renderResignImpact(emp);
+  renderResignLeave();
   document.getElementById('resignModal').classList.add('show');
+});
+
+// 離職視窗：特休離職結算，跟著上面的離職日期即時重算
+function renderResignLeave(){
+  const el = document.getElementById('rs_leave');
+  if(!el) return;
+  const emp = STATE.employees.find(x => String(x.id) === String(currentResignEmpId));
+  if(!emp){ el.innerHTML = ''; return; }
+  el.innerHTML = '<b>特休離職結算</b>（照離職日期算）<br>' + leaveResignSettleHtml(leaveResignSettle(emp, document.getElementById('rs_date').value || todayISO()));
+}
+['input', 'change'].forEach(ev => document.getElementById('rs_date').addEventListener(ev, renderResignLeave));
+// 人員卡片的「離職特休試算」：改預計離職日就重算
+document.getElementById('staffModalContent').addEventListener('input', (ev) => {
+  const t = ev.target;
+  if(!t || t.id !== 'lv_settle_date') return;
+  const id = t.getAttribute('data-settle-emp');
+  const e = (STATE.employees || []).find(x => String(x.id) === String(id));
+  const out = document.getElementById('lv_settle_out');
+  if(e && out) out.innerHTML = leaveResignSettleHtml(leaveResignSettle(e, t.value || todayISO()));
 });
 
 // 繳回清單的「全部勾選／全部取消」（清單是每次開視窗才畫的，所以綁在外層）
