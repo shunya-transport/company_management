@@ -212,7 +212,7 @@ async function load(){
   try{
     const [sched, vehicles, mlogs, leases, lessees] = await Promise.all([
       sgetAll('maintenance_schedules?select=*'),
-      sget('vehicles?select=vehicle_id,plate_number,base_location,status,current_mileage'),
+      sget('vehicles?select=vehicle_id,plate_number,base_location,status,current_mileage,rent_to,rent_returned_from,rent_returned_date'),
       sgetAll('vehicle_mileage_logs?select=vehicle_id,mileage,log_date&order=log_date.desc'),
       sgetAll('trailer_leases?select=*').catch(()=>[]),
       sgetAll('lessees?select=lessee_id,lessee_name').catch(()=>[])
@@ -221,7 +221,9 @@ async function load(){
     const lsName={}; lessees.forEach(l=>lsName[l.lessee_id]=l.lessee_name||'');
     const isJx=l=>/建興/.test(String(lsName[l.lessee_id]||''));
     const jxActive=new Set(leases.filter(l=>l.status==='租賃中' && isJx(l)).map(l=>l.vehicle_id));
+    vehicles.filter(v=>/建興/.test(String(v.rent_to||''))).forEach(v=>jxActive.add(v.vehicle_id));
     const jxBack={};
+    vehicles.filter(v=>/建興/.test(String(v.rent_returned_from||'')) && v.rent_returned_date).forEach(v=>{ jxBack[v.vehicle_id]=String(v.rent_returned_date).slice(0,10); });
     leases.filter(l=>l.status==='已歸還' && isJx(l) && l.return_date).forEach(l=>{
       const d=String(l.return_date).slice(0,10); if(!jxBack[l.vehicle_id] || d>jxBack[l.vehicle_id]) jxBack[l.vehicle_id]=d; });
     const vById={}; vehicles.forEach(v=>vById[v.vehicle_id]=v);

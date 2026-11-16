@@ -19,7 +19,7 @@ async function main() {
 
   const [allLeaseRows, vehicles, lessees, docs, schedules, mileageLogs, trainings, employees, trainingTypes, licences] = await Promise.all([
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'trailer_leases?select=*'),
-    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage,status'),
+    supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicles?select=vehicle_id,plate_number,vehicle_category,vehicle_type,maintenance_model,current_mileage,status,rent_to,rent_returned_from,rent_returned_date'),
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'lessees?select=lessee_id,lessee_name'),
     // 驗車和其他證件（滅火器／濾毒罐／自主管理標章／行車記錄器）都在這張表，一次撈回來後再分開
     supaFetch(SUPABASE_URL, SUPABASE_KEY, 'vehicle_documents?select=*'),
@@ -62,7 +62,11 @@ async function main() {
   const leases = allLeases.filter(l => l.status === '租賃中');
   const isJx = (l) => /建興/.test(String(lesseeById[l.lessee_id] || ''));
   const jxActive = new Set(leases.filter(isJx).map(l => l.vehicle_id));
+  // 其他資產清單的「出租」（車輛主檔 rent_to）租給建興的也一樣
+  vehicles.filter((v) => /建興/.test(String(v.rent_to || ''))).forEach((v) => jxActive.add(v.vehicle_id));
   const jxBack = {};
+  vehicles.filter((v) => /建興/.test(String(v.rent_returned_from || '')) && v.rent_returned_date)
+    .forEach((v) => { jxBack[v.vehicle_id] = String(v.rent_returned_date).slice(0, 10); });
   allLeases.filter(l => l.status === '已歸還' && isJx(l) && l.return_date).forEach(l => {
     const d = String(l.return_date).slice(0, 10);
     if (!jxBack[l.vehicle_id] || d > jxBack[l.vehicle_id]) jxBack[l.vehicle_id] = d;

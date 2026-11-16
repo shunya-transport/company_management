@@ -785,6 +785,27 @@
     </div>
 
     <div class="card">
+      <h2>其他資產清單<span class="count-badge" id="fleet_other_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">堆高機、夾櫃機、吊掛機這類不是道路車輛的設備，從上面的車輛清單分出來列在這裡（資料一樣在車輛主檔，保養、打油、維修單照常）。
+        「出租」可以記下租給誰、哪天起租；租給建興的，打油會標「租建興，由建興處理」，收回後從第一次打油重新起算。
+        堆高機編號後面會自動加所在地區，例如「堆高機-05(新竹)」，入維修單比較好找。</div>
+      <div class="toolbar">
+        <input id="other_search" placeholder="搜尋編號／地區／承租方">
+        <select id="other_rent_filter">
+          <option value="all">全部</option>
+          <option value="rent">只看出租中</option>
+          <option value="self">只看自用</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>編號</th><th>類別</th><th>廠牌</th><th>公司別</th><th>所在地區</th><th>狀態</th><th>出租</th><th></th></tr></thead>
+          <tbody id="otherAssetTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>各車型車輛數（含板架）<span class="count-badge" id="fleet_type_sum_badge"></span></h2>
       <div class="muted" style="margin-bottom:10px;">
         以<b>車輛清單</b>、<b>板架清單</b>上的車為準（在役＋停駛，不含待賣出、已賣出／報廢），依車型分、各行號各幾台。
@@ -4006,7 +4027,10 @@ function vehicleByPlate(plate){
   // 使用者可能只打了車牌的一部分(例如只打 9298),若全系統只有一台對得上就自動帶入
   const bare = key.replace(/-/g,'');
   const hit = STATE.vehicles.filter(x => normPlate(x.plate).replace(/-/g,'').endsWith(bare));
-  return hit.length === 1 ? hit[0] : null;
+  if(hit.length === 1) return hit[0];
+  // 堆高機編號後面加了地區（堆高機-05(新竹)），只打「堆高機-05」時，全系統只有一台對得上就帶入
+  const core = STATE.vehicles.filter(x => normPlate(x.plate).replace(/[（(][^()（）]*[)）]$/, '') === key);
+  return core.length === 1 ? core[0] : null;
 }
 function plateToVehicleId(plate){
   const v = vehicleByPlate(plate);
@@ -9969,6 +9993,7 @@ function renderVehicleModalView(v){
     <h3>${esc(v.plate)}</h3>
     <dl class="detail-grid">
       <dt>類別/車型</dt><dd>${esc(v.vehicle_category||'—')} / ${esc(v.vehicle_type||'—')}</dd>
+      ${v.rent_to ? `<dt>出租</dt><dd>${esc(v.rent_to)}${v.rent_since ? '（' + esc(String(v.rent_since).slice(0, 10)) + ' 起）' : ''}</dd>` : ''}
       <dt>廠牌/型號</dt><dd>${esc(v.brand||'—')} / ${esc(v.model||'—')}</dd>
       <dt>出廠年月</dt><dd>${esc(mfgROC(v.manufacture_date)||'—')}</dd>
       <dt>車身號碼</dt><dd>${esc(v.chassis_no||'—')}</dd>
@@ -10124,6 +10149,11 @@ function renderVehicleModalEdit(v){
     v.purchase_date = document.getElementById('ve_purchase').value || null;
     v.manufacture_date = document.getElementById('ve_mfg').value || null;
     v.base_location = document.getElementById('ve_base').value.trim();
+    // 堆高機：編號後面的地區跟著所在地區走（例：堆高機-05(新竹)）
+    {
+      const _np = forkliftPlate(v.plate, v.base_location);
+      if(_np !== v.plate && !STATE.vehicles.some(x => x !== v && x.plate === _np)){ v.plate = _np; v.plate_number = _np; }
+    }
     const _wasRetiredBefore = isRetiredVehicle(v);
     v.status = document.getElementById('ve_status').value;
     v.maintenance_model = document.getElementById('ve_maint_model').value || null;
@@ -11286,12 +11316,93 @@ function fleetRefreshFilters(pool){
   fill('fleet_tons_filter',  uniq(v => v.load_capacity, true), '全部噸數', x => x + ' 噸');
 }
 
+// ===== 其他資產（115/11 使用者要求）=====
+// 堆高機、夾櫃機、吊掛機這類不是道路車輛的設備，從「車輛清單」分出去，另列「其他資產清單」。
+// 判斷：不是板架，而且（編號不像車牌，或車型／保養標準是這幾種設備、又不是營業／自用車型）。
+const OTHER_ASSET_RE = /堆高機|夾櫃機|吊掛機|手推車|油壓推車|發電機|空壓機/;
+function isOtherAsset(v){
+  if(!v || v.vehicle_category === '板架') return false;
+  const plateLike = /^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/i.test(String(v.plate || '').trim());
+  const kind = String(v.vehicle_type || '') + ' ' + String(v.maintenance_model || '');
+  return !plateLike || (OTHER_ASSET_RE.test(kind) && !/^(營業|自用)/.test(String(v.vehicle_type || '')));
+}
+// 堆高機編號後面加所在地區：「堆高機-05」→「堆高機-05(新竹)」；地區改了括號跟著換
+function forkliftPlate(plate, base){
+  const p = String(plate || '').trim();
+  if(!/^堆高機/.test(p)) return p;
+  const b = String(base || '').trim().replace(/車場$|場$/, '');
+  const core = p.replace(/\s*[（(][^()（）]*[)）]\s*$/, '');
+  return b ? core + '(' + b + ')' : core;
+}
+function otherAssetRentCell(v){
+  if(v.rent_to){
+    return `<span class="pill amber" title="${v.rent_since ? '起租 ' + esc(String(v.rent_since).slice(0, 10)) : ''}">出租：${esc(v.rent_to)}</span>`
+      + (v.rent_since ? ` <span class="muted" style="font-size:12px;">${esc(String(v.rent_since).slice(0, 10))} 起</span>` : '')
+      + ` <button class="name-link" data-unrent-asset="${v.id}" style="margin-left:6px;">收回</button>`;
+  }
+  return `<span class="pill gray">自用</span> <button class="name-link" data-rent-asset="${v.id}" style="margin-left:6px;">出租</button>`;
+}
+function renderOtherAssetTable(){
+  const body = document.getElementById('otherAssetTableBody');
+  if(!body) return;
+  const q = ((document.getElementById('other_search') || {}).value || '').trim();
+  const rf = ((document.getElementById('other_rent_filter') || {}).value) || 'all';
+  const rows = STATE.vehicles.filter(v => isOtherAsset(v) && !isRetiredVehicle(v) && !isPendingSaleVehicle(v))
+    .filter(v => rf === 'all' || (rf === 'rent' ? !!v.rent_to : !v.rent_to))
+    .filter(v => !q || [v.plate, v.base_location, v.rent_to, v.vehicle_type].some(x => String(x || '').includes(q)))
+    .sort((a, b) => String(a.vehicle_type || '').localeCompare(String(b.vehicle_type || ''), 'zh-Hant')
+                 || String(a.plate || '').localeCompare(String(b.plate || ''), 'zh-Hant', {numeric: true}));
+  const c = document.getElementById('fleet_other_count'); if(c) c.textContent = `共 ${rows.length} 台`;
+  body.innerHTML = rows.map(v => `
+    <tr>
+      <td><button class="name-link" data-view-vehicle="${v.id}">${esc(v.plate)}</button></td>
+      <td>${esc(v.vehicle_type || v.maintenance_model || '')}</td>
+      <td>${esc(v.brand || '')}</td>
+      <td title="${esc(v.company_name || '')}">${esc(shortCompany(v.company_name))}</td>
+      <td>${esc(v.base_location || '')}</td>
+      <td>${esc(v.status || '')}</td>
+      <td style="white-space:nowrap;">${otherAssetRentCell(v)}</td>
+      <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
+    </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的資產</td></tr>`;
+}
+async function otherAssetRent(id, back){
+  const v = STATE.vehicles.find(x => String(x.id) === String(id));
+  if(!v) return;
+  if(back){
+    if(!confirm(v.plate + ' 從「' + (v.rent_to || '') + '」收回，改回自用？')) return;
+    v.rent_returned_from = v.rent_to || null;
+    v.rent_returned_date = todayISO();
+    v.rent_to = null; v.rent_since = null;
+  }else{
+    const names = [...new Set((STATE.lessees || []).map(l => l.name).filter(Boolean))];
+    const who = prompt(v.plate + ' 租給誰？' + (names.length ? '\n（承租方清單：' + names.slice(0, 12).join('、') + '）' : ''),
+                       names.find(n => /建興/.test(n)) || '');
+    if(who === null || !who.trim()) return;
+    const d = prompt('起租日（YYYY-MM-DD，可空白）', todayISO());
+    if(d === null) return;
+    if(d.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ alert('日期格式要像 2026-11-16'); return; }
+    v.rent_to = who.trim(); v.rent_since = d.trim() || null;
+  }
+  await saveRows('roster_vehicles', [v], STATE.vehicles);
+  renderAll();
+}
+{
+  const _ob = document.getElementById('otherAssetTableBody');
+  if(_ob) _ob.addEventListener('click', (e) => {
+    const r = e.target.getAttribute('data-rent-asset'), u = e.target.getAttribute('data-unrent-asset');
+    if(r){ otherAssetRent(r, false); return; }
+    if(u){ otherAssetRent(u, true); return; }
+    if(typeof handleFleetTableClick === 'function') handleFleetTableClick(e);
+  });
+  ['other_search', 'other_rent_filter'].forEach(id => { const el = document.getElementById(id); if(el){ el.addEventListener('input', renderOtherAssetTable); el.addEventListener('change', renderOtherAssetTable); } });
+}
+
 function renderFleetTable(){
   const statusFilter = document.getElementById('fleet_status_filter').value;
   const fleetQ = document.getElementById('fleet_search').value.trim();
   // 下拉選項用「還在清單上的車」去產生，已報廢／待賣出的車才有的廠牌不要跑出來
   const fleetPool = STATE.vehicles.filter(v =>
-    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v));
+    v.vehicle_category==='車輛' && !isRetiredVehicle(v) && !isPendingSaleVehicle(v) && !isOtherAsset(v));
   fleetRefreshFilters(fleetPool);
   const _val = id => { const el = document.getElementById(id); return el ? el.value : 'all'; };
   const brandF = _val('fleet_brand_filter');
@@ -11322,6 +11433,7 @@ function renderFleetTable(){
       <td><button class="del-btn" data-del-vehicle="${v.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的車輛</td></tr>`;
 
+  renderOtherAssetTable();
   refreshTrailerSizeList();
   renderEqchk();
   _MLNEWEST = null;          // 里程資料可能剛剛改過，重算「全隊登錄到哪個月」
@@ -19227,12 +19339,16 @@ function greaseLeaseMatch(l, v){
 }
 function greaseJxLease(v){
   if(!v) return null;
+  if(/建興/.test(String(v.rent_to || ''))) return {lessee_name: v.rent_to};   // 其他資產清單的「出租」
   return (STATE.leases || []).find(l => l.status !== '已歸還' && /建興/.test(String(l.lessee_name || '')) && greaseLeaseMatch(l, v)) || null;
 }
 function greaseJxReturnDate(v){
   if(!v) return null;
   const ds = (STATE.leases || []).filter(l => l.status === '已歸還' && /建興/.test(String(l.lessee_name || '')) && greaseLeaseMatch(l, v))
-    .map(l => String(l.return_date || '').slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    .map(l => String(l.return_date || '').slice(0, 10))
+    // 其他資產清單「出租」給建興、後來按「收回」的
+    .concat(/建興/.test(String(v.rent_returned_from || '')) ? [String(v.rent_returned_date || '').slice(0, 10)] : [])
+    .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   return ds.length ? ds[ds.length - 1] : null;
 }
 function greaseRowFor(v){
@@ -25890,7 +26006,8 @@ document.getElementById('form_print').addEventListener('click', () => {
 });
 
 document.getElementById('vf_add').addEventListener('click', async () => {
-  const plate = document.getElementById('vf_plate').value.trim();
+  // 堆高機編號自動加所在地區（例：堆高機-05 → 堆高機-05(新竹)）
+  const plate = forkliftPlate(document.getElementById('vf_plate').value.trim(), document.getElementById('vf_base').value);
   if(!plate){ alert('請輸入車號'); return; }
   if(STATE.vehicles.some(v=>v.plate===plate)){ alert('這個車號已經存在'); return; }
   STATE.vehicles.push({
