@@ -118,8 +118,10 @@ async function main() {
   const hasLicence = new Set(licences.map(d => d.employee_id + '|' + normLic(d.license_type)));
   // 只寄在職人員的：離職的人證照紀錄會留著查沿革，但不該再催（名字也會是空白）
   const activeEmp = new Set(employees.filter(e => e.status === '在職').map(e => e.employee_id));
+  // 「暫不外訓」的不寄（115/11 使用者要求，跟儀表板一樣：效期先不算，到期日照留著）
+  const onHold = (t) => [true, 1, '1', 't', 'true'].includes(t.on_hold);
   const certItems = trainings
-    .filter(t => t.expiry_date && activeEmp.has(t.employee_id))
+    .filter(t => t.expiry_date && activeEmp.has(t.employee_id) && !onHold(t))
     .filter(t => {
       const n = String(trainingTypeById[t.type_id] || '').trim();
       return !(/駕照$/.test(n) && hasLicence.has(t.employee_id + '|' + normLic(n)));
