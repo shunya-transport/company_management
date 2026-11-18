@@ -172,6 +172,7 @@
       <button data-tab="orders">採購登錄</button>
       <button data-tab="suppliers">合格供應商</button>
       <button data-tab="ratings">供應商評分</button>
+      <button data-tab="catalog">產品規格表</button>
       <button data-tab="contacts">通訊錄</button>
       <button data-tab="forms">表單生成</button>
     </nav>
@@ -213,7 +214,8 @@
             <label>採購日期<input id="po_purchase_date" type="date"></label>
             <label>需求日期<input id="po_need_date" type="date"></label>
             <label>到貨日期<input id="po_arrival_date" type="date"></label>
-            <label>申請單位<input id="po_dept" placeholder="例：行政管理部"></label>
+            <label>申請單位<input id="po_dept" list="poDeptList" placeholder="例：行政管理部" autocomplete="off"></label>
+            <datalist id="poDeptList"><option value="桃園車場"><option value="新竹車場"><option value="台中車場"><option value="雲林車場"><option value="台南車場"><option value="高雄車場"><option value="行政管理部"><option value="品質管理部"><option value="財務部"><option value="設備管理部"><option value="業務部"><option value="環安衛管理部"><option value="調度管理部"></datalist>
             <label>申請人<input id="po_applicant" placeholder="選填"></label>
             <label>供應商名稱<input id="po_supplier"></label>
             <label>品名/規格<input id="po_spec"></label>
@@ -225,7 +227,13 @@
             <label>付款方式
               <select id="po_payment">
                 <option value="月結">月結</option>
+                <option value="付現 (零用金)">付現 (零用金)</option>
+                <option value="先行代墊">先行代墊</option>
                 <option value="匯款">匯款</option>
+                <option value="分期">分期</option>
+                <option value="即期票">即期票</option>
+                <option value="下貨付現">下貨付現</option>
+                <option value="交車完款">交車完款</option>
                 <option value="現金">現金</option>
                 <option value="其他">其他</option>
               </select>
@@ -235,12 +243,15 @@
                 <option value="例行性採購">例行性採購</option>
                 <option value="一般事務採購">一般事務採購</option>
                 <option value="專案採購">專案採購</option>
+                <option value="其他-車輛採購">其他-車輛採購</option>
                 <option value="其他">其他</option>
               </select>
             </label>
             <label>備註<input id="po_notes" placeholder="選填"></label>
           </div>
           <button class="btn" id="po_add">新增採購登錄</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-size:13px;color:var(--text-2);">
+            <input type="checkbox" id="po_keep" style="width:auto;" checked> 存完接著登錄同一張的下一項（採購編號、日期、單位、供應商留著，項次自動＋1）</label>
         </div>
         <div class="card">
           <h2>採購登錄清單<span class="count-badge" id="po_count"></span></h2>
@@ -308,28 +319,73 @@
             </table>
           </div>
         </div>
+        <div class="card">
+          <h2>不合格供應商<span class="count-badge" id="sp_bad_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;">年度評分 D 級、或評估不合格的供應商（舊系統「不合格外部供應商一覽表」）。不會出現在合格清單和年度評分；要恢復請按「恢復合格」。</div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>建檔日期</th><th>類別</th><th>公司行號</th><th>區域</th><th>電話</th><th>負責人</th><th>不合格原因</th><th></th></tr></thead>
+              <tbody id="spBadBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>供應商評鑑表單</h2>
+          <div class="muted" style="margin-bottom:10px;">舊系統「表單－供應商評鑑」那幾張：選供應商、選表單，資料會帶進去，印出來手寫勾選與簽核。</div>
+          <div class="form-grid">
+            <label>供應商<select id="se_sp"></select></label>
+            <label>表單<select id="se_form">
+              <option value="basic">外部供應商基本資料（DGTT-P008-R01-01）</option>
+              <option value="care">外部供應商的責任關懷原則</option>
+              <option value="ev_maint">運送設備服務商評估表（保養維修廠）</option>
+              <option value="ev_tire">運送設備服務商評估表（輪胎換修廠）</option>
+              <option value="ev_rec">運送設備服務商評估表（行車紀錄器）</option>
+              <option value="ev_gps">運送設備服務商評估表（GPS系統建置）</option>
+              <option value="ev_waste">運送設備服務商評估表（廢棄物清除廠商）</option>
+              <option value="ev_water">運送設備服務商評估表（飲用水及設備廠商）</option>
+              <option value="site">外部供應商現場評分表</option>
+            </select></label>
+            <label>日期<input id="se_date" type="date"></label>
+            <label>評估者／評分者<input id="se_rater" placeholder="選填"></label>
+          </div>
+          <button class="btn" id="se_print">列印</button>
+        </div>
       </div>
 
       <div id="ratings" class="panel">
         <div class="card">
-          <h2>新增供應商評分</h2>
-          <div class="form-grid">
-            <label>年度(民國)<input id="rt_year" type="number" placeholder="例：115"></label>
-            <label>供應商
-              <select id="rt_supplier"></select>
-            </label>
-            <label>分數<input id="rt_score" type="number" step="0.1"></label>
-            <label>等級
-              <select id="rt_grade">
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-              </select>
-            </label>
-            <label>備註<input id="rt_notes" placeholder="選填"></label>
+          <h2>年度供應商評分作業<span class="count-badge" id="rtw_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;line-height:1.7;">
+            每家供應商五個項目各選一個等第（優良 100／良好 80／普通 60／劣 0），系統依比重自動算總分：
+            安全 20%、衛生 10%、環保 20%、品質 30%、保安 20%。<br>
+            等級：A 優先採用（85～100）、B 保持正常往來（70～84）、C 減少次數（60～69）、D 拒絕往來（60 以下，審核「不合格」）。
+            選好按該列「存檔」，或最下面「全部存檔」；存好後可以印「評分表＋審核」（表單 DGTT-P008-R08-01）和「年度評分結果總表」。
           </div>
-          <button class="btn" id="rt_add">新增評分</button>
+          <div class="form-grid">
+            <label>年度（民國）<input id="rtw_year" type="number" placeholder="例：115"></label>
+            <label>評分日期<input id="rtw_date" type="date"></label>
+            <label>評分者<input id="rtw_rater" placeholder="選填，印在評分表上"></label>
+            <label>類別<select id="rtw_cat"><option value="all">全部類別</option></select></label>
+            <label>區域<select id="rtw_region"><option value="all">全部區域</option></select></label>
+            <label style="flex-direction:row;align-items:center;gap:6px;"><input type="checkbox" id="rtw_need" checked style="width:auto;"> 只列需年度評核的類別</label>
+            <label>顯示<select id="rtw_show"><option value="all">全部合格供應商</option><option value="todo">只看還沒評分的</option><option value="done">只看已評分的</option></select></label>
+          </div>
+          <div class="table-scroll" style="margin-top:10px;">
+            <table style="font-size:12.5px;">
+              <thead><tr><th>類別</th><th>公司行號</th><th>區域</th>
+                <th style="text-align:center;">安全<br><span class="muted">20%</span></th><th style="text-align:center;">衛生<br><span class="muted">10%</span></th>
+                <th style="text-align:center;">環保<br><span class="muted">20%</span></th><th style="text-align:center;">品質<br><span class="muted">30%</span></th>
+                <th style="text-align:center;">保安<br><span class="muted">20%</span></th>
+                <th style="text-align:center;">總分</th><th style="text-align:center;">等級</th><th style="text-align:center;">審核</th><th></th></tr></thead>
+              <tbody id="rtwBody"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn" id="rtw_save_all">全部存檔</button>
+            <button class="btn ghost" id="rtw_print_all">列印這一年已評分的評分表（整批）</button>
+            <button class="btn ghost" id="rtw_print_sum">列印年度評分結果總表</button>
+            <span id="rtw_msg" class="muted" style="align-self:center;"></span>
+          </div>
         </div>
         <div class="card">
           <h2>供應商評分清單<span class="count-badge" id="rt_count"></span></h2>
@@ -343,7 +399,7 @@
           </div>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>年度</th><th>類別</th><th>公司行號</th><th>區域</th><th>分數</th><th>等級</th><th>備註</th><th></th></tr></thead>
+              <thead><tr><th>年度</th><th>類別</th><th>公司行號</th><th>區域</th><th>分數</th><th>等級</th><th>審核</th><th>備註</th><th></th></tr></thead>
               <tbody id="rtTableBody"></tbody>
             </table>
           </div>
@@ -369,6 +425,40 @@
           <button class="btn ghost no-print" id="form_print" style="display:none;">列印</button>
         </div>
         <div id="printArea"></div>
+      </div>
+
+      <div id="catalog" class="panel">
+        <div class="card">
+          <h2>新增產品規格</h2>
+          <div class="muted" style="margin-bottom:10px;">舊系統「產品規格表」：常買品項的規格、可以買的供應商（最多三家），採購時對照用。</div>
+          <div class="form-grid">
+            <label>分類<input id="ct_cat" list="ctCatList" placeholder="例：個人PPE" autocomplete="off"></label>
+            <label>品名<input id="ct_item" placeholder="例：安全帽"></label>
+            <label>供應商-1<input id="ct_s1" list="ctSupList" autocomplete="off"></label>
+            <label>供應商-2<input id="ct_s2" list="ctSupList" autocomplete="off" placeholder="選填"></label>
+            <label>供應商-3<input id="ct_s3" list="ctSupList" autocomplete="off" placeholder="選填"></label>
+            <label>SDS<input id="ct_sds" placeholder="選填"></label>
+            <label style="grid-column:1/-1;">規格<textarea id="ct_spec" rows="3" style="width:100%;font-family:inherit;"></textarea></label>
+            <label style="grid-column:1/-1;">備註<input id="ct_notes" placeholder="選填"></label>
+          </div>
+          <datalist id="ctCatList"></datalist><datalist id="ctSupList"></datalist>
+          <button class="btn" id="ct_add">新增品項</button>
+          <button class="btn ghost" id="ct_cancel" style="display:none;">取消修改</button>
+        </div>
+        <div class="card">
+          <h2>產品規格表<span class="count-badge" id="ct_count"></span></h2>
+          <div class="toolbar">
+            <input id="ct_search" placeholder="搜尋品名／規格／供應商">
+            <select id="ct_cat_filter"><option value="all">全部分類</option></select>
+            <button class="btn ghost" id="ct_print">列印</button>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>分類</th><th>品名</th><th>規格</th><th>供應商-1</th><th>供應商-2</th><th>供應商-3</th><th>SDS</th><th>備註</th><th></th></tr></thead>
+              <tbody id="ctBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div id="contacts" class="panel">
@@ -440,6 +530,11 @@
       <label>聯絡人<input id="spe_contact"></label>
       <label>創立日期<input id="spe_established" type="date"></label>
       <label>營業項目說明<input id="spe_desc"></label>
+      <label>評估<select id="spe_eval"><option value="">（未填）</option><option value="V">V（已評估）</option><option value="NA">NA</option></select></label>
+      <label>評估者<input id="spe_evaluator" placeholder="例：設備"></label>
+      <label>保密協定<input id="spe_nda" placeholder="簽署日期或 NA"></label>
+      <label>胎壓錶校正<input id="spe_tire" placeholder="日期或 NA"></label>
+      <label>扭力板手校正<input id="spe_torque" placeholder="日期或 NA"></label>
     </div>
     <button class="btn" id="spEditModalSave">儲存修改</button>
     <button class="btn ghost" id="spEditModalCancel">取消</button>
@@ -1064,6 +1159,9 @@ function renderSpSelects(){
   document.getElementById('sp_region_filter').innerHTML = '<option value="all">全部區域</option>' + regions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
 }
 function isActive(s){ return s.is_active === undefined || s.is_active === null || s.is_active === 1 || s.is_active === true; }
+// 不合格供應商（舊系統「不合格外部供應商一覽表」，SQL_271 加的 qualify_status）：不出現在合格清單、歷史資料，另列一張
+function isBadSp(s){ return String(s.qualify_status || '').trim() === '不合格'; }
+function isQualified(s){ return isActive(s) && !isBadSp(s); }
 let confirmingDeleteSpId = null;
 let confirmingDeletePoId = null;
 let confirmingDeleteRtId = null;
@@ -1097,6 +1195,11 @@ function openSpEditModal(id){
   document.getElementById('spe_contact').value = s.contact_person || '';
   document.getElementById('spe_established').value = s.established_date || '';
   document.getElementById('spe_desc').value = s.business_desc || '';
+  document.getElementById('spe_eval').value = s.eval_mark || '';
+  document.getElementById('spe_evaluator').value = s.evaluator || '';
+  document.getElementById('spe_nda').value = s.nda_note || '';
+  document.getElementById('spe_tire').value = s.tire_gauge_cal || '';
+  document.getElementById('spe_torque').value = s.torque_wrench_cal || '';
   document.getElementById('spEditModal').classList.add('show');
 }
 function closeSpEditModal(){ document.getElementById('spEditModal').classList.remove('show'); }
@@ -1104,7 +1207,7 @@ function renderSpTable(){
   const q = document.getElementById('sp_search').value.trim();
   const catF = document.getElementById('sp_category_filter').value;
   const regionF = document.getElementById('sp_region_filter').value;
-  let rows = STATE.qualifiedSuppliers.filter(isActive).sort((a,b)=>(a.company_name||'').localeCompare(b.company_name||''));
+  let rows = STATE.qualifiedSuppliers.filter(isQualified).sort((a,b)=>(a.company_name||'').localeCompare(b.company_name||''));
   if(q) rows = rows.filter(s => (s.company_name||'').includes(q));
   if(catF!=='all') rows = rows.filter(s => s.category===catF);
   if(regionF!=='all') rows = rows.filter(s => s.region===regionF);
@@ -1119,12 +1222,12 @@ function renderSpTable(){
       <td>${esc(s.responsible_person||'')}</td>
       <td>${esc(s.tax_id||'')}</td>
       <td>${esc(s.contact_person||'')}</td>
-      <td><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button>　<button class="name-link" data-bad-sp="${s.id}" style="color:var(--red);">標記不合格</button></td>
     </tr>`).join('') || `<tr><td colspan="9" class="empty">尚無供應商資料</td></tr>`;
 }
 function renderSpHistoryTable(){
   const q = document.getElementById('sp_history_search').value.trim();
-  let rows = STATE.qualifiedSuppliers.filter(s => !isActive(s)).sort((a,b)=>(a.company_name||'').localeCompare(b.company_name||''));
+  let rows = STATE.qualifiedSuppliers.filter(s => !isActive(s) && !isBadSp(s)).sort((a,b)=>(a.company_name||'').localeCompare(b.company_name||''));
   if(q) rows = rows.filter(s => (s.company_name||'').includes(q));
   document.getElementById('sp_history_count').textContent = `共 ${rows.length} 筆`;
   document.getElementById('spHistoryTableBody').innerHTML = rows.map(s => {
@@ -1145,7 +1248,7 @@ function renderSpHistoryTable(){
 
 // ============ 供應商評分 ============
 function renderRtSelects(){
-  document.getElementById('rt_supplier').innerHTML = STATE.qualifiedSuppliers.map(s => `<option value="${s.id}">${esc(s.company_name)}（${esc(s.category||'')}）</option>`).join('');
+  if(document.getElementById('rt_supplier')) document.getElementById('rt_supplier').innerHTML = STATE.qualifiedSuppliers.map(s => `<option value="${s.id}">${esc(s.company_name)}（${esc(s.category||'')}）</option>`).join('');
   const years = [...new Set(STATE.supplierRatings.map(r=>r.year_roc).filter(Boolean))].sort((a,b)=>b-a);
   document.getElementById('rt_year_filter').innerHTML = '<option value="all">全部年度</option>' + years.map(y=>`<option value="${y}">民國${y}年</option>`).join('');
 }
@@ -1171,10 +1274,447 @@ function renderRtTable(){
       <td>${esc(r.region||'')}</td>
       <td>${r.score??''}</td>
       <td><span class="pill ${gradeCls}">${esc(r.grade||'')}</span></td>
+      <td>${esc(r.audit_result || (r.grade ? rtAudit(r.grade) : ''))}</td>
       <td class="muted">${esc(r.notes||'')}</td>
-      <td>${deleteCell}</td>
+      <td style="white-space:nowrap;"><button class="name-link" data-print-rt="${r.id}">評分表</button>　${deleteCell}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" class="empty">尚無評分資料</td></tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty">尚無評分資料</td></tr>`;
+}
+
+
+// ============ 年度供應商評分作業（115/11 使用者要求：方便輸入＋產生「年度外部供應商評分表／審核」）============
+// 評分明細存在 supplier_ratings 新加的欄位（SQL_270）：rated_on 評分日期、rater 評分者、
+// pt_safety／pt_hygiene／pt_env／pt_quality／pt_security 五項得分（100／80／60／0）、audit_result 審核（合格／不合格）。
+// 總分＝Σ 得分×比重；等級 A≥85、B≥70、C≥60、D<60（D 審核不合格）。
+const RT_ITEMS = [['pt_safety','安全方面',20],['pt_hygiene','衛生方面',10],['pt_env','環保方面',20],['pt_quality','品質方面',30],['pt_security','保安方面',20]];
+const RT_LV = [[100,'優良'],[80,'良好'],[60,'普通'],[0,'劣']];
+// 舊系統「分類設定」打 V 的類別才做年度評核
+const RT_NEED_CATS = ['保養維修','輪胎保養','GPS','行車記錄器','飲用水及設備','廢棄物清除'];
+function rtNum(v){ return (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v); }
+function rtCalc(o){
+  const pts = RT_ITEMS.map(it => rtNum(o[it[0]]));
+  if(pts.some(x => x === null)) return null;
+  return Math.round(RT_ITEMS.reduce((sum, it, i) => sum + pts[i] * it[2] / 100, 0) * 100) / 100;
+}
+function rtGrade(score){ if(score === null || score === undefined) return ''; return score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D'; }
+function rtAudit(grade){ return !grade ? '' : (grade === 'D' ? '不合格' : '合格'); }
+function rtRocYear(){ return new Date().getFullYear() - 1911; }
+function rtYear(){ return parseInt(document.getElementById('rtw_year').value, 10) || rtRocYear(); }
+function rtFind(year, name){
+  return STATE.supplierRatings.find(r => Number(r.year_roc) === Number(year) && String(r.company_name || '').trim() === String(name || '').trim());
+}
+function rtwSuppliers(){
+  const cat = document.getElementById('rtw_cat').value, reg = document.getElementById('rtw_region').value;
+  const show = document.getElementById('rtw_show').value, y = rtYear();
+  return STATE.qualifiedSuppliers.filter(isQualified)
+    .filter(s => !(document.getElementById('rtw_need') || {}).checked || RT_NEED_CATS.indexOf(String(s.category || '').trim()) >= 0)
+    .filter(s => cat === 'all' || s.category === cat)
+    .filter(s => reg === 'all' || s.region === reg)
+    .filter(s => { const r = rtFind(y, s.company_name); return show === 'all' || (show === 'done' ? !!(r && r.score != null) : !(r && r.score != null)); })
+    .sort((a, b) => (a.id || 0) - (b.id || 0));
+}
+function rtwRenderSelects(){
+  const y = document.getElementById('rtw_year');
+  if(!y.value) y.value = rtRocYear();
+  const d = document.getElementById('rtw_date');
+  if(!d.value) d.value = todayISO();
+  const keep = (id, list, all) => { const el = document.getElementById(id); const v = el.value;
+    el.innerHTML = `<option value="all">${all}</option>` + list.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    if([...el.options].some(o => o.value === v)) el.value = v; };
+  const act = STATE.qualifiedSuppliers.filter(isQualified);
+  keep('rtw_cat', [...new Set(act.map(s => s.category).filter(Boolean))].sort(), '全部類別');
+  keep('rtw_region', [...new Set(act.map(s => s.region).filter(Boolean))].sort(), '全部區域');
+}
+function rtwRowHtml(s){
+  const r = rtFind(rtYear(), s.company_name) || {};
+  const sel = it => `<select data-rtw-pt="${it[0]}" style="padding:4px 4px;font-size:12px;min-width:74px;">
+      <option value="">—</option>${RT_LV.map(l => `<option value="${l[0]}"${rtNum(r[it[0]]) === l[0] ? ' selected' : ''}>${l[1]} ${l[0]}</option>`).join('')}</select>`;
+  const score = rtCalc(r) ?? (r.score != null ? Number(r.score) : null);
+  const grade = r.grade || rtGrade(score);
+  const saved = r.id ? (rtCalc(r) !== null ? '<span class="pill green">已評分</span>' : '<span class="pill amber" title="只有總分、沒有五項明細（例如從紙本補登的）">只有總分</span>') : '';
+  return `<tr data-rtw-sp="${s.id}">
+    <td>${esc(s.category || '')}</td><td><b>${esc(s.company_name)}</b></td><td>${esc(s.region || '')}</td>
+    ${RT_ITEMS.map(it => `<td style="text-align:center;">${sel(it)}</td>`).join('')}
+    <td style="text-align:center;font-weight:700;" data-rtw-score>${score ?? ''}</td>
+    <td style="text-align:center;" data-rtw-grade>${esc(grade)}</td>
+    <td style="text-align:center;" data-rtw-audit>${esc(rtAudit(grade))}</td>
+    <td style="white-space:nowrap;">${saved} <button class="name-link" data-rtw-save="${s.id}">存檔</button>
+      ${r.id ? `<button class="name-link" data-print-rt="${r.id}" style="margin-left:6px;">列印</button>` : ''}</td></tr>`;
+}
+function renderRtWork(){
+  if(!document.getElementById('rtwBody')) return;
+  rtwRenderSelects();
+  const list = rtwSuppliers();
+  const y = rtYear();
+  const done = STATE.qualifiedSuppliers.filter(isQualified).filter(s => { const r = rtFind(y, s.company_name); return r && r.score != null; }).length;
+  document.getElementById('rtw_count').textContent = `${y} 年度：已評 ${done}／${STATE.qualifiedSuppliers.filter(isQualified).length} 家`;
+  document.getElementById('rtwBody').innerHTML = list.map(rtwRowHtml).join('') || '<tr><td colspan="12" class="empty">沒有符合條件的供應商</td></tr>';
+}
+function rtwReadRow(tr){
+  const o = {};
+  tr.querySelectorAll('[data-rtw-pt]').forEach(el => { o[el.getAttribute('data-rtw-pt')] = rtNum(el.value); });
+  return o;
+}
+function rtwRefreshRow(tr){
+  const o = rtwReadRow(tr), sc = rtCalc(o), g = rtGrade(sc);
+  tr.querySelector('[data-rtw-score]').textContent = sc ?? '';
+  tr.querySelector('[data-rtw-grade]').textContent = g;
+  tr.querySelector('[data-rtw-audit]').textContent = rtAudit(g);
+}
+// 把一列寫進 STATE（不存檔）；五項沒選齊回傳 false
+function rtwApply(tr){
+  const sp = STATE.qualifiedSuppliers.find(x => String(x.id) === tr.getAttribute('data-rtw-sp'));
+  if(!sp) return false;
+  const o = rtwReadRow(tr), sc = rtCalc(o);
+  if(sc === null) return false;
+  const y = rtYear();
+  let r = rtFind(y, sp.company_name);
+  if(!r){ r = { id: nextId(STATE.supplierRatings), year_roc: y, company_name: sp.company_name, notes: '' }; STATE.supplierRatings.push(r); }
+  Object.assign(r, o, { category: sp.category || '', region: sp.region || '', score: sc, grade: rtGrade(sc), audit_result: rtAudit(rtGrade(sc)),
+    rated_on: document.getElementById('rtw_date').value || todayISO(),
+    rater: document.getElementById('rtw_rater').value.trim() || r.rater || null });
+  return true;
+}
+async function rtwSave(trs){
+  let n = 0, skip = 0;
+  trs.forEach(tr => { if(rtwApply(tr)) n++; else if([...tr.querySelectorAll('[data-rtw-pt]')].some(el => el.value !== '')) skip++; });
+  if(!n){ alert(skip ? '五個項目要全部選完才能存檔。' : '還沒有選任何評分。'); return; }
+  await saveState('supplier_ratings', STATE.supplierRatings, true);
+  renderAll();
+  document.getElementById('rtw_msg').textContent = `已存 ${n} 家` + (skip ? `；${skip} 家五項沒選齊，沒有存` : '');
+}
+// ---------- 列印：年度外部供應商評分表＋評分審核（DGTT-P008-R08-01）----------
+function rtRocDate(d){ const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[1] - 1911}/${+m[2]}/${+m[3]}` : ''; }
+function rtSheetHtml(r){
+  const B = 'border:1px solid #000;padding:6px 6px;vertical-align:middle;';
+  const G = 'background:#d9d9d9;';
+  const C = 'text-align:center;';
+  const has = rtCalc(r) !== null;
+  const rows = RT_ITEMS.map(it => {
+    const v = rtNum(r[it[0]]);
+    return `<tr style="height:38px;"><td style="${B}${C}font-size:13px;">${it[1]}(佔${it[2]}%)</td>
+      ${RT_LV.map(l => `<td style="${B}${C}font-size:14px;">${v === l[0] ? 'V' : ''}</td>`).join('')}
+      <td style="${B}${C}${G}font-size:14px;">${v === null ? '' : v}</td><td style="${B}${C}${G}font-size:14px;">${v === null ? '' : Math.round(v * it[2]) / 100}</td></tr>`;
+  }).join('');
+  const sc = has ? rtCalc(r) : rtNum(r.score);
+  const grade = r.grade || rtGrade(sc);
+  const audit = r.audit_result || rtAudit(grade);
+  const sub = it => { const v = rtNum(r[it[0]]); return v === null ? '' : Math.round(v * it[2]) / 100; };
+  return `<div class="rt-page">
+    <img src="${PF_LOGO}" style="height:30px;display:block;align-self:flex-start;">
+    <div style="text-align:center;font-size:18px;letter-spacing:2px;margin:2px 0 4px;">年度外部供應商評分表</div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;border:2px solid #000;">
+      <colgroup><col style="width:21%"><col style="width:11.5%"><col style="width:11.5%"><col style="width:11.5%"><col style="width:11.5%"><col style="width:11.5%"><col style="width:11.5%"><col style="width:10%"></colgroup>
+      <tr style="height:42px;"><td style="${B}" colspan="4">區　域：　　<span style="font-size:15px;">${esc(r.region || '')}</span></td>
+        <td style="${B}" colspan="4">評分者：　${esc(r.rater || '')}</td></tr>
+      <tr style="height:42px;"><td style="${B}" colspan="4">外部供應商：　<span style="font-size:15px;">${esc(r.company_name || '')}</span></td>
+        <td style="${B}" colspan="4">日　期：　<span style="font-size:17px;font-family:Arial,sans-serif;">${esc(rtRocDate(r.rated_on))}</span></td></tr>
+      <tr style="height:62px;"><td style="${B}${C}font-size:17px;">項 目<br><span style="font-size:13px;">(A)</span></td>
+        ${RT_LV.map(l => `<td style="${B}${C}font-size:17px;">${l[1]}<br><span style="font-size:13px;">(${l[0]}分)</span></td>`).join('')}
+        <td style="${B}${C}${G}font-size:17px;">小計<br><span style="font-size:13px;">(B)</span></td>
+        <td style="${B}${C}${G}font-size:16px;" colspan="2">總分(%)<br><span style="font-size:13px;">(A*B)</span></td></tr>
+      ${rows.replace(/<td style="([^"]*)background:#d9d9d9;font-size:14px;">([^<]*)<\/td><\/tr>/g, '<td style="$1background:#d9d9d9;font-size:14px;" colspan="2">$2</td></tr>')}
+    </table>
+    <div style="font-size:13px;margin:6px 0 0;line-height:1.6;">※評分者請依實際狀況（V）評分計算總分，評分結果將作為判定此外部供應商符合公司要求下將持續配合。</div>
+    <div style="border-top:2px dashed #000;margin:22px 0 18px;"></div>
+    <div style="text-align:center;font-size:19px;font-weight:700;letter-spacing:3px;margin-bottom:4px;">年度外部供應商評分審核</div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;border:2px solid #000;">
+      <colgroup><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:25%"></colgroup>
+      <tr style="height:52px;"><td style="${B}${C}white-space:nowrap;font-size:13px;padding:6px 2px;">外部供應商</td><td style="${B}${C}font-size:14px;" colspan="2">${esc(r.company_name || '')}</td>
+        <td style="${B}${C}">日 期</td><td style="${B}${C}font-size:18px;font-family:Arial,sans-serif;" colspan="2">${esc(rtRocDate(r.rated_on))}</td></tr>
+      <tr style="height:36px;">${['安全方面','衛生方面','環保方面','品質方面','保安方面'].map(t => `<td style="${B}${C}">${t}</td>`).join('')}<td style="${B}${C}">總　分</td></tr>
+      <tr style="height:40px;">${RT_ITEMS.map(it => `<td style="${B}${C}font-size:20px;font-family:Arial,sans-serif;">${sub(it)}</td>`).join('')}
+        <td style="${B}${C}font-size:22px;font-weight:700;font-family:Arial,sans-serif;">${sc ?? ''}</td></tr>
+      <tr style="height:52px;${G}"><td style="${B}${C}${G}">等　級</td><td style="${B}${C}${G}font-size:34px;font-weight:700;font-family:Arial,sans-serif;">${esc(grade)}</td>
+        <td style="${B}${C}${G}">審 核</td><td style="${B}${C}${G}font-size:30px;font-weight:700;" colspan="3">${esc(audit)}</td></tr>
+      <tr style="height:34px;"><td style="${B}${C}" colspan="2">總經理</td><td style="${B}${C}" colspan="2">行政管理部主管</td><td style="${B}${C}" colspan="2">採購單位</td></tr>
+      <tr style="height:74px;"><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td></tr>
+      <tr><td style="${B}font-size:12px;line-height:1.6;" colspan="6">說明：等級A：優先採用（100~85分）<br>
+        <span style="padding-left:3em;">等級B：保持正常往來(84~70分)</span><br>
+        <span style="padding-left:3em;">等級C：減少次數(69~60分)評比當年度將採購次數不多於3次</span><br>
+        <span style="padding-left:3em;">等級D：拒絕往來(60分以下)將不再進行採購</span></td></tr>
+    </table>
+    <div style="text-align:right;font-size:11px;margin-top:auto;padding-top:10px;font-family:Arial,sans-serif;">表單編號：DGTT-P008-R08-01</div>
+  </div>`;
+}
+// ---------- 列印：○○度供應商年度評分結果（總表）----------
+function rtSummaryHtml(year){
+  const order = id => { const i = STATE.qualifiedSuppliers.findIndex(s => String(s.company_name || '').trim() === id); return i < 0 ? 9999 : i; };
+  const list = STATE.supplierRatings.filter(r => Number(r.year_roc) === Number(year) && r.score != null)
+    .sort((a, b) => (STATE.qualifiedSuppliers.find(s => s.company_name === a.company_name)?.id || 9e9) - (STATE.qualifiedSuppliers.find(s => s.company_name === b.company_name)?.id || 9e9));
+  const pass = list.filter(r => (r.audit_result || rtAudit(r.grade || rtGrade(rtNum(r.score)))) !== '不合格').length;
+  const B = 'border:1px solid #000;padding:0 5px;height:21px;';
+  const C = 'text-align:center;';
+  const nNum = Math.max(30, list.length), total = Math.max(40, nNum);
+  const rows = Array.from({length: total}, (_, i) => {
+    const r = list[i];
+    return `<tr><td style="${B}${C}">${i < nNum ? i + 1 : ''}</td><td style="${B}">${r ? esc(r.category || '') : ''}</td><td style="${B}">${r ? esc(r.company_name || '') : ''}</td>
+      <td style="${B}${C}">${r ? esc(r.region || '') : ''}</td><td style="${B}${C}">${r ? esc(r.score) : ''}</td><td style="${B}${C}">${r ? esc(r.grade || '') : ''}</td><td style="${B}">${r ? esc(r.notes || '') : ''}</td></tr>`;
+  }).join('');
+  return `<div class="rt-page">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;">
+      <img src="${PF_LOGO}" style="height:30px;margin-top:8px;">
+      <table style="border-collapse:collapse;width:340px;font-size:15px;">
+        <tr><td style="border:1px solid #000;${C}padding:3px;" colspan="2">${esc(year)}度供應商年度評分結果</td></tr>
+        <tr><td style="border:1px solid #000;${C}padding:5px;width:50%;">合格數</td><td style="border:1px solid #000;${C}padding:5px;">不合格數</td></tr>
+        <tr><td style="border:1px solid #000;${C}padding:7px;">${pass}</td><td style="border:1px solid #000;${C}padding:7px;">${list.length - pass}</td></tr>
+      </table></div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;border:2px solid #000;">
+      <colgroup><col style="width:6%"><col style="width:14%"><col style="width:31%"><col style="width:6%"><col style="width:9%"><col style="width:10%"><col style="width:14%"></colgroup>
+      <tr><td style="${B}${C}" rowspan="2">NO.</td><td style="${B}${C}" rowspan="2">供應商類別</td><td style="${B}${C}" rowspan="2">公司行號</td><td style="${B}${C}" rowspan="2">區域</td>
+        <td style="${B}${C}" colspan="2">本年度評分結果</td><td style="${B}${C}" rowspan="2">備註</td></tr>
+      <tr><td style="${B}${C}">分數</td><td style="${B}${C}">等級</td></tr>
+      ${rows}
+    </table></div>`;
+}
+function rtPrint(pages){
+  const w = window.open('', '_blank');
+  if(!w){ alert('瀏覽器擋住了新視窗，請允許這個網站開彈出視窗後再按一次。'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>供應商評分</title><style>
+    @page{ size:A4; margin:10mm 12mm; }
+    body{ margin:0; font-family:'PMingLiU','新細明體','MingLiU','DFKai-SB',serif; color:#000; }
+    .rt-page{ min-height:272mm; display:flex; flex-direction:column; page-break-after:always; box-sizing:border-box; }
+    .rt-page:last-child{ page-break-after:auto; }
+    @media screen{ .rt-page{ width:186mm; margin:10px auto; padding:10mm 12mm; box-shadow:0 0 0 1px #ccc; } }
+  </style></head><body>${pages.join('')}</body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 400);
+}
+{
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  ['rtw_year', 'rtw_cat', 'rtw_region', 'rtw_show', 'rtw_need'].forEach(id => on(id, 'change', renderRtWork));
+  on('rtwBody', 'change', e => { const tr = e.target.closest('tr[data-rtw-sp]'); if(tr && e.target.hasAttribute('data-rtw-pt')) rtwRefreshRow(tr); });
+  on('rtwBody', 'click', e => {
+    const id = e.target.getAttribute('data-rtw-save');
+    if(id){ rtwSave([e.target.closest('tr')]); }
+  });
+  on('rtw_save_all', 'click', () => rtwSave([...document.querySelectorAll('#rtwBody tr[data-rtw-sp]')]));
+  on('rtw_print_all', 'click', () => {
+    const y = rtYear();
+    const list = STATE.supplierRatings.filter(r => Number(r.year_roc) === y && r.score != null);
+    if(!list.length){ alert(y + ' 年度還沒有評分資料。'); return; }
+    rtPrint(list.map(rtSheetHtml));
+  });
+  on('rtw_print_sum', 'click', () => rtPrint([rtSummaryHtml(rtYear())]));
+  // 評分清單、評分作業的「列印」按鈕
+  document.addEventListener('click', e => {
+    const id = e.target.getAttribute && e.target.getAttribute('data-print-rt');
+    if(!id) return;
+    const r = STATE.supplierRatings.find(x => String(x.id) === String(id));
+    if(r) rtPrint([rtSheetHtml(r)]);
+  });
+}
+
+
+// ============ 不合格供應商 ============
+function renderSpBad(){
+  const body = document.getElementById('spBadBody'); if(!body) return;
+  const rows = STATE.qualifiedSuppliers.filter(isBadSp).sort((a, b) => String(b.filed_date || '').localeCompare(String(a.filed_date || '')));
+  document.getElementById('sp_bad_count').textContent = `共 ${rows.length} 家`;
+  body.innerHTML = rows.map(s => `<tr>
+      <td>${esc(s.filed_date || '')}</td><td>${esc(s.category || '')}</td>
+      <td><button class="name-link" data-edit-sp="${s.id}"><b>${esc(s.company_name)}</b></button></td>
+      <td>${esc(s.region || '')}</td><td>${esc(String(s.phone || '').split(/\s+/)[0])}</td><td>${esc(s.responsible_person || '')}</td>
+      <td>${esc(s.disqualify_reason || '')}</td>
+      <td><button class="name-link" data-good-sp="${s.id}">恢復合格</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">目前沒有不合格供應商</td></tr>';
+}
+{
+  const b = document.getElementById('spBadBody');
+  if(b) b.addEventListener('click', async e => {
+    const g = e.target.getAttribute('data-good-sp'), ed = e.target.getAttribute('data-edit-sp');
+    if(ed){ openSpEditModal(ed); return; }
+    if(!g) return;
+    const s = STATE.qualifiedSuppliers.find(x => String(x.id) === g);
+    if(!s || !confirm(s.company_name + ' 恢復為合格供應商？')) return;
+    s.qualify_status = null; s.is_active = true;
+    await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+    renderAll();
+  });
+}
+
+// ============ 供應商評鑑表單（舊系統「表單－供應商評鑑」）============
+const SE_EVAL = {
+  ev_maint: ['保養維修廠', ['車輛原廠維修廠*', 'ISO/TS 16949等機構認證或國際知名品質獎項*', '客戶指定之外部供應商*', '保養維修貨運車/槽車一年(含)以上經驗',
+    '維修廠空間至少可同時容納2部車(含)', '至少有一張保養維修技師證', '安全衛生防護措施', '最近一年內未發生職業安全衛生、環保事故或被主管機關處分開罰事件。',
+    '廢棄物合格回收管道', '可提供書面保修紀錄', '簽具保密協定等保安措施'], '□合格（符合□1 或□2 或□3 或□4～11）　□不合格'],
+  ev_tire: ['輪胎換修廠', ['車輛原廠維修廠*', '外部供應商若為獲得ISO/TS 16949等機構認證或國際知名品質獎項，或客戶指定之外部供應商*', '具有換修貨運車/槽車輪胎一年(含)以上經驗',
+    '可到停車場作維修服務', '最近一年內未發生職業安全衛生、環保事故或被主管機關處分開罰事件。', '量測儀器(如扭力板手)有定期校正管理', '量測儀器(如胎壓計)有定期校正管理',
+    '安全衛生防護措施', '廢棄物合格回收管道', '簽具保密協定等保安措施'], '□合格（符合□1 或□2 或□3～10）　□不合格'],
+  ev_rec: ['行車紀錄器', ['車輛原廠之行車紀錄器製造商*', '政府指定之行車紀錄器檢校單位*',
+    '獲得ISO 9001驗證(須為車輛行車紀錄器製造、檢校、維修廠，且驗證範圍為車輛行車紀錄器製造、檢校、維修相關業務)。*', '經實際安裝確認可裝上車輛使用',
+    '經實際試用，紀錄紙可正常運作且列印清晰', '安全衛生防護措施'], '□合格（符合□1 或□2 或□3 或□4～6）　□不合格'],
+  ev_gps: ['GPS系統建置', ['客戶指定的建置廠商*', '獲得ISO 9001驗證(驗證範圍須為GPS建置服務的相關業務)*', '專業的GPS建置廠商*', '提供GPS操作訓練', '提供GPS後續維護',
+    '安全衛生防護措施', '廢棄物合格回收管道', '簽具保密協定等保安措施'], '□合格（符合□1 或□2 或□3 或□4～8）　□不合格'],
+  ev_waste: ['廢棄物清除廠商', ['持有廢棄物清除許可證之廠商*', '具有廢棄清除一年(含)以上經驗及持有合約審查清除技術員資格', '可到停車場作載運服務',
+    '定期派人員車輛清除工作，且依廢棄物清除處理法規作業', '每月提供事業廢棄物清除廠外紀錄聯單', '安全衛生防護措施',
+    '最近一年內未發生職業安全衛生、環保事故或被主管機關處分開罰事件。'], '□合格（符合□1 或□2～7）　□不合格'],
+  ev_water: ['飲用水及設備廠商', ['符合飲用水水質標準*', '獲得ISO 9001驗證(範圍為飲水機製造或符合飲用水相關業務)。*', '具有飲用水或設備製造一年(含)以上經驗',
+    '可到停車場作飲水機定期保養服務，桶裝水可直接配送服務', '最近一年內未發生職業安全衛生、環保事故或被主管機關處分開罰事件。', '提供定期水質檢測報告', '安全衛生防護措施'],
+    '□合格（符合□1 或□2 或□3～7）　□不合格'],
+};
+const SE_CARE = ['DGTT(危險品運輸團隊)深信品質獲得保證、工作零災害、健康及衛生受到保障、環境獲得保護、保安管理收到實效，才能使本公司、員工、客戶、承攬商、股東及社會獲得最大利益。',
+  '因此營造符合安全衛生環保的良好工作環境、持續提昇品質及保安管理的績效，全力防止任何安全衛生環保品質及保安異常事故的發生，是建興貨運集團經營管理者無可旁貸的責任，也是所有供應商一致努力的目標。所以與外部供應商共同承諾：'];
+const SE_CARE_ITEMS = ['塑造安全與健康衛生的工作環境，防範傷害及不健康的發生。', '落實設備維護管理與人員操作要求，杜絕承載物污染破壞環境。',
+  '在「安全第一、服務高品質」前提之下，提升物流的管理績效，以滿足供應鏈的品質/顧客要求。', '鑑別與管理保安漏洞，防杜人員、貨品及設施遭受威脅、破壞。',
+  '落實員工的安全觀念與行為。', '嚴格禁止藥物、毒品和酒精的使用，建立健康安全的工作環境。<div style="padding-left:2em;line-height:1.7;">Ø 苯二氮平類及與其相關藥物<br>Ø 具鎮靜效果者抗組織胺藥物<br>Ø 精神疾患用藥<br>Ø 鴉片類止痛藥<br>Ø 三環及四環類抗憂鬱劑<br>Ø 抗痙攣藥</div>',
+  '規劃與實施所需的訓練專案，提升員工的認知與能力。', '落實不符合項目的矯正管理，防止事件的再次發生。', '遵守適用的法令法規及其他要求事項。',
+  '持續改善安全衛生管理系統與管理績效。', '廢棄物依廢棄物清理法實施。', '遵守法規法令、危害預防、節能減廢、持續改善、落實風險管理。',
+  '禁用童工、禁止強迫勞動、禁止任何歧視與騷擾、尊重相關者基本人權。'];
+function seRenderSelect(){
+  const el = document.getElementById('se_sp'); if(!el) return;
+  const v = el.value;
+  el.innerHTML = STATE.qualifiedSuppliers.slice().sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'zh-Hant'))
+    .map(x => `<option value="${x.id}">${esc(x.company_name)}${x.category ? '（' + esc(x.category) + '）' : ''}${isBadSp(x) ? '［不合格］' : (!isActive(x) ? '［已無合作］' : '')}</option>`).join('');
+  if([...el.options].some(o => o.value === v)) el.value = v;
+  const d = document.getElementById('se_date'); if(d && !d.value) d.value = todayISO();
+}
+function seDateText(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[1] - 1911}　年　${+m[2]}　月　${+m[3]}　日` : '　　年　　月　　日'; }
+function seSheet(s, type, date, rater){
+  const B = 'border:1px solid #000;padding:6px 8px;vertical-align:middle;';
+  const C = 'text-align:center;';
+  const head = `<img src="${PF_LOGO}" style="height:30px;align-self:flex-start;">`;
+  if(type === 'basic'){
+    const L = (t) => `<td style="${B}${C}white-space:nowrap;width:15%;">${t}</td>`;
+    const line = (t) => `<div style="padding:3px 0;">${t}：　□合格　□不合格　說明：<span style="display:inline-block;min-width:240px;border-bottom:1px solid #000;">&nbsp;</span></div>`;
+    return `<div class="rt-page">${head}
+      <div style="text-align:center;font-size:20px;letter-spacing:4px;margin:4px 0 2px;">外部供應商基本資料</div>
+      <div style="text-align:right;font-size:13px;margin-bottom:4px;">No.　${esc(s.id)}</div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;">
+        <tr style="height:40px;">${L('公 司 行 號')}<td style="${B}" colspan="5">${esc(s.company_name || '')}</td></tr>
+        <tr style="height:40px;">${L('公司負責人')}<td style="${B}">${esc(s.responsible_person || '')}</td>${L('聯 絡 人')}<td style="${B}">${esc(s.contact_person || '')}</td>${L('創立日期')}<td style="${B}">${esc(s.established_date || '')}</td></tr>
+        <tr style="height:40px;">${L('地　　址')}<td style="${B}white-space:pre-line;" colspan="5">${esc(s.address || '')}</td></tr>
+        <tr style="height:40px;">${L('電　　話')}<td style="${B}white-space:pre-line;" colspan="3">${esc(s.phone || '')}</td>${L('傳　　真')}<td style="${B}">${esc(s.fax || '')}</td></tr>
+        <tr style="height:40px;">${L('統 一 編 號')}<td style="${B}" colspan="3">${esc(s.tax_id || '')}</td>${L('供應商類別')}<td style="${B}">${esc(s.category || '')}</td></tr>
+        <tr style="height:70px;">${L('營業項目說明')}<td style="${B}vertical-align:top;" colspan="5">${esc(s.business_desc || '')}</td></tr>
+        <tr>${L('審核意見')}<td style="${B}line-height:1.9;" colspan="5">運送設備服務商評估：（任一項合格）
+          ${line('1.保養維修廠')}${line('2.輪胎換修廠')}${line('3.行車紀錄器')}${line('4.GPS系統建置')}${line('5.廢棄物清除廠商')}${line('6.飲用水及設備廠商')}</td></tr>
+        <tr style="height:34px;"><td style="${B}${C}" colspan="2">總經理</td><td style="${B}${C}" colspan="2">行政主管</td><td style="${B}${C}" colspan="2">採購單位</td></tr>
+        <tr style="height:80px;"><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td></tr>
+      </table>
+      <div style="text-align:right;font-size:11px;margin-top:auto;font-family:Arial,sans-serif;">表單編號：DGTT-P008-R01-01</div></div>`;
+  }
+  if(type === 'care'){
+    return `<div class="rt-page">${head}
+      <div style="text-align:right;font-size:12px;">列印編號　${esc(s.id)}</div>
+      <div style="text-align:center;font-size:22px;letter-spacing:3px;margin:18px 0 22px;font-weight:700;">外部供應商的責任關懷原則</div>
+      <div style="font-size:15px;line-height:2;">${SE_CARE.map(t => `<p style="text-indent:2em;margin:0 0 8px;">${t}</p>`).join('')}
+        <ol style="margin:6px 0 0;padding-left:2em;">${SE_CARE_ITEMS.map(t => `<li>${t}</li>`).join('')}</ol></div>
+      <div style="margin-top:auto;font-size:16px;line-height:2.6;">公司名稱：${esc(s.company_name || '')}<br>公司代表人：${esc(s.responsible_person || '')}<span style="margin-left:4em;">（簽章）</span><br>
+        <span style="font-size:14px;">中華民國　${seDateText(date)}</span></div></div>`;
+  }
+  if(type === 'site'){
+    const rows = [['安全方面', '安全標示（佔10%）'], ['', '安全防護措施（佔10%）'], ['衛生方面', '環境整潔（佔10%）'], ['環保方面', '廢棄物管理（佔20%）'],
+      ['品質方面', '符合合格供應商（佔10%）'], ['', '符合要求確實執行（佔10%）'], ['', '價格（佔10%）'], ['保安方面', '現場有人員進行管理（佔20%）']];
+    return `<div class="rt-page">${head}
+      <div style="text-align:center;font-size:19px;letter-spacing:3px;margin:4px 0 6px;">外部供應商現場評分表</div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:13.5px;border:2px solid #000;">
+        <colgroup><col style="width:13%"><col style="width:27%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
+        <tr style="height:40px;"><td style="${B}${C}">區　域</td><td style="${B}">${esc(s.region || '')}</td><td style="${B}${C}">日　期</td><td style="${B}" colspan="5">${seDateText(date)}</td></tr>
+        <tr style="height:40px;"><td style="${B}${C}">外部供應商</td><td style="${B}">${esc(s.company_name || '')}</td><td style="${B}${C}">評分者</td><td style="${B}" colspan="5">${esc(rater || '')}</td></tr>
+        <tr><td style="${B}${C}" rowspan="2">項目</td><td style="${B}${C}">評分要素</td><td style="${B}${C}">優良</td><td style="${B}${C}">良好</td><td style="${B}${C}">普通</td><td style="${B}${C}">劣</td><td style="${B}${C}">小計</td><td style="${B}${C}">總小計(%)</td></tr>
+        <tr><td style="${B}${C}">(A)</td><td style="${B}${C}">100</td><td style="${B}${C}">80</td><td style="${B}${C}">60</td><td style="${B}${C}">0</td><td style="${B}${C}">(B)</td><td style="${B}${C}">(A*B)</td></tr>
+        ${rows.map(r => `<tr style="height:38px;"><td style="${B}${C}">${r[0]}</td><td style="${B}">${r[1]}</td>${('<td style="' + B + '"></td>').repeat(6)}</tr>`).join('')}
+        <tr style="height:40px;"><td style="${B}${C}">總　分</td><td style="${B}" colspan="7"></td></tr>
+      </table>
+      <div style="font-size:13px;margin-top:6px;">※評分者請依現場實際狀況（ν）評分計算總分，評分結果將作為判定此外部供應商符合公司要求下將持續配合。</div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;margin-top:14px;">
+        <tr style="height:34px;"><td style="${B}${C}">總經理</td><td style="${B}${C}">行政主管</td><td style="${B}${C}">採購單位</td></tr>
+        <tr style="height:80px;"><td style="${B}"></td><td style="${B}"></td><td style="${B}"></td></tr></table></div>`;
+  }
+  const ev = SE_EVAL[type]; if(!ev) return '';
+  return `<div class="rt-page">${head}
+    <div style="text-align:center;font-size:13px;margin-top:2px;">建興貨運集團</div>
+    <div style="text-align:center;font-size:19px;letter-spacing:2px;margin:2px 0 8px;">運送設備服務商評估表（${ev[0]}）</div>
+    <div style="font-size:14px;margin-bottom:4px;">區域：${esc(s.region || '')}</div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:13.5px;border:2px solid #000;">
+      <colgroup><col style="width:8%"><col style="width:46%"><col style="width:28%"><col style="width:18%"></colgroup>
+      <tr style="height:40px;"><td style="${B}" colspan="2">外部供應商名稱：　${esc(s.company_name || '')}</td><td style="${B}" colspan="2">日期：${seDateText(date)}</td></tr>
+      <tr><td style="${B}${C}">項次</td><td style="${B}${C}">評分項目</td><td style="${B}${C}">評　　估</td><td style="${B}${C}">備　註</td></tr>
+      ${ev[1].map((t, i) => { const key = /\*$/.test(t); return `<tr style="height:40px;"><td style="${B}${C}">${i + 1}</td><td style="${B}">${esc(t.replace(/\*$/, ''))}</td>
+        <td style="${B}">□否　□是${key ? '（列為合格廠商）' : ''}</td><td style="${B}"></td></tr>`; }).join('')}
+      <tr style="height:44px;"><td style="${B}${C}" colspan="1">評估<br>結果</td><td style="${B}" colspan="3">${ev[2]}　說明：</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;margin-top:14px;">
+      <tr style="height:34px;"><td style="${B}${C}">總　經　理</td><td style="${B}${C}">行 政 主 管</td><td style="${B}${C}">採　購　單　位</td><td style="${B}${C}">評　估　者</td></tr>
+      <tr style="height:80px;"><td style="${B}"></td><td style="${B}"></td><td style="${B}"></td><td style="${B}${C}">${esc(rater || '')}</td></tr></table></div>`;
+}
+{
+  const b = document.getElementById('se_print');
+  if(b) b.addEventListener('click', () => {
+    const s = STATE.qualifiedSuppliers.find(x => String(x.id) === document.getElementById('se_sp').value);
+    if(!s){ alert('請先選供應商'); return; }
+    rtPrint([seSheet(s, document.getElementById('se_form').value, document.getElementById('se_date').value, document.getElementById('se_rater').value.trim())]);
+  });
+}
+
+// ============ 產品規格表（supplier_item_catalog，舊系統「產品規格表」）============
+let ctEditing = null;
+function renderCatalog(){
+  const body = document.getElementById('ctBody'); if(!body) return;
+  const list = STATE.supplierItemCatalog || [];
+  const cats = [...new Set(list.map(r => r.category).filter(Boolean))].sort();
+  const cf = document.getElementById('ct_cat_filter'); const cv = cf.value;
+  cf.innerHTML = '<option value="all">全部分類</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if([...cf.options].some(o => o.value === cv)) cf.value = cv;
+  document.getElementById('ctCatList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+  document.getElementById('ctSupList').innerHTML = STATE.qualifiedSuppliers.filter(isQualified).map(x => `<option value="${esc(x.company_name)}">`).join('');
+  const q = document.getElementById('ct_search').value.trim();
+  const rows = list.filter(r => cf.value === 'all' || r.category === cf.value)
+    .filter(r => !q || [r.item_name, r.spec, r.supplier_name, r.supplier_2, r.supplier_3].some(x => String(x || '').includes(q)))
+    .sort((a, b) => String(a.category || '').localeCompare(String(b.category || ''), 'zh-Hant') || (a.id || 0) - (b.id || 0));
+  document.getElementById('ct_count').textContent = `共 ${rows.length} 項`;
+  body.innerHTML = rows.map(r => `<tr>
+      <td>${esc(r.category || '')}</td><td><b>${esc(r.item_name || '')}</b></td>
+      <td style="white-space:pre-line;font-size:12px;max-width:340px;">${esc(r.spec || '')}</td>
+      <td>${esc(r.supplier_name || '')}</td><td>${esc(r.supplier_2 || '')}</td><td>${esc(r.supplier_3 || '')}</td>
+      <td>${esc(r.sds_note || '')}</td><td class="muted">${esc(r.notes || '')}</td>
+      <td style="white-space:nowrap;"><button class="name-link" data-ct-edit="${r.id}">修改</button>　<button class="del-btn" data-ct-del="${r.id}">刪除</button></td></tr>`).join('')
+    || '<tr><td colspan="9" class="empty">尚無產品規格資料</td></tr>';
+}
+function ctClear(){
+  ['ct_cat','ct_item','ct_s1','ct_s2','ct_s3','ct_sds','ct_spec','ct_notes'].forEach(id => { document.getElementById(id).value = ''; });
+  ctEditing = null; document.getElementById('ct_add').textContent = '新增品項'; document.getElementById('ct_cancel').style.display = 'none';
+}
+{
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  on('ct_search', 'input', renderCatalog); on('ct_cat_filter', 'change', renderCatalog); on('ct_cancel', 'click', ctClear);
+  on('ct_add', 'click', async () => {
+    const g = id => document.getElementById(id).value.trim();
+    if(!g('ct_item') || !g('ct_s1')){ alert('品名和供應商-1 一定要填'); return; }
+    const data = { category: g('ct_cat') || null, item_name: g('ct_item'), spec: document.getElementById('ct_spec').value.trim() || null,
+      supplier_name: g('ct_s1'), supplier_2: g('ct_s2') || null, supplier_3: g('ct_s3') || null, sds_note: g('ct_sds') || null, notes: g('ct_notes') || null };
+    if(ctEditing){ Object.assign(STATE.supplierItemCatalog.find(r => String(r.id) === String(ctEditing)) || {}, data); }
+    else STATE.supplierItemCatalog.push(Object.assign({ id: nextId(STATE.supplierItemCatalog) }, data));
+    await saveState('supplier_item_catalog', STATE.supplierItemCatalog, true);
+    ctClear(); renderCatalog();
+  });
+  on('ctBody', 'click', async e => {
+    const ed = e.target.getAttribute('data-ct-edit'), del = e.target.getAttribute('data-ct-del');
+    if(ed){
+      const r = STATE.supplierItemCatalog.find(x => String(x.id) === ed); if(!r) return;
+      const set = (id, v) => { document.getElementById(id).value = v || ''; };
+      set('ct_cat', r.category); set('ct_item', r.item_name); set('ct_s1', r.supplier_name); set('ct_s2', r.supplier_2); set('ct_s3', r.supplier_3);
+      set('ct_sds', r.sds_note); set('ct_spec', r.spec); set('ct_notes', r.notes);
+      ctEditing = ed; document.getElementById('ct_add').textContent = '儲存修改'; document.getElementById('ct_cancel').style.display = 'inline-block';
+      document.getElementById('ct_item').scrollIntoView({block: 'center'});
+    }
+    if(del){
+      const r = STATE.supplierItemCatalog.find(x => String(x.id) === del);
+      if(!r || !confirm('刪除「' + (r.item_name || '') + '」？')) return;
+      STATE.supplierItemCatalog = STATE.supplierItemCatalog.filter(x => x !== r);
+      await saveState('supplier_item_catalog', STATE.supplierItemCatalog, true);
+      renderCatalog();
+    }
+  });
+  on('ct_print', 'click', () => {
+    const list = (STATE.supplierItemCatalog || []).slice().sort((a, b) => String(a.category || '').localeCompare(String(b.category || ''), 'zh-Hant'));
+    const B = 'border:1px solid #000;padding:4px 6px;vertical-align:top;font-size:12px;';
+    rtPrint([`<div class="rt-page"><img src="${PF_LOGO}" style="height:28px;align-self:flex-start;">
+      <div style="text-align:center;font-size:18px;letter-spacing:3px;margin:4px 0 8px;">產品規格表</div>
+      <table style="width:100%;border-collapse:collapse;"><tr>${['分類','品名','規格','供應商-1','供應商-2','供應商-3','SDS','備註'].map(h => `<th style="${B}background:#eee;">${h}</th>`).join('')}</tr>
+      ${list.map(r => `<tr><td style="${B}">${esc(r.category || '')}</td><td style="${B}">${esc(r.item_name || '')}</td><td style="${B}white-space:pre-line;">${esc(r.spec || '')}</td>
+        <td style="${B}">${esc(r.supplier_name || '')}</td><td style="${B}">${esc(r.supplier_2 || '')}</td><td style="${B}">${esc(r.supplier_3 || '')}</td><td style="${B}">${esc(r.sds_note || '')}</td><td style="${B}">${esc(r.notes || '')}</td></tr>`).join('')}
+      </table></div>`]);
+  });
 }
 
 // ============ 表單生成 ============
@@ -1217,8 +1757,9 @@ function pfDeptHit(dept, name){
   return d.indexOf(name) >= 0 || (/車場$/.test(name) && d.indexOf(name.replace('車場', '')) >= 0);
 }
 function pfTypeLine(pt){
-  return `${checkbox(pt === '一般事務採購')}一般事務採購（2千元含以上）　${checkbox(pt === '例行性採購')}例行性採購　${checkbox(pt === '專案採購')}專案採購（超出30萬之案件）<br>`
-    + `${checkbox(pt === '其他')}其他<span style="display:inline-block;min-width:300px;border-bottom:1px solid #000;">&nbsp;</span>`;
+  const other = /^其他/.test(pt) ? pt.replace(/^其他[-－:：]?/, '') : '';
+  return `${checkbox(pt.indexOf('一般事務') === 0)}一般事務採購（2千元含以上）　${checkbox(pt === '例行性採購')}例行性採購　${checkbox(pt.indexOf('專案') === 0)}專案採購（超出30萬之案件）<br>`
+    + `${checkbox(/^其他/.test(pt))}其他<span style="display:inline-block;min-width:300px;border-bottom:1px solid #000;">${other ? esc(other) : '&nbsp;'}</span>`;
 }
 
 // ---------- 採購申請單（DGTT-P008-R09-01）----------
@@ -1263,7 +1804,7 @@ function buildOrderForm(orderNo, items, first, totalPrice){
   const untaxed = items.reduce((s, o) => s + (parseFloat(sub(o)) || 0), 0);
   const rows = Array.from({length: n}, (_, i) => items[i] || null).map((o, i) => {
     const pay = o ? String(o.payment_method || '').trim() : '';
-    const k = PF_PAY.indexOf(pay);
+    const k = PF_PAY.findIndex(x => x !== '其他' && pay.indexOf(x) >= 0);
     const payCells = (!o || !pay) ? PF_PAY.map(() => pfTd('')).join('')
       : (k >= 0 ? PF_PAY.map((x, j) => pfTd(j === k ? '■' : '', 'text-align:center;')).join('')
                 : pfTd(esc(pay), 'text-align:center;font-size:11px;" colspan="5'));
@@ -1393,6 +1934,10 @@ function renderAll(){
   renderSpHistoryTable();
   renderRtSelects();
   renderRtTable();
+  renderRtWork();
+  renderSpBad();
+  seRenderSelect();
+  renderCatalog();
   renderFormSelects();
   renderContactsAll();
 }
@@ -1623,8 +2168,14 @@ document.getElementById('po_add').addEventListener('click', async () => {
     notes: document.getElementById('po_notes').value.trim()
   });
   await saveState('procurement_orders', STATE.procurementOrders, true);
-  ['po_no','po_apply_date','po_purchase_date','po_need_date','po_arrival_date','po_dept','po_applicant','po_supplier','po_spec','po_qty','po_unit','po_price','po_tax','po_invoice','po_notes'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('po_item_no').value = 1;
+  if((document.getElementById('po_keep') || {}).checked){
+    // 舊系統「新增下一筆」：表頭留著，只清品項那幾格，項次＋1
+    ['po_spec','po_qty','po_unit','po_price','po_tax','po_notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    document.getElementById('po_item_no').value = (parseInt(document.getElementById('po_item_no').value, 10) || 1) + 1;
+  }else{
+    ['po_no','po_apply_date','po_purchase_date','po_need_date','po_arrival_date','po_dept','po_applicant','po_supplier','po_spec','po_qty','po_unit','po_price','po_tax','po_invoice','po_notes'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('po_item_no').value = 1;
+  }
   renderAll();
 });
 document.getElementById('po_search').addEventListener('input', renderPoTable);
@@ -1690,6 +2241,17 @@ document.getElementById('sp_region_filter').addEventListener('change', renderSpT
 document.getElementById('spTableBody').addEventListener('click', async (e) => {
   const deactivateId = e.target.getAttribute('data-deactivate-sp');
   const editId = e.target.getAttribute('data-edit-sp');
+  const badId = e.target.getAttribute('data-bad-sp');
+  if(badId){
+    const s = STATE.qualifiedSuppliers.find(x => String(x.id) === badId);
+    if(!s) return;
+    const why = prompt(s.company_name + ' 標記為不合格供應商。\n不合格原因（例：115 年度評分 D 級）：', '');
+    if(why === null) return;
+    s.qualify_status = '不合格'; s.disqualify_reason = why.trim() || null;
+    await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
+    renderAll();
+    return;
+  }
   if(deactivateId){
     const s = STATE.qualifiedSuppliers.find(x => String(x.id) === deactivateId);
     if(s){ s.is_active = false; }
@@ -1727,24 +2289,6 @@ document.getElementById('spHistoryTableBody').addEventListener('click', async (e
   }
 });
 
-document.getElementById('rt_add').addEventListener('click', async () => {
-  const supplierId = parseInt(document.getElementById('rt_supplier').value);
-  const year = parseInt(document.getElementById('rt_year').value);
-  if(!supplierId || !year){ alert('請選擇供應商並填寫年度'); return; }
-  const supplier = STATE.qualifiedSuppliers.find(s => s.id === supplierId);
-  STATE.supplierRatings.push({
-    id: nextId(STATE.supplierRatings), year_roc: year,
-    category: supplier ? supplier.category : '',
-    company_name: supplier ? supplier.company_name : '',
-    region: supplier ? supplier.region : '',
-    score: document.getElementById('rt_score').value ? parseFloat(document.getElementById('rt_score').value) : null,
-    grade: document.getElementById('rt_grade').value,
-    notes: document.getElementById('rt_notes').value.trim()
-  });
-  await saveState('supplier_ratings', STATE.supplierRatings, true);
-  ['rt_year','rt_score','rt_notes'].forEach(id=>document.getElementById(id).value='');
-  renderAll();
-});
 document.getElementById('rt_search').addEventListener('input', renderRtTable);
 document.getElementById('rt_year_filter').addEventListener('change', renderRtTable);
 document.getElementById('rt_grade_filter').addEventListener('change', renderRtTable);
@@ -1786,6 +2330,11 @@ document.getElementById('spEditModalSave').addEventListener('click', async () =>
   s.contact_person = document.getElementById('spe_contact').value.trim();
   s.established_date = document.getElementById('spe_established').value || null;
   s.business_desc = document.getElementById('spe_desc').value.trim();
+  s.eval_mark = document.getElementById('spe_eval').value || null;
+  s.evaluator = document.getElementById('spe_evaluator').value.trim() || null;
+  s.nda_note = document.getElementById('spe_nda').value.trim() || null;
+  s.tire_gauge_cal = document.getElementById('spe_tire').value.trim() || null;
+  s.torque_wrench_cal = document.getElementById('spe_torque').value.trim() || null;
   await saveState('qualified_suppliers', STATE.qualifiedSuppliers, true);
   closeSpEditModal();
   renderAll();
