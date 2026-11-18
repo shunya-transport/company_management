@@ -1684,7 +1684,7 @@ const SE_EVAL = {
     '□合格（符合□1 或□2 或□3～7）　□不合格'],
 };
 const SE_CARE = ['DGTT(危險品運輸團隊)深信品質獲得保證、工作零災害、健康及衛生受到保障、環境獲得保護、保安管理收到實效，才能使本公司、員工、客戶、承攬商、股東及社會獲得最大利益。',
-  '因此營造符合安全衛生環保的良好工作環境、持續提昇品質及保安管理的績效，全力防止任何安全衛生環保品質及保安異常事故的發生，是建興貨運集團經營管理者無可旁貸的責任，也是所有供應商一致努力的目標。所以與外部供應商共同承諾：'];
+  '因此營造符合安全衛生環保的良好工作環境、持續提昇品質及保安管理的績效，全力防止任何安全衛生環保品質及保安異常事故的發生，是DGTT經營管理者無可旁貸的責任，也是所有供應商一致努力的目標。所以與外部供應商共同承諾：'];
 const SE_CARE_ITEMS = ['塑造安全與健康衛生的工作環境，防範傷害及不健康的發生。', '落實設備維護管理與人員操作要求，杜絕承載物污染破壞環境。',
   '在「安全第一、服務高品質」前提之下，提升物流的管理績效，以滿足供應鏈的品質/顧客要求。', '鑑別與管理保安漏洞，防杜人員、貨品及設施遭受威脅、破壞。',
   '落實員工的安全觀念與行為。', '嚴格禁止藥物、毒品和酒精的使用，建立健康安全的工作環境。<div style="padding-left:2em;line-height:1.7;">Ø 苯二氮平類及與其相關藥物<br>Ø 具鎮靜效果者抗組織胺藥物<br>Ø 精神疾患用藥<br>Ø 鴉片類止痛藥<br>Ø 三環及四環類抗憂鬱劑<br>Ø 抗痙攣藥</div>',
@@ -1755,7 +1755,6 @@ function seSheet(s, type, date, rater){
   const ev = SE_EVAL[type]; if(!ev) return '';
   const rh = Math.max(40, Math.min(64, Math.floor(500 / ev[1].length)));
   return `<div class="rt-page">${head}
-    <div style="text-align:center;font-size:13px;margin-top:2px;">建興貨運集團</div>
     <div style="text-align:center;font-size:23px;letter-spacing:3px;margin:4px 0 10px;">運送設備服務商評估表（${ev[0]}）</div>
     <div style="font-size:14px;margin-bottom:4px;">區域：${esc(s.region || '')}</div>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;border:2px solid #000;">
