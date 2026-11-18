@@ -132,6 +132,9 @@
   table.lvot-table .c-days{font-size:12.5px;white-space:nowrap;}
   tr:last-child td{border-bottom:none;}
   .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .vp-cam{display:inline-flex;flex-direction:column;align-items:center;font-size:20px;line-height:1.1;text-decoration:none;}
+  .vp-cam:hover{transform:scale(1.15);}
+  .vp-cam small{font-size:10px;color:#8a6d3b;font-weight:600;}
   .pill.red{background:var(--red-bg);color:var(--red);}
   .pill.amber{background:var(--amber-bg);color:var(--amber);}
   .pill.green{background:var(--green-bg);color:var(--green);}
@@ -3374,11 +3377,13 @@
     <details style="margin-bottom:8px;"><summary style="cursor:pointer;color:var(--accent-dark,#8a6d3b);font-weight:600;">怎麼一次拿到 Google 雲端整個資料夾的檔名＋連結？（點開看）</summary>
       <div class="muted" style="line-height:1.7;margin:6px 0;">
         1. 打開 <b>script.google.com</b> → 新專案，把下面整段貼上（取代原本內容）。<br>
-        2. 第一行的 <b>資料夾ID</b> 換成雲端資料夾網址最後那一串（drive.google.com/drive/folders/<b>這一串</b>）。<br>
+        2. 上面 FOLDERS 裡填「資料夾名稱: 資料夾ID」（ID＝雲端資料夾網址 drive.google.com/drive/folders/<b>這一串</b>，問號後面不要），可以一次放很多個；通行證的資料夾名稱請用廠商名稱（例：隆興）。<br>
         3. 按「執行」，第一次會要求授權，選自己的帳號允許。<br>
         4. 跑完到「我的雲端硬碟」打開新產生的試算表「檔案連結清單」，把 A、B 兩欄全選複製，貼到下面的框框。<br>
         子資料夾也會一起列出來，檔名前面會帶資料夾名稱（例：國介/SDS二氧化碳.pdf），資料夾名稱跟業主一樣時會優先對那個業主。</div>
-      <textarea id="lk_script" readonly style="width:100%;height:150px;font-family:monospace;font-size:12px;">const FOLDER_ID = '資料夾ID';
+      <textarea id="lk_script" readonly style="width:100%;height:170px;font-family:monospace;font-size:12px;">const FOLDERS = {
+  '資料夾名稱': '資料夾ID',
+};
 function listFiles(){
   const out = [];
   const walk = (folder, path) => {
@@ -3387,7 +3392,7 @@ function listFiles(){
     const subs = folder.getFolders();
     while(subs.hasNext()){ const d = subs.next(); walk(d, path + d.getName() + '/'); }
   };
-  walk(DriveApp.getFolderById(FOLDER_ID), '');
+  Object.keys(FOLDERS).forEach(name => walk(DriveApp.getFolderById(FOLDERS[name]), name + '/'));
   const ss = SpreadsheetApp.create('檔案連結清單');
   if(out.length) ss.getActiveSheet().getRange(1, 1, out.length, 2).setValues(out);
   Logger.log('共 ' + out.length + ' 個檔案：' + ss.getUrl());
@@ -22031,6 +22036,7 @@ function sdsCsv(){
 })();
 // ===================== 雲端連結（SDS、通行證）=====================
 // 只接受 http(s) 網址，避免 javascript: 之類的連結被點下去執行
+function lkIsFolder(u){ return /\/drive\/(u\/\d+\/)?folders\//.test(String(u || '')); }
 function lkSafe(u){ const t = String(u || '').trim(); return /^https?:\/\/\S+$/i.test(t) ? t : ''; }
 function lkAsk(label, cur){
   const v = prompt(label + '\n\n貼上雲端檔案的分享網址（Google 雲端請先把共用設成公司的人都看得到）。\n清空後按確定＝拿掉連結。', cur || '');
@@ -22063,7 +22069,7 @@ function lkOpen(mode){
   document.getElementById('lk_title').textContent = mode === 'sds' ? '批次貼上 SDS 雲端連結' : '批次貼上通行證雲端連結';
   document.getElementById('lk_help').innerHTML = mode === 'sds'
     ? '一行一個檔案：<b>檔名</b>＋<b>網址</b>（從試算表複製兩欄貼上就是這個格式）。用檔名對 SDS 表上的「檔名」，前面的序號、空白、.pdf 有沒有都可以。'
-    : '一行一個檔案：<b>檔名</b>＋<b>網址</b>。檔名裡有<b>通行證號碼</b>（例：50D11508181）就掛到那一張；沒有證號但有<b>批號</b>（例：D501150513020）的，掛到那一批的每一張（整批掃成一個 PDF 時用）。';
+    : '一行一個檔案：<b>檔名</b>＋<b>網址</b>。檔名裡有<b>通行證號碼</b>（例：50D11508181）就掛到那一張；沒有證號但有<b>批號</b>（例：D501150513020）的，掛到那一批的每一張；只有<b>車號</b>的，要帶廠商資料夾名稱（例：隆興/KLM-2088.pdf），掛到那個廠商那台車還有效的證。原本只掛「廠商資料夾」的會自動換成單張檔案。';
   document.getElementById('lk_text').value = '';
   document.getElementById('lk_result').innerHTML = ''; document.getElementById('lk_msg').textContent = '';
   document.getElementById('lkModal').classList.add('show');
@@ -22109,9 +22115,18 @@ async function lkApply(){
       let hit = ps.filter(p => p.pass_no && nm.includes(key(p.pass_no)));
       let how = '證號';
       if(!hit.length){ hit = ps.filter(p => p.batch_no && nm.includes(key(p.batch_no))); how = '批號'; }
+      if(!hit.length){
+        // 檔名只有車號：要放在廠商資料夾裡（例：隆興/KLM-2088.pdf），用「廠商＋車號」對，只掛還有效的證
+        const parts = ln.name.split('/'); const base = key(parts.pop());
+        const fk = parts.map(x => x.replace(/[A-Za-z\s]/g, '') || x).filter(Boolean);
+        if(fk.length) hit = ps.filter(p => p.plate && base.includes(key(p.plate))
+          && fk.some(f => String(p.vendor || '').includes(f)) && (vpDaysLeft(p.expiry_date) ?? 0) >= 0);
+        how = '廠商資料夾＋車號';
+      }
       if(!hit.length){ miss.push(ln.name); return; }
       let n = 0;
-      hit.forEach(p => { if(p.link_url && !over) return; p.link_url = ln.url; touched.push(p); n++; });
+      // 原本只掛「廠商資料夾」的，一律換成單張檔案的連結
+      hit.forEach(p => { if(p.link_url && !over && !lkIsFolder(p.link_url)) return; p.link_url = ln.url; touched.push(p); n++; });
       if(n) ok.push(ln.name + ' → ' + how + '對到 ' + hit.length + ' 張' + (n < hit.length ? '（' + (hit.length - n) + ' 張原本有連結，沒動）' : ''));
       else skip.push(ln.name);
     });
@@ -22648,7 +22663,9 @@ function renderVpTable(){
       <td>${esc(p.expiry_date || '—')}</td>
       <td>${vpPill(p.expiry_date)}</td>
       <td class="muted">${esc(p.inspect_date || '—')}</td>
-      <td style="white-space:nowrap;">${lkSafe(p.link_url) ? `<a class="name-link" href="${esc(lkSafe(p.link_url))}" target="_blank" rel="noopener noreferrer">開啟 ↗</a><br>` : ''}<button class="name-link" data-link-pass="${p.id}" style="font-weight:400;">${p.link_url ? '改連結' : '＋連結'}</button></td>
+      <td style="white-space:nowrap;text-align:center;">${lkSafe(p.link_url)
+        ? `<a href="${esc(lkSafe(p.link_url))}" target="_blank" rel="noopener noreferrer" class="vp-cam" title="${lkIsFolder(p.link_url) ? '開啟這個廠商的雲端資料夾（還沒掛到單張檔案）' : '開啟這張通行證'}">📷${lkIsFolder(p.link_url) ? '<small>資料夾</small>' : ''}</a>` : ''}
+        <div><button class="name-link" data-link-pass="${p.id}" style="font-weight:400;font-size:11.5px;">${p.link_url ? '改連結' : '＋連結'}</button></div></td>
       <td style="white-space:nowrap;">
         <button class="name-link" data-edit-pass="${p.id}">修改</button>
         <button class="del-btn" data-del-pass="${p.id}">刪除</button></td>
