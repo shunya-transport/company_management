@@ -1184,186 +1184,179 @@ function renderFormSelects(){
 }
 function checkbox(checked){ return checked ? '■' : '□'; }
 
+// ===== 採購三聯表單（115/11 照公司紙本更新：DGTT-P008-R09-01／R13-01／R14-01）=====
+// 版面照紙本：左上 LOGO、置中標題、右上採購編號、底部表單編號。
+// 表單產生後整張可以直接點進去打字（用途說明、其他、驗退那些空格），改完再按列印。
+const PF_LOGO = 'data:image/png;base64,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';
+const PF_B = 'border:1px solid #000;';
+const pfTd = (txt, extra) => `<td style="${PF_B}padding:4px 5px;vertical-align:middle;color:#000;${extra || ''}">${txt == null ? '' : txt}</td>`;
+function pfMd(d){
+  const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? (+m[2]) + '月' + (+m[3]) + '日' : esc(d || '');
+}
+function pfNum(v){
+  if(v === null || v === undefined || v === '') return '';
+  const n = Number(v); return isNaN(n) ? esc(v) : String(Math.round(n * 100) / 100);
+}
+function pfHead(title, orderNo){
+  return `<div style="position:relative;height:46px;margin-bottom:4px;">
+      <img src="${PF_LOGO}" alt="DGTT" style="position:absolute;left:0;top:0;height:30px;">
+      <div style="position:absolute;left:0;right:0;top:20px;text-align:center;font-size:16px;letter-spacing:2px;">${title}</div>
+      <div style="position:absolute;right:0;top:20px;font-size:15px;font-family:Arial,sans-serif;">${esc(orderNo)}</div>
+    </div>`;
+}
+function pfFoot(code, page){
+  return `<div style="margin-top:auto;padding-top:14px;position:relative;font-size:11px;height:16px;">
+      ${page ? '<div style="position:absolute;left:0;right:0;text-align:center;">第 1 頁，共 1 頁</div>' : ''}
+      <div style="position:absolute;right:0;font-family:Arial,sans-serif;">表單編號：${code}</div></div>`;
+}
+const PF_DEPTS = ['業務部', '行政管理部', '財務部', '品質管理部', '環安衛管理部'];
+const PF_YARDS = ['桃園車場', '新竹車場', '台中車場', '台南車場', '高雄車場'];
+function pfDeptHit(dept, name){
+  const d = String(dept || '');
+  return d.indexOf(name) >= 0 || (/車場$/.test(name) && d.indexOf(name.replace('車場', '')) >= 0);
+}
+function pfTypeLine(pt){
+  return `${checkbox(pt === '一般事務採購')}一般事務採購（2千元含以上）　${checkbox(pt === '例行性採購')}例行性採購　${checkbox(pt === '專案採購')}專案採購（超出30萬之案件）<br>`
+    + `${checkbox(pt === '其他')}其他<span style="display:inline-block;min-width:300px;border-bottom:1px solid #000;">&nbsp;</span>`;
+}
+
+// ---------- 採購申請單（DGTT-P008-R09-01）----------
 function buildRequestForm(orderNo, items, first){
-  const rows10 = Array.from({length:10}, (_,i) => items[i] || null);
-  const rowsHtml = rows10.map((o,i) => `
-    <tr>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;width:6%;">${i+1}</td>
-      <td style="border:1px solid #333;padding:4px 6px;width:42%;">${o?esc(o.item_spec||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;width:26%;"></td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;width:13%;">${o?(o.quantity??''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;width:13%;">${o?esc(o.unit||''):''}</td>
-    </tr>`).join('');
-  const pt = (first.purchase_type||'').trim();
-  const dept = (first.apply_dept||'').trim();
-  return `
-    <div style="text-align:right;font-size:15px;font-weight:700;margin-bottom:6px;">採購申請單　　　　　　　　　　　　　　${esc(orderNo)}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;width:16%;font-weight:700;">採 購 種 類</td>
-        <td style="border:1px solid #333;padding:6px;" colspan="4">
-          ${checkbox(pt==='一般事務採購')}一般事務採購 (2千元含以上)　${checkbox(pt==='例行性採購')}例行性採購　${checkbox(pt==='專案採購')}專案採購 (超出30萬之案件)<br>
-          ${checkbox(pt==='其他')}其他
-        </td>
-      </tr>
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申 請 部 門</td>
-        <td style="border:1px solid #333;padding:6px;" colspan="4">
-          ${checkbox(dept==='業務部')}業務部　${checkbox(dept==='行政管理部')}行政管理部　${checkbox(dept==='財務部')}財務部　${checkbox(dept==='品質管理部')}品質管理部　${checkbox(dept==='環安衛管理部')}環安衛管理部<br>
-          運務管理部：　${checkbox(dept==='桃園車場')}桃園車場　${checkbox(dept==='新竹車場')}新竹車場　${checkbox(dept==='台中車場')}台中車場　${checkbox(dept==='台南車場')}台南車場　${checkbox(dept==='高雄車場')}高雄車場
-        </td>
-      </tr>
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申請人</td>
-        <td style="border:1px solid #333;padding:6px;" colspan="4">${esc(first.applicant||'')}</td>
-      </tr>
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申請日期</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;">${esc(first.apply_date||'')}</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">需求日期</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;" colspan="2">${esc(first.need_date||'')}</td>
-      </tr>
-      <tr>
-        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">項次</th>
-        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">品　名</th>
-        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">規　格</th>
-        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">請購數</th>
-        <th style="border:1px solid #333;padding:6px;background:#f5f5f5;">單位</th>
-      </tr>
-      ${rowsHtml}
-      <tr><td colspan="5" style="border:1px solid #333;padding:6px;">用途說明：</td></tr>
-      <tr>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">總經理</td>
-        <td colspan="1" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">環安衛主管</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">部門主管</td>
-      </tr>
+  const pt = (first.purchase_type || '').trim();
+  const dept = (first.apply_dept || '').trim();
+  const n = Math.max(10, items.length);
+  const rows = Array.from({length: n}, (_, i) => items[i] || null).map((o, i) => `<tr style="height:40px;">
+      ${pfTd(i + 1, 'text-align:center;')}
+      ${pfTd(o ? esc(o.item_spec || '') : '', 'text-align:center;" colspan="2')}
+      ${pfTd('', '')}
+      ${pfTd(o ? pfNum(o.quantity) : '', 'text-align:center;')}
+      ${pfTd(o ? esc(o.unit || '') : '', 'text-align:center;')}</tr>`).join('');
+  const L = 'text-align:center;letter-spacing:2px;" colspan="2';
+  return pfHead('採購申請單', orderNo) + `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+      <colgroup><col style="width:5.5%"><col style="width:9%"><col style="width:31.5%"><col style="width:26%"><col style="width:14%"><col style="width:14%"></colgroup>
+      <tr style="height:40px;">${pfTd('採 購 種 類', L)}${pfTd(pfTypeLine(pt), '" colspan="4')}</tr>
+      <tr style="height:44px;">${pfTd('申 請 部 門', L)}${pfTd(
+          PF_DEPTS.map(d => checkbox(pfDeptHit(dept, d)) + d).join('　') + '<br>運務管理部：'
+          + PF_YARDS.map(d => checkbox(pfDeptHit(dept, d)) + d).join('　'), '" colspan="4')}</tr>
+      <tr style="height:36px;">${pfTd('申請人', 'text-align:center;" colspan="2')}${pfTd(esc(first.applicant || ''), 'text-align:center;" colspan="4')}</tr>
+      <tr style="height:30px;">${pfTd('申請日期', 'text-align:center;" colspan="2')}${pfTd(pfMd(first.apply_date), 'text-align:center;')}
+        ${pfTd('需求日期', 'text-align:center;')}${pfTd(pfMd(first.need_date), 'text-align:center;" colspan="2')}</tr>
+      <tr>${pfTd('項次', 'text-align:center;')}${pfTd('品　　名', 'text-align:center;" colspan="2')}${pfTd('規　格', 'text-align:center;')}
+        ${pfTd('請購數', 'text-align:center;')}${pfTd('單位', 'text-align:center;')}</tr>
+      ${rows}
+      <tr style="height:64px;">${pfTd('用途說明：' + esc(first.notes || ''), 'vertical-align:top;" colspan="6')}</tr>
+      <tr>${pfTd('總經理', 'text-align:center;" colspan="3')}${pfTd('環安衛主管', 'text-align:center;')}${pfTd('部門主管', 'text-align:center;" colspan="2')}</tr>
+      <tr style="height:78px;">${pfTd('', '" colspan="3')}${pfTd('', '')}${pfTd('', '" colspan="2')}</tr>
     </table>
-    <p style="font-size:11px;color:#555;margin-top:10px;">※二千元(含)以上申請人提出申請，經核可後申請人需送至採購單位。</p>`;
+    <div style="font-size:11px;margin-top:6px;">※二千元(含)以上申請人提出申請，經核可後申請人需送至採購單位。</div>`
+    + pfFoot('DGTT-P008-R09-01', false);
 }
 
+// ---------- 採購單（DGTT-P008-R13-01）----------
+const PF_PAY = ['月結', '零用金', '先行代墊', '分期', '其他'];
 function buildOrderForm(orderNo, items, first, totalPrice){
-  const rows10 = Array.from({length:10}, (_,i) => items[i] || null);
-  const rowsHtml = rows10.map((o,i) => `
-    <tr>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${i+1}</td>
-      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.supplier_name||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.item_spec||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.quantity??''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?esc(o.unit||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.unit_price??''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.total_price??''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;font-size:11px;">${o?esc(o.payment_method||''):''}</td>
-    </tr>`).join('');
-  const pt = (first.purchase_type||'').trim();
-  return `
-    <div style="text-align:right;font-size:15px;font-weight:700;margin-bottom:6px;">採購單　　　　　　　　　　　　　　${esc(orderNo)}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;width:14%;font-weight:700;">採 購 種 類</td>
-        <td style="border:1px solid #333;padding:6px;" colspan="7">
-          ${checkbox(pt==='一般事務採購')}一般事務採購 (2千元含以上)　${checkbox(pt==='例行性採購')}例行性採購　${checkbox(pt==='專案採購')}專案採購 (超出30萬之案件)　${checkbox(pt==='其他')}其他
-        </td>
-      </tr>
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">申請日期</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;" colspan="2">${esc(first.apply_date||'')}</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">需求日期</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;" colspan="2">${esc(first.need_date||'')}</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">採購日期</td>
-        <td style="border:1px solid #333;padding:6px;text-align:center;">${esc(first.purchase_date||'')}</td>
-      </tr>
-      <tr>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">項次</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">外部供應商/聯絡人/電話</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">品名/規格</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">數量</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單位</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單價</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">小計</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">付款方式</th>
-      </tr>
-      ${rowsHtml}
-      <tr>
-        <td colspan="6" style="border:1px solid #333;padding:6px;">採購總價：■未稅　□含稅</td>
-        <td colspan="2" style="border:1px solid #333;padding:6px;text-align:center;font-weight:700;">$${totalPrice.toLocaleString()}</td>
-      </tr>
-      <tr><td colspan="8" style="border:1px solid #333;padding:6px;">說明：</td></tr>
-      <tr>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">總經理</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">行政管理部主管</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">環安衛主管</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">採購單位：${esc(first.applicant||'')}</td>
-      </tr>
+  const pt = (first.purchase_type || '').trim();
+  const n = Math.max(5, items.length);
+  const sub = o => (o.subtotal != null && o.subtotal !== '') ? o.subtotal : o.total_price;
+  const untaxed = items.reduce((s, o) => s + (parseFloat(sub(o)) || 0), 0);
+  const rows = Array.from({length: n}, (_, i) => items[i] || null).map((o, i) => {
+    const pay = o ? String(o.payment_method || '').trim() : '';
+    const k = PF_PAY.indexOf(pay);
+    const payCells = (!o || !pay) ? PF_PAY.map(() => pfTd('')).join('')
+      : (k >= 0 ? PF_PAY.map((x, j) => pfTd(j === k ? '■' : '', 'text-align:center;')).join('')
+                : pfTd(esc(pay), 'text-align:center;font-size:11px;" colspan="5'));
+    const C = 'text-align:center;font-size:11px;';
+    return `<tr style="height:58px;">
+      ${pfTd(i + 1, 'text-align:center;')}
+      ${pfTd(o ? esc(o.supplier_name || '') : '', 'font-size:11px;')}
+      ${pfTd(o ? esc(o.item_spec || '') : '', 'font-size:11px;')}
+      ${pfTd(o ? pfNum(o.quantity) : '', C)}${pfTd(o ? esc(o.unit || '') : '', C)}
+      ${pfTd(o ? pfNum(o.quantity) : '', C)}${pfTd(o ? esc(o.unit || '') : '', C)}
+      ${pfTd(o ? pfNum(o.unit_price) : '', C)}${pfTd(o ? pfNum(o.unit_price) : '', C)}${pfTd(o ? pfNum(o.unit_price) : '', C)}
+      ${pfTd(o ? pfNum(sub(o)) : '', C)}
+      ${payCells}</tr>`;
+  }).join('');
+  const H = 'text-align:center;font-size:11px;';
+  const V = 'text-align:center;font-size:10px;line-height:1.15;padding:3px 1px;';
+  return pfHead('採購單', orderNo) + `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+      <colgroup><col style="width:6%"><col style="width:13%"><col style="width:16%">
+        <col style="width:4.5%"><col style="width:4%"><col style="width:4.5%"><col style="width:4%">
+        <col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:8%">
+        <col style="width:3.6%"><col style="width:3.6%"><col style="width:3.6%"><col style="width:3.6%"><col style="width:3.6%"></colgroup>
+      <tr style="height:40px;">${pfTd('採 購 種 類', 'text-align:center;letter-spacing:2px;" colspan="2')}${pfTd(pfTypeLine(pt), '" colspan="14')}</tr>
+      <tr style="height:30px;">${pfTd('申請日期', 'text-align:center;" colspan="2')}${pfTd(pfMd(first.apply_date), 'text-align:center;')}
+        ${pfTd('需求日期', 'text-align:center;" colspan="4')}${pfTd(pfMd(first.need_date), 'text-align:center;" colspan="3')}
+        ${pfTd('採購日期', 'text-align:center;" colspan="2')}${pfTd(pfMd(first.purchase_date), 'text-align:center;" colspan="4')}</tr>
+      <tr>${pfTd('項次', H + '" rowspan="2')}${pfTd('外部供應商/聯絡人/電話', H + '" rowspan="2')}${pfTd('品　名　/　規　格', H + '" rowspan="2')}
+        ${pfTd('數　量', H + '" colspan="4')}${pfTd('價格', H + '" colspan="3')}${pfTd('價格<br>小計<br>（NT）', H + '" rowspan="2')}${pfTd('付款方式', H + '" colspan="5')}</tr>
+      <tr>${pfTd('請購數', V)}${pfTd('單位', V)}${pfTd('採購數', V)}${pfTd('單位', V)}
+        ${pfTd('前購價', V)}${pfTd('議價前', V)}${pfTd('議價後', V)}
+        ${pfTd('月<br>結', V)}${pfTd('零<br>用<br>金', V)}${pfTd('先<br>行<br>代<br>墊', V)}${pfTd('分<br>期', V)}${pfTd('其<br>他', V)}</tr>
+      ${rows}
+      <tr style="height:44px;">${pfTd('採購總價：■未稅　□含稅', '" colspan="3')}${pfTd(untaxed ? untaxed.toLocaleString('en-US') : '', 'text-align:center;font-size:13px;" colspan="13')}</tr>
+      <tr style="height:50px;">${pfTd('說明：', 'vertical-align:top;" colspan="16')}</tr>
+      <tr>${pfTd('簽　　核', 'text-align:center;font-weight:700;background:#e9e9e9;" colspan="16')}</tr>
+      <tr style="height:56px;">${pfTd('總經理', 'text-align:center;white-space:nowrap;font-size:10.5px;padding:2px;')}${pfTd('', '" colspan="2')}
+        ${pfTd('行政管理部<br>主管', 'text-align:center;font-size:10.5px;white-space:nowrap;padding:2px;" colspan="2')}${pfTd('', '" colspan="2')}
+        ${pfTd('環安衛<br>主管', 'text-align:center;font-size:11px;" colspan="2')}${pfTd('', '" colspan="2')}
+        ${pfTd('採購<br>單位', 'text-align:center;font-size:11px;" colspan="2')}${pfTd(esc(first.applicant || ''), 'text-align:center;" colspan="3')}</tr>
     </table>
-    <div style="font-size:10.5px;color:#555;margin-top:10px;line-height:1.8;">
-      <p>1.【一般事務採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准，由採購單位進行採購。</p>
-      <p>2.【例行性採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位依第一次進行詢價、比價的報價價格為基準（為固定長期配合廠商）。</p>
-      <p>3.【車輛採購】屬專案採購案件由總經理訂定之規格，再由運務管理部申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准。</p>
-      <p>4.【專案採購】30萬以上，經呈權責部門主管需提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准。</p>
-      <p>5.若是各區統一規格，由運務管理部統籌請購，再進行區域分配，設備管理部負責規劃、庫存數量統計與區域間調配。</p>
-      <p>6.個人PPE及車輛配備須經環安衛主管簽核</p>
-    </div>`;
+    <div style="font-size:10px;margin-top:8px;line-height:1.75;">
+      <div>1.【一般事務採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准，由採購單位進行採買。</div>
+      <div>2.【例行性採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位依第一次進行詢價、比價的報價價格為基準（為固定長期配合之廠商，規格及協議價格不變）檢附在「採購單」後，行政主管審核後，呈總經理核准，由採購單位進行採購。當對於價格協議異動時，則需重新進行詢價、比價及議價程序。</div>
+      <div>3.【車輛採購】屬專案採購案件由總經理訂定之規格，再由運務管理部申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准，由採購單位進行採買。</div>
+      <div>4.【專案採購】30萬以上，經呈權責部門主管需提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准，由採購單位進行採買。</div>
+      <div>5.若是各區統一規格，由運務管理部統籌請購，再進行區域分配，設備管理部負責規劃、庫存數量統計與區域間調配。</div>
+      <div>6.個人PPE及車輛配備須經環安衛主管簽核</div>
+    </div>`
+    + pfFoot('DGTT-P008-R13-01', true);
 }
 
+// ---------- 驗收單（DGTT-P008-R14-01）----------
 function buildReceivingForm(orderNo, items, first){
-  const rows10 = Array.from({length:10}, (_,i) => items[i] || null);
-  const rowsHtml = rows10.map((o,i) => `
-    <tr>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${i+1}</td>
-      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.supplier_name||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;">${o?esc(o.item_spec||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.quantity??''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?esc(o.unit||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?(o.quantity??''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;">${o?esc(o.unit||''):''}</td>
-      <td style="border:1px solid #333;padding:4px 6px;text-align:center;"></td>
-    </tr>`).join('');
-  return `
-    <div style="text-align:right;font-size:15px;font-weight:700;margin-bottom:6px;">驗收單　　　　　　　　　　　　　　${esc(orderNo)}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <tr>
-        <td style="border:1px solid #333;padding:6px;text-align:center;width:14%;font-weight:700;">驗收日期</td>
-        <td style="border:1px solid #333;padding:6px;" colspan="7">${esc(first.arrival_date||'')}</td>
-      </tr>
-      <tr>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">項次</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">外部供應商/送貨人</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">品名/規格</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">採購數</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單位</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">實收數量</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">單位</th>
-        <th style="border:1px solid #333;padding:5px;background:#f5f5f5;">驗收判定<br><span style="font-weight:400;font-size:10px;">合格/不合格</span></th>
-      </tr>
-      ${rowsHtml}
-      <tr>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">行政主管</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">採購單位</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">環安衛主管簽核及備註</td>
-        <td colspan="2" style="border:1px solid #333;padding:16px 6px 6px;text-align:center;">請購部門主管 / 申請人：${esc(first.applicant||'')}</td>
-      </tr>
-      <tr><td colspan="8" style="border:1px solid #333;padding:6px;font-weight:700;">驗退</td></tr>
-      <tr>
-        <td colspan="2" style="border:1px solid #333;padding:6px;">驗退人：＿＿＿＿＿</td>
-        <td colspan="2" style="border:1px solid #333;padding:6px;">退件數：＿＿＿＿＿</td>
-        <td colspan="4" style="border:1px solid #333;padding:6px;">退貨日期：＿＿＿＿＿</td>
-      </tr>
-      <tr>
-        <td colspan="4" style="border:1px solid #333;padding:6px;">退件品名：＿＿＿＿＿＿＿＿＿＿＿＿</td>
-        <td colspan="4" style="border:1px solid #333;padding:6px;">退貨原因：＿＿＿＿＿＿＿＿＿＿＿＿<br><span style="font-size:10px;color:#555;">※需填寫「外部供應商改善要求書」進行改善作業。</span></td>
-      </tr>
-      <tr><td colspan="8" style="border:1px solid #333;padding:6px;font-weight:700;">驗收結案</td></tr>
-      <tr>
-        <td colspan="2" style="border:1px solid #333;padding:6px;">廠商單據：□收據　■發票</td>
-        <td colspan="2" style="border:1px solid #333;padding:6px;">會計：＿＿＿＿＿</td>
-        <td colspan="2" style="border:1px solid #333;padding:6px;">付款狀態：已付款</td>
-        <td colspan="2" style="border:1px solid #333;padding:6px;">日期：＿＿＿＿＿</td>
-      </tr>
+  const n = Math.max(10, items.length);
+  const C = 'text-align:center;';
+  const rows = Array.from({length: n}, (_, i) => items[i] || null).map((o, i) => `<tr style="height:31px;">
+      ${pfTd(i + 1, C)}
+      ${pfTd(o ? `<b>${esc(o.supplier_name || '')}</b>` : '', 'text-align:center;font-size:11.5px;')}
+      ${pfTd(o ? esc(o.item_spec || '') : '', 'text-align:center;font-size:9.5px;')}
+      ${pfTd(o ? pfNum(o.quantity) : '', C)}${pfTd(o ? esc(o.unit || '') : '', C)}
+      ${pfTd(o ? pfNum(o.quantity) : '', C)}${pfTd(o ? esc(o.unit || '') : '', C)}
+      ${pfTd('', '')}${pfTd('', '')}${pfTd('', '')}</tr>`).join('');
+  const G = 'text-align:center;background:#e9e9e9;';
+  const hasInv = items.some(o => String(o.invoice_no || '').trim());
+  return pfHead('驗收單', orderNo) + `
+    <div style="font-size:12px;margin:-2px 0 4px;">驗收日期：${pfMd(first.arrival_date)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+      <colgroup><col style="width:5%"><col style="width:19%"><col style="width:13%"><col style="width:8%"><col style="width:7%">
+        <col style="width:9%"><col style="width:7%"><col style="width:6%"><col style="width:6%"><col style="width:20%"></colgroup>
+      <tr>${pfTd('項次', C + '" rowspan="2')}${pfTd('外部供應商/送貨人', C + '" rowspan="2')}${pfTd('品　名　/　規　格', 'text-align:center;font-size:11px;" rowspan="2')}
+        ${pfTd('採購數', C + '" rowspan="2')}${pfTd('單位', C + '" rowspan="2')}${pfTd('實收數量', C + '" rowspan="2')}${pfTd('單位', C + '" rowspan="2')}
+        ${pfTd('驗收判定', C + '" colspan="3')}</tr>
+      <tr>${pfTd('合格', C)}${pfTd('不合格', 'text-align:center;font-size:11px;')}${pfTd('不合格說明', C)}</tr>
+      ${rows}
+      <tr style="height:31px;">${pfTd('', '" colspan="10')}</tr>
+      <tr>${pfTd('行政主管', C + '" colspan="2')}${pfTd('採購單位', C)}${pfTd('環安衛主管簽核及備註', C + '" colspan="3')}
+        ${pfTd('請購部門主管', C + '" colspan="3')}${pfTd('申請人', C)}</tr>
+      <tr style="height:62px;">${pfTd('', '" colspan="2')}${pfTd('', '')}${pfTd('', '" colspan="3')}${pfTd('', '" colspan="3')}${pfTd(esc(first.applicant || ''), C)}</tr>
+      <tr>${pfTd('驗退', G + '" colspan="10')}</tr>
+      <tr style="height:40px;">${pfTd('驗退人', C + '" colspan="2')}${pfTd('', '')}${pfTd('退件數', C + '" colspan="2')}${pfTd('', '" colspan="2')}
+        ${pfTd('退貨日期', C + '" colspan="2')}${pfTd('', '')}</tr>
+      <tr style="height:60px;">${pfTd('退件品名', C + '" colspan="2')}${pfTd('', '" colspan="2')}${pfTd('退貨<br>原因', C)}
+        ${pfTd('<div style="height:34px;"></div><div style="font-size:10.5px;">※需填寫「外部供應商改善要求書」進行改善作業。</div>', '" colspan="5')}</tr>
+      <tr>${pfTd('驗收結案', G + '" colspan="10')}</tr>
+      <tr style="height:36px;">${pfTd('廠商單據', C + '" colspan="2')}${pfTd('□收據　' + checkbox(hasInv) + '發票', 'white-space:nowrap;font-size:11px;')}
+        ${pfTd('會計', '" colspan="2')}${pfTd('', '" colspan="2')}
+        ${pfTd('付款<br>狀態　已付款', 'font-size:11px;" colspan="2')}${pfTd(pfMd(first.arrival_date), C)}</tr>
     </table>
-    <div style="font-size:10.5px;color:#555;margin-top:10px;line-height:1.8;">
-      <p>※1.進行驗收結案流程：採購（收集廠商單據）→提交會計單據正本→採購結案確認（單據影本佐證）。</p>
-      <p>※2.驗收時有不合格時，需填寫「外部供應商改善要求書」。</p>
-    </div>`;
+    <div style="font-size:10.5px;margin-top:6px;line-height:1.7;">
+      <div>※1.進行驗收結案流程：採購（收集廠商單據）→提交會計單據正本→採購結案確認（單據影本佐證）。</div>
+      <div>※2.驗收時有不合格時，需填寫「外部供應商改善要求書」進行改善作業，並將「外部供應商改善要求書」做為改善完成證明，放置本單據後以供存查。</div>
+    </div>`
+    + pfFoot('DGTT-P008-R14-01', true);
 }
 
 function generateForm(){
@@ -1379,7 +1372,8 @@ function generateForm(){
   else if(type==='order') bodyHtml = buildOrderForm(orderNo, items, first, totalPrice);
   else bodyHtml = buildReceivingForm(orderNo, items, first);
 
-  document.getElementById('printArea').innerHTML = `<div style="width:210mm;min-height:297mm;box-sizing:border-box;margin:0 auto;padding:15mm 12mm;border:1px solid #ddd;box-shadow:0 4px 16px rgba(0,0,0,.08);background:#fff;">${bodyHtml}</div>`;
+  // 整張可以直接點進去打字（用途說明、其他、驗退等空格），改完再列印
+  document.getElementById('printArea').innerHTML = `<style>#printArea tbody tr:hover td{background:transparent;}</style><div contenteditable="true" spellcheck="false" style="width:210mm;min-height:297mm;box-sizing:border-box;margin:0 auto;padding:12mm 12mm 10mm;border:1px solid #ddd;box-shadow:0 4px 16px rgba(0,0,0,.08);background:#fff;color:#000;font-family:'PMingLiU','新細明體','MingLiU',serif;display:flex;flex-direction:column;outline:none;">${bodyHtml}</div>`;
   document.getElementById('form_print').style.display = 'inline-block';
 }
 
@@ -1797,7 +1791,7 @@ document.getElementById('form_print').addEventListener('click', () => {
     <style>
       @page{ size: A4; margin: 12mm; }
       body{font-family:"Noto Sans TC",sans-serif;margin:0;}
-      #printArea > div{ width:210mm !important; min-height:297mm; margin:0 !important; padding:0 !important; border:none !important; box-shadow:none !important; box-sizing:border-box; }
+      #printArea > div{ width:auto !important; min-height:270mm !important; margin:0 !important; padding:0 !important; border:none !important; box-shadow:none !important; box-sizing:border-box; }
     </style>
     </head><body><div id="printArea">${document.getElementById('printArea').innerHTML}</div></body></html>`);
   printWin.document.close();
