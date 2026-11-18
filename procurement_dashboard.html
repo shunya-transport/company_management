@@ -109,6 +109,7 @@
   table.sp-list td:nth-child(7){font-variant-numeric:tabular-nums;}
   table.sp-list td:nth-child(8){min-width:90px;max-width:150px;}
   table.sp-list td:nth-child(9) .name-link{display:block;text-align:left;padding:2px 0;}
+  .sp-edit-btn{color:var(--navy,#0d1b2c) !important;font-weight:700;}
   table.sp-list .sp-more{display:inline-block;margin-left:6px;padding:0 6px;border-radius:8px;background:rgba(13,27,44,.06);font-size:11px;color:#5b6573;}
   tbody tr:hover td{background:#fffaf0;}
   tr:last-child td{border-bottom:none;}
@@ -1273,7 +1274,7 @@ function renderSpTable(){
       <td>${esc(s.responsible_person||'')}</td>
       <td>${esc(s.tax_id||'')}</td>
       <td>${esc(s.contact_person||'')}</td>
-      <td style="white-space:nowrap;"><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button><button class="name-link" data-bad-sp="${s.id}" style="color:var(--red);">標記不合格</button></td>
+      <td style="white-space:nowrap;"><button class="name-link sp-edit-btn" data-edit-sp="${s.id}">✎ 修改資料</button><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button><button class="name-link" data-bad-sp="${s.id}" style="color:var(--red);">標記不合格</button></td>
     </tr>`).join('') || `<tr><td colspan="9" class="empty">尚無供應商資料</td></tr>`;
 }
 function renderSpHistoryTable(){
@@ -1285,7 +1286,7 @@ function renderSpHistoryTable(){
     const isConfirming = String(confirmingDeleteSpId) === String(s.id);
     const deleteCell = isConfirming
       ? `<span style="color:var(--red);font-weight:600;">確定永久刪除？</span> <button class="name-link" data-confirm-del-sp="${s.id}" style="color:var(--red);">確定</button> <button class="name-link" data-cancel-del-sp="${s.id}">取消</button>`
-      : `<button class="name-link" data-reactivate-sp="${s.id}">恢復合作</button> <button class="del-btn" data-ask-del-sp="${s.id}">刪除</button>`;
+      : `<button class="name-link sp-edit-btn" data-edit-sp="${s.id}">✎ 修改資料</button>　<button class="name-link" data-reactivate-sp="${s.id}">恢復合作</button> <button class="del-btn" data-ask-del-sp="${s.id}">刪除</button>`;
     return `<tr>
       <td>${esc(s.category||'')}</td>
       <td><button class="name-link" data-edit-sp="${s.id}">${esc(s.company_name)}</button></td>
@@ -1646,12 +1647,12 @@ function renderSpBad(){
       <td><button class="name-link" data-edit-sp="${s.id}"><b>${esc(s.company_name)}</b></button></td>
       <td>${esc(s.region || '')}</td><td>${esc(String(s.phone || '').split(/\s+/)[0])}</td><td>${esc(s.responsible_person || '')}</td>
       <td>${esc(s.disqualify_reason || '')}</td>
-      <td><button class="name-link" data-good-sp="${s.id}">恢復合格</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">目前沒有不合格供應商</td></tr>';
+      <td style="white-space:nowrap;"><button class="name-link sp-edit-btn" data-edit-sp="${s.id}">✎ 修改資料</button>　<button class="name-link" data-good-sp="${s.id}">恢復合格</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">目前沒有不合格供應商</td></tr>';
 }
 {
   const b = document.getElementById('spBadBody');
   if(b) b.addEventListener('click', async e => {
-    const g = e.target.getAttribute('data-good-sp'), ed = e.target.getAttribute('data-edit-sp');
+    const g = e.target.getAttribute('data-good-sp'), ed = e.target.closest('[data-edit-sp]')?.getAttribute('data-edit-sp');
     if(ed){ openSpEditModal(ed); return; }
     if(!g) return;
     const s = STATE.qualifiedSuppliers.find(x => String(x.id) === g);
@@ -2377,7 +2378,7 @@ document.getElementById('sp_category_filter').addEventListener('change', renderS
 document.getElementById('sp_region_filter').addEventListener('change', renderSpTable);
 document.getElementById('spTableBody').addEventListener('click', async (e) => {
   const deactivateId = e.target.getAttribute('data-deactivate-sp');
-  const editId = e.target.getAttribute('data-edit-sp');
+  const editId = e.target.closest('[data-edit-sp]')?.getAttribute('data-edit-sp');
   const badId = e.target.getAttribute('data-bad-sp');
   if(badId){
     const s = STATE.qualifiedSuppliers.find(x => String(x.id) === badId);
@@ -2404,7 +2405,7 @@ document.getElementById('spHistoryTableBody').addEventListener('click', async (e
   const askId = e.target.getAttribute('data-ask-del-sp');
   const confirmId = e.target.getAttribute('data-confirm-del-sp');
   const cancelId = e.target.getAttribute('data-cancel-del-sp');
-  const editId = e.target.getAttribute('data-edit-sp');
+  const editId = e.target.closest('[data-edit-sp]')?.getAttribute('data-edit-sp');
   if(reactivateId){
     const s = STATE.qualifiedSuppliers.find(x => String(x.id) === reactivateId);
     if(s){ s.is_active = true; }
