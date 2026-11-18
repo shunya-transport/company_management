@@ -266,6 +266,14 @@
               <tbody id="poTableBody"></tbody>
             </table>
           </div>
+          <div class="toolbar" id="po_pager" style="margin:10px 0 0;justify-content:flex-end;">
+            <span class="muted" id="po_page_info"></span>
+            <select id="po_page_size" style="width:auto;"><option value="100">每頁 100 筆</option><option value="300">每頁 300 筆</option><option value="1000">每頁 1000 筆</option></select>
+            <button class="btn" id="po_first" type="button">≪ 第一頁</button>
+            <button class="btn" id="po_prev" type="button">‹ 上一頁</button>
+            <button class="btn" id="po_next" type="button">下一頁 ›</button>
+            <button class="btn" id="po_last" type="button">最後一頁 ≫</button>
+          </div>
         </div>
       </div>
 
@@ -562,7 +570,8 @@ function esc(v){
   if(v===null || v===undefined) return '';
   return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function nextId(arr){ return Math.max(0, ...arr.map(x=>x.id||0)) + 1; }
+// 不用 Math.max(...陣列)：筆數一多（幾萬筆）會超過瀏覽器參數上限直接報錯
+function nextId(arr){ let m = 0; (arr || []).forEach(x => { const v = Number(x && x.id) || 0; if(v > m) m = v; }); return m + 1; }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function fmt2(n){
   if(n===null || n===undefined || isNaN(n)) return n;
@@ -1042,7 +1051,10 @@ async function saveState(key, value, shared){
           throw new Error('已取消刪除動作,雲端資料未變更');
         }
       }
-      await supaFetch(`${map.table}?${map.pk}=in.(${idsToDelete.join(',')})`, { method:'DELETE' });
+      // 分批刪：一次塞幾百個編號進網址會超過長度上限（414／400），整批刪不掉
+      for(let i = 0; i < idsToDelete.length; i += 150){
+        await supaFetch(`${map.table}?${map.pk}=in.(${idsToDelete.slice(i, i + 150).join(',')})`, { method:'DELETE' });
+      }
     }
     rememberGood(key, value);   // 這一份已經跟雲端一致了，下次失敗就還原成這個樣子
   }catch(err){
@@ -1119,16 +1131,32 @@ function renderPoSelects(){
   const types = [...new Set(STATE.procurementOrders.map(o=>o.purchase_type).filter(Boolean))];
   document.getElementById('po_type_filter').innerHTML = '<option value="all">全部採購種類</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
 }
+const PO_PAGE = { page: 1, sig: null };
 function renderPoTable(){
   const q = document.getElementById('po_search').value.trim();
   const deptF = document.getElementById('po_dept_filter').value;
   const typeF = document.getElementById('po_type_filter').value;
-  let rows = STATE.procurementOrders.slice().sort((a,b)=>(b.apply_date||'').localeCompare(a.apply_date||''));
+  // 排序要固定（同一天的照採購編號、項次排），分頁換頁時才不會有資料跳來跳去或重複出現
+  let rows = STATE.procurementOrders.slice().sort((a,b)=>(b.apply_date||'').localeCompare(a.apply_date||'')
+    || String(b.order_no||'').localeCompare(String(a.order_no||'')) || (Number(a.item_no)||0) - (Number(b.item_no)||0) || (Number(a.id)||0) - (Number(b.id)||0));
   if(q) rows = rows.filter(o => (o.order_no||'').includes(q) || (o.supplier_name||'').includes(q) || (o.item_spec||'').includes(q));
   if(deptF!=='all') rows = rows.filter(o => o.apply_dept===deptF);
   if(typeF!=='all') rows = rows.filter(o => o.purchase_type===typeF);
   document.getElementById('po_count').textContent = `共 ${rows.length} 筆`;
-  document.getElementById('poTableBody').innerHTML = rows.slice(0,300).map(o => {
+  // 舊寫法只畫前 300 筆，超過的就看不到也刪不到；改成分頁
+  const _sig = [q, deptF, typeF].join('|');
+  if(_sig !== PO_PAGE.sig){ PO_PAGE.sig = _sig; PO_PAGE.page = 1; }
+  const _size = Number(document.getElementById('po_page_size').value) || 100;
+  const _pages = Math.max(1, Math.ceil(rows.length / _size));
+  if(PO_PAGE.page > _pages) PO_PAGE.page = _pages;
+  if(PO_PAGE.page < 1) PO_PAGE.page = 1;
+  const _from = (PO_PAGE.page - 1) * _size;
+  document.getElementById('po_page_info').textContent = rows.length
+    ? `第 ${PO_PAGE.page} ／ ${_pages} 頁（第 ${_from + 1}～${Math.min(_from + _size, rows.length)} 筆）` : '';
+  document.getElementById('po_first').disabled = document.getElementById('po_prev').disabled = PO_PAGE.page <= 1;
+  document.getElementById('po_next').disabled = document.getElementById('po_last').disabled = PO_PAGE.page >= _pages;
+  document.getElementById('po_pager').style.display = rows.length > 100 ? '' : 'none';
+  document.getElementById('poTableBody').innerHTML = rows.slice(_from, _from + _size).map(o => {
     const isConfirming = String(confirmingDeletePoId) === String(o.id);
     const deleteCell = isConfirming
       ? `<span style="color:var(--red);font-weight:600;">確定？</span> <button class="name-link" data-confirm-del-po="${o.id}" style="color:var(--red);">是</button> <button class="name-link" data-cancel-del-po="${o.id}">否</button>`
@@ -2054,10 +2082,10 @@ function cbCsv(name, head, rows){
 async function cbLoad(){
   try{
     const [emps, phones, exts, locs] = await Promise.all([
-      supaFetch('employees?select=employee_id,employee_no,name,region,status,phone,home_phone,positions(position_name)&order=employee_id.asc'),
-      supaFetch('company_phones?select=phone_id,phone_no,pnp_code,employee_id,status'),
-      supaFetch('office_extensions?select=ext_id,region,display_name,ext_no,sort_order'),
-      supaFetch('office_locations?select=location_id,region,tel,fax,address')
+      supaFetchAll('employees?select=employee_id,employee_no,name,region,status,phone,home_phone,positions(position_name)&order=employee_id.asc'),
+      supaFetchAll('company_phones?select=phone_id,phone_no,pnp_code,employee_id,status&order=phone_id.asc'),
+      supaFetchAll('office_extensions?select=ext_id,region,display_name,ext_no,sort_order&order=ext_id.asc'),
+      supaFetchAll('office_locations?select=location_id,region,tel,fax,address&order=location_id.asc')
     ]);
     STATE.cbEmployees = (emps||[]).map(r => ({
       id: r.employee_id, employee_no: r.employee_no, name: r.name, region: r.region,
@@ -2263,6 +2291,11 @@ document.getElementById('po_add').addEventListener('click', async () => {
 document.getElementById('po_search').addEventListener('input', renderPoTable);
 document.getElementById('po_dept_filter').addEventListener('change', renderPoTable);
 document.getElementById('po_type_filter').addEventListener('change', renderPoTable);
+document.getElementById('po_page_size').addEventListener('change', () => { PO_PAGE.page = 1; renderPoTable(); });
+document.getElementById('po_first').addEventListener('click', () => { PO_PAGE.page = 1; renderPoTable(); });
+document.getElementById('po_prev').addEventListener('click', () => { PO_PAGE.page--; renderPoTable(); });
+document.getElementById('po_next').addEventListener('click', () => { PO_PAGE.page++; renderPoTable(); });
+document.getElementById('po_last').addEventListener('click', () => { PO_PAGE.page = 1e9; renderPoTable(); });
 document.getElementById('poTableBody').addEventListener('click', async (e) => {
   const askId = e.target.getAttribute('data-ask-del-po');
   const confirmId = e.target.getAttribute('data-confirm-del-po');
