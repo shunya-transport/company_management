@@ -2555,13 +2555,14 @@
         </select>
         <button class="btn ghost" id="vp_export" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
         <button class="btn" id="vp_book" style="padding:8px 14px;font-size:13px;">列印出車本頁籤</button>
+        <button class="btn ghost" id="vp_links" style="padding:8px 14px;font-size:13px;">批次貼上雲端連結</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead><tr>
             <th>車號</th><th>行號</th><th>廠商</th><th>品項</th><th>危險物品</th><th>板架</th>
             <th>通行證號碼(NO)</th><th>批號</th><th>有效期間</th><th>到期日</th>
-            <th>剩餘天數</th><th>指定檢驗日</th><th></th>
+            <th>剩餘天數</th><th>指定檢驗日</th><th>證件</th><th></th>
           </tr></thead>
           <tbody id="vpTableBody"></tbody>
         </table>
@@ -2585,13 +2586,14 @@
           <option value="valid">有效</option>
           <option value="90">90 天內到期</option>
           <option value="expired">已過期</option>
-          <option value="nofile">還沒上傳 PDF</option>
+          <option value="nofile">還沒上傳 PDF 也沒連結</option>
         </select>
         <button class="btn ghost" id="sds_new" style="padding:8px 14px;font-size:13px;">新增</button>
         <button class="btn ghost" id="sds_bulk_btn" style="padding:8px 14px;font-size:13px;">批次上傳 PDF</button>
         <input type="file" id="sds_bulk_file" accept="application/pdf,.pdf" multiple style="display:none;">
         <input type="file" id="sds_one_file" accept="application/pdf,.pdf" style="display:none;">
         <button class="btn ghost" id="sds_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
+        <button class="btn ghost" id="sds_links" style="padding:8px 14px;font-size:13px;">批次貼上雲端連結</button>
       </div>
       <div id="sds_form" style="display:none;margin:8px 0 12px;padding:10px;border:1px solid var(--line,#ddd);border-radius:10px;">
         <div class="form-grid">
@@ -2606,6 +2608,7 @@
           <label>供應商／製造商<input id="sds_f_supplier"></label>
           <label>檔名<input id="sds_f_file" placeholder="上傳 PDF 時對檔名用"></label>
           <label>備註<input id="sds_f_note"></label>
+          <label>雲端連結（Google 雲端等）<input id="sds_f_link" placeholder="https://drive.google.com/…"></label>
         </div>
         <datalist id="sdsOwnerList"></datalist>
         <button class="btn" id="sds_save">儲存</button>
@@ -2616,7 +2619,7 @@
       <div class="table-scroll" style="max-height:640px;">
         <table>
           <thead><tr><th>業主</th><th>物質名稱</th><th>UN 編號</th><th>CAS No.</th><th>化學式／型號</th><th>危險分類</th>
-            <th>製表日期</th><th>有效日期</th><th>剩餘</th><th>PDF</th><th></th></tr></thead>
+            <th>製表日期</th><th>有效日期</th><th>剩餘</th><th>PDF／連結</th><th></th></tr></thead>
           <tbody id="sdsBody"></tbody>
         </table>
       </div>
@@ -3363,6 +3366,43 @@
     </div>
   </div>
 
+<div class="modal-backdrop no-print" id="lkModal">
+  <div class="modal-box" style="max-width:760px;">
+    <button class="modal-close" type="button" data-lk-close>✕</button>
+    <h3 id="lk_title">批次貼上雲端連結</h3>
+    <div class="muted" id="lk_help" style="margin-bottom:8px;line-height:1.7;"></div>
+    <details style="margin-bottom:8px;"><summary style="cursor:pointer;color:var(--accent-dark,#8a6d3b);font-weight:600;">怎麼一次拿到 Google 雲端整個資料夾的檔名＋連結？（點開看）</summary>
+      <div class="muted" style="line-height:1.7;margin:6px 0;">
+        1. 打開 <b>script.google.com</b> → 新專案，把下面整段貼上（取代原本內容）。<br>
+        2. 第一行的 <b>資料夾ID</b> 換成雲端資料夾網址最後那一串（drive.google.com/drive/folders/<b>這一串</b>）。<br>
+        3. 按「執行」，第一次會要求授權，選自己的帳號允許。<br>
+        4. 跑完到「我的雲端硬碟」打開新產生的試算表「檔案連結清單」，把 A、B 兩欄全選複製，貼到下面的框框。<br>
+        子資料夾也會一起列出來，檔名前面會帶資料夾名稱（例：國介/SDS二氧化碳.pdf），資料夾名稱跟業主一樣時會優先對那個業主。</div>
+      <textarea id="lk_script" readonly style="width:100%;height:150px;font-family:monospace;font-size:12px;">const FOLDER_ID = '資料夾ID';
+function listFiles(){
+  const out = [];
+  const walk = (folder, path) => {
+    const files = folder.getFiles();
+    while(files.hasNext()){ const f = files.next(); out.push([path + f.getName(), f.getUrl()]); }
+    const subs = folder.getFolders();
+    while(subs.hasNext()){ const d = subs.next(); walk(d, path + d.getName() + '/'); }
+  };
+  walk(DriveApp.getFolderById(FOLDER_ID), '');
+  const ss = SpreadsheetApp.create('檔案連結清單');
+  if(out.length) ss.getActiveSheet().getRange(1, 1, out.length, 2).setValues(out);
+  Logger.log('共 ' + out.length + ' 個檔案：' + ss.getUrl());
+}</textarea>
+      <button class="btn ghost" type="button" id="lk_copy" style="padding:6px 12px;font-size:13px;margin-top:4px;">複製程式碼</button>
+    </details>
+    <textarea id="lk_text" placeholder="一行一個：檔名（Tab 或空白）網址" style="width:100%;height:190px;font-size:12.5px;"></textarea>
+    <label style="display:flex;align-items:center;gap:6px;margin:6px 0;"><input type="checkbox" id="lk_over" style="width:auto;"> 已經有連結的也覆蓋</label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" type="button" id="lk_apply">對檔名並套用</button>
+      <span id="lk_msg" class="muted" style="font-size:12.5px;"></span>
+    </div>
+    <div id="lk_result" style="margin-top:8px;max-height:30vh;overflow:auto;font-size:12.5px;line-height:1.7;"></div>
+  </div>
+</div>
 <div class="modal-backdrop no-print" id="vbModal">
   <div class="modal-box" style="max-width:720px;">
     <button class="modal-close" type="button" data-vb-close>✕</button>
@@ -21814,7 +21854,7 @@ function sdsRows(){
     if(df === 'valid')   return d !== null && d >= 0;
     if(df === '90')      return d !== null && d >= 0 && d <= 90;
     if(df === 'expired') return d !== null && d < 0;
-    if(df === 'nofile')  return !r.file_path;
+    if(df === 'nofile')  return !r.file_path && !r.link_url;
     return true;
   });
 }
@@ -21850,9 +21890,10 @@ function renderSds(){
       <td>${esc(r.un_no || '')}</td><td style="font-size:12px;">${esc(r.cas_no || '')}</td>
       <td>${esc(r.formula_code || '')}</td><td>${esc(r.hazard_class || '')}</td>
       <td>${esc(sdsRoc(r.sds_date))}</td><td>${esc(sdsRoc(sdsValid(r)))}</td><td>${sdsPill(r)}</td>
-      <td>${r.file_path ? `<button class="name-link" data-sds-open="${r.id}">開啟</button>` : '<span class="muted">未上傳</span>'}
-        　<button class="name-link" data-sds-up="${r.id}">${r.file_path ? '換檔' : '上傳'}</button></td>
-      <td><button class="name-link" data-sds-edit="${r.id}">改</button>　<button class="del-btn" data-sds-del="${r.id}">刪除</button></td>
+      <td style="white-space:nowrap;line-height:1.9;">${r.file_path ? `<button class="name-link" data-sds-open="${r.id}">開啟 PDF</button>` : '<span class="muted">未上傳</span>'}
+        　<button class="name-link" data-sds-up="${r.id}">${r.file_path ? '換檔' : '上傳'}</button><br>
+        ${lkSafe(r.link_url) ? `<a class="name-link" href="${esc(lkSafe(r.link_url))}" target="_blank" rel="noopener noreferrer">雲端連結 ↗</a>　` : ''}<button class="name-link" data-sds-link="${r.id}" style="font-weight:400;">${r.link_url ? '改連結' : '＋連結'}</button></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-sds-edit="${r.id}">改</button>　<button class="del-btn" data-sds-del="${r.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="11" class="empty">${STATE.sdsLoaded && !all.length ? '還沒有資料（請先在 Supabase 執行 SQL_231）' : '沒有符合條件的 SDS'}</td></tr>`;
 }
 function sdsMsg(html, color){
@@ -21865,7 +21906,7 @@ function sdsOpenForm(r){
   v('sds_f_owner', r && r.owner); v('sds_f_name', r && r.substance_name); v('sds_f_un', r && r.un_no);
   v('sds_f_cas', r && r.cas_no); v('sds_f_code', r && r.formula_code); v('sds_f_class', r && r.hazard_class);
   v('sds_f_date', r && r.sds_date && String(r.sds_date).slice(0, 10)); v('sds_f_valid', r && r.valid_until && String(r.valid_until).slice(0, 10));
-  v('sds_f_supplier', r && r.supplier); v('sds_f_file', r && r.file_name); v('sds_f_note', r && r.notes);
+  v('sds_f_supplier', r && r.supplier); v('sds_f_file', r && r.file_name); v('sds_f_note', r && r.notes); v('sds_f_link', r && r.link_url);
   document.getElementById('sds_form').style.display = '';
   document.getElementById('sds_form_msg').textContent = r ? '修改：' + (r.substance_name || '') : '新增一份 SDS';
   document.getElementById('sds_f_owner').focus();
@@ -21874,9 +21915,11 @@ async function sdsSave(){
   const g = id => ((document.getElementById(id) || {}).value || '').trim();
   const row = { owner: g('sds_f_owner'), substance_name: g('sds_f_name'), un_no: g('sds_f_un') || null, cas_no: g('sds_f_cas') || null,
     formula_code: g('sds_f_code') || null, hazard_class: g('sds_f_class') || null, sds_date: g('sds_f_date') || null,
-    valid_until: g('sds_f_valid') || null, supplier: g('sds_f_supplier') || null, file_name: g('sds_f_file') || null, notes: g('sds_f_note') || null };
+    valid_until: g('sds_f_valid') || null, supplier: g('sds_f_supplier') || null, file_name: g('sds_f_file') || null, notes: g('sds_f_note') || null,
+    link_url: g('sds_f_link') || null };
   const msg = document.getElementById('sds_form_msg');
   if(!row.owner || !row.substance_name){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '業主、物質名稱一定要填。'; return; }
+  if(row.link_url && !lkSafe(row.link_url)){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '雲端連結要用 https:// 開頭的網址。'; return; }
   try{
     if(SDS_EDIT_ID){
       const res = await supaFetch('sds_documents?id=eq.' + SDS_EDIT_ID, { method:'PATCH', headers:{ 'Prefer':'return=representation' }, body: JSON.stringify(row) });
@@ -21950,9 +21993,9 @@ async function sdsBulk(files){
 function sdsCsv(){
   const rows = sdsRows();
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const head = ['業主','物質名稱','UN編號','CAS No.','化學式/產品型號','危險物品分類','製表日期','SDS有效日期','剩餘天數','供應商/製造商','檔名','PDF已上傳','備註'];
+  const head = ['業主','物質名稱','UN編號','CAS No.','化學式/產品型號','危險物品分類','製表日期','SDS有效日期','剩餘天數','供應商/製造商','檔名','PDF已上傳','備註','雲端連結'];
   const out = rows.map(r => [r.owner, r.substance_name, r.un_no, r.cas_no, r.formula_code, r.hazard_class,
-    String(r.sds_date || '').slice(0, 10), sdsValid(r), sdsDays(r) ?? '', r.supplier, r.file_name, r.file_path ? '是' : '否', r.notes]);
+    String(r.sds_date || '').slice(0, 10), sdsValid(r), sdsDays(r) ?? '', r.supplier, r.file_name, r.file_path ? '是' : '否', r.notes, r.link_url]);
   const text = [head.map(q).join(',')].concat(out.map(r => r.map(q).join(','))).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + text], { type:'text/csv;charset=utf-8;' }));
@@ -21977,13 +22020,122 @@ function sdsCsv(){
     catch(err){ sdsMsg(esc(err.message), 'var(--red,#c0392b)'); }
   });
   on('sdsBody', 'click', e => {
-    const t = e.target.closest('[data-sds-open],[data-sds-up],[data-sds-edit],[data-sds-del]');
+    const t = e.target.closest('[data-sds-open],[data-sds-up],[data-sds-edit],[data-sds-del],[data-sds-link]');
     if(!t) return;
-    if(t.dataset.sdsOpen) sdsOpen(Number(t.dataset.sdsOpen));
+    if(t.dataset.sdsLink) sdsSetLink(Number(t.dataset.sdsLink));
+    else if(t.dataset.sdsOpen) sdsOpen(Number(t.dataset.sdsOpen));
     else if(t.dataset.sdsUp){ SDS_ONE_ID = Number(t.dataset.sdsUp); document.getElementById('sds_one_file').click(); }
     else if(t.dataset.sdsEdit) sdsOpenForm((STATE.sdsDocs || []).find(x => x.id === Number(t.dataset.sdsEdit)));
     else if(t.dataset.sdsDel) sdsDelete(Number(t.dataset.sdsDel));
   });
+})();
+// ===================== 雲端連結（SDS、通行證）=====================
+// 只接受 http(s) 網址，避免 javascript: 之類的連結被點下去執行
+function lkSafe(u){ const t = String(u || '').trim(); return /^https?:\/\/\S+$/i.test(t) ? t : ''; }
+function lkAsk(label, cur){
+  const v = prompt(label + '\n\n貼上雲端檔案的分享網址（Google 雲端請先把共用設成公司的人都看得到）。\n清空後按確定＝拿掉連結。', cur || '');
+  if(v === null) return undefined;
+  const t = v.trim();
+  if(t && !lkSafe(t)){ alert('網址要用 https:// 開頭。'); return undefined; }
+  return t || null;
+}
+async function sdsSetLink(id){
+  const r = (STATE.sdsDocs || []).find(x => x.id === id); if(!r) return;
+  const v = lkAsk('SDS：' + (r.owner || '') + '　' + (r.substance_name || ''), r.link_url); if(v === undefined) return;
+  try{
+    await supaFetch('sds_documents?id=eq.' + id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body: JSON.stringify({ link_url: v }) });
+    r.link_url = v; renderSds(); sdsMsg(v ? '連結已存。' : '連結已拿掉。', 'var(--green,#2e7d32)');
+  }catch(e){ alert('存不進去：' + e.message + '\n（如果訊息提到 link_url，請先在 Supabase 執行 SQL_274）'); }
+}
+async function vpSetLink(id){
+  const p = (STATE.vehiclePasses || []).find(x => String(x.id) === String(id)); if(!p) return;
+  const v = lkAsk('通行證：' + (p.plate || '') + '　' + (p.vendor || '') + '　' + (p.pass_no || ''), p.link_url); if(v === undefined) return;
+  const old = p.link_url;
+  p.link_url = v;
+  try{ await saveState('vehicle_passes', STATE.vehiclePasses, true); }
+  catch(e){ p.link_url = old; renderVpTable(); return; }
+  renderVpTable();
+}
+// 批次：一行「檔名 網址」。SDS 用檔名對（可帶「業主資料夾/」），通行證用檔名裡的通行證號碼（或批號）對
+let LK_MODE = 'sds';
+function lkOpen(mode){
+  LK_MODE = mode;
+  document.getElementById('lk_title').textContent = mode === 'sds' ? '批次貼上 SDS 雲端連結' : '批次貼上通行證雲端連結';
+  document.getElementById('lk_help').innerHTML = mode === 'sds'
+    ? '一行一個檔案：<b>檔名</b>＋<b>網址</b>（從試算表複製兩欄貼上就是這個格式）。用檔名對 SDS 表上的「檔名」，前面的序號、空白、.pdf 有沒有都可以。'
+    : '一行一個檔案：<b>檔名</b>＋<b>網址</b>。檔名裡有<b>通行證號碼</b>（例：50D11508181）就掛到那一張；沒有證號但有<b>批號</b>（例：D501150513020）的，掛到那一批的每一張（整批掃成一個 PDF 時用）。';
+  document.getElementById('lk_text').value = '';
+  document.getElementById('lk_result').innerHTML = ''; document.getElementById('lk_msg').textContent = '';
+  document.getElementById('lkModal').classList.add('show');
+}
+function lkParse(text){
+  return String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.match(/https?:\/\/\S+/i); if(!m) return null;
+    const name = (l.slice(0, m.index) + ' ' + l.slice(m.index + m[0].length)).replace(/\t/g, ' ').trim();
+    return { name, url: m[0] };
+  }).filter(Boolean);
+}
+async function lkApply(){
+  const lines = lkParse(document.getElementById('lk_text').value);
+  const over = document.getElementById('lk_over').checked;
+  const msg = document.getElementById('lk_msg'), out = document.getElementById('lk_result');
+  if(!lines.length){ msg.textContent = '沒有讀到網址。'; return; }
+  const ok = [], miss = [], skip = [], fail = [];
+  if(LK_MODE === 'sds'){
+    const docs = STATE.sdsDocs || [];
+    const owners = [...new Set(docs.map(r => r.owner).filter(Boolean))];
+    for(const ln of lines){
+      const parts = ln.name.split('/'); const base = parts.pop();
+      const folder = parts.find(x => owners.includes(x.trim()));
+      let hit = docs.filter(r => String(r.file_name || '').normalize('NFC') === base.normalize('NFC'));
+      if(!hit.length) hit = docs.filter(r => sdsNorm(r.file_name) && sdsNorm(r.file_name) === sdsNorm(base));
+      if(hit.length > 1 && folder) hit = hit.filter(r => r.owner === folder.trim());
+      if(hit.length !== 1){ miss.push(ln.name + (hit.length > 1 ? '（對到 ' + hit.length + ' 筆，不同業主同檔名：請放在業主名稱的資料夾裡，或在表上按「＋連結」）' : '')); continue; }
+      const r = hit[0];
+      if(r.link_url && !over){ skip.push(ln.name); continue; }
+      try{
+        await supaFetch('sds_documents?id=eq.' + r.id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body: JSON.stringify({ link_url: ln.url }) });
+        r.link_url = ln.url; ok.push(ln.name + ' → ' + (r.owner || '') + '　' + (r.substance_name || ''));
+      }catch(e){ fail.push(ln.name + '：' + e.message); if(/link_url/.test(e.message)) break; }
+      msg.textContent = '處理中… ' + (ok.length + miss.length + skip.length + fail.length) + '／' + lines.length;
+    }
+    renderSds();
+  }else{
+    const ps = STATE.vehiclePasses || [];
+    const key = s => String(s || '').toUpperCase().replace(/[\s\-_]/g, '');
+    const touched = [];
+    lines.forEach(ln => {
+      const nm = key(ln.name);
+      let hit = ps.filter(p => p.pass_no && nm.includes(key(p.pass_no)));
+      let how = '證號';
+      if(!hit.length){ hit = ps.filter(p => p.batch_no && nm.includes(key(p.batch_no))); how = '批號'; }
+      if(!hit.length){ miss.push(ln.name); return; }
+      let n = 0;
+      hit.forEach(p => { if(p.link_url && !over) return; p.link_url = ln.url; touched.push(p); n++; });
+      if(n) ok.push(ln.name + ' → ' + how + '對到 ' + hit.length + ' 張' + (n < hit.length ? '（' + (hit.length - n) + ' 張原本有連結，沒動）' : ''));
+      else skip.push(ln.name);
+    });
+    if(touched.length){
+      try{ await saveState('vehicle_passes', ps, true); }
+      catch(e){ fail.push('存檔失敗：' + e.message); ok.length = 0; }
+    }
+    renderVpTable();
+  }
+  msg.textContent = '';
+  out.innerHTML = `<div style="color:var(--green,#2e7d32);"><b>套用 ${ok.length} 筆</b></div>${ok.map(x => '<div>' + esc(x) + '</div>').join('')}`
+    + (skip.length ? `<div style="margin-top:6px;color:#666;"><b>原本已有連結、沒有覆蓋 ${skip.length} 筆</b>（要覆蓋請勾上面那格）：${esc(skip.join('、'))}</div>` : '')
+    + (miss.length ? `<div style="margin-top:6px;color:#b26a00;"><b>對不到 ${miss.length} 筆</b>：${miss.map(esc).join('<br>')}</div>` : '')
+    + (fail.length ? `<div style="margin-top:6px;color:#c0392b;"><b>失敗</b>：${fail.map(esc).join('<br>')}${fail.some(x => /link_url/.test(x)) ? '<br>請先在 Supabase 執行 SQL_274 再試。' : ''}</div>` : '');
+}
+(function(){
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  on('sds_links', 'click', () => lkOpen('sds'));
+  on('vp_links', 'click', () => lkOpen('vp'));
+  on('lk_apply', 'click', lkApply);
+  on('lk_copy', 'click', () => { const t = document.getElementById('lk_script'); t.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).catch(() => document.execCommand('copy'));
+    document.getElementById('lk_copy').textContent = '已複製'; });
+  on('lkModal', 'click', e => { if(e.target.id === 'lkModal' || e.target.hasAttribute('data-lk-close')) document.getElementById('lkModal').classList.remove('show'); });
 })();
 // ===================== 通行證查詢 =====================
 // 載運危險物品臨時通行證（vehicle_passes，SQL_192 建的）。
@@ -22496,14 +22648,15 @@ function renderVpTable(){
       <td>${esc(p.expiry_date || '—')}</td>
       <td>${vpPill(p.expiry_date)}</td>
       <td class="muted">${esc(p.inspect_date || '—')}</td>
+      <td style="white-space:nowrap;">${lkSafe(p.link_url) ? `<a class="name-link" href="${esc(lkSafe(p.link_url))}" target="_blank" rel="noopener noreferrer">開啟 ↗</a><br>` : ''}<button class="name-link" data-link-pass="${p.id}" style="font-weight:400;">${p.link_url ? '改連結' : '＋連結'}</button></td>
       <td style="white-space:nowrap;">
         <button class="name-link" data-edit-pass="${p.id}">修改</button>
         <button class="del-btn" data-del-pass="${p.id}">刪除</button></td>
     </tr>
     <tr class="vp-detail" data-detail-pass="${p.id}" data-filled="0" style="display:none;">
-      <td colspan="13" style="background:rgba(0,0,0,.02);"></td>
+      <td colspan="14" style="background:rgba(0,0,0,.02);"></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="13" class="empty">沒有符合條件的通行證</td></tr>`;
+  }).join('') || `<tr><td colspan="14" class="empty">沒有符合條件的通行證</td></tr>`;
 
   renderVpGroups();
 }
@@ -23430,6 +23583,8 @@ function closeVpEdit(){
       }
       return;
     }
+    const lid = e.target.getAttribute('data-link-pass');
+    if(lid){ vpSetLink(lid); return; }
     const eid = e.target.getAttribute('data-edit-pass');
     if(eid){ openVpEdit(eid); return; }
     const did = e.target.getAttribute('data-del-pass');
