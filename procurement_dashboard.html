@@ -98,6 +98,18 @@
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;color:#263240;font-weight:600;padding:12px 14px;border-bottom:1px solid rgba(13,27,44,.08);white-space:nowrap;font-size:11.5px;letter-spacing:.3px;background:linear-gradient(90deg,#fbfaf8,#f2ece4);}
   td{padding:11px 14px;border-bottom:1px solid rgba(13,27,44,.08);vertical-align:top;color:#202935;}
+  /* 合格供應商清單：短欄位不折行、長欄位限寬，整列置中對齊 */
+  table.sp-list td{vertical-align:middle;padding:9px 10px;line-height:1.5;}
+  table.sp-list th{padding:12px 10px;}
+  table.sp-list td:nth-child(1),table.sp-list td:nth-child(3),table.sp-list td:nth-child(6),
+  table.sp-list td:nth-child(7),table.sp-list td:nth-child(9){white-space:nowrap;}
+  table.sp-list td:nth-child(2){min-width:160px;max-width:220px;}
+  table.sp-list td:nth-child(4){min-width:170px;max-width:240px;}
+  table.sp-list td:nth-child(5){white-space:pre-line;min-width:120px;font-variant-numeric:tabular-nums;}
+  table.sp-list td:nth-child(7){font-variant-numeric:tabular-nums;}
+  table.sp-list td:nth-child(8){min-width:90px;max-width:150px;}
+  table.sp-list td:nth-child(9) .name-link{display:block;text-align:left;padding:2px 0;}
+  table.sp-list .sp-more{display:inline-block;margin-left:6px;padding:0 6px;border-radius:8px;background:rgba(13,27,44,.06);font-size:11px;color:#5b6573;}
   tbody tr:hover td{background:#fffaf0;}
   tr:last-child td{border-bottom:none;}
   .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;}
@@ -311,7 +323,7 @@
             <button class="btn" id="sp_print_list" title="照舊系統「合格供應商一覽表」格式，A4 橫式；只印目前篩選出來的供應商">列印合格供應商一覽表</button>
           </div>
           <div class="table-scroll">
-            <table>
+            <table class="sp-list">
               <thead><tr><th>類別</th><th>公司行號</th><th>區域</th><th>地址</th><th>電話</th><th>負責人</th><th>統編</th><th>聯絡人</th><th></th></tr></thead>
               <tbody id="spTableBody"></tbody>
             </table>
@@ -1232,6 +1244,16 @@ function openSpEditModal(id){
   document.getElementById('spEditModal').classList.add('show');
 }
 function closeSpEditModal(){ document.getElementById('spEditModal').classList.remove('show'); }
+// 地址只顯示第一個，其餘用「另 N 處」標示（滑過去看全部）
+function spAddrCell(a){
+  const list = String(a || '').split(/\r?\n|\s+(?=\d{0,5}[\u4e00-\u9fff]{2}[市縣])/).map(x => x.trim()).filter(Boolean);
+  if(!list.length) return '';
+  return esc(list[0]) + (list.length > 1 ? `<span class="sp-more" title="${esc(list.join('\n'))}">另 ${list.length - 1} 處</span>` : '');
+}
+// 多支電話一支一行
+function spPhoneLines(p){
+  return String(p || '').split(/\r?\n|\s{2,}|\s(?=0\d)|[，、;；]/).map(x => x.trim()).filter(Boolean).join('\n');
+}
 function renderSpTable(){
   const q = document.getElementById('sp_search').value.trim();
   const catF = document.getElementById('sp_category_filter').value;
@@ -1244,14 +1266,14 @@ function renderSpTable(){
   document.getElementById('spTableBody').innerHTML = rows.map(s => `
     <tr>
       <td>${esc(s.category||'')}</td>
-      <td><button class="name-link" data-edit-sp="${s.id}"><b>${esc(s.company_name)}</b></button></td>
+      <td><button class="name-link" data-edit-sp="${s.id}" style="text-align:left;"><b>${esc(s.company_name)}</b></button></td>
       <td>${esc(s.region||'')}</td>
-      <td class="muted">${esc((s.address||'').split('\\n')[0])}</td>
-      <td>${esc((s.phone||'').split(' ')[0])}</td>
+      <td class="muted">${spAddrCell(s.address)}</td>
+      <td>${esc(spPhoneLines(s.phone))}</td>
       <td>${esc(s.responsible_person||'')}</td>
       <td>${esc(s.tax_id||'')}</td>
       <td>${esc(s.contact_person||'')}</td>
-      <td style="white-space:nowrap;"><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button>　<button class="name-link" data-bad-sp="${s.id}" style="color:var(--red);">標記不合格</button></td>
+      <td style="white-space:nowrap;"><button class="name-link" data-deactivate-sp="${s.id}">標記已無合作</button><button class="name-link" data-bad-sp="${s.id}" style="color:var(--red);">標記不合格</button></td>
     </tr>`).join('') || `<tr><td colspan="9" class="empty">尚無供應商資料</td></tr>`;
 }
 function renderSpHistoryTable(){
