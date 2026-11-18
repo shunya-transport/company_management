@@ -1299,10 +1299,17 @@ function buildOrderForm(orderNo, items, first, totalPrice){
       <tr style="height:44px;">${pfTd('採購總價：■未稅　□含稅', '" colspan="3')}${pfTd(untaxed ? untaxed.toLocaleString('en-US') : '', 'text-align:center;font-size:13px;" colspan="13')}</tr>
       <tr style="height:50px;">${pfTd('說明：', 'vertical-align:top;" colspan="16')}</tr>
       <tr>${pfTd('簽　　核', 'text-align:center;font-weight:700;background:#e9e9e9;" colspan="16')}</tr>
-      <tr style="height:56px;">${pfTd('總經理', 'text-align:center;white-space:nowrap;font-size:10.5px;padding:2px;')}${pfTd('', '" colspan="2')}
-        ${pfTd('行政管理部<br>主管', 'text-align:center;font-size:10.5px;white-space:nowrap;padding:2px;" colspan="2')}${pfTd('', '" colspan="2')}
-        ${pfTd('環安衛<br>主管', 'text-align:center;font-size:11px;" colspan="2')}${pfTd('', '" colspan="2')}
-        ${pfTd('採購<br>單位', 'text-align:center;font-size:11px;" colspan="2')}${pfTd(esc(first.applicant || ''), 'text-align:center;" colspan="3')}</tr>
+      <tr><td colspan="16" style="padding:0;border:1px solid #000;">
+        <!-- 簽核列：四組「職稱＋簽名格」各佔四分之一，職稱格一樣寬（115/11 使用者要求調欄寬） -->
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px;">
+          <colgroup>${'<col style="width:11%"><col style="width:14%">'.repeat(4)}</colgroup>
+          <tr style="height:60px;">
+            ${pfTd('總經理', 'text-align:center;border-width:0 1px 0 0;')}${pfTd('', 'border-width:0 1px 0 0;')}
+            ${pfTd('行政管理部<br>主管', 'text-align:center;font-size:11px;white-space:nowrap;padding:2px;border-width:0 1px 0 0;')}${pfTd('', 'border-width:0 1px 0 0;')}
+            ${pfTd('環安衛<br>主管', 'text-align:center;font-size:11px;border-width:0 1px 0 0;')}${pfTd('', 'border-width:0 1px 0 0;')}
+            ${pfTd('採購<br>單位', 'text-align:center;font-size:11px;border-width:0 1px 0 0;')}${pfTd(esc(first.applicant || ''), 'text-align:center;border-width:0;')}
+          </tr>
+        </table></td></tr>
     </table>
     <div style="font-size:10px;margin-top:8px;line-height:1.75;">
       <div>1.【一般事務採購】二千元(含)以上申請人提出申請「採購申請單」經總經理核准後，採購單位進行採買議價與行政主管審核後，呈總經理核准，由採購單位進行採買。</div>
