@@ -300,32 +300,12 @@
             <input id="sp_search" placeholder="搜尋公司行號">
             <select id="sp_category_filter"><option value="all">全部類別</option></select>
             <select id="sp_region_filter"><option value="all">全部區域</option></select>
+            <button class="btn" id="sp_print_list" title="照舊系統「合格供應商一覽表」格式，A4 橫式；只印目前篩選出來的供應商">列印合格供應商一覽表</button>
           </div>
           <div class="table-scroll">
             <table>
               <thead><tr><th>類別</th><th>公司行號</th><th>區域</th><th>地址</th><th>電話</th><th>負責人</th><th>統編</th><th>聯絡人</th><th></th></tr></thead>
               <tbody id="spTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="card">
-          <h2>供應商歷史資料<span class="count-badge" id="sp_history_count"></span></h2>
-          <div class="muted" style="margin-bottom:10px;">已標記為「已無合作」的供應商，資料保留備查，不會出現在上方合格供應商清單裡。</div>
-          <div class="toolbar"><input id="sp_history_search" placeholder="搜尋公司行號"></div>
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>類別</th><th>公司行號</th><th>區域</th><th>電話</th><th>聯絡人</th><th></th></tr></thead>
-              <tbody id="spHistoryTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="card">
-          <h2>不合格供應商<span class="count-badge" id="sp_bad_count"></span></h2>
-          <div class="muted" style="margin-bottom:10px;">年度評分 D 級、或評估不合格的供應商（舊系統「不合格外部供應商一覽表」）。不會出現在合格清單和年度評分；要恢復請按「恢復合格」。</div>
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>建檔日期</th><th>類別</th><th>公司行號</th><th>區域</th><th>電話</th><th>負責人</th><th>不合格原因</th><th></th></tr></thead>
-              <tbody id="spBadBody"></tbody>
             </table>
           </div>
         </div>
@@ -349,6 +329,27 @@
             <label>評估者／評分者<input id="se_rater" placeholder="選填"></label>
           </div>
           <button class="btn" id="se_print">列印</button>
+        </div>
+        <div class="card">
+          <h2>供應商歷史資料<span class="count-badge" id="sp_history_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;">已標記為「已無合作」的供應商，資料保留備查，不會出現在上方合格供應商清單裡。</div>
+          <div class="toolbar"><input id="sp_history_search" placeholder="搜尋公司行號"></div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>類別</th><th>公司行號</th><th>區域</th><th>電話</th><th>聯絡人</th><th></th></tr></thead>
+              <tbody id="spHistoryTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>不合格供應商<span class="count-badge" id="sp_bad_count"></span></h2>
+          <div class="muted" style="margin-bottom:10px;">年度評分 D 級、或評估不合格的供應商（舊系統「不合格外部供應商一覽表」）。不會出現在合格清單和年度評分；要恢復請按「恢復合格」。</div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>建檔日期</th><th>類別</th><th>公司行號</th><th>區域</th><th>電話</th><th>負責人</th><th>不合格原因</th><th></th></tr></thead>
+              <tbody id="spBadBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1475,9 +1476,29 @@ function rtPrint(pages){
     body{ margin:0; font-family:'PMingLiU','新細明體','MingLiU','DFKai-SB',serif; color:#000; }
     .rt-page{ min-height:272mm; display:flex; flex-direction:column; page-break-after:always; box-sizing:border-box; }
     .rt-page:last-child{ page-break-after:auto; }
-    @media screen{ .rt-page{ width:186mm; margin:10px auto; padding:10mm 12mm; box-shadow:0 0 0 1px #ccc; } }
+    @media screen{ .rt-page{ width:210mm; min-height:297mm; margin:10px auto; padding:10mm 12mm; box-shadow:0 0 0 1px #ccc; } }
+    li[data-g]{ box-sizing:border-box; }
   </style></head><body>${pages.join('')}</body></html>`);
-  w.document.close(); w.focus(); setTimeout(() => w.print(), 400);
+  w.document.close(); w.focus();
+  // 有 data-g 的列平均撐高，讓整張剛好填滿 A4（不會跑到第二頁）
+  try{
+    const mm = w.document.createElement('div'); mm.style.cssText = 'position:absolute;visibility:hidden;height:100mm;'; w.document.body.appendChild(mm);
+    const pxmm = mm.getBoundingClientRect().height / 100; mm.remove();
+    const target = 262 * pxmm;
+    w.document.querySelectorAll('.rt-page').forEach(pg => {
+      const rows = [...pg.querySelectorAll('[data-g]')]; if(!rows.length) return;
+      const keep = pg.style.cssText; pg.style.minHeight = '0'; pg.style.display = 'block';
+      const cs = w.getComputedStyle(pg); const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const extra = target - (pg.getBoundingClientRect().height - pad);
+      if(extra > 4){
+        const hs = rows.map(r => r.getBoundingClientRect().height); const tot = hs.reduce((a, b) => a + b, 0);
+        rows.forEach((r, k) => { const h = hs[k] + extra * hs[k] / tot;
+          if(r.tagName === 'LI'){ r.style.minHeight = h + 'px'; } else r.style.height = h + 'px'; });
+      }
+      pg.style.cssText = keep;
+    });
+  }catch(e){}
+  setTimeout(() => w.print(), 400);
 }
 {
   const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
@@ -1504,6 +1525,66 @@ function rtPrint(pages){
   });
 }
 
+
+// ============ 合格供應商一覽表（舊系統格式，表單編號 JS-P013-R07-04）============
+function spListRows(){
+  const q = document.getElementById('sp_search').value.trim();
+  const catF = document.getElementById('sp_category_filter').value;
+  const regionF = document.getElementById('sp_region_filter').value;
+  let rows = STATE.qualifiedSuppliers.filter(isQualified);
+  if(q) rows = rows.filter(s => (s.company_name||'').includes(q));
+  if(catF!=='all') rows = rows.filter(s => s.category===catF);
+  if(regionF!=='all') rows = rows.filter(s => s.region===regionF);
+  return rows.sort((a, b) => String(a.filed_date || '9999').localeCompare(String(b.filed_date || '9999')) || (Number(a.id) || 0) - (Number(b.id) || 0));
+}
+function spListDate(v){ const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[1]}/${+m[2]}/${+m[3]}` : esc(v || ''); }
+function spListPrint(){
+  const rows = spListRows();
+  if(!rows.length){ alert('目前篩選條件下沒有合格供應商。'); return; }
+  const catF = document.getElementById('sp_category_filter').value, regionF = document.getElementById('sp_region_filter').value;
+  const q = document.getElementById('sp_search').value.trim();
+  const cond = [catF !== 'all' ? '類別：' + catF : '', regionF !== 'all' ? '區域：' + regionF : '', q ? '搜尋：' + q : ''].filter(Boolean).join('　');
+  const W = [12, 13, 7, 6.8, 31.2, 46, 22.2, 17, 11, 13, 17, 12.5, 30.2];
+  const tot = W.reduce((a, b) => a + b, 0);
+  const H = ['建檔<br>日期', '供應商類別', 'NO.', '區域', '公司行號', '地址', '電話', '傳真', '負責人', '統一編號', '聯絡人', '創立日期', '營業項目說明'];
+  const C = [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0];
+  const body = rows.map(s => {
+    const v = [spListDate(s.filed_date), esc(s.category || ''), esc(s.id), esc(s.region || ''), esc(s.company_name || ''), esc(s.address || ''),
+      esc(s.phone || ''), esc(s.fax || ''), esc(s.responsible_person || ''), esc(s.tax_id || ''), esc(s.contact_person || ''), spListDate(s.established_date), esc(s.business_desc || '')];
+    return '<tr>' + v.map((x, i) => `<td${C[i] ? ' class="c"' : ''}>${x}</td>`).join('') + '</tr>';
+  }).join('');
+  const w = window.open('', '_blank');
+  if(!w){ alert('瀏覽器擋住了新視窗，請允許這個網站開彈出視窗後再按一次。'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>合格供應商一覽表</title><style>
+    @page{ size:A4 landscape; margin:8mm 8mm 12mm;
+      @bottom-center{ content:"第 " counter(page) " 頁，共 " counter(pages) " 頁"; font-size:9pt; font-family:'DFKai-SB','標楷體',serif; }
+      @bottom-right{ content:"表單編號:JS-P013-R07-04"; font-size:9pt; font-family:'DFKai-SB','標楷體',serif; } }
+    body{ margin:0; font-family:'DFKai-SB','標楷體','BiauKai','PMingLiU',serif; color:#000; }
+    table.l{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:9.5px; }
+    table.l th, table.l td{ border:1px solid #000; padding:3px 4px; vertical-align:middle; white-space:pre-line; word-break:break-all; line-height:1.35; }
+    table.l th{ font-weight:400; text-align:center; font-size:10px; height:30px; }
+    table.l td.c{ text-align:center; }
+    table.l tr{ page-break-inside:avoid; }
+    thead{ display:table-header-group; }
+    .ttl{ text-align:center; font-size:18px; letter-spacing:6px; }
+    .sign{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; margin-top:10px; page-break-inside:avoid; }
+    .sign td{ border:1px solid #000; text-align:center; height:24px; }
+    .sign tr + tr td{ height:70px; }
+    @media screen{ body{ width:281mm; margin:10px auto; } }
+  </style></head><body>
+    <table class="l"><colgroup>${W.map(x => `<col style="width:${(x / tot * 100).toFixed(2)}%">`).join('')}</colgroup>
+      <thead>
+        <tr><th colspan="13" style="border:none;height:auto;text-align:left;padding:0 0 2px;"><img src="${PF_LOGO}" style="height:26px;"></th></tr>
+        <tr><th colspan="13" style="border:none;height:auto;padding:0 0 6px;"><div class="ttl">合格供應商一覽表</div>${cond ? `<div style="text-align:right;font-size:10px;">${esc(cond)}</div>` : ''}</th></tr>
+        <tr>${H.map(h => `<th>${h}</th>`).join('')}</tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+    <table class="sign"><tr><td>總經理</td><td>行政主管</td><td>採購單位</td></tr><tr><td></td><td></td><td></td></tr></table>
+  </body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 500);
+}
+{ const b = document.getElementById('sp_print_list'); if(b) b.addEventListener('click', spListPrint); }
 
 // ============ 不合格供應商 ============
 function renderSpBad(){
@@ -1573,22 +1654,22 @@ function seSheet(s, type, date, rater){
   const C = 'text-align:center;';
   const head = `<img src="${PF_LOGO}" style="height:30px;align-self:flex-start;">`;
   if(type === 'basic'){
-    const L = (t) => `<td style="${B}${C}white-space:nowrap;width:15%;">${t}</td>`;
-    const line = (t) => `<div style="padding:3px 0;">${t}：　□合格　□不合格　說明：<span style="display:inline-block;min-width:240px;border-bottom:1px solid #000;">&nbsp;</span></div>`;
+    const L = (t) => `<td style="${B}${C}white-space:nowrap;width:15%;letter-spacing:1px;">${t}</td>`;
+    const line = (t) => `<div style="padding:7px 0;display:flex;white-space:nowrap;">${t}：　□合格　□不合格　說明：<span style="flex:1;margin-left:4px;border-bottom:1px solid #000;">&nbsp;</span></div>`;
     return `<div class="rt-page">${head}
-      <div style="text-align:center;font-size:20px;letter-spacing:4px;margin:4px 0 2px;">外部供應商基本資料</div>
-      <div style="text-align:right;font-size:13px;margin-bottom:4px;">No.　${esc(s.id)}</div>
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;">
-        <tr style="height:40px;">${L('公 司 行 號')}<td style="${B}" colspan="5">${esc(s.company_name || '')}</td></tr>
-        <tr style="height:40px;">${L('公司負責人')}<td style="${B}">${esc(s.responsible_person || '')}</td>${L('聯 絡 人')}<td style="${B}">${esc(s.contact_person || '')}</td>${L('創立日期')}<td style="${B}">${esc(s.established_date || '')}</td></tr>
-        <tr style="height:40px;">${L('地　　址')}<td style="${B}white-space:pre-line;" colspan="5">${esc(s.address || '')}</td></tr>
-        <tr style="height:40px;">${L('電　　話')}<td style="${B}white-space:pre-line;" colspan="3">${esc(s.phone || '')}</td>${L('傳　　真')}<td style="${B}">${esc(s.fax || '')}</td></tr>
-        <tr style="height:40px;">${L('統 一 編 號')}<td style="${B}" colspan="3">${esc(s.tax_id || '')}</td>${L('供應商類別')}<td style="${B}">${esc(s.category || '')}</td></tr>
-        <tr style="height:70px;">${L('營業項目說明')}<td style="${B}vertical-align:top;" colspan="5">${esc(s.business_desc || '')}</td></tr>
-        <tr>${L('審核意見')}<td style="${B}line-height:1.9;" colspan="5">運送設備服務商評估：（任一項合格）
+      <div style="text-align:center;font-size:24px;letter-spacing:6px;margin:8px 0 4px;">外部供應商基本資料</div>
+      <div style="text-align:right;font-size:14px;margin-bottom:6px;">No.　${esc(s.id)}</div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:15.5px;">
+        <tr data-g style="height:54px;">${L('公 司 行 號')}<td style="${B}" colspan="5">${esc(s.company_name || '')}</td></tr>
+        <tr data-g style="height:54px;">${L('公司負責人')}<td style="${B}">${esc(s.responsible_person || '')}</td>${L('聯 絡 人')}<td style="${B}">${esc(s.contact_person || '')}</td>${L('創立日期')}<td style="${B}">${esc(s.established_date || '')}</td></tr>
+        <tr data-g style="height:54px;">${L('地　　址')}<td style="${B}white-space:pre-line;" colspan="5">${esc(s.address || '')}</td></tr>
+        <tr data-g style="height:54px;">${L('電　　話')}<td style="${B}white-space:pre-line;" colspan="3">${esc(s.phone || '')}</td>${L('傳　　真')}<td style="${B}">${esc(s.fax || '')}</td></tr>
+        <tr data-g style="height:54px;">${L('統 一 編 號')}<td style="${B}" colspan="3">${esc(s.tax_id || '')}</td>${L('供應商類別')}<td style="${B}">${esc(s.category || '')}</td></tr>
+        <tr data-g style="height:120px;">${L('營業項目說明')}<td style="${B}vertical-align:top;" colspan="5">${esc(s.business_desc || '')}</td></tr>
+        <tr>${L('審核意見')}<td style="${B}line-height:1.9;padding:10px 12px;" colspan="5">運送設備服務商評估：（任一項合格）
           ${line('1.保養維修廠')}${line('2.輪胎換修廠')}${line('3.行車紀錄器')}${line('4.GPS系統建置')}${line('5.廢棄物清除廠商')}${line('6.飲用水及設備廠商')}</td></tr>
-        <tr style="height:34px;"><td style="${B}${C}" colspan="2">總經理</td><td style="${B}${C}" colspan="2">行政主管</td><td style="${B}${C}" colspan="2">採購單位</td></tr>
-        <tr style="height:80px;"><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td></tr>
+        <tr style="height:44px;"><td style="${B}${C}" colspan="2">總經理</td><td style="${B}${C}" colspan="2">行政主管</td><td style="${B}${C}" colspan="2">採購單位</td></tr>
+        <tr data-g style="height:130px;"><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td><td style="${B}" colspan="2"></td></tr>
       </table>
       <div style="text-align:right;font-size:11px;margin-top:auto;font-family:Arial,sans-serif;">表單編號：DGTT-P008-R01-01</div></div>`;
   }
@@ -1597,7 +1678,7 @@ function seSheet(s, type, date, rater){
       <div style="text-align:right;font-size:12px;">列印編號　${esc(s.id)}</div>
       <div style="text-align:center;font-size:22px;letter-spacing:3px;margin:18px 0 22px;font-weight:700;">外部供應商的責任關懷原則</div>
       <div style="font-size:15px;line-height:2;">${SE_CARE.map(t => `<p style="text-indent:2em;margin:0 0 8px;">${t}</p>`).join('')}
-        <ol style="margin:6px 0 0;padding-left:2em;">${SE_CARE_ITEMS.map(t => `<li>${t}</li>`).join('')}</ol></div>
+        <ol style="margin:6px 0 0;padding-left:2em;">${SE_CARE_ITEMS.map(t => `<li data-g>${t}</li>`).join('')}</ol></div>
       <div style="margin-top:auto;font-size:16px;line-height:2.6;">公司名稱：${esc(s.company_name || '')}<br>公司代表人：${esc(s.responsible_person || '')}<span style="margin-left:4em;">（簽章）</span><br>
         <span style="font-size:14px;">中華民國　${seDateText(date)}</span></div></div>`;
   }
@@ -1605,37 +1686,38 @@ function seSheet(s, type, date, rater){
     const rows = [['安全方面', '安全標示（佔10%）'], ['', '安全防護措施（佔10%）'], ['衛生方面', '環境整潔（佔10%）'], ['環保方面', '廢棄物管理（佔20%）'],
       ['品質方面', '符合合格供應商（佔10%）'], ['', '符合要求確實執行（佔10%）'], ['', '價格（佔10%）'], ['保安方面', '現場有人員進行管理（佔20%）']];
     return `<div class="rt-page">${head}
-      <div style="text-align:center;font-size:19px;letter-spacing:3px;margin:4px 0 6px;">外部供應商現場評分表</div>
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:13.5px;border:2px solid #000;">
+      <div style="text-align:center;font-size:23px;letter-spacing:5px;margin:8px 0 10px;">外部供應商現場評分表</div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;border:2px solid #000;">
         <colgroup><col style="width:13%"><col style="width:27%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
-        <tr style="height:40px;"><td style="${B}${C}">區　域</td><td style="${B}">${esc(s.region || '')}</td><td style="${B}${C}">日　期</td><td style="${B}" colspan="5">${seDateText(date)}</td></tr>
-        <tr style="height:40px;"><td style="${B}${C}">外部供應商</td><td style="${B}">${esc(s.company_name || '')}</td><td style="${B}${C}">評分者</td><td style="${B}" colspan="5">${esc(rater || '')}</td></tr>
+        <tr style="height:52px;"><td style="${B}${C}">區　域</td><td style="${B}">${esc(s.region || '')}</td><td style="${B}${C}">日　期</td><td style="${B}" colspan="5">${seDateText(date)}</td></tr>
+        <tr style="height:52px;"><td style="${B}${C}">外部供應商</td><td style="${B}">${esc(s.company_name || '')}</td><td style="${B}${C}">評分者</td><td style="${B}" colspan="5">${esc(rater || '')}</td></tr>
         <tr><td style="${B}${C}" rowspan="2">項目</td><td style="${B}${C}">評分要素</td><td style="${B}${C}">優良</td><td style="${B}${C}">良好</td><td style="${B}${C}">普通</td><td style="${B}${C}">劣</td><td style="${B}${C}">小計</td><td style="${B}${C}">總小計(%)</td></tr>
         <tr><td style="${B}${C}">(A)</td><td style="${B}${C}">100</td><td style="${B}${C}">80</td><td style="${B}${C}">60</td><td style="${B}${C}">0</td><td style="${B}${C}">(B)</td><td style="${B}${C}">(A*B)</td></tr>
-        ${rows.map(r => `<tr style="height:38px;"><td style="${B}${C}">${r[0]}</td><td style="${B}">${r[1]}</td>${('<td style="' + B + '"></td>').repeat(6)}</tr>`).join('')}
-        <tr style="height:40px;"><td style="${B}${C}">總　分</td><td style="${B}" colspan="7"></td></tr>
+        ${rows.map(r => `<tr data-g style="height:52px;"><td style="${B}${C}">${r[0]}</td><td style="${B}">${r[1]}</td>${('<td style="' + B + '"></td>').repeat(6)}</tr>`).join('')}
+        <tr style="height:52px;"><td style="${B}${C}">總　分</td><td style="${B}" colspan="7"></td></tr>
       </table>
       <div style="font-size:13px;margin-top:6px;">※評分者請依現場實際狀況（ν）評分計算總分，評分結果將作為判定此外部供應商符合公司要求下將持續配合。</div>
       <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;margin-top:14px;">
-        <tr style="height:34px;"><td style="${B}${C}">總經理</td><td style="${B}${C}">行政主管</td><td style="${B}${C}">採購單位</td></tr>
-        <tr style="height:80px;"><td style="${B}"></td><td style="${B}"></td><td style="${B}"></td></tr></table></div>`;
+        <tr style="height:44px;"><td style="${B}${C}">總經理</td><td style="${B}${C}">行政主管</td><td style="${B}${C}">採購單位</td></tr>
+        <tr data-g style="height:140px;"><td style="${B}"></td><td style="${B}"></td><td style="${B}"></td></tr></table></div>`;
   }
   const ev = SE_EVAL[type]; if(!ev) return '';
+  const rh = Math.max(40, Math.min(64, Math.floor(500 / ev[1].length)));
   return `<div class="rt-page">${head}
     <div style="text-align:center;font-size:13px;margin-top:2px;">建興貨運集團</div>
-    <div style="text-align:center;font-size:19px;letter-spacing:2px;margin:2px 0 8px;">運送設備服務商評估表（${ev[0]}）</div>
+    <div style="text-align:center;font-size:23px;letter-spacing:3px;margin:4px 0 10px;">運送設備服務商評估表（${ev[0]}）</div>
     <div style="font-size:14px;margin-bottom:4px;">區域：${esc(s.region || '')}</div>
-    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:13.5px;border:2px solid #000;">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;border:2px solid #000;">
       <colgroup><col style="width:8%"><col style="width:46%"><col style="width:28%"><col style="width:18%"></colgroup>
-      <tr style="height:40px;"><td style="${B}" colspan="2">外部供應商名稱：　${esc(s.company_name || '')}</td><td style="${B}" colspan="2">日期：${seDateText(date)}</td></tr>
+      <tr style="height:54px;"><td style="${B}" colspan="2">外部供應商名稱：　${esc(s.company_name || '')}</td><td style="${B}" colspan="2">日期：${seDateText(date)}</td></tr>
       <tr><td style="${B}${C}">項次</td><td style="${B}${C}">評分項目</td><td style="${B}${C}">評　　估</td><td style="${B}${C}">備　註</td></tr>
-      ${ev[1].map((t, i) => { const key = /\*$/.test(t); return `<tr style="height:40px;"><td style="${B}${C}">${i + 1}</td><td style="${B}">${esc(t.replace(/\*$/, ''))}</td>
+      ${ev[1].map((t, i) => { const key = /\*$/.test(t); return `<tr data-g style="height:${rh}px;"><td style="${B}${C}">${i + 1}</td><td style="${B}">${esc(t.replace(/\*$/, ''))}</td>
         <td style="${B}">□否　□是${key ? '（列為合格廠商）' : ''}</td><td style="${B}"></td></tr>`; }).join('')}
-      <tr style="height:44px;"><td style="${B}${C}" colspan="1">評估<br>結果</td><td style="${B}" colspan="3">${ev[2]}　說明：</td></tr>
+      <tr style="height:60px;"><td style="${B}${C}" colspan="1">評估<br>結果</td><td style="${B}" colspan="3">${ev[2]}　說明：</td></tr>
     </table>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;margin-top:14px;">
-      <tr style="height:34px;"><td style="${B}${C}">總　經　理</td><td style="${B}${C}">行 政 主 管</td><td style="${B}${C}">採　購　單　位</td><td style="${B}${C}">評　估　者</td></tr>
-      <tr style="height:80px;"><td style="${B}"></td><td style="${B}"></td><td style="${B}"></td><td style="${B}${C}">${esc(rater || '')}</td></tr></table></div>`;
+      <tr style="height:44px;"><td style="${B}${C}">總　經　理</td><td style="${B}${C}">行 政 主 管</td><td style="${B}${C}">採　購　單　位</td><td style="${B}${C}">評　估　者</td></tr>
+      <tr data-g style="height:120px;"><td style="${B}"></td><td style="${B}"></td><td style="${B}"></td><td style="${B}${C}">${esc(rater || '')}</td></tr></table></div>`;
 }
 {
   const b = document.getElementById('se_print');
