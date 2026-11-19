@@ -17,6 +17,17 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const BACKUP_EMAIL = process.env.BACKUP_EMAIL || process.env.NOTIFY_EMAIL;
+// 備份壓縮檔密碼（GitHub Secrets 的 BACKUP_ZIP_PASSWORD）。交通部個資安全維護管理辦法第 17 條：
+// 備份要比照原件保護、有需要時加密。設了就用 AES-256 加密 zip（7-Zip、WinRAR、Windows 11 都能解），
+// 沒設就照舊不加密，但信裡會用紅字提醒。密碼不要寫進任何檔案，也不要寫在信裡。
+const BACKUP_ZIP_PASSWORD = process.env.BACKUP_ZIP_PASSWORD || '';
+function makeZip(){
+  if (BACKUP_ZIP_PASSWORD) {
+    execFileSync('7z', ['a', '-tzip', '-mem=AES256', '-bso0', '-bsp0', '-p' + BACKUP_ZIP_PASSWORD, ZIP, path.basename(OUT)], { cwd: process.cwd() });
+  } else {
+    execFileSync('zip', ['-r', '-q', ZIP, path.basename(OUT)], { cwd: process.cwd() });
+  }
+}
 
 if (!SUPABASE_URL || !SUPABASE_KEY || !RESEND_API_KEY || !BACKUP_EMAIL) {
   console.error('缺少必要環境變數，請檢查 GitHub Secrets 設定。');
@@ -252,7 +263,7 @@ ${IS_DAILY ? '' : `
   fs.writeFileSync(path.join(OUT, '00_備份說明.md'), readme);
 
   fs.rmSync(ZIP, { force: true });
-  execFileSync('zip', ['-r', '-q', ZIP, path.basename(OUT)], { cwd: process.cwd() });
+  makeZip();
   let mb = fs.statSync(ZIP).size / 1024 / 1024;
   let trimmed = false;
   // 萬一哪天資料長太大、信件夾不下，就先捨棄儀表板網頁（那些 GitHub 上本來就有版本紀錄），
@@ -261,7 +272,7 @@ ${IS_DAILY ? '' : `
     console.warn(`備份 ${mb.toFixed(1)} MB 超過上限，改為只打包資料庫部分`);
     fs.rmSync(path.join(OUT, '02_儀表板網頁'), { recursive: true, force: true });
     fs.rmSync(ZIP, { force: true });
-    execFileSync('zip', ['-r', '-q', ZIP, path.basename(OUT)], { cwd: process.cwd() });
+    makeZip();
     mb = fs.statSync(ZIP).size / 1024 / 1024;
     trimmed = true;
   }
@@ -287,6 +298,9 @@ async function sendMail(stat) {
       ${IS_DAILY ? '' : `隨附儀表板與程式檔 <b>${stat.fileCount}</b> 個、`}壓縮檔 <b>${stat.mb.toFixed(1)} MB</b>。
     </p>
     ${warn}
+    ${BACKUP_ZIP_PASSWORD
+      ? '<p style="font-family:sans-serif;font-size:14px;">壓縮檔已加密（AES-256），解壓縮時輸入公司另外保管的備份密碼（不會寫在信裡）。</p>'
+      : '<p style="font-family:sans-serif;color:#B3261E;">⚠ 這份備份沒有加密。請到 GitHub → Settings → Secrets and variables → Actions 新增 BACKUP_ZIP_PASSWORD。</p>'}
     ${tooBig
       ? `<p style="font-family:sans-serif;color:#B3261E;">備份檔仍超過 ${MAX_ATTACH_MB} MB，這封信夾不了檔案。請聯絡系統維護人員手動取一份。</p>`
       : `<p style="font-family:sans-serif;font-size:14px;">備份檔就附在這封信裡（${path.basename(ZIP)}），解開後先看「00_備份說明.md」。</p>`}
