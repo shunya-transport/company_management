@@ -2578,8 +2578,7 @@
       <div class="muted" style="margin-bottom:10px;">
         各業主（貨主）提供的安全資料表（SDS）。<b>有效日期＝製表日期＋3 年</b>（危害性化學品標示及通識規則：SDS 至少每 3 年檢討更新一次），
         90 天內到期標黃、過期標紅，到期前請向業主索取新版。<br>
-        PDF 原檔存在雲端（Supabase Storage，只有登入的人看得到）。按「批次上傳 PDF」一次選多個檔案，
-        檔名跟表上的「檔名」一樣的會自動對上；對不上的會列出來，可以再一筆一筆按「上傳」。
+        SDS 檔案放在 Google 雲端：每一列按「＋連結」貼上網址，或按「批次貼上雲端連結」用檔名一次對上。
       </div>
       <div class="toolbar">
         <input id="sds_search" placeholder="搜尋物質名稱／UN／CAS／化學式或型號">
@@ -2589,14 +2588,14 @@
           <option value="valid">有效</option>
           <option value="90">90 天內到期</option>
           <option value="expired">已過期</option>
-          <option value="nofile">還沒上傳 PDF 也沒連結</option>
+          <option value="nofile">還沒有雲端連結</option>
         </select>
         <button class="btn ghost" id="sds_new" style="padding:8px 14px;font-size:13px;">新增</button>
-        <button class="btn ghost" id="sds_bulk_btn" style="padding:8px 14px;font-size:13px;">批次上傳 PDF</button>
         <input type="file" id="sds_bulk_file" accept="application/pdf,.pdf" multiple style="display:none;">
         <input type="file" id="sds_one_file" accept="application/pdf,.pdf" style="display:none;">
         <button class="btn ghost" id="sds_csv" style="padding:8px 14px;font-size:13px;">匯出 CSV</button>
         <button class="btn ghost" id="sds_links" style="padding:8px 14px;font-size:13px;">批次貼上雲端連結</button>
+        <button class="btn" id="sds_idx" style="padding:8px 14px;font-size:13px;">列印 SDS 目錄</button>
       </div>
       <div id="sds_form" style="display:none;margin:8px 0 12px;padding:10px;border:1px solid var(--line,#ddd);border-radius:10px;">
         <div class="form-grid">
@@ -2622,7 +2621,7 @@
       <div class="table-scroll" style="max-height:640px;">
         <table>
           <thead><tr><th>業主</th><th>物質名稱</th><th>UN 編號</th><th>CAS No.</th><th>化學式／型號</th><th>危險分類</th>
-            <th>製表日期</th><th>有效日期</th><th>剩餘</th><th>PDF／連結</th><th></th></tr></thead>
+            <th>製表日期</th><th>有效日期</th><th>剩餘</th><th>雲端連結</th><th></th></tr></thead>
           <tbody id="sdsBody"></tbody>
         </table>
       </div>
@@ -3369,6 +3368,25 @@
     </div>
   </div>
 
+<div class="modal-backdrop no-print" id="sdsIdxModal">
+  <div class="modal-box" style="max-width:720px;">
+    <button class="modal-close" type="button" data-sx-close>✕</button>
+    <h3>列印 SDS 目錄（安全資料表目錄，依業主分類）</h3>
+    <div class="muted" style="margin-bottom:8px;">勾選要印的業主，每個業主從新的一頁開始，序號每個業主從 1 重新編。A4 直式。</div>
+    <div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="sx_cover" checked style="width:auto;"> 第一頁加印業主總目錄（含頁次）</label>
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="sx_valid" style="width:auto;"> 不印已過期的</label>
+      <label>其他名稱欄<select id="sx_other" style="width:auto;">
+        <option value="code">化學式／型號</option><option value="en">英文名稱（括號裡那段）</option><option value="none">留白（手寫）</option></select></label>
+      <label>日期<select id="sx_date" style="width:auto;"><option value="roc">民國（115/10/07）</option><option value="ad">西元（2026/10/07）</option></select></label>
+      <button class="btn ghost" type="button" id="sx_all" style="padding:6px 12px;font-size:13px;">全選／全不選</button>
+    </div>
+    <div id="sx_list" style="max-height:42vh;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px;"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+      <button class="btn" type="button" id="sx_print">列印</button><span id="sx_sum" class="muted" style="font-size:12.5px;"></span>
+    </div>
+  </div>
+</div>
 <div class="modal-backdrop no-print" id="lkModal">
   <div class="modal-box" style="max-width:760px;">
     <button class="modal-close" type="button" data-lk-close>✕</button>
@@ -21859,7 +21877,7 @@ function sdsRows(){
     if(df === 'valid')   return d !== null && d >= 0;
     if(df === '90')      return d !== null && d >= 0 && d <= 90;
     if(df === 'expired') return d !== null && d < 0;
-    if(df === 'nofile')  return !r.file_path && !r.link_url;
+    if(df === 'nofile')  return !r.link_url;
     return true;
   });
 }
@@ -21890,14 +21908,14 @@ function renderSds(){
   const b = document.getElementById('sds_due_badge');
   if(b) b.textContent = due.length ? `90 天內到期／已過期 ${due.length} 份` : '';
   body.innerHTML = rows.map(r => `<tr>
-      <td>${esc(r.owner || '')}</td>
+      <td style="white-space:nowrap;">${esc(r.owner || '')}</td>
       <td><b>${esc(r.substance_name || '')}</b>${r.notes ? `<div class="muted" style="font-size:11.5px;">${esc(r.notes)}</div>` : ''}</td>
       <td>${esc(r.un_no || '')}</td><td style="font-size:12px;">${esc(r.cas_no || '')}</td>
       <td>${esc(r.formula_code || '')}</td><td>${esc(r.hazard_class || '')}</td>
       <td>${esc(sdsRoc(r.sds_date))}</td><td>${esc(sdsRoc(sdsValid(r)))}</td><td>${sdsPill(r)}</td>
-      <td style="white-space:nowrap;line-height:1.9;">${r.file_path ? `<button class="name-link" data-sds-open="${r.id}">開啟 PDF</button>` : '<span class="muted">未上傳</span>'}
-        　<button class="name-link" data-sds-up="${r.id}">${r.file_path ? '換檔' : '上傳'}</button><br>
-        ${lkSafe(r.link_url) ? `<a class="name-link" href="${esc(lkSafe(r.link_url))}" target="_blank" rel="noopener noreferrer">雲端連結 ↗</a>　` : ''}<button class="name-link" data-sds-link="${r.id}" style="font-weight:400;">${r.link_url ? '改連結' : '＋連結'}</button></td>
+      <td style="white-space:nowrap;line-height:1.9;">${lkSafe(r.link_url)
+          ? `<a class="name-link" href="${esc(lkSafe(r.link_url))}" target="_blank" rel="noopener noreferrer">開啟 ↗</a>　`
+          : (r.file_path ? `<button class="name-link" data-sds-open="${r.id}" title="以前上傳到系統的 PDF">開啟（舊檔）</button>　` : '')}<button class="name-link" data-sds-link="${r.id}" style="font-weight:400;">${r.link_url ? '改連結' : '＋連結'}</button></td>
       <td style="white-space:nowrap;"><button class="name-link" data-sds-edit="${r.id}">改</button>　<button class="del-btn" data-sds-del="${r.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="11" class="empty">${STATE.sdsLoaded && !all.length ? '還沒有資料（請先在 Supabase 執行 SQL_231）' : '沒有符合條件的 SDS'}</td></tr>`;
 }
@@ -21998,9 +22016,9 @@ async function sdsBulk(files){
 function sdsCsv(){
   const rows = sdsRows();
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const head = ['業主','物質名稱','UN編號','CAS No.','化學式/產品型號','危險物品分類','製表日期','SDS有效日期','剩餘天數','供應商/製造商','檔名','PDF已上傳','備註','雲端連結'];
+  const head = ['業主','物質名稱','UN編號','CAS No.','化學式/產品型號','危險物品分類','製表日期','SDS有效日期','剩餘天數','供應商/製造商','檔名','備註','雲端連結'];
   const out = rows.map(r => [r.owner, r.substance_name, r.un_no, r.cas_no, r.formula_code, r.hazard_class,
-    String(r.sds_date || '').slice(0, 10), sdsValid(r), sdsDays(r) ?? '', r.supplier, r.file_name, r.file_path ? '是' : '否', r.notes, r.link_url]);
+    String(r.sds_date || '').slice(0, 10), sdsValid(r), sdsDays(r) ?? '', r.supplier, r.file_name, r.notes, r.link_url]);
   const text = [head.map(q).join(',')].concat(out.map(r => r.map(q).join(','))).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + text], { type:'text/csv;charset=utf-8;' }));
@@ -22034,6 +22052,101 @@ function sdsCsv(){
     else if(t.dataset.sdsDel) sdsDelete(Number(t.dataset.sdsDel));
   });
 })();
+// ===================== SDS 目錄（依業主分類，照紙本「安全資料表目錄」格式）=====================
+const SX_ROWS = 22;   // 一頁幾列（列高 10.5mm，A4 直式剛好）
+function sxDocsOf(owner){
+  const onlyValid = document.getElementById('sx_valid').checked;
+  return (STATE.sdsDocs || []).filter(r => r.owner === owner && (!onlyValid || (sdsDays(r) ?? 0) >= 0))
+    .sort((a, b) => (Number(a.sort_no) || 9999) - (Number(b.sort_no) || 9999) || String(a.substance_name || '').localeCompare(String(b.substance_name || ''), 'zh-Hant'));
+}
+function sxOpen(){
+  const all = STATE.sdsDocs || [];
+  if(!all.length){ alert('還沒有 SDS 資料。'); return; }
+  const owners = [...new Set(all.map(r => r.owner).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  const curF = (document.getElementById('sds_owner_filter') || {}).value || 'all';
+  document.getElementById('sx_list').innerHTML = owners.map(o => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+      <input type="checkbox" data-sx-owner="${esc(o)}" style="width:auto;"${curF === 'all' || curF === o ? ' checked' : ''}> ${esc(o)} <span class="muted">${all.filter(r => r.owner === o).length}</span></label>`).join('');
+  sxSum();
+  document.getElementById('sdsIdxModal').classList.add('show');
+}
+function sxSum(){
+  const os = [...document.querySelectorAll('#sx_list input[data-sx-owner]:checked')].map(x => x.dataset.sxOwner);
+  const n = os.reduce((a, o) => a + sxDocsOf(o).length, 0);
+  document.getElementById('sx_sum').textContent = os.length ? `${os.length} 個業主、${n} 份` : '請勾選業主';
+}
+function sxPrint(){
+  const owners = [...document.querySelectorAll('#sx_list input[data-sx-owner]:checked')].map(x => x.dataset.sxOwner);
+  if(!owners.length){ alert('請先勾選業主。'); return; }
+  const other = document.getElementById('sx_other').value, roc = document.getElementById('sx_date').value === 'roc';
+  const zh = n => String(n || '').replace(/\s*[（(][^（）()]*[A-Za-z][^（）()]*[）)]\s*$/, '').trim() || String(n || '');
+  const en = n => { const m = String(n || '').match(/[（(]([^（）()]*[A-Za-z][^（）()]*)[）)]\s*$/); return m ? m[1] : ''; };
+  const dt = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (roc ? (m[1] - 1911) : m[1]) + '/' + m[2] + '/' + m[3] : ''; };
+  const pages = [];   // { owner, rows:[...], from }
+  owners.forEach(o => {
+    const list = sxDocsOf(o).map((r, i) => ({ no: i + 1, name: zh(r.substance_name), other: other === 'code' ? (r.formula_code || '') : (other === 'en' ? en(r.substance_name) : ''),
+      un: r.un_no || '', valid: dt(sdsValid(r)), expired: (sdsDays(r) ?? 0) < 0 }));
+    if(!list.length) return;
+    for(let i = 0; i < list.length; i += SX_ROWS) pages.push({ owner: o, rows: list.slice(i, i + SX_ROWS), cont: i > 0, total: list.length });
+  });
+  if(!pages.length){ alert('勾選的業主沒有可以印的 SDS。'); return; }
+  const cover = document.getElementById('sx_cover').checked;
+  const off = cover ? 1 : 0, totalPages = pages.length + off;
+  const firstPage = {}; pages.forEach((pg, i) => { if(!(pg.owner in firstPage)) firstPage[pg.owner] = i + 1 + off; });
+  const tbl = (head, body) => `<table class="sx-t"><colgroup><col style="width:11%"><col style="width:6.5%"><col style="width:38%"><col style="width:17%"><col style="width:11%"><col style="width:16.5%"></colgroup>
+      <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  let h = '';
+  if(cover){
+    const ow = [...new Set(pages.map(p => p.owner))];
+    h += `<div class="sx-page"><div class="sx-title">安全資料表目錄</div><div class="sx-sub">依業主分類　共 ${ow.length} 個業主、${ow.reduce((a, o) => a + pages.find(p => p.owner === o).total, 0)} 份　列印日期 ${esc(todayROC())}</div>
+      <table class="sx-t sx-cov"><colgroup><col style="width:12%"><col style="width:48%"><col style="width:20%"><col style="width:20%"></colgroup>
+      <thead><tr><th>序號</th><th>業主</th><th>SDS 份數</th><th>頁次</th></tr></thead><tbody>
+      ${ow.map((o, i) => `<tr><td class="c">${i + 1}</td><td>${esc(o)}</td><td class="c">${pages.find(p => p.owner === o).total}</td><td class="c">${firstPage[o]}</td></tr>`).join('')}
+      </tbody></table><div class="sx-foot">第 1 頁／共 ${totalPages} 頁</div></div>`;
+  }
+  pages.forEach((pg, i) => {
+    const pad = SX_ROWS - pg.rows.length;
+    const body = pg.rows.map((r, k) => `<tr>${k === 0 ? `<td class="sx-owner" rowspan="${pg.rows.length + pad}">${esc(pg.owner)}${pg.cont ? '<div class="sx-cont">（續）</div>' : ''}</td>` : ''}
+        <td class="c">${r.no}</td><td>${esc(r.name)}</td><td>${esc(r.other)}</td><td class="c">${esc(r.un)}</td><td class="c${r.expired ? ' sx-exp' : ''}">${esc(r.valid)}</td></tr>`).join('')
+      + Array(pad).fill('<tr><td></td><td></td><td></td><td></td><td></td></tr>').join('');
+    h += `<div class="sx-page"><div class="sx-title">安全資料表目錄</div>
+      ${tbl('<th>業主</th><th>序號</th><th>物質名稱</th><th>其他名稱</th><th>聯合國<br>編號</th><th>有效日期</th>', body)}
+      <div class="sx-foot">${esc(pg.owner)}　第 ${i + 1 + off} 頁／共 ${totalPages} 頁</div></div>`;
+  });
+  const w = window.open('', '_blank');
+  if(!w){ alert('瀏覽器擋住了新視窗，請允許這個網站開彈出視窗後再按一次。'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>安全資料表目錄</title><style>
+    @page{ size:A4 portrait; margin:10mm 12mm; }
+    body{ margin:0; font-family:'PMingLiU','新細明體','MingLiU','Noto Serif TC',serif; color:#000; }
+    .sx-page{ height:276mm; position:relative; box-sizing:border-box; page-break-after:always; break-after:page; overflow:hidden; }
+    .sx-page:last-child{ page-break-after:auto; break-after:auto; }
+    .sx-title{ text-align:center; font-size:22pt; font-weight:700; letter-spacing:4px; height:15mm; line-height:15mm; }
+    .sx-sub{ text-align:center; font-size:11pt; margin-bottom:5mm; }
+    .sx-t{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:12pt; }
+    .sx-cov td, .sx-cov th{ height:7.6mm !important; font-size:11.5pt; }
+    .sx-t th{ border:0.3mm solid #000; height:14mm; font-weight:400; text-align:center; vertical-align:middle; line-height:1.2; }
+    .sx-t td{ border:0.3mm solid #000; height:10.5mm; padding:0 2mm; vertical-align:middle; overflow:hidden; word-break:break-all; line-height:1.15; }
+    .sx-t td.c{ text-align:center; }
+    .sx-t td.sx-owner{ text-align:center; font-size:14pt; letter-spacing:1px; white-space:normal; }
+    .sx-t td:nth-child(n){ white-space:normal; }
+    .sx-t td.c{ white-space:nowrap; }
+    .sx-cont{ font-size:10pt; }
+    .sx-exp{ text-decoration:line-through; color:#900; }
+    .sx-foot{ position:absolute; bottom:0; left:0; right:0; text-align:center; font-size:9pt; color:#555; }
+    @media screen{ body{ background:#eee; } .sx-page{ width:186mm; height:277mm; margin:10px auto; padding:0; background:#fff; box-shadow:0 0 0 10mm #fff, 0 0 0 calc(10mm + 1px) #ccc; } }
+  </style></head><body>${h}</body></html>`);
+  w.document.close(); w.focus();
+  document.getElementById('sdsIdxModal').classList.remove('show');
+  setTimeout(() => w.print(), 400);
+}
+(function(){
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  on('sds_idx', 'click', sxOpen);
+  on('sx_print', 'click', sxPrint);
+  on('sx_list', 'change', sxSum);
+  on('sx_valid', 'change', sxSum);
+  on('sx_all', 'click', () => { const bs = [...document.querySelectorAll('#sx_list input[data-sx-owner]')]; const v = !bs.every(x => x.checked); bs.forEach(x => x.checked = v); sxSum(); });
+  on('sdsIdxModal', 'click', e => { if(e.target.id === 'sdsIdxModal' || e.target.hasAttribute('data-sx-close')) document.getElementById('sdsIdxModal').classList.remove('show'); });
+})();
 // ===================== 雲端連結（SDS、通行證）=====================
 // 只接受 http(s) 網址，避免 javascript: 之類的連結被點下去執行
 function lkIsFolder(u){ return /\/drive\/(u\/\d+\/)?folders\//.test(String(u || '')); }
@@ -22064,6 +22177,8 @@ async function vpSetLink(id){
 }
 // 批次：一行「檔名 網址」。SDS 用檔名對（可帶「業主資料夾/」），通行證用檔名裡的通行證號碼（或批號）對
 let LK_MODE = 'sds';
+// 雲端資料夾名稱跟通行證廠商全名差很多的（跟 SQL_275 同一套）
+const LK_ALIAS = { '愛思開SK': ['愛思開', 'SK'], '台特化': ['台特化', '台灣特品化學', '台灣特化'], '住精': ['住精', '住友精化'] };
 function lkOpen(mode){
   LK_MODE = mode;
   document.getElementById('lk_title').textContent = mode === 'sds' ? '批次貼上 SDS 雲端連結' : '批次貼上通行證雲端連結';
@@ -22118,9 +22233,9 @@ async function lkApply(){
       if(!hit.length){
         // 檔名只有車號：要放在廠商資料夾裡（例：隆興/KLM-2088.pdf），用「廠商＋車號」對，只掛還有效的證
         const parts = ln.name.split('/'); const base = key(parts.pop());
-        const fk = parts.map(x => x.replace(/[A-Za-z\s]/g, '') || x).filter(Boolean);
+        const fk = parts.flatMap(x => (LK_ALIAS[x.trim()] || [x.replace(/[A-Za-z\s]/g, '') || x])).filter(Boolean);
         if(fk.length) hit = ps.filter(p => p.plate && base.includes(key(p.plate))
-          && fk.some(f => String(p.vendor || '').includes(f)) && (vpDaysLeft(p.expiry_date) ?? 0) >= 0);
+          && fk.some(f => String(p.vendor || '').toUpperCase().includes(f.toUpperCase())) && (vpDaysLeft(p.expiry_date) ?? 0) >= 0);
         how = '廠商資料夾＋車號';
       }
       if(!hit.length){ miss.push(ln.name); return; }
