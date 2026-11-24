@@ -577,30 +577,22 @@
       <div id="cicDiff" style="margin-top:10px;"></div>
     </div>
 
-    <div class="card">
-      <h2>月報結轉（產生新一期）<span class="count-badge" id="ins_carry_badge"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">
-        月報本來只能等勞保局、健保署的對帳單來了再匯進系統，所以月初印不出當月的提撥表。
-        這裡可以<b>先用在職名冊＋投保金額＋現行級距把新的一期算出來</b>，表單生成就有東西可以拉；
-        對帳單到了再核對、有差額就改。<br>
-        算法跟上面的級距試算一樣：勞保 12.5%（公司 70%／員工 20%，上限 45,800）、
-        健保 5.17%（公司 60%×1.56／員工 30%，上限 313,000，眷口超過 3 口以 3 口計）、
-        職災依<b>各人上一期的行業費率</b>、勞退 6%（下限 1,500、上限 150,000），四項各自四捨五入。
-      </div>
-      <div class="form-grid" style="margin-bottom:10px;">
-        <label>以哪一期為底<select id="ins_carry_src"></select></label>
-        <label>要產生哪一期<input id="ins_carry_dst" placeholder="例：115/09" style="max-width:140px;"></label>
-        <label>人員範圍
-          <select id="ins_carry_scope">
-            <option value="onduty">目前在職人員（建議）</option>
-            <option value="same">跟來源那一期同一批人</option>
-          </select>
-        </label>
+    <div class="card" id="insMonthCard">
+      <h2>勞健保月報<span class="count-badge" id="ins_carry_badge"></span></h2>
+      <div class="muted" style="margin-bottom:10px;line-height:1.8;">
+        先選期別。<b>已經有的期別</b>：下面列出每個人的月報，打開「顯示對帳欄」輸入實扣與對帳單，差額自動算出來；
+        <b>還沒有的期別</b>：按「產生這一期」，系統用在職名冊＋投保金額＋現行級距算出來（職災費率、眷口自動接上一期），確認後按「寫入月報」。<br>
+        匯出薪資匯入檔時，<b>上一期的對帳差額</b>會自動填進「補繳／退費」欄（例：匯出 115/11 會帶 115/10 的差額）。
+        <details style="margin-top:4px;"><summary style="cursor:pointer;">算法</summary>
+          勞保 12.5%（公司 70%／員工 20%，上限 45,800）、健保 5.17%（公司 60%×1.56／員工 30%，上限 313,000，眷口超過 3 口以 3 口計）、
+          職災依各人上一期的行業費率、勞退 6%（下限 1,500、上限 150,000），四項各自四捨五入；
+          勞保、職災、勞退按投保日數折算（31 日不算），健保不折算。</details>
       </div>
       <div class="toolbar">
-        <button class="btn ghost" id="ins_carry_calc">試算這一期</button>
+        <label>期別<select id="ins_period" style="min-width:170px;"></select></label>
+        <button class="btn ghost" id="ins_carry_calc">產生這一期</button>
         <button class="btn" id="ins_carry_save" style="display:none;">寫入月報</button>
-        <button class="btn ghost no-print" id="ins_carry_csv" style="display:none;">匯出 CSV</button>
+        <button class="btn ghost no-print" id="ins_carry_csv" style="display:none;">匯出試算 CSV</button>
         <button class="btn ghost no-print" id="ins_payroll_csv">匯出薪資匯入檔 CSV</button>
         <label class="muted" style="font-weight:400;">日期格式
           <select id="ins_payroll_datefmt" style="width:auto;">
@@ -609,8 +601,11 @@
           </select>
         </label>
       </div>
+      <div style="display:none;"><select id="ins_carry_src"></select><input id="ins_carry_dst">
+        <select id="ins_carry_scope"><option value="onduty">在職</option></select></div>
       <div id="ins_carry_msg" style="margin:8px 0;font-size:13px;"></div>
       <div id="ins_carry_result"></div>
+      <div id="ins_rec_box"></div>
     </div>
 
     <div class="card">
@@ -5271,6 +5266,8 @@ async function loadState(){
     STATE.referralRules = await _opt('referral_bonus_rules?select=*&order=effective_from.desc,months.asc');
     // 勞健保預估快照（SQL_228）：拿去扣薪資的那一版，多退少補表用
     STATE.insEstimates = await _opt('insurance_monthly_estimates?select=*&order=year_roc.desc,month.desc');
+    // 勞健保對帳（SQL_283）：每人每期的實扣、對帳單數字
+    STATE.insReconcile = await _opt('insurance_reconcile?select=*&order=year_roc.desc,month.desc,id.asc');
   }
   // 勞健保級距表（SQL_182 建的）。撈不到就用程式裡那份內建備援，畫面照樣能看。
   STATE.insBrackets = [];
@@ -9121,9 +9118,12 @@ function insPayrollDate(d){
 }
 function insPayrollCsv(){
   const msg = document.getElementById('ins_carry_msg');
-  const key = insParseKey((document.getElementById('ins_carry_dst') || {}).value)
-           || Number((document.getElementById('ins_carry_src') || {}).value) || insLatestKey();
+  const key = insPeriodKey();
   const rows = (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key);
+  // 上一期的對帳差額 → 這一期的補繳／退費欄（不要輸入負數：正的放補繳、負的放退費）
+  const prev = insPrevKey(key);
+  const PE = insRecEst(prev);
+  const usedPrev = new Set();
   if(!rows.length){
     msg.style.color = 'var(--red,#c0392b)';
     msg.textContent = insKeyLabel(key) + ' 的月報還沒有資料，先按「試算這一期」再「寫入月報」，才有東西可以匯出。';
@@ -9166,6 +9166,18 @@ function insPayrollCsv(){
       c[41] = r.health_rate != null ? String(r.health_rate) : '';
       c[42] = r.injury_rate != null ? String(r.injury_rate) : '';
       c[45] = insPayrollDate(e && e.hire_date);            // ★到職日期
+      c[2]  = r.account_type || (e && e.employee_type ? String(e.employee_type).slice(0, 1) : '');   // 分帳（直／間）
+      c[43] = r.dependents_count != null ? String(Math.min(3, Number(r.dependents_count) || 0)) : '';   // 眷口數計算（超過 3 口以 3 口計）
+      const pk = (r.company_name || '') + '|' + String(r.name || '').trim();
+      if(!usedPrev.has(pk)){
+        const x = insRecDiff(prev, r.company_name || '', String(r.name || '').trim(), PE.map.get(pk));
+        if(x.diff && (x.diff.pl || x.diff.ph || x.diff.el || x.diff.eh || x.diff.ep)){
+          usedPrev.add(pk);
+          const put = (v, iAdd, iRef) => { v = Math.round(v); if(v > 0) c[iAdd] = String(v); else if(v < 0) c[iRef] = String(-v); };
+          put(x.diff.pl, 23, 24); put(x.diff.ph, 25, 26); put(x.diff.el, 27, 28); put(x.diff.eh, 29, 30); put(x.diff.ep, 31, 32);
+          if(x.diff.emp || x.diff.com) c[18] = insKeyLabel(prev) + ' 勞健保對帳差額' + (x.note ? '：' + x.note : '');
+        }
+      }
       return c;
     });
   // 身分證字號、到職日期查不到的提醒一下，免得貼回去才發現空的
@@ -9181,7 +9193,17 @@ function insPayrollCsv(){
   a.download = '勞健保薪資匯入檔_' + y + String(m).padStart(2, '0') + '.csv';
   a.click();
   msg.style.color = noId.length || noHire.length ? '#b26a00' : 'var(--green,#2e7d32)';
+  // 上一期有差額、這一期月報沒有的人（多半是離職）→ 不進薪資匯入檔，列出來另行支付
+  const orphan = [];
+  (STATE.insReconcile || []).filter(r => Number(r.year_roc) * 100 + Number(r.month) === prev).forEach(r => {
+    const pk = (r.company_name || '') + '|' + String(r.name || '').trim();
+    if(usedPrev.has(pk) || rows.some(x => (x.company_name || '') + '|' + String(x.name || '').trim() === pk)) return;
+    const x = insRecDiff(prev, r.company_name || '', String(r.name || '').trim(), PE.map.get(pk));
+    if(x.diff && x.diff.emp) orphan.push(String(r.name || '').trim() + '（' + (x.diff.emp < 0 ? '退還 ' + (-x.diff.emp) : '補扣 ' + x.diff.emp) + '）');
+  });
   msg.innerHTML = insKeyLabel(key) + ' 已匯出 ' + out.length + ' 人。'
+    + (usedPrev.size ? '<br>已帶入 ' + insKeyLabel(prev) + ' 對帳差額 ' + usedPrev.size + ' 人（補繳／退費欄）。' : '<br><span class="muted">' + insKeyLabel(prev) + ' 還沒有輸入對帳單，補繳／退費欄是空的。</span>')
+    + (orphan.length ? '<br><b style="color:#b26a00;">已離職、不在這一期月報，請另行支付：</b>' + esc(orphan.join('、')) : '')
     + (noId.length ? '<br>查不到身分證字號：' + esc(noId.join('、')) + '（請到人員管理補）' : '')
     + (noHire.length ? '<br>查不到到職日期：' + esc(noHire.join('、')) : '')
     + '<br><span class="muted">「其他扣款金額」「其他退款金額」系統沒有這種資料，留白給你自己填。</span>';
@@ -9190,16 +9212,250 @@ function insPayrollCsv(){
   const _pc = document.getElementById('ins_payroll_csv');
   if(_pc) _pc.addEventListener('click', insPayrollCsv);
 }
+// 期別只選一個：有月報的期別＋下一期（還沒產生）。「以哪一期為底」自動用選的期別之前最近的一期。
 function insCarryFillSrc(){
   const sel = document.getElementById('ins_carry_src');
-  if(!sel) return;
-  const cur = sel.value;
+  const per = document.getElementById('ins_period');
+  if(!sel || !per) return;
   const keys = insAllKeys();
   sel.innerHTML = keys.map(k => `<option value="${k}">${esc(insKeyLabel(k))}</option>`).join('');
-  if(keys.length){
-    sel.value = (cur && keys.indexOf(Number(cur)) >= 0) ? cur : String(keys[0]);
-    const dst = document.getElementById('ins_carry_dst');
-    if(dst && !dst.value) dst.value = insKeyLabel(insNextKey(Number(sel.value)));
+  const next = keys.length ? insNextKey(keys[0]) : 0;
+  const cur = Number(per.value) || 0;
+  per.innerHTML = (next ? `<option value="${next}">${esc(insKeyLabel(next))}（還沒產生）</option>` : '')
+    + keys.map(k => `<option value="${k}">${esc(insKeyLabel(k))}</option>`).join('');
+  per.value = String(cur && (cur === next || keys.indexOf(cur) >= 0) ? cur : (keys[0] || next || ''));
+  insPeriodSync();
+}
+function insPeriodKey(){ return Number((document.getElementById('ins_period') || {}).value) || insLatestKey(); }
+function insPeriodSync(){
+  const key = insPeriodKey();
+  const keys = insAllKeys();
+  const src = keys.filter(k => k < key)[0] || keys[0] || 0;
+  const sel = document.getElementById('ins_carry_src'); if(sel && src) sel.value = String(src);
+  const dst = document.getElementById('ins_carry_dst'); if(dst) dst.value = insKeyLabel(key);
+  const exists = keys.indexOf(key) >= 0;
+  const b = document.getElementById('ins_carry_calc'); if(b) b.textContent = exists ? '重新產生這一期' : '產生這一期';
+  insRecRender();
+}
+{
+  const _per = document.getElementById('ins_period');
+  if(_per) _per.addEventListener('change', () => {
+    INS_CARRY_CACHE = null;
+    ['ins_carry_save', 'ins_carry_csv'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+    const r = document.getElementById('ins_carry_result'); if(r) r.innerHTML = '';
+    const m = document.getElementById('ins_carry_msg'); if(m) m.textContent = '';
+    insPeriodSync();
+  });
+}
+// ===================== 勞健保對帳（實扣 vs 對帳單）=====================
+// 預扣＝結轉當時的預估快照（insurance_monthly_estimates）；沒有快照才用目前的月報。
+// 實扣預設＝預扣，薪資手動改過才改；對帳單照勞保局、健保署、勞退名冊填。差額＝對帳單－實扣（公司：對帳單－預估）。
+// 資料存在 insurance_reconcile（SQL_283），不跟月報放一起：月報「重新產生」會整期刪掉重寫，對帳資料不能跟著不見。
+let INS_REC_SHOW = false, INS_REC_CO = '';
+const INS_REC_DIRTY = new Map();
+const insCoShort = c => String(c || '').replace(/(股份)?有限公司$/, '').replace(/運通$|工業$/, '') || '未設定';
+function insPrevKey(key){ const y = Math.floor(key / 100), m = key % 100; return m <= 1 ? (y - 1) * 100 + 12 : y * 100 + (m - 1); }
+function insRecEst(key){
+  const nm = v => String(v || '').trim();
+  const snap = (STATE.insEstimates || []).filter(r => Number(r.year_roc) * 100 + Number(r.month) === key);
+  const src = snap.length ? snap : (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key);
+  const m = new Map();
+  src.forEach(r => {
+    const k = (r.company_name || '') + '|' + nm(r.name);
+    const o = m.get(k) || { company: r.company_name || '', name: nm(r.name), pl:0, ph:0, el:0, eh:0, ep:0 };
+    o.pl += Number(r.personal_labor) || 0; o.ph += Number(r.personal_health) || 0;
+    o.el += (Number(r.employer_labor_general) || 0) + (Number(r.employer_labor_injury) || 0);
+    o.eh += Number(r.employer_health) || 0; o.ep += Number(r.employer_pension) || 0;
+    m.set(k, o);
+  });
+  return { map: m, snap: snap.length > 0 };
+}
+function insRecOf(key, company, name){
+  const k = key + '|' + (company || '') + '|' + name;
+  if(INS_REC_DIRTY.has(k)) return INS_REC_DIRTY.get(k);
+  return (STATE.insReconcile || []).find(r => Number(r.year_roc) * 100 + Number(r.month) === key
+    && (r.company_name || '') === (company || '') && String(r.name || '').trim() === name) || null;
+}
+const _nz = v => (v === null || v === undefined || v === '') ? null : Number(v);
+// 一個人這一期的差額（沒輸入對帳單就是 null）
+function insRecDiff(key, company, name, estObj){
+  const e = estObj || insRecEst(key).map.get((company || '') + '|' + name) || { pl:0, ph:0, el:0, eh:0, ep:0 };
+  const r = insRecOf(key, company, name) || {};
+  const act = { pl: _nz(r.act_personal_labor) ?? e.pl, ph: _nz(r.act_personal_health) ?? e.ph };
+  const bill = { pl:_nz(r.bill_personal_labor), ph:_nz(r.bill_personal_health), el:_nz(r.bill_employer_labor), eh:_nz(r.bill_employer_health), ep:_nz(r.bill_employer_pension) };
+  const has = Object.values(bill).some(v => v !== null);
+  const d = has ? {
+    pl: (bill.pl ?? act.pl) - act.pl, ph: (bill.ph ?? act.ph) - act.ph,
+    el: (bill.el ?? e.el) - e.el, eh: (bill.eh ?? e.eh) - e.eh, ep: (bill.ep ?? e.ep) - e.ep } : null;
+  if(d){ d.emp = d.pl + d.ph; d.com = d.el + d.eh + d.ep; }
+  return { est: e, act, bill, diff: d, note: r.note || '' };
+}
+function insRecIsLeft(name){
+  return !(STATE.employees || []).some(x => String(x.name || '').trim() === name && x.status === '在職');
+}
+function insRecRender(){
+  const box = document.getElementById('ins_rec_box'); if(!box) return;
+  const key = insPeriodKey();
+  const rows0 = (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key);
+  if(!rows0.length){ box.innerHTML = `<div class="muted" style="padding:8px 0;">${esc(insKeyLabel(key))} 還沒有月報，按「產生這一期」。</div>`; return; }
+  const E = insRecEst(key);
+  const nm = v => String(v || '').trim();
+  const people = new Map();
+  rows0.forEach(r => { const k = (r.company_name || '') + '|' + nm(r.name);
+    const o = people.get(k) || { company: r.company_name || '', name: nm(r.name), pl:0, ph:0, el:0, eh:0, ep:0 };
+    o.pl += Number(r.personal_labor) || 0; o.ph += Number(r.personal_health) || 0;
+    o.el += (Number(r.employer_labor_general) || 0) + (Number(r.employer_labor_injury) || 0);
+    o.eh += Number(r.employer_health) || 0; o.ep += Number(r.employer_pension) || 0; people.set(k, o); });
+  // 對帳單上有、月報沒有的（例如當月離職沒進月報）也列出來
+  (STATE.insReconcile || []).filter(r => Number(r.year_roc) * 100 + Number(r.month) === key).forEach(r => {
+    const k = (r.company_name || '') + '|' + nm(r.name);
+    if(!people.has(k)) people.set(k, { company: r.company_name || '', name: nm(r.name), pl:0, ph:0, el:0, eh:0, ep:0, extra:true });
+  });
+  const cos = [...new Set([...people.values()].map(p => p.company))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  if(INS_REC_CO && cos.indexOf(INS_REC_CO) < 0) INS_REC_CO = '';
+  const list = [...people.values()].filter(p => !INS_REC_CO || p.company === INS_REC_CO)
+    .sort((a, b) => a.company.localeCompare(b.company, 'zh-Hant') || a.name.localeCompare(b.name, 'zh-Hant'));
+  const n = v => (v === null || v === undefined) ? '' : Number(v).toLocaleString('en-US');
+  const T = { pl:0, ph:0, el:0, eh:0, ep:0, apl:0, aph:0, bpl:0, bph:0, bel:0, beh:0, bep:0, emp:0, com:0 };
+  const td = 'padding:5px 7px;border-bottom:1px solid var(--line,#eee);text-align:right;white-space:nowrap;';
+  const inp = (k, f, v, chg, ph) => `<input data-rk="${esc(k)}" data-rf="${f}" value="${v === null || v === undefined ? '' : v}" placeholder="${ph || ''}"
+      style="width:66px;text-align:right;padding:3px 5px;font-size:12.5px;${chg ? 'background:#fff6dc;border-color:#c99a56;font-weight:700;' : ''}">`;
+  const rc = INS_REC_SHOW ? '' : 'display:none;';
+  const body = list.map(p => {
+    const k = key + '|' + p.company + '|' + p.name;
+    const x = insRecDiff(key, p.company, p.name, E.map.get(p.company + '|' + p.name));
+    const left = insRecIsLeft(p.name);
+    T.pl += p.pl; T.ph += p.ph; T.el += p.el; T.eh += p.eh; T.ep += p.ep; T.apl += x.act.pl; T.aph += x.act.ph;
+    T.bpl += x.bill.pl || 0; T.bph += x.bill.ph || 0; T.bel += x.bill.el || 0; T.beh += x.bill.eh || 0; T.bep += x.bill.ep || 0;
+    if(x.diff){ T.emp += x.diff.emp; T.com += x.diff.com; }
+    const d = x.diff;
+    const act = !d ? '<span class="muted">未輸入</span>' : !d.emp ? '<span class="muted">—</span>'
+      : left ? `<span class="pill amber">另行支付 ${d.emp < 0 ? '退' : '補'} ${n(Math.abs(d.emp))}</span>`
+      : d.emp < 0 ? `<span class="pill red">退還 ${n(-d.emp)}</span>` : `<span class="pill" style="background:#e3ecf7;color:#1f4f8a;">補扣 ${n(d.emp)}</span>`;
+    return `<tr>
+      <td style="${td}text-align:left;">${esc(p.name)}${left ? ' <span class="pill amber" style="font-size:10.5px;">已離職</span>' : ''}${INS_REC_CO ? '' : ` <span class="muted" style="font-size:11px;">${esc(insCoShort(p.company))}</span>`}</td>
+      <td style="${td}">${n(p.pl)}</td><td style="${td}">${n(p.ph)}</td><td style="${td}">${n(p.pl + p.ph)}</td>
+      <td style="${td}border-left:2px solid #eee;">${n(p.el)}</td><td style="${td}">${n(p.eh)}</td><td style="${td}">${n(p.ep)}</td>
+      <td style="${td}${rc}border-left:2px solid #eadfcd;background:#fffaf0;">${inp(k, 'act_personal_labor', x.act.pl, x.act.pl !== x.est.pl)}</td>
+      <td style="${td}${rc}background:#fffaf0;">${inp(k, 'act_personal_health', x.act.ph, x.act.ph !== x.est.ph)}</td>
+      <td style="${td}${rc}border-left:2px solid #dbe6f3;">${inp(k, 'bill_personal_labor', x.bill.pl)}</td><td style="${td}${rc}">${inp(k, 'bill_personal_health', x.bill.ph)}</td>
+      <td style="${td}${rc}border-left:2px solid #dbe6f3;">${inp(k, 'bill_employer_labor', x.bill.el)}</td><td style="${td}${rc}">${inp(k, 'bill_employer_health', x.bill.eh)}</td><td style="${td}${rc}">${inp(k, 'bill_employer_pension', x.bill.ep)}</td>
+      <td style="${td}${rc}border-left:2px solid #efd9d4;${d && d.emp < 0 ? 'color:var(--red,#c0392b);font-weight:700;' : d && d.emp > 0 ? 'color:#1f4f8a;font-weight:700;' : ''}">${d ? n(d.emp) : ''}</td>
+      <td style="${td}${rc}text-align:left;">${act}</td>
+      <td style="${td}${rc}${d && d.com ? 'color:var(--red,#c0392b);' : ''}">${d ? n(d.com) : ''}</td></tr>`;
+  }).join('');
+  const th = 'padding:6px 7px;border-bottom:1px solid #e5d8c6;background:linear-gradient(90deg,#fbfaf8,#f2ece4);white-space:nowrap;text-align:right;position:sticky;top:0;';
+  box.innerHTML = `
+    <div class="toolbar" style="margin-top:10px;">
+      <label>行號<select id="ins_rec_co" style="width:auto;"><option value="">全部</option>${cos.map(c => `<option value="${esc(c)}"${c === INS_REC_CO ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:700;cursor:pointer;"><input type="checkbox" id="ins_rec_show" style="width:auto;"${INS_REC_SHOW ? ' checked' : ''}> 顯示對帳欄</label>
+      <span style="${INS_REC_SHOW ? '' : 'display:none;'}">
+        <button class="btn" id="ins_rec_save" type="button">存對帳</button>
+        <button class="btn ghost" id="ins_rec_csv" type="button">匯出對帳差額 CSV</button></span>
+      <span class="muted" style="font-size:12px;">${E.snap ? '預扣＝結轉當時的預估快照' : '★ 這一期沒有預估快照，預扣暫用目前的月報'}</span>
+      <span id="ins_rec_msg" style="font-size:12.5px;"></span>
+    </div>
+    ${INS_REC_SHOW ? `<div class="muted" style="font-size:12px;margin-bottom:6px;">實扣預設＝預扣，只有薪資手動改過的人才改（改過變黃）；對帳單照單據填。差額＝對帳單－實扣，紅字＝多扣要退還、藍字＝少扣要補扣；已離職的標「另行支付」，不會進薪資匯入檔。改完記得按「存對帳」。</div>` : ''}
+    <div class="table-scroll" style="max-height:62vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr><th style="${th}text-align:left;" rowspan="2">姓名</th>
+        <th style="${th}text-align:center;" colspan="3">員工自付（月報）</th><th style="${th}text-align:center;" colspan="3">公司負擔（月報）</th>
+        <th style="${th}${rc}text-align:center;background:#fff3dc;" colspan="2">實扣</th>
+        <th style="${th}${rc}text-align:center;background:#e9f1fb;" colspan="2">對帳單（員工）</th>
+        <th style="${th}${rc}text-align:center;background:#e9f1fb;" colspan="3">對帳單（公司）</th>
+        <th style="${th}${rc}text-align:center;background:#f3e9e6;" colspan="3">差額</th></tr>
+      <tr><th style="${th}top:30px;">勞保</th><th style="${th}top:30px;">健保</th><th style="${th}top:30px;">合計</th>
+        <th style="${th}top:30px;">勞保(含職災)</th><th style="${th}top:30px;">健保</th><th style="${th}top:30px;">勞退</th>
+        <th style="${th}top:30px;${rc}">勞保</th><th style="${th}top:30px;${rc}">健保</th><th style="${th}top:30px;${rc}">勞保</th><th style="${th}top:30px;${rc}">健保</th>
+        <th style="${th}top:30px;${rc}">勞保</th><th style="${th}top:30px;${rc}">健保</th><th style="${th}top:30px;${rc}">勞退</th>
+        <th style="${th}top:30px;${rc}">員工</th><th style="${th}top:30px;${rc}text-align:left;">處理</th><th style="${th}top:30px;${rc}">公司</th></tr></thead>
+      <tbody id="ins_rec_body">${body}
+      <tr style="font-weight:700;background:#f7f3ec;"><td style="${td}text-align:left;">合計（${list.length} 人）</td>
+        <td style="${td}">${n(T.pl)}</td><td style="${td}">${n(T.ph)}</td><td style="${td}">${n(T.pl + T.ph)}</td>
+        <td style="${td}">${n(T.el)}</td><td style="${td}">${n(T.eh)}</td><td style="${td}">${n(T.ep)}</td>
+        <td style="${td}${rc}">${n(T.apl)}</td><td style="${td}${rc}">${n(T.aph)}</td><td style="${td}${rc}">${n(T.bpl)}</td><td style="${td}${rc}">${n(T.bph)}</td>
+        <td style="${td}${rc}">${n(T.bel)}</td><td style="${td}${rc}">${n(T.beh)}</td><td style="${td}${rc}">${n(T.bep)}</td>
+        <td style="${td}${rc}${T.emp < 0 ? 'color:var(--red,#c0392b);' : ''}">${n(T.emp)}</td><td style="${td}${rc}"></td><td style="${td}${rc}">${n(T.com)}</td></tr>
+      </tbody></table></div>`;
+  const badge = document.getElementById('ins_carry_badge');
+  if(badge) badge.textContent = `${insKeyLabel(key)}　${list.length} 人` + (INS_REC_SHOW && T.emp ? `　員工差額 ${n(T.emp)}` : '');
+}
+function insRecCsv(){
+  const key = insPeriodKey();
+  const nm = v => String(v || '').trim();
+  const E = insRecEst(key);
+  const names = new Map();
+  (STATE.insuranceMonthly || []).filter(r => insMonthlyKey(r) === key).forEach(r => names.set((r.company_name || '') + '|' + nm(r.name), [r.company_name || '', nm(r.name)]));
+  (STATE.insReconcile || []).filter(r => Number(r.year_roc) * 100 + Number(r.month) === key).forEach(r => names.set((r.company_name || '') + '|' + nm(r.name), [r.company_name || '', nm(r.name)]));
+  const head = ['期別','行號','姓名','狀態','預扣勞保','預扣健保','實扣勞保','實扣健保','對帳單勞保','對帳單健保','員工差額','處理',
+    '預估公司勞保(含職災)','預估公司健保','預估勞退','對帳單公司勞保','對帳單公司健保','對帳單勞退','公司差額','備註'];
+  const rows = [...names.values()].filter(([c]) => !INS_REC_CO || c === INS_REC_CO)
+    .sort((a, b) => a[0].localeCompare(b[0], 'zh-Hant') || a[1].localeCompare(b[1], 'zh-Hant')).map(([c, name]) => {
+    const x = insRecDiff(key, c, name, E.map.get(c + '|' + name)); const d = x.diff; const left = insRecIsLeft(name);
+    const how = !d ? '未輸入對帳單' : !d.emp ? '-' : (left ? '另行支付 ' : '') + (d.emp < 0 ? '退還 ' + (-d.emp) : '補扣 ' + d.emp);
+    return [insKeyLabel(key), c, name, left ? '已離職' : '在職', x.est.pl, x.est.ph, x.act.pl, x.act.ph, x.bill.pl ?? '', x.bill.ph ?? '', d ? d.emp : '', how,
+      x.est.el, x.est.eh, x.est.ep, x.bill.el ?? '', x.bill.eh ?? '', x.bill.ep ?? '', d ? d.com : '', x.note];
+  });
+  const blob = new Blob(['\ufeff' + csvLines(head, rows)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = '勞健保對帳差額_' + insKeyLabel(key).replace('/', '') + (INS_REC_CO ? '_' + insCoShort(INS_REC_CO) : '') + '.csv'; a.click();
+}
+async function insRecSave(){
+  const msg = document.getElementById('ins_rec_msg');
+  if(!INS_REC_DIRTY.size){ if(msg){ msg.style.color = ''; msg.textContent = '沒有改動。'; } return; }
+  const rows = [...INS_REC_DIRTY.values()].map(r => {
+    const o = { year_roc: r.year_roc, month: r.month, company_name: r.company_name, name: r.name, updated_at: new Date().toISOString() };
+    ['act_personal_labor','act_personal_health','bill_personal_labor','bill_personal_health','bill_employer_labor','bill_employer_health','bill_employer_pension','note']
+      .forEach(f => { o[f] = (r[f] === '' || r[f] === undefined) ? null : r[f]; });
+    return o;
+  });
+  try{
+    if(msg){ msg.style.color = ''; msg.textContent = '存檔中…'; }
+    const res = await supaFetch('insurance_reconcile?on_conflict=year_roc,month,company_name,name', { method:'POST',
+      headers:{ 'Prefer':'resolution=merge-duplicates,return=representation' }, body: JSON.stringify(rows) });
+    (res || rows).forEach(r => {
+      const list = STATE.insReconcile || (STATE.insReconcile = []);
+      const i = list.findIndex(x => Number(x.year_roc) === Number(r.year_roc) && Number(x.month) === Number(r.month)
+        && (x.company_name || '') === (r.company_name || '') && x.name === r.name);
+      if(i >= 0) list[i] = Object.assign(list[i], r); else list.push(r);
+    });
+    INS_REC_DIRTY.clear();
+    insRecRender();
+    const m2 = document.getElementById('ins_rec_msg'); if(m2){ m2.style.color = 'var(--green,#2e7d32)'; m2.textContent = '已存 ' + rows.length + ' 人。'; }
+  }catch(e){
+    if(msg){ msg.style.color = 'var(--red,#c0392b)'; msg.textContent = '存不進去：' + e.message + (/insurance_reconcile/.test(e.message) ? '（請先在 Supabase 執行 SQL_283）' : ''); }
+  }
+}
+{
+  const box = document.getElementById('ins_rec_box');
+  if(box){
+    box.addEventListener('change', e => {
+      if(e.target.id === 'ins_rec_show'){ INS_REC_SHOW = e.target.checked; insRecRender(); }
+      else if(e.target.id === 'ins_rec_co'){ INS_REC_CO = e.target.value; insRecRender(); }
+    });
+    box.addEventListener('click', e => {
+      if(e.target.id === 'ins_rec_save') insRecSave();
+      else if(e.target.id === 'ins_rec_csv') insRecCsv();
+    });
+    // 打字時只改那一列的差額，不整張重畫（游標才不會跳掉）；離開欄位才重算合計
+    box.addEventListener('input', e => {
+      const k = e.target.getAttribute && e.target.getAttribute('data-rk'); if(!k) return;
+      const f = e.target.getAttribute('data-rf');
+      const [y, rest] = [k.split('|')[0], k.slice(k.indexOf('|') + 1)];
+      const company = rest.slice(0, rest.lastIndexOf('|')), name = rest.slice(rest.lastIndexOf('|') + 1);
+      const key = Number(y);
+      const base = insRecOf(key, company, name);
+      const r = Object.assign({ year_roc: Math.floor(key / 100), month: key % 100, company_name: company, name: name }, base || {});
+      const v = String(e.target.value).replace(/[,\s]/g, '');
+      r[f] = v === '' ? null : (isNaN(Number(v)) ? null : Number(v));
+      INS_REC_DIRTY.set(k, r);
+      const msg = document.getElementById('ins_rec_msg'); if(msg){ msg.style.color = '#b26a00'; msg.textContent = '有 ' + INS_REC_DIRTY.size + ' 人還沒存'; }
+    });
+    box.addEventListener('focusout', e => {
+      if(!(e.target.getAttribute && e.target.getAttribute('data-rk'))) return;
+      setTimeout(() => { const a = document.activeElement; const keep = a && a.getAttribute && a.getAttribute('data-rk') ? [a.getAttribute('data-rk'), a.getAttribute('data-rf')] : null;
+        insRecRender(); const m = document.getElementById('ins_rec_msg'); if(m && INS_REC_DIRTY.size){ m.style.color = '#b26a00'; m.textContent = '有 ' + INS_REC_DIRTY.size + ' 人還沒存'; }
+        if(keep){ const el = document.querySelector(`#ins_rec_box input[data-rk="${CSS.escape(keep[0])}"][data-rf="${keep[1]}"]`); if(el){ el.focus(); el.select && el.select(); } } }, 0);
+    });
   }
 }
 function insCarryCsv(){
