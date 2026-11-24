@@ -5507,6 +5507,8 @@ function renderOverviewVehDocs(){
   const rows = Object.values(latest).map(d => {
     const v = (STATE.vehicles || []).find(x => x.id === d.vehicle_id);
     if(!v || isNoReminderVehicle(v)) return null;
+    // 租給建興的板架：驗車由建興處理，不提醒（115/11 使用者要求；1、15 號提醒信也一樣）
+    if(d.doc_type === '驗車' && String(v.vehicle_category || '') === '板架' && greaseJxLease(v)) return null;
     const exp = String(d.expiry_date).slice(0, 10);
     const grace = d.doc_type === '驗車' ? addOneMonth(exp) : exp;
     const st = statusOf(grace, 30);
@@ -5538,7 +5540,8 @@ function renderOverview(){
   active.forEach(l => {
     byLessee[l.lessee_name] = byLessee[l.lessee_name] || {count:0, overdue:0};
     byLessee[l.lessee_name].count++;
-    if(statusOf(addOneMonth(l.inspection_expiry),30)==='red') byLessee[l.lessee_name].overdue++;
+    // 租建興的板架驗車由建興處理，不算逾期
+    if(!/建興/.test(String(l.lessee_name || '')) && statusOf(addOneMonth(l.inspection_expiry),30)==='red') byLessee[l.lessee_name].overdue++;
   });
   const maxCount = Math.max(1, ...Object.values(byLessee).map(v=>v.count));
   const rows = Object.entries(byLessee).sort((a,b)=>b[1].count-a[1].count).map(([name,v]) => `

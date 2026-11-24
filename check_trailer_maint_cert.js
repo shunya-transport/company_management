@@ -92,8 +92,10 @@ async function main() {
   </tr>`, ['板架車號', '承租廠商', '合約到期日', '剩餘天數']);
 
   // ---------- 2. 驗車與其他證件到期（車輛與板架分開列，車輛在上、板架在下） ----------
+  // 租給建興的板架：驗車由建興處理，不寄驗車提醒（115/11 使用者要求，跟儀表板總覽一致）；其他證件照常
   const allDocItems = docs
     .filter(d => d.expiry_date && !retired.has(d.vehicle_id))
+    .filter(d => !(d.doc_type === '驗車' && jxActive.has(d.vehicle_id) && isTrailer(vehicleById[d.vehicle_id] || {})))
     .map(d => {
       const v = vehicleById[d.vehicle_id] || {};
       return { ...d, plate: v.plate_number || '', vehicle_type: v.vehicle_type || '', is_trailer: isTrailer(v) };
