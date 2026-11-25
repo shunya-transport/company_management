@@ -126,8 +126,17 @@ async function main() {
   const activeEmp = new Set(employees.filter(e => e.status === '在職').map(e => e.employee_id));
   // 「暫不外訓」的不寄（115/11 使用者要求，跟儀表板一樣：效期先不算，到期日照留著）
   const onHold = (t) => [true, 1, '1', 't', 'true'].includes(t.on_hold);
+  // 同一個人同一項證照有好幾筆（舊證、換證）：只要其中一筆標了暫不外訓，這一項整個不寄；
+  // 沒標的也只看最新那一筆，舊證不再催（115/11 使用者要求）
+  const certKey = (t) => t.employee_id + '|' + t.type_id;
+  const heldKeys = new Set(trainings.filter(onHold).map(certKey));
+  const latestByKey = {};
+  trainings.filter(t => t.expiry_date).forEach(t => {
+    const k = certKey(t);
+    if (!latestByKey[k] || String(t.expiry_date) > String(latestByKey[k].expiry_date)) latestByKey[k] = t;
+  });
   const certItems = trainings
-    .filter(t => t.expiry_date && activeEmp.has(t.employee_id) && !onHold(t))
+    .filter(t => t.expiry_date && activeEmp.has(t.employee_id) && !onHold(t) && !heldKeys.has(certKey(t)) && latestByKey[certKey(t)] === t)
     .filter(t => {
       const n = String(trainingTypeById[t.type_id] || '').trim();
       return !(/駕照$/.test(n) && hasLicence.has(t.employee_id + '|' + normLic(n)));
