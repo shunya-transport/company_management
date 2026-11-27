@@ -1493,6 +1493,46 @@
       <div class="muted" style="margin-top:8px;">預設僅顯示最新 200 筆，可用搜尋或年份篩選縮小範圍。<b id="tl_window_note"></b>
         <button class="btn ghost" id="tl_load_all" style="padding:4px 10px;font-size:12px;margin-left:6px;">載入全部歷年</button></div>
     </div>
+
+    <div class="card">
+      <h2>內外訓項目維護<span class="count-badge" id="tt_count"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">
+        這裡新增的項目，「新增受訓紀錄」的下拉會立刻跟著出現。
+        外訓的<b>效期年限</b>是用來自動推算下次覆驗日的（發證日＋N年－1天），沒填就不會自動帶。
+        改名不影響任何一筆既有紀錄；已經有人用過的項目不能刪。
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+        <div>
+          <h3 style="font-size:14px;margin:0 0 8px;">外訓（證照）項目</h3>
+          <div class="toolbar">
+            <input id="tt_ext_new" placeholder="新項目名稱" style="min-width:150px;">
+            <input id="tt_ext_years" type="number" min="0" step="1" placeholder="效期年" style="width:80px;">
+            <input id="tt_ext_note" placeholder="效期說明（例：依主管機關規定）" style="min-width:150px;">
+            <button class="btn" id="tt_ext_add">新增外訓項目</button>
+          </div>
+          <div class="table-scroll" style="max-height:340px;">
+            <table>
+              <thead><tr><th>項目</th><th style="width:110px;">效期</th><th style="width:70px;">已使用</th><th style="width:150px;"></th></tr></thead>
+              <tbody id="ttExtBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:14px;margin:0 0 8px;">內訓項目</h3>
+          <div class="toolbar">
+            <input id="tt_int_new" placeholder="新項目名稱" style="min-width:200px;">
+            <button class="btn" id="tt_int_add">新增內訓項目</button>
+          </div>
+          <div class="table-scroll" style="max-height:340px;">
+            <table>
+              <thead><tr><th>項目</th><th style="width:70px;">已使用</th><th style="width:110px;"></th></tr></thead>
+              <tbody id="ttIntBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="tt_msg" class="muted" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <div id="maintenance" class="panel">
@@ -2182,95 +2222,23 @@
     </div>
 
     <div class="card">
-      <h2>車場辦公室電話</h2>
-      <div class="muted" style="margin-bottom:10px;">改完直接按下方的「儲存辦公室資料」。</div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>區別</th><th>電話</th><th>傳真</th><th>地址</th></tr></thead>
-          <tbody id="olTableBody"></tbody>
-        </table>
+      <h2>常用廠商電話<span class="count-badge" id="vp_count2"></span></h2>
+      <div class="muted" style="margin-bottom:10px;">叫修、工務支援常用的電話，依區域分組；電話可以直接點撥。</div>
+      <div class="form-grid">
+        <label>區域<select id="cv_region"><option value="新竹">新竹</option><option value="台中">台中</option><option value="台南">台南</option><option value="全區">全區</option></select></label>
+        <label>類別<input id="cv_cat" list="cvCatList" placeholder="例：水電、拖吊、輪胎"><datalist id="cvCatList"></datalist></label>
+        <label>廠商名稱<input id="cv_name"></label>
+        <label>聯絡人<input id="cv_contact"></label>
+        <label>電話<input id="cv_phone" placeholder="例：03-5551234"></label>
+        <label>手機／其他<input id="cv_mobile"></label>
+        <label style="grid-column:span 2;">備註<input id="cv_note" placeholder="例：24 小時、只修冷氣"></label>
       </div>
-      <button class="btn" id="ol_save" style="margin-top:10px;">儲存辦公室資料</button>
-    </div>
-
-    <div class="card">
-      <h2>職務代理人</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>部門</th><th>職務</th><th>代理人</th><th>備註</th></tr></thead>
-          <tbody id="adminDeputiesBody"></tbody>
-        </table>
+      <div class="toolbar" style="margin-top:4px;">
+        <button class="btn" id="cv_add">新增</button>
+        <button class="btn ghost" id="cv_cancel" style="display:none;">取消修改</button>
+        <input id="cv_q" placeholder="搜尋廠商／類別／電話" style="margin-left:auto;max-width:220px;">
       </div>
-    </div>
-
-    <div class="card">
-      <h2>講師資格能力需求表</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>講師類別</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
-          <tbody id="adminInstructorBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>專責人員能力需求表</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>需求部門</th><th>專責名稱</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
-          <tbody id="adminSpecialistBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>年度訓練計劃表</h2>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>月份</th><th>課程名稱</th><th>主辦單位</th><th>講師</th><th>地點</th><th>時數</th></tr></thead>
-          <tbody id="adminPlanBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>內外訓項目維護<span class="count-badge" id="tt_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">
-        這裡新增的項目，「新增受訓紀錄」的下拉會立刻跟著出現。
-        外訓的<b>效期年限</b>是用來自動推算下次覆驗日的（發證日＋N年－1天），沒填就不會自動帶。
-        改名不影響任何一筆既有紀錄；已經有人用過的項目不能刪。
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
-        <div>
-          <h3 style="font-size:14px;margin:0 0 8px;">外訓（證照）項目</h3>
-          <div class="toolbar">
-            <input id="tt_ext_new" placeholder="新項目名稱" style="min-width:150px;">
-            <input id="tt_ext_years" type="number" min="0" step="1" placeholder="效期年" style="width:80px;">
-            <input id="tt_ext_note" placeholder="效期說明（例：依主管機關規定）" style="min-width:150px;">
-            <button class="btn" id="tt_ext_add">新增外訓項目</button>
-          </div>
-          <div class="table-scroll" style="max-height:340px;">
-            <table>
-              <thead><tr><th>項目</th><th style="width:110px;">效期</th><th style="width:70px;">已使用</th><th style="width:150px;"></th></tr></thead>
-              <tbody id="ttExtBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div>
-          <h3 style="font-size:14px;margin:0 0 8px;">內訓項目</h3>
-          <div class="toolbar">
-            <input id="tt_int_new" placeholder="新項目名稱" style="min-width:200px;">
-            <button class="btn" id="tt_int_add">新增內訓項目</button>
-          </div>
-          <div class="table-scroll" style="max-height:340px;">
-            <table>
-              <thead><tr><th>項目</th><th style="width:70px;">已使用</th><th style="width:110px;"></th></tr></thead>
-              <tbody id="ttIntBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div id="tt_msg" class="muted" style="margin-top:10px;"></div>
+      <div id="cvList" style="margin-top:8px;"></div>
     </div>
 
     <div class="card">
@@ -2375,6 +2343,58 @@
         </table>
       </div>
       <div id="pcLines" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>車場辦公室電話</h2>
+      <div class="muted" style="margin-bottom:10px;">改完直接按下方的「儲存辦公室資料」。</div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>區別</th><th>電話</th><th>傳真</th><th>地址</th></tr></thead>
+          <tbody id="olTableBody"></tbody>
+        </table>
+      </div>
+      <button class="btn" id="ol_save" style="margin-top:10px;">儲存辦公室資料</button>
+    </div>
+
+    <div class="card">
+      <h2>職務代理人</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>部門</th><th>職務</th><th>代理人</th><th>備註</th></tr></thead>
+          <tbody id="adminDeputiesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>講師資格能力需求表</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>講師類別</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
+          <tbody id="adminInstructorBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>專責人員能力需求表</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>需求部門</th><th>專責名稱</th><th>需求條件</th><th>訓練次數</th><th>要求</th><th>達成方式</th><th>考核方式</th></tr></thead>
+          <tbody id="adminSpecialistBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>年度訓練計劃表</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>月份</th><th>課程名稱</th><th>主辦單位</th><th>講師</th><th>地點</th><th>時數</th></tr></thead>
+          <tbody id="adminPlanBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -4231,6 +4251,7 @@ const TABLE_MAP = {
   medical_exam_records: {table:'medical_exam_records', pk:'record_id'},
   medical_kit_items: {table:'medical_kit_items', pk:'item_id'},
   office_extensions: {table:'office_extensions', pk:'ext_id'},
+  vendor_phones: {table:'vendor_phones', pk:'vp_id'},
   office_locations: {table:'office_locations', pk:'location_id'},
   work_hour_daily: {table:'work_hour_daily', pk:'wh_id'},
   work_hour_monthly: {table:'work_hour_monthly', pk:'whm_id'},
@@ -4751,7 +4772,7 @@ const KEY_LABELS = {
   tire_service_orders:'輪胎作業單', tire_service_tires:'輪胎作業單明細',
   tire_service_charges:'輪胎作業單費用', trailer_leases:'板架租賃', lessees:'承租方',
   company_phones:'公務機', instruments:'儀器', calibration_records:'校驗紀錄',
-  medical_exam_records:'體檢', medical_kit_items:'醫藥箱', office_extensions:'桌機分機',
+  medical_exam_records:'體檢', medical_kit_items:'醫藥箱', office_extensions:'桌機分機', vendor_phones:'常用廠商電話',
   office_locations:'車場電話', pension_elections:'勞退提繳', admin_rewards:'獎懲',
   admin_tolls:'國道通行費', urea_logs:'車用尿素', urea_stock_in:'尿素進貨',
   urea_stock_opening:'尿素期初', work_hour_monthly:'月度工時', work_hour_daily:'每日工時',
@@ -5202,6 +5223,7 @@ async function loadState(){
   _kick('ureaOpening', ['urea_stock_opening', [], true]);
   _kick('companyPhones', ['company_phones', SEED.company_phones || [], true]);
   _kick('officeExtensions', ['office_extensions', SEED.office_extensions || [], true]);
+  _kick('vendorPhones', ['vendor_phones', [], true]);
   _kick('officeLocations', ['office_locations', SEED.office_locations || [], true]);
   _kick('workHourDaily', ['work_hour_daily', SEED.work_hour_daily || [], true]);
   _kick('workHourMonthly', ['work_hour_monthly', SEED.work_hour_monthly || [], true]);
@@ -6199,6 +6221,7 @@ async function orgReload(){
     Object.keys(REF_NAME2ID[k]).forEach(n => delete REF_NAME2ID[k][n]));
   await loadOrgRefs();
   renderOrgTables();
+  renderVendorPhones();
   try{ renderNewStaffSelects(); }catch(e){ /* 這一頁沒有新增人員表單就跳過 */ }
 }
 async function orgAdd(kind){
@@ -21900,6 +21923,7 @@ function leaveStatExportByMonth(){
 function renderAll(){
   renderMaintMileageCard();
   renderOrgTables();
+  renderVendorPhones();
   renderEquipTypeCard();
   renderTtTables();
   renderOverview();
@@ -25528,6 +25552,74 @@ if(document.getElementById('cp_export')) document.getElementById('cp_export').ad
   URL.revokeObjectURL(a.href);
 });
 
+
+// ===== 常用廠商電話（叫修、工務支援；vendor_phones，SQL_286）=====
+const CV_REGIONS = ['新竹', '台中', '台南', '全區'];
+let CV_EDIT = null;
+function renderVendorPhones(){
+  const box = document.getElementById('cvList'); if(!box) return;
+  const all = STATE.vendorPhones || [];
+  const q = ((document.getElementById('cv_q') || {}).value || '').trim();
+  const dl = document.getElementById('cvCatList');
+  if(dl) dl.innerHTML = [...new Set(['水電', '冷氣', '電腦網路', '影印機', '拖吊／道路救援', '輪胎', '玻璃', '鎖匠', '消防', '清潔', '保全'].concat(all.map(x => x.category).filter(Boolean)))]
+    .map(c => `<option value="${esc(c)}">`).join('');
+  const hit = x => !q || [x.vendor_name, x.category, x.contact, x.phone, x.mobile, x.notes].some(v => String(v || '').includes(q));
+  const tel = v => { const t = String(v || '').trim(); return t ? `<a href="tel:${esc(t.replace(/[^0-9+#*]/g, ''))}" style="color:inherit;">${esc(t)}</a>` : ''; };
+  const c = document.getElementById('vp_count2'); if(c) c.textContent = all.length ? `${all.length} 筆` : '';
+  const regions = CV_REGIONS.concat([...new Set(all.map(x => x.region).filter(r => r && CV_REGIONS.indexOf(r) < 0))]);
+  const html = regions.map(r => {
+    const rows = all.filter(x => (x.region || '全區') === r && hit(x))
+      .sort((a, b) => String(a.category || '').localeCompare(String(b.category || ''), 'zh-Hant') || String(a.vendor_name || '').localeCompare(String(b.vendor_name || ''), 'zh-Hant'));
+    if(!rows.length) return '';
+    return `<div style="margin-top:10px;"><div style="font-weight:700;color:var(--navy);margin-bottom:4px;">${esc(r)}　<span class="muted" style="font-weight:400;font-size:12px;">${rows.length} 家</span></div>
+      <div class="table-scroll"><table style="table-layout:fixed;min-width:760px;"><colgroup><col style="width:14%"><col style="width:22%"><col style="width:11%"><col style="width:14%"><col style="width:14%"><col style="width:15%"><col style="width:10%"></colgroup><thead><tr><th>類別</th><th>廠商</th><th>聯絡人</th><th>電話</th><th>手機／其他</th><th>備註</th><th></th></tr></thead><tbody>
+      ${rows.map(x => `<tr><td>${esc(x.category || '')}</td><td><b>${esc(x.vendor_name || '')}</b></td><td>${esc(x.contact || '')}</td>
+        <td style="white-space:nowrap;">${tel(x.phone)}</td><td style="white-space:nowrap;">${tel(x.mobile)}</td><td class="muted">${esc(x.notes || '')}</td>
+        <td style="white-space:nowrap;"><button class="name-link" data-cv-edit="${x.id}">修改</button>　<button class="del-btn" data-cv-del="${x.id}">刪除</button></td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  }).join('');
+  box.innerHTML = html || `<div class="empty">${q ? '找不到符合的廠商' : '還沒有資料，從上面新增'}</div>`;
+}
+function cvForm(x){
+  const v = (id, val) => { const el = document.getElementById(id); if(el) el.value = val == null ? '' : val; };
+  v('cv_region', (x && x.region) || '新竹'); v('cv_cat', x && x.category); v('cv_name', x && x.vendor_name); v('cv_contact', x && x.contact);
+  v('cv_phone', x && x.phone); v('cv_mobile', x && x.mobile); v('cv_note', x && x.notes);
+  CV_EDIT = x ? x.id : null;
+  document.getElementById('cv_add').textContent = x ? '儲存修改' : '新增';
+  document.getElementById('cv_cancel').style.display = x ? '' : 'none';
+}
+if(document.getElementById('cv_add')) document.getElementById('cv_add').addEventListener('click', async () => {
+  const g = id => (document.getElementById(id).value || '').trim();
+  if(!g('cv_name')){ alert('請填廠商名稱'); return; }
+  if(!g('cv_phone') && !g('cv_mobile')){ alert('請填電話或手機'); return; }
+  const list = STATE.vendorPhones || (STATE.vendorPhones = []);
+  const backup = list.map(x => ({...x}));
+  const data = { region: g('cv_region') || '全區', category: g('cv_cat') || null, vendor_name: g('cv_name'), contact: g('cv_contact') || null,
+                 phone: g('cv_phone') || null, mobile: g('cv_mobile') || null, notes: g('cv_note') || null };
+  if(CV_EDIT != null){ const x = list.find(y => y.id === CV_EDIT); if(x) Object.assign(x, data); }
+  else list.push(Object.assign({ id: nextId(list) }, data));
+  try{ await saveState('vendor_phones', list, true); }
+  catch(err){ STATE.vendorPhones = backup; renderVendorPhones(); return; }
+  cvForm(null);
+  renderVendorPhones();
+});
+if(document.getElementById('cv_cancel')) document.getElementById('cv_cancel').addEventListener('click', () => cvForm(null));
+if(document.getElementById('cv_q')) document.getElementById('cv_q').addEventListener('input', renderVendorPhones);
+if(document.getElementById('cvList')) document.getElementById('cvList').addEventListener('click', async (ev) => {
+  const e1 = ev.target.closest('[data-cv-edit]'), d1 = ev.target.closest('[data-cv-del]');
+  const list = STATE.vendorPhones || [];
+  if(e1){ const x = list.find(y => String(y.id) === e1.getAttribute('data-cv-edit')); if(x){ cvForm(x); document.getElementById('cv_name').focus(); } return; }
+  if(d1){
+    const x = list.find(y => String(y.id) === d1.getAttribute('data-cv-del')); if(!x) return;
+    if(!confirm('確定要刪除「' + x.vendor_name + '」嗎？')) return;
+    const backup = list.slice();
+    STATE.vendorPhones = list.filter(y => y !== x);
+    try{ await saveState('vendor_phones', STATE.vendorPhones, true); }
+    catch(err){ STATE.vendorPhones = backup; }
+    if(CV_EDIT === x.id) cvForm(null);
+    renderVendorPhones();
+  }
+});
 if(document.getElementById('oe_add')) document.getElementById('oe_add').addEventListener('click', async () => {
   const name = document.getElementById('oe_name').value.trim();
   const ext = document.getElementById('oe_ext').value.trim();
