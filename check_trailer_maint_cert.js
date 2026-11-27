@@ -93,8 +93,15 @@ async function main() {
 
   // ---------- 2. 驗車與其他證件到期（車輛與板架分開列，車輛在上、板架在下） ----------
   // 租給建興的板架：驗車由建興處理，不寄驗車提醒（115/11 使用者要求，跟儀表板總覽一致）；其他證件照常
+  // 同一台車同一種證件只看到期日最晚那一筆：換新證後舊的那筆還留著，不能再拿來提醒（115/11 修）
+  const latestDoc = {};
+  docs.filter(d => d.expiry_date).forEach(d => {
+    const k = d.vehicle_id + '|' + d.doc_type;
+    if (!latestDoc[k] || String(d.expiry_date) > String(latestDoc[k].expiry_date)) latestDoc[k] = d;
+  });
   const allDocItems = docs
     .filter(d => d.expiry_date && !retired.has(d.vehicle_id))
+    .filter(d => ['滅火器', '濾毒罐'].includes(d.doc_type) || latestDoc[d.vehicle_id + '|' + d.doc_type] === d)
     .filter(d => !(d.doc_type === '驗車' && jxActive.has(d.vehicle_id) && isTrailer(vehicleById[d.vehicle_id] || {})))
     .map(d => {
       const v = vehicleById[d.vehicle_id] || {};

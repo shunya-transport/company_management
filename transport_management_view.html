@@ -960,6 +960,7 @@
           <option value="汽車強制卡">汽車強制卡</option>
           <option value="保稅車檢驗">保稅車檢驗</option>
         </select>
+        <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;"><input type="checkbox" id="vd_show_old" style="width:auto;margin:0;"> 含舊紀錄</label>
         <select id="vd_status_filter">
           <option value="all">全部狀態</option>
           <option value="red">已逾期</option>
@@ -4807,7 +4808,7 @@ async function enrichDenormalizedFields(){
     r.plate = v ? v.plate : r.plate;
     r.vtype = v ? v.vehicle_type : r.vtype;
     r.lessee_name = lesseeById[r.lessee_id] || r.lessee_name || '';
-    const insp = STATE.vehicleDocuments.find(d => d.vehicle_id === r.vehicle_id && d.doc_type === '驗車');
+    const insp = vdLatest(r.vehicle_id, '驗車');
     r.inspection_expiry = insp ? insp.expiry_date : r.inspection_expiry;
   });
   STATE.vehicleInsurance.forEach(r => { const v = vehById[r.vehicle_id]; r.plate = v ? v.plate : r.plate; });
@@ -10480,8 +10481,17 @@ function renderStaffTable(){
 }
 
 let currentVehicleEditId = null;
+// 同一台車同一種證件有舊紀錄時，一律看「到期日最晚」那一筆（115/11 修：原本用 find 抓到最舊那筆，換新證後畫面還是舊日期）
+function vdLatest(vehicleId, docType){
+  let best = null;
+  (STATE.vehicleDocuments || []).forEach(d => {
+    if(d.vehicle_id !== vehicleId || d.doc_type !== docType) return;
+    if(!best || String(d.expiry_date || '') > String(best.expiry_date || '')) best = d;
+  });
+  return best;
+}
 function vehicleDocStatus(vehicleId, docType){
-  const doc = STATE.vehicleDocuments.find(d => d.vehicle_id === vehicleId && d.doc_type === docType);
+  const doc = vdLatest(vehicleId, docType);
   if(!doc || !doc.expiry_date) return null;
   const grace = docType === '驗車' ? addOneMonth(doc.expiry_date) : doc.expiry_date;
   return {expiry: doc.expiry_date, grace, status: statusOf(grace, 30)};
@@ -12996,8 +13006,10 @@ function renderVdTable(){
   const q  = ((qEl && qEl.value) || '').trim();
   const tf = (tEl && tEl.value) || 'all';
   const sf = (sEl && sEl.value) || 'all';
+  const showOld = !!(document.getElementById('vd_show_old') || {}).checked;
   let rows = STATE.vehicleDocuments
     .filter(d => VD_TYPES.indexOf(d.doc_type) >= 0)
+    .filter(d => showOld || vdLatest(d.vehicle_id, d.doc_type) === d)   // 預設只列每台車每種證件最新那一筆
     .map(d => {
       const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
       // 驗車有一個月寬限，跟系統其他地方一致，狀態要用寬限後的日期算
@@ -13020,7 +13032,7 @@ function renderVdTable(){
       <td>${esc(r.d.expiry_date||'—')}</td>
       <td class="muted">${r.d.doc_type==='驗車' && r.grace ? esc(r.grace) : ''}</td>
       <td>${r.grace ? `<span class="pill ${r.code}">${statusLabel(r.grace,30)}</span>` : '<span class="pill gray">未設定</span>'}</td>
-      <td><button class="del-btn" data-del-vd="${r.d.id}">刪除</button></td>
+      <td>${vdLatest(r.d.vehicle_id, r.d.doc_type) === r.d ? '' : '<span class="pill gray" style="font-size:10.5px;">舊</span> '}<button class="del-btn" data-del-vd="${r.d.id}">刪除</button></td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty">沒有符合條件的紀錄</td></tr>`;
 }
 
@@ -21748,7 +21760,7 @@ document.getElementById('trailer_search').addEventListener('input', renderFleetT
 }
 // ===== 車輛證件效期：新增/覆蓋、刪除、篩選 =====
 {
-  ['vd_search','vd_type_filter','vd_status_filter'].forEach(id => {
+  ['vd_search','vd_type_filter','vd_status_filter','vd_show_old'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener(id === 'vd_search' ? 'input' : 'change', renderVdTable);
   });
