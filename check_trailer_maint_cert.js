@@ -100,7 +100,7 @@ async function main() {
     if (!latestDoc[k] || String(d.expiry_date) > String(latestDoc[k].expiry_date)) latestDoc[k] = d;
   });
   const allDocItems = docs
-    .filter(d => d.expiry_date && !retired.has(d.vehicle_id))
+    .filter(d => d.expiry_date && !retired.has(d.vehicle_id) && d.doc_type !== '汽車強制卡')   // 強制卡改看保險，不算進件數
     .filter(d => ['滅火器', '濾毒罐'].includes(d.doc_type) || latestDoc[d.vehicle_id + '|' + d.doc_type] === d)
     .filter(d => !(d.doc_type === '驗車' && jxActive.has(d.vehicle_id) && isTrailer(vehicleById[d.vehicle_id] || {})))
     .map(d => {
@@ -109,7 +109,8 @@ async function main() {
     });
   const inspectionItems = allDocItems.filter(d => d.doc_type === '驗車');
   // 行照不另外提醒（115/11/05 起：行照到期時跟最後一次驗車一起換）
-  const otherDocItems = allDocItems.filter(d => d.doc_type !== '驗車' && d.doc_type !== '行照');
+  // 汽車強制卡不寄：強制險在「其他物品」那封保險提醒已經有了（115/11 使用者要求，同一件事不寄兩次）
+  const otherDocItems = allDocItems.filter(d => d.doc_type !== '驗車' && d.doc_type !== '行照' && d.doc_type !== '汽車強制卡');
 
   const vehicleInspectionHtml = bucketByDate(inspectionItems.filter(d => !d.is_trailer), 'expiry_date', d => `<tr>
     <td><b>${d.plate}</b></td><td>${d.vehicle_type}</td><td>${d.expiry_date}</td><td>${daysLabel(d.expiry_date)}</td>

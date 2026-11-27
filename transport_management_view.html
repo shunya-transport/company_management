@@ -931,7 +931,7 @@
 
     <div class="card">
       <h2>車輛證件效期<span class="count-badge" id="vd_count"></span></h2>
-      <div class="muted" style="margin-bottom:10px;">驗車、行車記錄器、自主管理標章、汽車強制卡、保稅車檢驗都在這裡登錄與查詢（行照不另外管，到期時跟最後一次驗車一起換）。<b>「汽車強制卡」不用在這裡手動改</b>——到「車輛管理 → 保險」登錄強制險時，這邊的到期日會自動跟著更新（沒有的話會自動建一筆）。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
+      <div class="muted" style="margin-bottom:10px;">驗車、行車記錄器、自主管理標章、保稅車檢驗都在這裡登錄與查詢（行照不另外管，到期時跟最後一次驗車一起換；強制險請看「車輛管理 → 保險」）。<b>同一台車同一種證件只留一筆</b>——換新證直接選同一台車同一類別再存一次就會覆蓋掉舊的到期日，不會兩個日期互相打架。驗車會自動加一個月寬限期。<br>滅火器與濾毒罐不在這裡，因為同一台車可能有好幾支，請用上面「車輛清單」那兩顆按鈕分別管理。</div>
       <div class="form-grid">
         <label>車號
           <select id="vd_plate"></select>
@@ -941,7 +941,6 @@
             <option value="驗車">驗車</option>
             <option value="行車記錄器">行車記錄器</option>
             <option value="自主管理標章">自主管理標章</option>
-            <option value="汽車強制卡">汽車強制卡</option>
             <option value="保稅車檢驗">保稅車檢驗</option>
           </select>
         </label>
@@ -957,7 +956,7 @@
           <option value="驗車">驗車</option>
           <option value="行車記錄器">行車記錄器</option>
           <option value="自主管理標章">自主管理標章</option>
-          <option value="汽車強制卡">汽車強制卡</option>
+          
           <option value="保稅車檢驗">保稅車檢驗</option>
         </select>
         <label class="muted" style="display:inline-flex;align-items:center;gap:5px;font-weight:400;"><input type="checkbox" id="vd_show_old" style="width:auto;margin:0;"> 含舊紀錄</label>
@@ -12935,7 +12934,8 @@ function renderViTable(){
 // 有獨立的輸入視窗，其餘證件沒有任何地方可以新增或改到期日。這一區把入口補上。
 // 滅火器／濾毒罐刻意不放進來，同一台車可能掛好幾支，仍走車輛清單那兩顆按鈕。
 // 115/11/05 起不管行照效期：行照到期時最後一次驗車會一起換，跟著驗車就好（使用者要求）
-const VD_TYPES = ['驗車','行車記錄器','自主管理標章','汽車強制卡','保稅車檢驗'];
+// 115/11 起「汽車強制卡」不在這裡管：強制險只看「車輛管理 → 保險」（使用者要求）
+const VD_TYPES = ['驗車','行車記錄器','自主管理標章','保稅車檢驗'];
 
 // 強制險 →「汽車強制卡」：這兩個講的是同一件事，只是分別存在
 // vehicle_insurance 與 vehicle_documents 兩張表。以前各記各的，
@@ -12946,6 +12946,7 @@ const VD_TYPES = ['驗車','行車記錄器','自主管理標章','汽車強制�
 //   ‧ 證件那邊還沒有這一筆就建一筆（證號與發證日留空，之後再補）。
 //   ‧ 刻意不做反向連動：保險是主檔，雙向同步會變成兩邊互相覆蓋。
 async function vdSyncCompulsory(vehicleId, insType, expiry){
+  return;   // 115/11 起強制卡不在證件效期管理，不再同步（保留函式是因為保險存檔還會呼叫）
   if(!vehicleId || !expiry) return;
   if(String(insType || '').indexOf('強制') < 0) return;
   const e = String(expiry).slice(0, 10);
@@ -13009,6 +13010,7 @@ function renderVdTable(){
   const showOld = !!(document.getElementById('vd_show_old') || {}).checked;
   let rows = STATE.vehicleDocuments
     .filter(d => VD_TYPES.indexOf(d.doc_type) >= 0)
+    .filter(d => d.doc_type !== '汽車強制卡')   // 強制卡改看保險，舊資料不列
     .filter(d => showOld || vdLatest(d.vehicle_id, d.doc_type) === d)   // 預設只列每台車每種證件最新那一筆
     .map(d => {
       const v = STATE.vehicles.find(x => x.id === d.vehicle_id);
@@ -23981,8 +23983,8 @@ document.getElementById('insOffSave').addEventListener('click', async () => {
     ins.terminated_reason = reason;
     await saveState('vehicle_insurance', STATE.vehicleInsurance, true);
     // 強制險存檔時會自動把到期日帶到證件效期的「汽車強制卡」，
-    // 保險中止了卡還留著就會繼續跳提醒，所以在這裡一起問。
-    if(String(ins.insurance_type || '').indexOf('強制') >= 0){
+    // 保險中止了卡還留著就會繼續跳提醒，所以在這裡一起問。（115/11 起強制卡不在證件效期管理，不再問）
+    if(false && String(ins.insurance_type || '').indexOf('強制') >= 0){
       const vid = (typeof plateToVehicleId === 'function') ? plateToVehicleId(ins.plate) : null;
       const cards = (STATE.vehicleDocuments || [])
         .filter(x => x.vehicle_id === vid && x.doc_type === '汽車強制卡');
